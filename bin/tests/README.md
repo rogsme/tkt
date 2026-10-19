@@ -7,7 +7,7 @@ bash bin/tests/run            # every test
 bash bin/tests/run start      # only tests whose name contains "start"
 ```
 
-The runner needs bash 4.4 or newer, git, jq and the coreutils. It prints one line per test and exits non-zero when a test fails.
+The runner builds tkt from this checkout, so it needs Go, plus bash 4.4 or newer, git, jq and the coreutils for the fakes. It prints one line per test and exits non-zero when a test fails. Set `TKT_BIN` to test another build instead.
 
 ## How they work
 
@@ -22,13 +22,7 @@ Each test runs in a subshell with its own temporary `HOME`, a git repository wit
 
 Every fake appends its arguments to `$FAKE_LOG`, so tests assert the exact commands tkt ran. `assert_house_rules` checks the rules every command keeps: no `--no-hooks`, `--clobber` or `--yes` for `wt`, no worktree changes through git or herdr, and no direct `claude` call.
 
-The `unit_*.sh` files test pure functions (configuration, presets, prompt guards, the review verdict and checks parsing, the next-step table) by sourcing `bin/tkt`, which runs nothing when sourced.
-
-To run the black-box tests against another build of tkt, set `TKT_BIN` to its path. The runner then skips the `unit_*.sh` files:
-
-```bash
-TKT_BIN=/path/to/tkt bash bin/tests/run
-```
+The Go unit tests (`go test ./...`) cover the pure logic: configuration, presets, prompt guards, the review verdict and checks parsing, and the next-step table.
 
 ## Manual check in herdr
 

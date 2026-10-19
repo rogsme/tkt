@@ -1,7 +1,7 @@
 # shellcheck shell=bash disable=SC2016
 # Helpers for the tkt tests. The runner sources this file into every test.
 
-TKT=${TKT_BIN:-$TESTS_DIR/tkt-link}
+TKT=$TKT_BIN
 
 fail() {
   printf '%s\n' "$*" >&2

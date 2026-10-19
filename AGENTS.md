@@ -2,7 +2,7 @@
 
 tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills](https://gitlab.com/rogs/skills) ticket lifecycle from a herdr pane. People and agents both drive it, so every change keeps two readers in mind: a person at a terminal and a program that parses the output.
 
-The bash version in `bin/` is being replaced. Until it goes, `bin/tests/` is the parity oracle: the Go build must pass it unchanged (see Verification).
+`bin/tests/` holds the black-box tests carried over from the bash version, which the Go build passes unchanged.
 
 ## Layout
 
@@ -54,7 +54,6 @@ Run these before pushing:
 test -z "$(gofmt -l .)"
 go vet ./...
 go test -race ./...
-dir=$(mktemp -d) && go build -race -o "$dir/tkt" . && TKT_BIN="$dir/tkt" bash bin/tests/run
 bash bin/tests/run
 for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -o /dev/null . ; done
 grep -rnP '[\x{2013}\x{2014}]' --exclude-dir=.git .

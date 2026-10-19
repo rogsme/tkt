@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# Runs the tkt tests: bash bin/tests/run [name-filter]
-# With TKT_BIN set, the tests run that executable and skip the unit_*.sh
-# files, which source bin/tkt.
+# Runs the tkt black-box tests: bash bin/tests/run [name-filter]
+# The tests run the Go build of this checkout, or the executable in TKT_BIN.
 set -uo pipefail
 TESTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 export TESTS_DIR
 REAL_GIT=$(command -v git)
 export REAL_GIT
-ln -sf ../tkt "$TESTS_DIR/tkt-link"
+if [[ -z ${TKT_BIN:-} ]]; then
+  build_dir=$(mktemp -d)
+  trap 'rm -rf "$build_dir"' EXIT
+  go -C "$TESTS_DIR/../.." build -o "$build_dir/tkt" . || exit 1
+  TKT_BIN=$build_dir/tkt
+fi
+export TKT_BIN
 export PATH=$TESTS_DIR/fakes:$PATH
 filter=${1:-}
 pass=0
 failed=0
-files=("$TESTS_DIR"/test_*.sh)
-if [[ -z ${TKT_BIN:-} ]]; then files+=("$TESTS_DIR"/unit_*.sh); fi
-for file in "${files[@]}"; do
+for file in "$TESTS_DIR"/test_*.sh; do
   while read -r name; do
     [[ -z $filter || $name == *"$filter"* ]] || continue
     if out=$(
@@ -35,6 +38,5 @@ for file in "${files[@]}"; do
     fi
   done < <(grep -oE '^test_[a-z0-9_]+' "$file")
 done
-rm -f "$TESTS_DIR/tkt-link"
 printf '%d passed, %d failed\n' "$pass" "$failed"
 ((failed == 0))

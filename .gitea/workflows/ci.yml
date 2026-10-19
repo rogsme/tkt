@@ -41,12 +41,9 @@ jobs:
         run: go test -race ./...
 
       - name: Shellcheck
-        run: shellcheck -x bin/tkt bin/tests/run bin/tests/*.sh bin/tests/fakes/*
+        run: shellcheck -x bin/tests/run bin/tests/*.sh bin/tests/fakes/*
 
-      - name: Black-box tests of the bash tkt
-        run: bash bin/tests/run
-
-      - name: Black-box tests of the Go tkt
+      - name: Black-box tests
         run: |
           dir=$(mktemp -d)
           go build -race -o "$dir/tkt" .

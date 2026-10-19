@@ -2,20 +2,27 @@
 
 `tkt` runs the mechanical steps around the [rogs-skills](https://gitlab.com/rogs/skills) ticket lifecycle. It creates the ticket's worktree, opens a [herdr](https://herdr.dev) tab named after the ticket, starts Claude Code or OpenCode in that tab, and hands the agent its prompt. Each command is one step you take. Nothing chains stages together: you still approve plans, run the human verification steps and merge, and `tkt ls` only suggests the next command.
 
-tkt is moving from bash to Go. Until the Go build replaces it, the tool is the bash script `bin/tkt`.
-
 ## Install
 
-Clone this repository and link the script into your `PATH`:
+Build it with Go 1.26 or newer:
+
+```bash
+go install gitlab.com/rogs/tkt@latest
+```
+
+Or build it from a clone:
 
 ```bash
 git clone https://gitlab.com/rogs/tkt.git
-ln -s "$PWD/tkt/bin/tkt" ~/.local/bin/tkt
+cd tkt
+go build -o ~/.local/bin/tkt .
 ```
 
-Requirements:
+If `~/.local/bin/tkt` is still a symlink to the old bash script in a skills checkout, delete it first. `go build -o` would otherwise write through the link into that checkout.
 
-- bash 4.4 or newer, git, jq and the coreutils;
+Requirements at run time:
+
+- git 2.31 or newer;
 - herdr 0.9.3 or newer, with tkt running inside a herdr pane;
 - [worktrunk](https://worktrunk.dev) (`wt`) 0.68 or newer;
 - Claude Code or OpenCode;
