@@ -1,7 +1,7 @@
 # Without an id, tkt start takes the prompt's first ticket, and the prompt's
 # Model: line picks the preset.
 mkdir $HOME/.config/tkt
-cp $WORK/presets $HOME/.config/tkt/presets
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
 mkprompt $WORK/p.txt ACM-5 'Model: small (acme/fast)'
 stdin $WORK/p.txt
 exec tkt start --prompt -
@@ -15,8 +15,17 @@ state $FAKE_WT_ROOT/ACM-5 harness opencode
 state $FAKE_WT_ROOT/ACM-5 session ses_fake1
 houserules
 
--- presets --
-# name  harness   model              serves
-claude  claude    -                  frontier
-big     opencode  acme/big#high      frontier
-fast     opencode  acme/fast#max      small
+-- config.toml --
+[presets.claude]
+harness = "claude"
+serves = ["frontier"]
+
+[presets.big]
+harness = "opencode"
+model = "acme/big#high"
+serves = ["frontier"]
+
+[presets.fast]
+harness = "opencode"
+model = "acme/fast#max"
+serves = ["small"]

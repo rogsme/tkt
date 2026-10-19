@@ -76,21 +76,30 @@ take; nothing chains stages.`,
 		SilenceUsage:               true,
 		SuggestionsMinimumDistance: 2,
 	}
-	root.PersistentFlags().StringVarP(&g.dir, "dir", "C", "", "run as if tkt started in `DIR`")
+	root.PersistentFlags().StringVarP(&g.dir, "dir", "C", "", "run as if tkt started in DIR")
 	root.PersistentFlags().BoolVarP(&g.verbose, "verbose", "v", false, "print every external command to stderr")
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return apperr.New(apperr.Usage, "%s", err.Error()).Wrap(err)
 	})
+	cobra.EnableCommandSorting = false
 	root.AddGroup(
 		&cobra.Group{ID: "lifecycle", Title: "Lifecycle"},
 		&cobra.Group{ID: "inspect", Title: "Inspect"},
+		&cobra.Group{ID: "setup", Title: "Setup"},
+		&cobra.Group{ID: "topics", Title: "Help topics"},
 	)
+	root.SetHelpCommandGroupID("setup")
+	root.SetCompletionCommandGroupID("setup")
 	for _, c := range []*cobra.Command{startCmd(g), runCmd(g), resumeCmd(g), doneCmd(g)} {
 		c.GroupID = "lifecycle"
 		root.AddCommand(c)
 	}
 	for _, c := range []*cobra.Command{lsCmd(g)} {
 		c.GroupID = "inspect"
+		root.AddCommand(c)
+	}
+	for _, c := range topics() {
+		c.GroupID = "topics"
 		root.AddCommand(c)
 	}
 	return root

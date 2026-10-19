@@ -1,9 +1,10 @@
 # A preset whose harness is neither claude nor opencode is refused.
 mkdir $HOME/.config/tkt
-cp $WORK/presets $HOME/.config/tkt/presets
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
 ! exec tkt start ACM-1 --dry-run
 rc 3
-stderr 'claude or opencode'
+stderr 'preset ''odd'': the harness must be claude or opencode'
 
--- presets --
-odd vim - *
+-- config.toml --
+[presets.odd]
+harness = "vim"

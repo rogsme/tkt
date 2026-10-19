@@ -1,0 +1,35 @@
+tkt reads its settings from ${XDG_CONFIG_HOME:-~/.config}/tkt/config.toml. Without
+that file it runs Claude Code and OpenCode on their default models, with the
+built-in stage lines.
+
+Presets choose the agent. Each is a [presets.NAME] table:
+
+  [presets.claude]
+  harness = "claude"            # claude or opencode
+  serves = ["frontier"]         # the Model: values it serves; leave out for any
+
+  [presets.fast]
+  harness = "opencode"
+  model = "acme/small#max"      # leave out for the harness's default model
+  serves = ["small"]
+
+Order matters. The first preset is the default, and its tabs carry the bare
+ticket id; other presets' tabs read "ACM-12 (fast)". When a prompt carries a
+Model: line, tkt start picks the first preset that serves it. tkt resume
+picks the first preset of the session's harness. --as NAME picks one yourself.
+
+A Claude Code model reads model#effort, such as "opus#high". An OpenCode model
+reads provider/model#variant.
+
+Stages are the lines tkt run sends. A [stages] table overrides the built-in
+ones or adds your own; {id} becomes the ticket id:
+
+  [stages]
+  address = "Use the address-pr-review skill to address the review on this branch's pull request."
+  lint = "Run the linter on {id} and fix what it reports."
+
+An unknown key is an error, so a misspelling never passes silently. tkt doctor
+checks the file.
+
+Older versions of tkt read presets and stages column files. When only those
+exist, tkt stops and prints the equivalent config.toml to copy.

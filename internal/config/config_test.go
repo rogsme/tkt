@@ -4,12 +4,29 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
 )
 
-const presets = `# name  harness   model              serves
+const settings = `# Presets in order: the first is the default.
+[presets.claude]
+harness = "claude"
+serves = ["frontier"]
+
+[presets.big]
+harness = "opencode"
+model = "acme/big#high"
+serves = ["frontier"]
+
+[presets.fast]
+harness = "opencode"
+model = "acme/fast#max"
+serves = ["small"]
+`
+
+const legacyPresets = `# name  harness   model              serves
 claude  claude    -                  frontier
 big     opencode  acme/big#high      frontier
 fast     opencode  acme/fast#max      small
@@ -47,7 +64,7 @@ func TestBuiltinPresets(t *testing.T) {
 }
 
 func TestUserPresetsKeepHashInModels(t *testing.T) {
-	c, err := Load(dirWith(t, map[string]string{"presets": presets}))
+	c, err := Load(dirWith(t, map[string]string{"config.toml": settings}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,17 +80,84 @@ func TestUserPresetsKeepHashInModels(t *testing.T) {
 	}
 }
 
-func TestPresetErrors(t *testing.T) {
-	for _, src := range []string{"odd vim - *\n", "x claude\n", "x claude - * extra\n", "x claude - *\nx claude - *\n", "# none\n"} {
-		_, err := Load(dirWith(t, map[string]string{"presets": src}))
+func TestSettingsErrors(t *testing.T) {
+	for _, src := range []string{
+		"[presets.odd]\nharness = \"vim\"\n",
+		"[presets.x]\nharness = \"claude\"\nmodle = \"opus\"\n",
+		"[presets.x]\nharness = \"opencode\"\nmodel = \"fast\"\n",
+		"[presets.x]\nharness = \"claude\"\nserves = []\n",
+		"[presets.\"-x\"]\nharness = \"claude\"\n",
+		"[stages]\nlint = \"  \"\n",
+		"[stages]\nLint = \"Run it.\"\n",
+		"[presets.x\nharness = \"claude\"\n",
+		"color = true\n",
+	} {
+		_, err := Load(dirWith(t, map[string]string{"config.toml": src}))
 		if code(err) != apperr.ConfigInvalid {
 			t.Errorf("%q: %v", src, err)
 		}
 	}
 }
 
+func TestPresetOrderFollowsTheFile(t *testing.T) {
+	src := "[presets.zeta]\nharness = \"opencode\"\n\n[presets.alpha]\nharness = \"claude\"\n"
+	c, err := Load(dirWith(t, map[string]string{"config.toml": src}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.PresetNames(); !slices.Equal(got, []string{"zeta", "alpha"}) {
+		t.Errorf("order %v", got)
+	}
+	if p := c.Default(); p.Name != "zeta" || !slices.Equal(p.Serves, []string{"*"}) {
+		t.Errorf("default %+v", p)
+	}
+}
+
+func TestStagesOnlyKeepBuiltinPresets(t *testing.T) {
+	c, err := Load(dirWith(t, map[string]string{"config.toml": "[stages]\nlint = \"\"\"\nRun the linter\non {id}.\n\"\"\"\n"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.PresetNames(); !slices.Equal(got, []string{"claude", "opencode"}) {
+		t.Errorf("presets %v", got)
+	}
+	if got, _ := c.StageLine("lint", "ACM-1"); got != "Run the linter\non ACM-1." {
+		t.Errorf("lint: %q", got)
+	}
+}
+
+func TestLegacyFilesAreConverted(t *testing.T) {
+	dir := dirWith(t, map[string]string{"presets": legacyPresets, "stages": "lint Run \"the\" linter on {id}.\n"})
+	_, err := Load(dir)
+	e := apperr.As(err)
+	if e.Code != apperr.ConfigLegacy {
+		t.Fatalf("got %v", err)
+	}
+	text, _ := e.Details["config_toml"].(string)
+	if !strings.Contains(e.Msg, text) || !strings.Contains(text, "[presets.fast]") {
+		t.Errorf("message:\n%s", e.Msg)
+	}
+	os.WriteFile(filepath.Join(dir, "config.toml"), []byte(text), 0o644)
+	c, err := Load(dir)
+	if err != nil {
+		t.Fatalf("the converted file does not load: %v\n%s", err, text)
+	}
+	if got := c.PresetNames(); !slices.Equal(got, []string{"claude", "big", "fast"}) {
+		t.Errorf("presets %v", got)
+	}
+	if fast, _ := c.Preset("fast"); fast.Model != "acme/fast#max" || !slices.Equal(fast.Serves, []string{"small"}) {
+		t.Errorf("fast %+v", fast)
+	}
+	if got, _ := c.StageLine("lint", "ACM-1"); got != `Run "the" linter on ACM-1.` {
+		t.Errorf("lint %q", got)
+	}
+	if len(c.IgnoredLegacy) != 2 {
+		t.Errorf("ignored %v", c.IgnoredLegacy)
+	}
+}
+
 func TestPickFollowsModelLine(t *testing.T) {
-	c, _ := Load(dirWith(t, map[string]string{"presets": presets}))
+	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}))
 	cases := []struct{ as, prompt, want string }{
 		{"", "- Model: `small` (acme/fast)", "fast"},
 		{"", "Model: frontier.", "claude"},
@@ -89,7 +173,7 @@ func TestPickFollowsModelLine(t *testing.T) {
 }
 
 func TestPickRefusesConflicts(t *testing.T) {
-	c, _ := Load(dirWith(t, map[string]string{"presets": presets}))
+	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}))
 	if _, err := c.Pick("claude", "Model: small", false); code(err) != apperr.PresetModelMismatch {
 		t.Errorf("--as against the Model line: %v", err)
 	}
@@ -121,7 +205,7 @@ func TestStageLinesAndOverrides(t *testing.T) {
 	if got, _ := c.StageLine("start", "ACM-7"); got != "Use the start-ticket skill to start ticket ACM-7." {
 		t.Errorf("start: %q", got)
 	}
-	c, err := Load(dirWith(t, map[string]string{"stages": "# mine\naddress  Address ticket {id} please.\nlint Run the linter.\n"}))
+	c, err := Load(dirWith(t, map[string]string{"config.toml": "[stages]\naddress = \"Address ticket {id} please.\"\nlint = \"Run the linter.\"\n"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +222,7 @@ func TestStageLinesAndOverrides(t *testing.T) {
 }
 
 func TestTabLabel(t *testing.T) {
-	c, _ := Load(dirWith(t, map[string]string{"presets": presets}))
+	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}))
 	if got := c.TabLabel("ACM-1", "claude"); got != "ACM-1" {
 		t.Errorf("default preset: %q", got)
 	}

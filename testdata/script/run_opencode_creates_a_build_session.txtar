@@ -1,6 +1,6 @@
 # On an OpenCode preset, tkt run creates a fresh build session.
 mkdir $HOME/.config/tkt
-cp $WORK/presets $HOME/.config/tkt/presets
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
 mkprompt $WORK/p.txt ACM-12
 stdin $WORK/p.txt
 exec tkt start ACM-12 --as fast --prompt -
@@ -11,8 +11,17 @@ exec tkt run ACM-12 sync
 logged herdr agent start acm-12 --kind opencode --pane w1:p10 --timeout 90000 -- -s ses_fake2 $WT
 grep 'sync the PR with the base' $FAKE_DIR/prompts
 
--- presets --
-# name  harness   model              serves
-claude  claude    -                  frontier
-big     opencode  acme/big#high      frontier
-fast     opencode  acme/fast#max      small
+-- config.toml --
+[presets.claude]
+harness = "claude"
+serves = ["frontier"]
+
+[presets.big]
+harness = "opencode"
+model = "acme/big#high"
+serves = ["frontier"]
+
+[presets.fast]
+harness = "opencode"
+model = "acme/fast#max"
+serves = ["small"]

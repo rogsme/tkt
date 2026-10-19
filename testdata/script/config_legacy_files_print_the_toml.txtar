@@ -1,0 +1,23 @@
+# The old presets and stages files stop tkt with the equivalent config.toml.
+mkdir $HOME/.config/tkt
+cp $WORK/presets $HOME/.config/tkt/presets
+cp $WORK/stages $HOME/.config/tkt/stages
+! exec tkt start ACM-1 --dry-run
+rc 3
+stderr 'use the old format; write this to .*config.toml, then delete them'
+stderr '^\[presets.fast\]$'
+stderr '^model = "acme/fast#max"$'
+stderr '^lint = "Run the linter on \{id\}."$'
+
+# Once config.toml exists, tkt uses it and ignores the old files.
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-1 --dry-run
+
+-- presets --
+claude  claude    -                  frontier
+fast    opencode  acme/fast#max      small
+-- stages --
+lint Run the linter on {id}.
+-- config.toml --
+[presets.claude]
+harness = "claude"

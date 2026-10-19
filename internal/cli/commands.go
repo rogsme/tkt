@@ -21,7 +21,7 @@ func show[T texter](cmd *cobra.Command, res T, isNil bool, err error) error {
 }
 
 func promptFlag(cmd *cobra.Command, text *string) {
-	cmd.Flags().StringVar(text, "prompt", "", "send `TEXT` instead of the stage line; - reads it from stdin")
+	cmd.Flags().StringVar(text, "prompt", "", "send TEXT instead of the stage line; - reads it from stdin")
 }
 
 func promptSource(cmd *cobra.Command, text string) prompt.Source {
@@ -50,7 +50,7 @@ func startCmd(g *globals) *cobra.Command {
 		},
 	}
 	promptFlag(cmd, &text)
-	cmd.Flags().StringVar(&o.As, "as", "", "run on `PRESET` instead of the one the prompt's Model: line picks")
+	cmd.Flags().StringVar(&o.As, "as", "", "run on PRESET instead of the one the prompt's Model: line picks")
 	cmd.Flags().BoolVar(&o.Focus, "focus", false, "switch to the ticket's tab afterwards")
 	cmd.Flags().BoolVar(&o.Force, "force", false, "override the safety refusals")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
@@ -85,8 +85,8 @@ func runCmd(g *globals) *cobra.Command {
 		},
 	}
 	promptFlag(cmd, &text)
-	cmd.Flags().StringVar(&o.As, "as", "", "run on `PRESET` instead of the ticket's")
-	cmd.Flags().StringVar(&o.Pane, "pane", "", "use `PANE` when several agents run in the worktree")
+	cmd.Flags().StringVar(&o.As, "as", "", "run on PRESET instead of the ticket's")
+	cmd.Flags().StringVar(&o.Pane, "pane", "", "use PANE when several agents run in the worktree")
 	cmd.Flags().BoolVar(&o.Force, "force", false, "replace an agent that is planning or in an unknown state")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	return cmd
@@ -112,8 +112,8 @@ func resumeCmd(g *globals) *cobra.Command {
 			return show(cmd, res, res == nil, err)
 		},
 	}
-	cmd.Flags().StringVar(&o.Session, "session", "", "resume `ID` instead of the newest session")
-	cmd.Flags().StringVar(&o.As, "as", "", "resume on `PRESET`, and with it its harness")
+	cmd.Flags().StringVar(&o.Session, "session", "", "resume ID instead of the newest session")
+	cmd.Flags().StringVar(&o.As, "as", "", "resume on PRESET, and with it its harness")
 	cmd.Flags().BoolVar(&o.Focus, "focus", false, "switch to the ticket's tab afterwards")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	return cmd

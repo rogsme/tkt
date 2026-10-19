@@ -1,6 +1,6 @@
 # tkt resume skips plan-review and child sessions in OpenCode.
 mkdir $HOME/.config/tkt
-cp $WORK/presets $HOME/.config/tkt/presets
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
 realgit -C $REPO worktree add -q -b ACM-12 $FAKE_WT_ROOT/ACM-12 main
 jqedit $WORK/sessions.json '.data |= map(.location.directory = ($FAKE_WT_ROOT + "/ACM-12"))'
 env FAKE_OC_SESSIONS=$WORK/sessions.json
@@ -14,8 +14,17 @@ logcontains '--label ACM-12\ \(big\)'
   {"id": "ses_child", "agent": "general", "parentID": "ses_work", "location": {}, "time": {"updated": 2}},
   {"id": "ses_work", "agent": "build", "parentID": null, "location": {}, "time": {"updated": 1}}
 ]}
--- presets --
-# name  harness   model              serves
-claude  claude    -                  frontier
-big     opencode  acme/big#high      frontier
-fast     opencode  acme/fast#max      small
+-- config.toml --
+[presets.claude]
+harness = "claude"
+serves = ["frontier"]
+
+[presets.big]
+harness = "opencode"
+model = "acme/big#high"
+serves = ["frontier"]
+
+[presets.fast]
+harness = "opencode"
+model = "acme/fast#max"
+serves = ["small"]

@@ -1,0 +1,11 @@
+# A misspelled key in config.toml is an error, not a silent default.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+! exec tkt start ACM-1 --dry-run
+rc 3
+stderr 'unknown key presets.claude.modle'
+
+-- config.toml --
+[presets.claude]
+harness = "claude"
+modle = "opus"

@@ -6,13 +6,15 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
 )
 
-// Load reads the settings from dir, the tkt configuration directory.
-func Load(dir string) (Config, error) {
+// loadLegacy reads the old presets and stages column files in dir, to
+// convert them to config.toml. Delete it once nobody has the old files.
+func loadLegacy(dir string) (Config, error) {
 	c := builtin()
 	presets := filepath.Join(dir, "presets")
 	if src, err := os.ReadFile(presets); err == nil {
@@ -78,6 +80,9 @@ func parseStages(c *Config, f, src string) error {
 		}
 		if text == "" {
 			return apperr.New(apperr.ConfigInvalid, "%s: stage '%s' has no text", f, name)
+		}
+		if _, seen := c.Stages[name]; !seen || !slices.Contains(c.OwnStages, name) {
+			c.OwnStages = append(c.OwnStages, name)
 		}
 		c.Stages[name] = text
 	}

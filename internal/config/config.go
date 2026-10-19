@@ -39,6 +39,10 @@ type Config struct {
 	Source  string
 	Presets []Preset
 	Stages  map[string]string
+	// OwnStages lists the stages the settings define, sorted.
+	OwnStages []string
+	// IgnoredLegacy lists old-format files that config.toml overrides.
+	IgnoredLegacy []string
 }
 
 // BuiltinStages are the stage lines tkt run sends; {id} becomes the ticket.
