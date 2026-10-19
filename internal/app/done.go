@@ -189,6 +189,7 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 	res.Actions = c.Plan
 	if len(kept) > 0 && !o.All {
 		return res, apperr.New(apperr.TicketsKept, "kept %s; see the reasons above", strings.Join(kept, ", ")).
+			WithHint("fix the reasons, then rerun tkt done").
 			With("tickets", res.Tickets)
 	}
 	return res, nil

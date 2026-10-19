@@ -1,0 +1,20 @@
+# When a command fails after it found something, the error's details carry it.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env FAKE_GH_FAIL=1
+! exec tkt ls --no-fetch --json
+rc 1
+envelope '.error.code' forge_query_failed
+envelope '.error.details.rows[0].ticket' ACM-12
+env FAKE_GH_FAIL=
+cp $WORK/prs.json $WORK/open.json
+env FAKE_GH_PRS=$WORK/open.json
+! exec tkt done ACM-12 --json
+rc 4
+envelope '.error.code' tickets_kept
+envelope '.error.details.tickets[0].outcome' kept
+envelope '.error.details.tickets[0].reasons[0]' 'pull request #7 is still open'
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "abc", "headRepository": {"nameWithOwner": "acme/app"}}]

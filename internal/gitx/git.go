@@ -36,7 +36,8 @@ type Repo struct {
 // Resolve finds the repository that dir belongs to.
 func (g Git) Resolve(ctx context.Context, dir string) (Repo, error) {
 	if _, ok := g.out(ctx, "-C", dir, "rev-parse", "--git-dir"); !ok {
-		return Repo{}, apperr.New(apperr.NotARepository, "%s is not inside a git repository", dir)
+		return Repo{}, apperr.New(apperr.NotARepository, "%s is not inside a git repository", dir).
+			WithHint("run tkt inside the project, or pass -C DIR")
 	}
 	list, _ := g.out(ctx, "-C", dir, "worktree", "list", "--porcelain")
 	first, _, _ := strings.Cut(list, "\n")

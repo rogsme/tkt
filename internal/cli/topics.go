@@ -2,9 +2,12 @@ package cli
 
 import (
 	"embed"
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"gitlab.com/rogs/tkt/internal/apperr"
 )
 
 //go:embed help/*.txt
@@ -26,6 +29,24 @@ func topic(name, short, long string) *cobra.Command {
 
 func topics() []*cobra.Command {
 	return []*cobra.Command{
+		topic("json", "Machine-readable output with --json", helpText("json")),
+		topic("exit-codes", "Exit statuses and error codes", exitCodesText()),
 		topic("config", "Presets, stage lines and the config.toml file", helpText("config")),
 	}
+}
+
+// exitCodesText lists the exit statuses and every error code under its
+// status, from the registry.
+func exitCodesText() string {
+	var b strings.Builder
+	b.WriteString("tkt exits with one of these statuses. With --json, error.code names the exact\nfailure; programs branch on it.\n")
+	for _, m := range apperr.ExitMeanings {
+		fmt.Fprintf(&b, "\n%d  %s\n", m.Exit, m.Meaning)
+		for _, i := range apperr.Registry {
+			if i.Exit == m.Exit {
+				fmt.Fprintf(&b, "   %-24s %s\n", i.Code, i.Summary)
+			}
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

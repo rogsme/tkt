@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -36,18 +37,28 @@ type globals struct {
 	io      IO
 	dir     string
 	verbose bool
+	json    bool
 	ui      *output.UI
+	root    *cobra.Command
+	args    []string
 }
 
 // Main runs tkt with args and returns the exit status.
 func Main(ctx context.Context, args []string, version string, sio IO) int {
-	g := &globals{io: sio, ui: &output.UI{Err: sio.Stderr}}
-	root := newRoot(g)
+	g := &globals{io: sio, ui: &output.UI{Err: sio.Stderr}, args: args}
+	envJSON, err := formatFromEnv(sio.Getenv)
+	if err != nil {
+		g.printError(err)
+		return apperr.Exit(err)
+	}
+	root := newRoot(g, envJSON)
+	g.root = root
+	g.json = jsonFromArgs(args, envJSON)
 	root.SetArgs(args)
 	root.SetIn(sio.Stdin)
 	root.SetOut(sio.Stdout)
 	root.SetErr(sio.Stderr)
-	err := fang.Execute(ctx, root,
+	err = fang.Execute(ctx, root,
 		fang.WithVersion(versionString(version)),
 		fang.WithErrorHandler(g.handleError),
 		fang.WithNotifySignal(os.Interrupt, syscall.SIGTERM),
@@ -65,7 +76,37 @@ func versionString(v string) string {
 	return "dev"
 }
 
-func newRoot(g *globals) *cobra.Command {
+// formatFromEnv reads TKT_FORMAT, which lets a harness ask for JSON once.
+func formatFromEnv(getenv func(string) string) (bool, error) {
+	switch v := getenv("TKT_FORMAT"); v {
+	case "", "text":
+		return false, nil
+	case "json":
+		return true, nil
+	default:
+		return false, apperr.New(apperr.Usage, "TKT_FORMAT must be json or text, not %q", v)
+	}
+}
+
+// jsonFromArgs finds --json before cobra parses the arguments, so an error
+// in parsing them is reported in the right format too.
+func jsonFromArgs(args []string, def bool) bool {
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		if a == "--json" {
+			def = true
+		} else if v, ok := strings.CutPrefix(a, "--json="); ok {
+			if b, err := strconv.ParseBool(v); err == nil {
+				def = b
+			}
+		}
+	}
+	return def
+}
+
+func newRoot(g *globals, envJSON bool) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "tkt",
 		Short: "Run the mechanical steps of the ticket lifecycle from a herdr pane",
@@ -78,6 +119,7 @@ take; nothing chains stages.`,
 	}
 	root.PersistentFlags().StringVarP(&g.dir, "dir", "C", "", "run as if tkt started in DIR")
 	root.PersistentFlags().BoolVarP(&g.verbose, "verbose", "v", false, "print every external command to stderr")
+	root.PersistentFlags().BoolVar(&g.json, "json", envJSON, "print one JSON document on stdout (also TKT_FORMAT=json); see tkt help json")
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return apperr.New(apperr.Usage, "%s", err.Error()).Wrap(err)
 	})
@@ -163,20 +205,62 @@ func classify(err error) error {
 	return apperr.As(err)
 }
 
-// handleError prints an error as "tkt: <message>" and its hint.
+// handleError reports an error: as the JSON envelope in JSON mode, styled
+// on a terminal, otherwise as "tkt: <message>" and its hint.
 func (g *globals) handleError(w io.Writer, styles fang.Styles, err error) {
 	e := apperr.As(classify(err))
-	if f, ok := g.io.Stderr.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+	if e.Code == apperr.Usage && e.Hint == "" {
+		if name := g.commandName(); name == "tkt" {
+			e.Hint = "tkt --help"
+		} else {
+			e.Hint = "tkt " + name + " --help"
+		}
+	}
+	if g.json {
+		output.Emit(g.io.Stdout, output.Envelope{
+			Schema:  output.Schema,
+			Command: g.commandName(),
+			Error: &output.ErrBody{Code: string(e.Code), Exit: apperr.Lookup(e.Code).Exit,
+				Message: e.Msg, Hint: e.Hint, Details: e.Details},
+			Warnings: g.ui.Warnings(),
+		}, isTerminal(g.io.Stdout))
+		return
+	}
+	if isTerminal(g.io.Stderr) {
 		fang.DefaultErrorHandler(w, styles, e)
 		if e.Hint != "" {
 			io.WriteString(w, "hint: "+e.Hint+"\n\n")
 		}
 		return
 	}
-	io.WriteString(w, "tkt: "+e.Msg+"\n")
+	g.printError(e)
+}
+
+// printError prints "tkt: <message>" and its hint on stderr.
+func (g *globals) printError(err error) {
+	e := apperr.As(err)
+	io.WriteString(g.io.Stderr, "tkt: "+e.Msg+"\n")
 	if e.Hint != "" {
-		io.WriteString(w, "tkt: hint: "+e.Hint+"\n")
+		io.WriteString(g.io.Stderr, "tkt: hint: "+e.Hint+"\n")
 	}
+}
+
+// commandName names the command the arguments select, such as "start", or
+// "tkt" when they select none.
+func (g *globals) commandName() string {
+	if g.root == nil {
+		return "tkt"
+	}
+	cmd, _, err := g.root.Find(g.args)
+	if err != nil || cmd == g.root {
+		return "tkt"
+	}
+	return strings.TrimPrefix(cmd.CommandPath(), "tkt ")
+}
+
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 // usage returns a usage error.

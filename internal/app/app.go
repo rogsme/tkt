@@ -121,7 +121,7 @@ func (c *Ctx) Would(argv []string) {
 func (c *Ctx) needTools(tools ...string) error {
 	for _, t := range tools {
 		if _, err := exec.LookPath(t); err != nil {
-			return apperr.New(apperr.ToolMissing, "%s is not installed", t)
+			return apperr.New(apperr.ToolMissing, "%s is not installed", t).WithHint("install %s, then run tkt doctor", t)
 		}
 	}
 	return nil
@@ -129,7 +129,8 @@ func (c *Ctx) needTools(tools ...string) error {
 
 func (c *Ctx) needHerdr() error {
 	if c.Getenv("HERDR_ENV") != "1" || c.Getenv("HERDR_WORKSPACE_ID") == "" {
-		return apperr.New(apperr.HerdrEnvMissing, "run tkt from a herdr pane (HERDR_ENV is not set)")
+		return apperr.New(apperr.HerdrEnvMissing, "run tkt from a herdr pane (HERDR_ENV is not set)").
+			WithHint("open a herdr pane and run tkt there")
 	}
 	return c.needTools("herdr")
 }
@@ -140,7 +141,8 @@ func (c *Ctx) lockTicket(id string) error {
 	}
 	f, err := lock.Try(c.Repo.Common, id)
 	if errors.Is(err, lock.ErrHeld) {
-		return apperr.New(apperr.TicketLocked, "another tkt command is working on %s", id)
+		return apperr.New(apperr.TicketLocked, "another tkt command is working on %s", id).
+			WithHint("wait for the other tkt command to finish, then retry")
 	}
 	if err != nil {
 		return apperr.New(apperr.Internal, "cannot lock %s: %v", id, err)

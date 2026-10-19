@@ -142,7 +142,8 @@ func (a *App) Resume(ctx context.Context, o ResumeOpts) (*ResumeResult, error) {
 	if h == config.Claude {
 		for _, ag := range agents {
 			if ag.SessionID() == sid {
-				return nil, apperr.New(apperr.SessionInUse, "session %s already runs in pane %s", sid, ag.PaneID)
+				return nil, apperr.New(apperr.SessionInUse, "session %s already runs in pane %s", sid, ag.PaneID).
+					WithHint("switch to pane %s", ag.PaneID)
 			}
 		}
 	}
@@ -154,13 +155,14 @@ func (a *App) Resume(ctx context.Context, o ResumeOpts) (*ResumeResult, error) {
 		return nil, err
 	}
 	if !c.Dry && !c.Agent.PaneFree(c.Ctx, pane) {
-		return nil, apperr.New(apperr.PaneBusy, "pane %s is busy", pane)
+		return nil, apperr.New(apperr.PaneBusy, "pane %s is busy", pane).WithHint("finish what runs in pane %s", pane)
 	}
 	name := prompt.AgentName(id)
 	out, err := c.Agent.Launch(c.Ctx, pane, name, h, harness.LaunchArgs(h, harness.Resume, sid, preset, path))
 	switch out {
 	case agent.NotReady:
-		return nil, c.screenErr(apperr.New(apperr.AgentNotReady, "the agent stopped at a startup dialog in pane %s; answer it there", pane), pane)
+		return nil, c.screenErr(apperr.New(apperr.AgentNotReady, "the agent stopped at a startup dialog in pane %s; answer it there", pane).
+			WithHint("answer the dialog in pane %s", pane), pane)
 	case agent.Failed:
 		return nil, apperr.New(apperr.AgentLaunchFailed, "%s", err.Error())
 	}

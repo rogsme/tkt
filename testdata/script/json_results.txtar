@@ -1,0 +1,32 @@
+# Each command's result is an object in the success envelope.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt - --json
+envelope '.ok' true
+envelope '.command' start
+envelope '.result | [.ticket, .tab, .pane, .agent, .preset, .harness, .worktree_created, .dry_run]' '["ACM-12","w1:t10","w1:p10","acm-12","claude","claude",true,false]'
+statevar $FAKE_WT_ROOT/ACM-12 session SID
+envelope '.result.session == $SID' true
+! stdout 'ACM-12  '
+
+# A stage name close to a known one gets a suggestion.
+! exec tkt run ACM-12 adress --json
+envelope '.error.code' unknown_stage
+envelope '.error.hint' 'did you mean address?'
+
+# A dry run lists the commands a real run would execute.
+mkprompt $WORK/p7.txt ACM-7
+stdin $WORK/p7.txt
+exec tkt start ACM-7 --dry-run --prompt - --json
+envelope '.result.dry_run' true
+envelope '[.result.actions[].argv[0:3] | join(" ")]' '["wt -C '$REPO'","herdr tab create","herdr agent start","herdr agent prompt"]'
+! exists $FAKE_WT_ROOT/ACM-7
+
+# tkt ls rows carry typed fields and the next step as a command to run.
+exec tkt ls --no-fetch --json
+envelope '.result.sources' '{"fetch":"skipped","forge":"ok","herdr":"ok"}'
+envelope '.result.rows[0] | [.ticket, .agent.status, .pr, .behind]' '["ACM-12","idle",null,0]'
+envelope '.result.rows[0].next' '{"argv":null,"kind":"human","text":"check the agent in its tab"}'
+jqedit $FAKE_DIR/herdr.json '.agents = []'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0].next' '{"argv":["tkt","resume","ACM-12"],"kind":"command","text":"tkt resume ACM-12"}'

@@ -1,0 +1,31 @@
+With --json, or TKT_FORMAT=json in the environment, stdout holds exactly one
+JSON document per run, whether the command succeeds or fails. Progress and
+warnings still go to stderr. --json=false overrides TKT_FORMAT=json.
+
+On success:
+
+  {"schema": 1, "ok": true, "command": "run", "result": {...}, "warnings": []}
+
+On failure:
+
+  {"schema": 1, "ok": false, "command": "run",
+   "error": {"code": "agent_busy", "exit": 4,
+             "message": "the agent in pane w1:p10 is working; wait for it or answer it first",
+             "hint": "tkt wait ACM-12", "details": {"pane": "w1:p10", "status": "working"}},
+   "warnings": []}
+
+Branch on error.code, never on the message: codes are stable, messages are
+for people. error.exit is the process's exit status, error.hint names what to
+do next (often a tkt command), and error.details carries what the command
+found, such as the rows tkt ls read before a source failed. tkt help
+exit-codes lists every code.
+
+Each command's result is an object with that command's fields; tkt schema
+lists them. A dry run's result carries "dry_run": true and "actions", the
+commands a real run would execute. In tkt ls, a null field means unknown or
+absent, and "sources" says which sources tkt could read.
+
+The schema number changes only when a field changes meaning or goes away.
+New fields may appear in any release.
+
+--help, --version, completion and man always print text.

@@ -6,14 +6,25 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/rogs/tkt/internal/app"
+	"gitlab.com/rogs/tkt/internal/output"
 	"gitlab.com/rogs/tkt/internal/prompt"
 )
 
 type texter interface{ Text(w io.Writer) }
 
-// show prints a result in text mode and passes the error on. A command can
-// return both: tkt ls prints its table even when the forge failed.
-func show[T texter](cmd *cobra.Command, res T, isNil bool, err error) error {
+// show prints a command's result: the JSON envelope in JSON mode, otherwise
+// its text. A command can return a result and an error: tkt ls prints its
+// table even when the forge failed. In JSON mode the error envelope carries
+// that partial result in its details instead.
+func show[T texter](g *globals, cmd *cobra.Command, res T, isNil bool, err error) error {
+	if g.json {
+		if err != nil {
+			return err
+		}
+		return output.Emit(cmd.OutOrStdout(), output.Envelope{
+			Schema: output.Schema, OK: true, Command: g.commandName(), Result: res, Warnings: g.ui.Warnings(),
+		}, isTerminal(cmd.OutOrStdout()))
+	}
 	if !isNil {
 		res.Text(cmd.OutOrStdout())
 	}
@@ -46,7 +57,7 @@ func startCmd(g *globals) *cobra.Command {
 			}
 			o.Prompt = promptSource(cmd, text)
 			res, err := g.app().Start(cmd.Context(), o)
-			return show(cmd, res, res == nil, err)
+			return show(g, cmd, res, res == nil, err)
 		},
 	}
 	promptFlag(cmd, &text)
@@ -81,7 +92,7 @@ func runCmd(g *globals) *cobra.Command {
 			}
 			o.Prompt = promptSource(cmd, text)
 			res, err := g.app().Run(cmd.Context(), o)
-			return show(cmd, res, res == nil, err)
+			return show(g, cmd, res, res == nil, err)
 		},
 	}
 	promptFlag(cmd, &text)
@@ -109,7 +120,7 @@ func resumeCmd(g *globals) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.ID = args[0]
 			res, err := g.app().Resume(cmd.Context(), o)
-			return show(cmd, res, res == nil, err)
+			return show(g, cmd, res, res == nil, err)
 		},
 	}
 	cmd.Flags().StringVar(&o.Session, "session", "", "resume ID instead of the newest session")
@@ -137,7 +148,7 @@ func doneCmd(g *globals) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.IDs = args
 			res, err := g.app().Done(cmd.Context(), o)
-			return show(cmd, res, res == nil, err)
+			return show(g, cmd, res, res == nil, err)
 		},
 	}
 	cmd.Flags().BoolVar(&o.All, "all", false, "check every ticket worktree")
@@ -154,7 +165,7 @@ func lsCmd(g *globals) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			res, err := g.app().Ls(cmd.Context(), o)
-			return show(cmd, res, res == nil, err)
+			return show(g, cmd, res, res == nil, err)
 		},
 	}
 	cmd.Flags().BoolVar(&o.NoFetch, "no-fetch", false, "skip the git fetch that refreshes the commits-behind count")

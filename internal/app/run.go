@@ -123,7 +123,8 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 				WithHint("tkt wait %s", id).With("pane", pane).With("status", old.Status)
 		default:
 			if !o.Force {
-				return nil, apperr.New(apperr.AgentStateUnknown, "the agent in pane %s is in state '%s'; pass --force to replace it", pane, old.Status)
+				return nil, apperr.New(apperr.AgentStateUnknown, "the agent in pane %s is in state '%s'; pass --force to replace it", pane, old.Status).
+					WithHint("check pane %s, or pass --force", pane)
 			}
 		}
 		if st["harness"] == config.OpenCode && st["session"] != "" && c.OC.SessionActive(c.Ctx, st["session"]) {
@@ -131,10 +132,12 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 		}
 		res.ReplacedSession = st["session"]
 		if !c.Agent.Exit(c.Ctx, pane) {
-			return nil, apperr.New(apperr.AgentExitFailed, "the agent in pane %s did not exit; nothing was sent", pane)
+			return nil, apperr.New(apperr.AgentExitFailed, "the agent in pane %s did not exit; nothing was sent", pane).
+				WithHint("check pane %s, close the agent there, then rerun tkt run", pane)
 		}
 	} else if !c.Dry && !c.H.PaneIsShell(c.Ctx, pane) {
-		return nil, apperr.New(apperr.PaneBusy, "pane %s is not at a shell prompt", pane)
+		return nil, apperr.New(apperr.PaneBusy, "pane %s is not at a shell prompt", pane).
+			WithHint("finish what runs in pane %s, or pass --pane", pane)
 	}
 	sid, err := c.newSession(path, id+" "+stage, preset)
 	if err != nil {
@@ -147,7 +150,8 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 	case agent.NotReady:
 		c.save(ts, "status", "not_ready")
 		return nil, c.screenErr(apperr.New(apperr.AgentNotReady,
-			"the agent stopped at a startup dialog in pane %s; answer it, then send the stage line yourself", pane), pane)
+			"the agent stopped at a startup dialog in pane %s; answer it, then send the stage line yourself", pane).
+			WithHint("answer the dialog in pane %s, then send the stage line there", pane), pane)
 	case agent.Failed:
 		return nil, apperr.New(apperr.AgentLaunchFailed, "%s", err.Error())
 	}
@@ -157,7 +161,8 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 	case agent.Uncertain:
 		c.save(ts, "status", "prompt_uncertain")
 		return nil, c.screenErr(apperr.New(apperr.PromptUncertain,
-			"cannot confirm the agent received the stage line; check pane %s before sending it again", pane), pane)
+			"cannot confirm the agent received the stage line; check pane %s before sending it again", pane).
+			WithHint("check pane %s before sending the stage line again", pane), pane)
 	case agent.Failed:
 		return nil, sendErr("sending the stage line failed", err)
 	}
@@ -186,7 +191,7 @@ func (c *Ctx) pickPane(id, path, want string, st map[string]string, preset confi
 			ids[i] = a.PaneID
 		}
 		return "", "", apperr.New(apperr.AmbiguousPane, "%d agents run in %s; pick one with --pane (%s)", len(inPath), path, strings.Join(ids, ", ")).
-			With("panes", ids)
+			WithHint("pass --pane %s", ids[0]).With("panes", ids)
 	case len(inPath) == 1:
 		pane = inPath[0].PaneID
 	}
@@ -197,7 +202,7 @@ func (c *Ctx) pickPane(id, path, want string, st map[string]string, preset confi
 		}
 		mine := herdr.TicketTabs(tabs, id)
 		if len(mine) > 1 {
-			return "", "", apperr.New(apperr.AmbiguousPane, "%d tabs belong to %s; pick a pane with --pane", len(mine), id)
+			return "", "", apperr.New(apperr.AmbiguousPane, "%d tabs belong to %s; pick a pane with --pane", len(mine), id).WithHint("pass --pane PANE")
 		}
 		if len(mine) == 1 {
 			panes, err := c.H.Panes(c.Ctx)

@@ -1,0 +1,31 @@
+# In JSON mode, stdout holds one error envelope with a stable code, the exit
+# status and a hint.
+! exec tkt run ACM-99 address --json
+rc 4
+envelope '.ok' false
+envelope '.command' run
+envelope '.error.code' worktree_missing
+envelope '.error.exit' 4
+envelope '.error.hint' 'tkt start ACM-99'
+! stderr .
+
+# Errors in parsing the command line are envelopes too.
+! exec tkt start --bogus --json
+rc 2
+envelope '.error.code' usage
+envelope '.error.hint' 'tkt start --help'
+
+# TKT_FORMAT=json turns JSON on for every command; --json=false turns it off.
+env TKT_FORMAT=json
+! exec tkt run ACM-99 address
+envelope '.error.code' worktree_missing
+! exec tkt run ACM-99 address --json=false
+! stdout .
+stderr '^tkt: ACM-99 has no worktree'
+stderr '^tkt: hint: tkt start ACM-99$'
+
+# Any other TKT_FORMAT is a usage error.
+env TKT_FORMAT=yaml
+! exec tkt ls
+rc 2
+stderr 'TKT_FORMAT must be json or text'

@@ -77,11 +77,12 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		}
 		if from != "" && from != id && !o.Force {
 			return nil, apperr.New(apperr.TicketIDMismatch,
-				"you asked for %s but the prompt's first ticket is %s; pass --force to start %s with it", id, from, id)
+				"you asked for %s but the prompt's first ticket is %s; pass --force to start %s with it", id, from, id).
+				WithHint("tkt start %s, or pass --force", from)
 		}
 	} else {
 		if from == "" {
-			return nil, apperr.New(apperr.TicketIDMissing, "give a ticket id, or a prompt that names one")
+			return nil, apperr.New(apperr.TicketIDMissing, "give a ticket id, or a prompt that names one").WithHint("tkt start ACM-123")
 		}
 		id = from
 		a.UI.Info("ticket %s (the first id in the prompt)", id)
