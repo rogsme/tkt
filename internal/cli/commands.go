@@ -169,10 +169,10 @@ func doneCmd(g *globals) *cobra.Command {
 func lsCmd(g *globals) *cobra.Command {
 	var o app.LsOpts
 	cmd := &cobra.Command{
-		Use:   "ls",
+		Use:   "ls [ID...]",
 		Short: "List ticket worktrees with their state and the next step",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.IDs = args
 			res, err := g.app().Ls(cmd.Context(), o)
 			return show(g, cmd, res, res == nil, err)
 		},

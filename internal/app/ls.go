@@ -5,8 +5,10 @@ import (
 	"context"
 	"io"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 
@@ -143,6 +145,16 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	}
 	defer c.release()
 	f := c.LC.Forge
+	var want []string
+	for _, raw := range o.IDs {
+		id, err := c.LC.NormalizeID(raw)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.Contains(want, id) {
+			want = append(want, id)
+		}
+	}
 	res := &LsResult{Sources: Sources{Herdr: "unavailable", Forge: "unsupported", Fetch: "skipped"}, Rows: []Row{}}
 	haveHerdr := a.Getenv("HERDR_ENV") == "1" && found("herdr")
 	gh := forge.GH{R: a.R, Repo: f.Host + "/" + f.Repo, Name: f.Repo}
@@ -174,7 +186,29 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 		g.Go(func() error { agents, agentsErr = c.H.Agents(c.Ctx); return nil })
 		g.Go(func() error { tabs, tabsErr = c.H.Tabs(c.Ctx); return nil })
 	}
-	if haveGH {
+	switch {
+	case haveGH && len(want) > 0 && len(want) < 4:
+		// A few tickets: ask for their pull requests by head branch, which
+		// no list limit can cut off.
+		var mu sync.Mutex
+		for _, id := range want {
+			g.Go(func() error {
+				prs, err := gh.ListHead(c.Ctx, id, true)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					openErr = err
+				}
+				for _, p := range prs {
+					all = append(all, p)
+					if p.State == "OPEN" {
+						open = append(open, p)
+					}
+				}
+				return nil
+			})
+		}
+	case haveGH:
 		g.Go(func() error { open, openErr = gh.ListOpen(c.Ctx); return nil })
 		g.Go(func() error { all, allErr = gh.ListAll(c.Ctx); return nil })
 	}
@@ -204,6 +238,21 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	}
 
 	tickets := c.ticketWorktrees(entries)
+	var missing []string
+	if len(want) > 0 {
+		var picked []ticketWorktree
+		for _, t := range tickets {
+			if slices.Contains(want, t.ID) {
+				picked = append(picked, t)
+			}
+		}
+		for _, id := range want {
+			if !slices.ContainsFunc(picked, func(t ticketWorktree) bool { return t.ID == id }) {
+				missing = append(missing, id)
+			}
+		}
+		tickets = picked
+	}
 	baseRef := "refs/remotes/" + f.Remote + "/" + f.Base
 	hasBase := c.Git.HasRef(c.Ctx, c.Repo.Root, baseRef)
 	res.Rows = make([]Row, len(tickets))
@@ -251,11 +300,15 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 		})
 	}
 	rows.Wait()
-	if len(tickets) == 0 {
+	if len(tickets) == 0 && len(want) == 0 {
 		a.UI.Info("no ticket worktrees")
 	}
 	if !haveHerdr && forgeErr == nil && a.Getenv("HERDR_ENV") != "1" {
 		a.UI.Info("outside herdr: tab and agent columns show ?")
+	}
+	if len(missing) > 0 {
+		return res, apperr.New(apperr.WorktreeMissing, "%s has no worktree", strings.Join(missing, ", ")).
+			WithHint("tkt start %s", missing[0]).With("rows", res.Rows).With("missing", missing)
 	}
 	if forgeErr != nil {
 		e := apperr.As(forgeErr)

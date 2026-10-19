@@ -1,0 +1,25 @@
+# tkt ls ID... lists only those tickets, and reads their pull requests by
+# head branch.
+mkprompt $WORK/p1.txt ACM-1
+mkprompt $WORK/p2.txt ACM-2
+stdin $WORK/p1.txt
+exec tkt start ACM-1 --prompt -
+stdin $WORK/p2.txt
+exec tkt start ACM-2 --prompt -
+env FAKE_GH_PRS=$WORK/prs.json
+resetlog
+exec tkt ls 2 --no-fetch --json
+envelope '[.result.rows[].ticket]' '["ACM-2"]'
+envelope '.result.rows[0].pr' '{"head":"abc","mergeable":"MERGEABLE","number":2,"state":"OPEN"}'
+logged gh pr list --repo github.com/acme/app --head ACM-2 --state all
+! logcontains '--state open'
+
+# A ticket without a worktree is reported, with the rows tkt did find.
+! exec tkt ls ACM-1 ACM-9 --no-fetch --json
+rc 4
+envelope '.error.code' worktree_missing
+envelope '.error.details.missing' '["ACM-9"]'
+envelope '[.error.details.rows[].ticket]' '["ACM-1"]'
+
+-- prs.json --
+[{"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "abc", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [], "reviews": []}]
