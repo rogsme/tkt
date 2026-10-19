@@ -4,7 +4,7 @@ cp $WORK/presets $HOME/.config/tkt/presets
 cp $WORK/stages $HOME/.config/tkt/stages
 ! exec tkt start ACM-1 --dry-run
 rc 3
-stderr 'use the old format; write this to .*config.toml, then delete them'
+stderr 'no longer reads the old settings files \(.*/presets and .*/stages\); write this to .*config.toml, then delete them'
 stderr '^\[presets.fast\]$'
 stderr '^model = "acme/fast#max"$'
 stderr '^lint = "Run the linter on \{id\}."$'

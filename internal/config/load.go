@@ -129,12 +129,12 @@ func legacyError(dir string, files []string) error {
 	c, err := loadLegacy(dir)
 	if err != nil {
 		return apperr.New(apperr.ConfigLegacy,
-			"%s use the old format, and they do not parse: %v; write %s instead (tkt help config)",
+			"tkt no longer reads the old settings files (%s), and they do not parse: %v; write %s instead (tkt help config)",
 			strings.Join(files, " and "), apperr.As(err).Msg, filepath.Join(dir, FileName)).WithHint("tkt help config")
 	}
 	text := RenderTOML(c)
 	return apperr.New(apperr.ConfigLegacy,
-		"%s use the old format; write this to %s, then delete them:\n\n%s",
+		"tkt no longer reads the old settings files (%s); write this to %s, then delete them:\n\n%s",
 		strings.Join(files, " and "), filepath.Join(dir, FileName), text).
 		WithHint("write %s, then delete %s", filepath.Join(dir, FileName), strings.Join(files, " and ")).
 		With("config_toml", text)
