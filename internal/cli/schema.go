@@ -110,6 +110,9 @@ var environment = []SchemaVariable{
 
 // buildSchema walks the command tree, so the schema always matches the help.
 func buildSchema(root *cobra.Command, version string) Schema {
+	// cobra adds the completion command only when it executes; add it now
+	// so the schema lists it however it is built.
+	root.InitDefaultCompletionCmd()
 	s := Schema{
 		Schema:          output.Schema,
 		Name:            root.Name(),

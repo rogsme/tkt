@@ -517,6 +517,78 @@
         ],
         "version": "string"
       }
+    },
+    {
+      "path": "completion bash",
+      "use": "bash",
+      "short": "Generate the autocompletion script for bash",
+      "long": "Generate the autocompletion script for the bash shell.\n\nThis script depends on the 'bash-completion' package.\nIf it is not installed already, you can install it via your OS's package manager.\n\nTo load completions in your current shell session:\n\n\tsource <(tkt completion bash)\n\nTo load completions for every new session, execute once:\n\n#### Linux:\n\n\ttkt completion bash > /etc/bash_completion.d/tkt\n\n#### macOS:\n\n\ttkt completion bash > $(brew --prefix)/etc/bash_completion.d/tkt\n\nYou will need to start a new shell for this setup to take effect.\n",
+      "example": "",
+      "group": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "no-descriptions",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable completion descriptions"
+        }
+      ],
+      "result": null
+    },
+    {
+      "path": "completion zsh",
+      "use": "zsh",
+      "short": "Generate the autocompletion script for zsh",
+      "long": "Generate the autocompletion script for the zsh shell.\n\nIf shell completion is not already enabled in your environment you will need\nto enable it.  You can execute the following once:\n\n\techo \"autoload -U compinit; compinit\" >> ~/.zshrc\n\nTo load completions in your current shell session:\n\n\tsource <(tkt completion zsh)\n\nTo load completions for every new session, execute once:\n\n#### Linux:\n\n\ttkt completion zsh > \"${fpath[1]}/_tkt\"\n\n#### macOS:\n\n\ttkt completion zsh > $(brew --prefix)/share/zsh/site-functions/_tkt\n\nYou will need to start a new shell for this setup to take effect.\n",
+      "example": "",
+      "group": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "no-descriptions",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable completion descriptions"
+        }
+      ],
+      "result": null
+    },
+    {
+      "path": "completion fish",
+      "use": "fish",
+      "short": "Generate the autocompletion script for fish",
+      "long": "Generate the autocompletion script for the fish shell.\n\nTo load completions in your current shell session:\n\n\ttkt completion fish | source\n\nTo load completions for every new session, execute once:\n\n\ttkt completion fish > ~/.config/fish/completions/tkt.fish\n\nYou will need to start a new shell for this setup to take effect.\n",
+      "example": "",
+      "group": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "no-descriptions",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable completion descriptions"
+        }
+      ],
+      "result": null
+    },
+    {
+      "path": "completion powershell",
+      "use": "powershell",
+      "short": "Generate the autocompletion script for powershell",
+      "long": "Generate the autocompletion script for powershell.\n\nTo load completions in your current shell session:\n\n\ttkt completion powershell | Out-String | Invoke-Expression\n\nTo load completions for every new session, add the output of the above command\nto your powershell profile.\n",
+      "example": "",
+      "group": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "no-descriptions",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable completion descriptions"
+        }
+      ],
+      "result": null
     }
   ],
   "topics": [
