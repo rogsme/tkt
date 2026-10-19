@@ -8,10 +8,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"golang.org/x/sync/errgroup"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
@@ -51,6 +53,139 @@ func (r *DoctorResult) Text(w io.Writer) {
 			fmt.Fprintf(w, "%-22s hint: %s\n", "", c.Hint)
 		}
 	}
+}
+
+// doctorGroups sorts the checks under headings in the terminal view. A check
+// missing here lands in the last group.
+var doctorGroups = []struct {
+	title string
+	ids   []string
+}{
+	{"Tools", []string{"git", "wt", "herdr", "gh"}},
+	{"Harnesses", nil},
+	{"Project", []string{"repository", "lifecycle", "worktrunk_hooks"}},
+	{"Environment", []string{"config", "herdr_env", "log"}},
+}
+
+// doctorLabels names checks whose id reads poorly in the terminal view.
+var doctorLabels = map[string]string{
+	"wt":              "worktrunk",
+	"herdr_env":       "herdr pane",
+	"worktrunk_hooks": "worktrunk hooks",
+}
+
+func doctorGroup(id string) int {
+	if strings.HasPrefix(id, "harness.") {
+		return 1
+	}
+	for i, g := range doctorGroups {
+		if slices.Contains(g.ids, id) {
+			return i
+		}
+	}
+	return len(doctorGroups) - 1
+}
+
+func doctorLabel(id string) string {
+	if l, ok := doctorLabels[id]; ok {
+		return l
+	}
+	return strings.TrimPrefix(id, "harness.")
+}
+
+// Pretty writes the checks for a person at a terminal: grouped, colored,
+// with home shortened to ~ and messages wrapped to width. Text stays the
+// stable format for programs.
+func (r *DoctorResult) Pretty(w io.Writer, home string, width int) {
+	var (
+		heading = lipgloss.NewStyle().Bold(true)
+		faint   = lipgloss.NewStyle().Faint(true)
+		status  = map[string]lipgloss.Style{
+			CheckOK:   lipgloss.NewStyle().Foreground(lipgloss.Green),
+			CheckWarn: lipgloss.NewStyle().Foreground(lipgloss.Yellow).Bold(true),
+			CheckFail: lipgloss.NewStyle().Foreground(lipgloss.Red).Bold(true),
+			CheckSkip: faint,
+		}
+	)
+	short := func(s string) string {
+		if home == "" || home == "/" {
+			return s
+		}
+		return strings.ReplaceAll(s, home+"/", "~/")
+	}
+	labelW := 0
+	for _, c := range r.Checks {
+		labelW = max(labelW, len(doctorLabel(c.ID)))
+	}
+	indent := 4 + 6 + labelW + 2
+	pad := strings.Repeat(" ", indent)
+	wrap := func(s string) []string {
+		if width-indent < 30 {
+			return []string{s}
+		}
+		return wordWrap(s, width-indent)
+	}
+
+	groups := make([][]Check, len(doctorGroups))
+	counts := map[string]int{}
+	for _, c := range r.Checks {
+		i := doctorGroup(c.ID)
+		groups[i] = append(groups[i], c)
+		counts[c.Status]++
+	}
+	fmt.Fprintln(w)
+	for i, g := range doctorGroups {
+		if len(groups[i]) == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "  %s\n", heading.Render(g.title))
+		for _, c := range groups[i] {
+			msg := wrap(short(c.Message))
+			fmt.Fprintf(w, "    %s%-*s  %s\n", status[c.Status].Render(fmt.Sprintf("%-6s", c.Status)), labelW, doctorLabel(c.ID), msg[0])
+			for _, l := range msg[1:] {
+				fmt.Fprintf(w, "%s%s\n", pad, l)
+			}
+			if c.Hint != "" && c.Status != CheckOK {
+				for _, l := range wrap("hint: " + short(c.Hint)) {
+					fmt.Fprintf(w, "%s%s\n", pad, faint.Render(l))
+				}
+			}
+		}
+		fmt.Fprintln(w)
+	}
+
+	var parts []string
+	for _, s := range []string{CheckOK, CheckWarn, CheckFail, CheckSkip} {
+		if n := counts[s]; n > 0 {
+			parts = append(parts, status[s].Render(fmt.Sprintf("%d %s", n, s)))
+		}
+	}
+	verdict := "tkt is ready"
+	switch {
+	case counts[CheckFail] > 0:
+		verdict = status[CheckFail].Render("fix the failing checks before using tkt")
+	case counts[CheckWarn] > 0:
+		verdict = "tkt is ready, with warnings"
+	}
+	fmt.Fprintf(w, "  %s  %s\n\n", strings.Join(parts, faint.Render(", ")), verdict)
+}
+
+// wordWrap breaks s at spaces into lines of at most width bytes. A word
+// longer than width gets a line of its own, so paths and flags stay whole.
+func wordWrap(s string, width int) []string {
+	var lines []string
+	line := ""
+	for _, word := range strings.Fields(s) {
+		if line != "" && len(line)+1+len(word) > width {
+			lines = append(lines, line)
+			line = ""
+		}
+		if line != "" {
+			line += " "
+		}
+		line += word
+	}
+	return append(lines, line)
 }
 
 // Minimum versions tkt supports.

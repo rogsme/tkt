@@ -41,6 +41,9 @@ type globals struct {
 	root    *cobra.Command
 	args    []string
 	version string
+	// errShown is set when the result already told a person about the
+	// error, so the error handler stays quiet on a terminal.
+	errShown bool
 }
 
 // Main runs tkt with args and returns the exit status.
@@ -229,6 +232,9 @@ func (g *globals) handleError(w io.Writer, styles fang.Styles, err error) {
 		return
 	}
 	if isTerminal(g.io.Stderr) {
+		if g.errShown {
+			return
+		}
 		fang.DefaultErrorHandler(w, styles, e)
 		if e.Hint != "" {
 			io.WriteString(w, "hint: "+e.Hint+"\n\n")

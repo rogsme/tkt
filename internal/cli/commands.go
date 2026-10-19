@@ -2,15 +2,24 @@ package cli
 
 import (
 	"io"
+	"os"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"gitlab.com/rogs/tkt/internal/app"
+	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/output"
 	"gitlab.com/rogs/tkt/internal/prompt"
 )
 
 type texter interface{ Text(w io.Writer) }
+
+// prettier is a result with a richer view for a person at a terminal.
+type prettier interface {
+	Pretty(w io.Writer, home string, width int)
+}
 
 // show prints a command's result: the JSON envelope in JSON mode, otherwise
 // its text. A command can return a result and an error: tkt ls prints its
@@ -25,9 +34,19 @@ func show[T texter](g *globals, cmd *cobra.Command, res T, isNil bool, err error
 			Schema: output.Schema, OK: true, Command: g.commandName(), Result: res, Warnings: g.ui.Warnings(),
 		}, isTerminal(cmd.OutOrStdout()))
 	}
-	if !isNil {
-		res.Text(cmd.OutOrStdout())
+	if isNil {
+		return err
 	}
+	out := cmd.OutOrStdout()
+	if p, ok := any(res).(prettier); ok && isTerminal(out) {
+		width, _, _ := term.GetSize(int(out.(*os.File).Fd()))
+		p.Pretty(colorprofile.NewWriter(out, os.Environ()), g.io.Getenv("HOME"), width)
+		// The view ends with a summary of the failing checks, so the error
+		// box would repeat it.
+		g.errShown = apperr.As(err).Code == apperr.ChecksFailed
+		return err
+	}
+	res.Text(out)
 	return err
 }
 
