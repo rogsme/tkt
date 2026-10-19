@@ -28,6 +28,24 @@ func (c Config) NormalizeID(s string) (string, error) {
 	return id, nil
 }
 
+var scratchName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+
+// ScratchName checks a name for a worktree with no ticket. It must work as a
+// branch and a directory name, and must not pass for a ticket id, so ls and
+// done never take the worktree for a ticket's.
+func (c Config) ScratchName(s string) error {
+	if !scratchName.MatchString(s) {
+		return apperr.New(apperr.InvalidScratchName,
+			"'%s' is not a scratch name: use letters, digits, '-' and '_', starting with a letter or digit", s).
+			WithHint("tkt start --scratch spike-login")
+	}
+	if id, err := c.NormalizeID(s); err == nil {
+		return apperr.New(apperr.InvalidScratchName, "'%s' is a ticket id; start the ticket instead, or pick another name", s).
+			WithHint("tkt start %s", id)
+	}
+	return nil
+}
+
 var idToken = regexp.MustCompile(`[A-Za-z0-9-]+`)
 
 // FirstID returns the first ticket id in text, or "" when it names none.

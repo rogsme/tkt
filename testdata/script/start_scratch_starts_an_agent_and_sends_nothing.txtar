@@ -1,0 +1,21 @@
+# tkt start --scratch makes a worktree and tab with no ticket, starts the
+# agent and sends it nothing. tkt ls does not list the worktree.
+exec tkt start --scratch spike-login
+rc 0
+exists $FAKE_WT_ROOT/spike-login
+logged wt -C $REPO switch --create spike-login --no-cd --format json
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/spike-login --label spike-login --no-focus
+logged herdr agent start spike-login --kind claude --pane w1:p10
+! logcontains 'herdr agent prompt'
+! exists $FAKE_DIR/prompts
+state $FAKE_WT_ROOT/spike-login status launched
+stdout 'spike-login  '$FAKE_WT_ROOT'/spike-login  tab w1:t10  agent spike-login \(claude, claude\)'
+houserules
+
+exec tkt ls --no-fetch
+stderr 'no ticket worktrees'
+
+# A second start finds the agent and refuses.
+! exec tkt start --scratch spike-login
+rc 4
+stderr 'an agent already runs in'

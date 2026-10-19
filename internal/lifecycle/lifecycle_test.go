@@ -84,6 +84,19 @@ func TestNormalizeID(t *testing.T) {
 	}
 }
 
+func TestScratchName(t *testing.T) {
+	c, _ := Load(project(t, tracker, forge))
+	for in, ok := range map[string]bool{
+		"spike-login": true, "Spike_2": true,
+		"acm-12": false, "ACM-12": false, "12": false, "a/b": false, "-x": false, "": false, "a.b": false,
+	} {
+		err := c.ScratchName(in)
+		if ok && err != nil || !ok && code(err) != apperr.InvalidScratchName {
+			t.Errorf("ScratchName(%q) = %v", in, err)
+		}
+	}
+}
+
 func TestFirstID(t *testing.T) {
 	c, _ := Load(project(t, tracker, forge))
 	cases := map[string]string{

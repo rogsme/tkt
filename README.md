@@ -86,6 +86,8 @@ A ticket from start to merge, in short:
 4. Act on the verdict with `address` or `sync`, and review again.
 5. Verify, merge in the tab, then run `tkt done ACM-12`.
 
+For work with no ticket, `tkt start --scratch spike-login` makes the worktree, branch and tab `spike-login` and starts the agent without sending it anything. The other commands work on tickets only, so remove that worktree with `wt remove spike-login`.
+
 `tkt help lifecycle` walks through each step. [`docs/lifecycle.md`](docs/lifecycle.md) follows a ticket from the tracker to a merged pull request, with diagrams of how tkt, the skills, herdr, worktrunk, the tracker and the forge fit together. `tkt COMMAND --help` explains when to use a command and what it refuses.
 
 ### Settings

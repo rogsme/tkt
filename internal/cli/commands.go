@@ -86,17 +86,21 @@ func startCmd(g *globals) *cobra.Command {
 	var o app.StartOpts
 	var pf promptFlags
 	cmd := &cobra.Command{
-		Use:   "start [ID]",
+		Use:   "start [ID | --scratch NAME]",
 		Short: "Create the worktree and tab, start an agent and send it the prompt",
 		Long:  helpText("start"),
 		Example: `  xclip -selection clipboard -o | tkt start --prompt -
   tkt start ACM-12
   tkt start ACM-12 --prompt-file plan-request.md --as fast
-  tkt start ACM-12 --dry-run`,
+  tkt start ACM-12 --dry-run
+  tkt start --scratch spike-login --as fast`,
 		ValidArgsFunction: g.completeTickets(false),
-		Args: func(_ *cobra.Command, args []string) error {
-			if len(args) > 1 {
+		Args: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case len(args) > 1:
 				return usage("start takes one ticket id")
+			case len(args) == 1 && cmd.Flags().Changed("scratch"):
+				return usage("give a ticket id or --scratch NAME, not both")
 			}
 			return nil
 		},
@@ -110,6 +114,9 @@ func startCmd(g *globals) *cobra.Command {
 		},
 	}
 	pf.add(cmd, "the start stage line")
+	cmd.Flags().StringVar(&o.Scratch, "scratch", "", "start an agent in worktree NAME with no ticket, and send it nothing")
+	cmd.MarkFlagsMutuallyExclusive("scratch", "prompt")
+	cmd.MarkFlagsMutuallyExclusive("scratch", "prompt-file")
 	cmd.Flags().StringVar(&o.As, "as", "", "run on PRESET instead of the one the prompt's Model: line picks")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
 	cmd.Flags().BoolVar(&o.Focus, "focus", false, "switch to the ticket's tab afterwards")

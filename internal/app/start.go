@@ -16,17 +16,20 @@ import (
 
 // StartOpts are tkt start's arguments.
 type StartOpts struct {
-	ID     string
-	Prompt prompt.Source
-	As     string
-	Focus  bool
-	Force  bool
-	Dry    bool
+	ID string
+	// Scratch names a worktree with no ticket; its agent gets no prompt.
+	Scratch string
+	Prompt  prompt.Source
+	As      string
+	Focus   bool
+	Force   bool
+	Dry     bool
 }
 
 // StartResult is what tkt start did.
 type StartResult struct {
 	Ticket          string   `json:"ticket"`
+	Scratch         string   `json:"scratch,omitempty"`
 	Worktree        string   `json:"worktree"`
 	WorktreeCreated bool     `json:"worktree_created"`
 	Tab             string   `json:"tab"`
@@ -43,12 +46,17 @@ type StartResult struct {
 }
 
 func (r *StartResult) Text(w io.Writer) {
-	fmt.Fprintf(w, "%s  %s  tab %s  agent %s (%s, %s)\n", r.Ticket, r.Worktree, r.Tab, r.Agent, r.Preset, r.Harness)
+	name := r.Ticket
+	if r.Scratch != "" {
+		name = r.Scratch
+	}
+	fmt.Fprintf(w, "%s  %s  tab %s  agent %s (%s, %s)\n", name, r.Worktree, r.Tab, r.Agent, r.Preset, r.Harness)
 }
 
 // Start creates or reuses a ticket's worktree, opens its tab, starts an agent
-// and sends it the prompt.
+// and sends it the prompt. A scratch start has no ticket and sends nothing.
 func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
+	scratch := o.Scratch != ""
 	text := ""
 	if o.Prompt.Set {
 		var err error
@@ -71,7 +79,13 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		from = c.LC.FirstID(text)
 	}
 	var id string
-	if o.ID != "" {
+	switch {
+	case scratch:
+		if err := c.LC.ScratchName(o.Scratch); err != nil {
+			return nil, err
+		}
+		id = o.Scratch
+	case o.ID != "":
 		if id, err = c.LC.NormalizeID(o.ID); err != nil {
 			return nil, err
 		}
@@ -80,9 +94,10 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 				"you asked for %s but the prompt's first ticket is %s; pass --force to start %s with it", id, from, id).
 				WithHint("tkt start %s, or pass --force", from)
 		}
-	} else {
+	default:
 		if from == "" {
-			return nil, apperr.New(apperr.TicketIDMissing, "give a ticket id, or a prompt that names one").WithHint("tkt start ACM-123")
+			return nil, apperr.New(apperr.TicketIDMissing, "give a ticket id, or a prompt that names one").
+				WithHint("tkt start ACM-123, or tkt start --scratch NAME for a worktree with no ticket")
 		}
 		id = from
 		a.UI.Info("ticket %s (the first id in the prompt)", id)
@@ -93,7 +108,10 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		return nil, err
 	}
 	name := prompt.AgentName(id)
-	if !o.Prompt.Set {
+	again, stage, busy := "tkt start "+id, "start", "use tkt run or tkt resume, or close it"
+	if scratch {
+		again, stage, busy = "tkt start --scratch "+id, "", "close it"
+	} else if !o.Prompt.Set {
 		text, _ = c.Cfg.StageLine("start", id)
 	}
 	if err := c.needHerdr(); err != nil {
@@ -105,11 +123,14 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 	if err := c.lockTicket(id); err != nil {
 		return nil, err
 	}
-	path, created, err := c.resolveOrCreateWorktree(id)
+	path, created, err := c.resolveOrCreateWorktree(id, again)
 	if err != nil {
 		return nil, err
 	}
-	res := &StartResult{Ticket: id, Worktree: path, WorktreeCreated: created, Stage: "start", DryRun: c.Dry}
+	res := &StartResult{Ticket: id, Worktree: path, WorktreeCreated: created, Stage: stage, DryRun: c.Dry}
+	if scratch {
+		res.Ticket, res.Scratch = "", id
+	}
 	ts := &ticketState{st: map[string]string{}}
 	var inPath []herdr.Agent
 	if !strings.HasPrefix(path, "<") {
@@ -132,14 +153,17 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		a.UI.Info("continuing the start that stopped at the agent's startup dialog")
 		tab, pane, name, h = st["tab"], st["pane"], st["agent"], st["harness"]
 		preset.Name = st["preset"]
+	case len(inPath) > 0 && scratch:
+		return nil, apperr.New(apperr.AgentRunning, "an agent already runs in %s (pane %s)", path, inPath[0].PaneID).
+			WithHint("switch to pane %s", inPath[0].PaneID)
 	case len(inPath) > 0:
 		return nil, apperr.New(apperr.AgentRunning, "an agent already runs in %s (pane %s); use tkt run or tkt resume", path, inPath[0].PaneID).
 			WithHint("tkt run %s STAGE, or tkt resume %s", id, id)
 	default:
-		if tab, pane, err = c.startTab(id, path, preset); err != nil {
+		if tab, pane, err = c.startTab(id, path, preset, busy); err != nil {
 			return nil, err
 		}
-		c.save(ts, "ticket", id, "preset", preset.Name, "harness", h, "stage", "start", "tab", tab, "pane", pane, "agent", name, "status", "tab")
+		c.save(ts, "ticket", id, "preset", preset.Name, "harness", h, "stage", stage, "tab", tab, "pane", pane, "agent", name, "status", "tab")
 		if !c.Dry {
 			c.Agent.WaitPaneFree(c.Ctx, pane, 40)
 			p, err := c.H.PaneGet(c.Ctx, pane)
@@ -159,27 +183,35 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		switch out {
 		case agent.NotReady:
 			c.save(ts, "status", "not_ready")
+			rerun := again
+			if !scratch {
+				rerun += " with the same prompt"
+			}
 			return nil, c.screenErr(apperr.New(apperr.AgentNotReady,
-				"the agent stopped at a startup dialog in tab %s; answer it there, then rerun: tkt start %s (with the same prompt)", tab, id).
-				WithHint("answer the dialog in tab %s, then rerun tkt start %s with the same prompt", tab, id), pane)
+				"the agent stopped at a startup dialog in tab %s; answer it there, then rerun %s", tab, rerun).
+				WithHint("answer the dialog in tab %s, then rerun %s", tab, rerun), pane)
 		case agent.Failed:
 			return nil, apperr.New(apperr.AgentLaunchFailed, "%s", err.Error())
 		}
 	}
 	res.Tab, res.Pane, res.Agent, res.Preset, res.Harness, res.Continued = tab, pane, name, preset.Name, h, continuing
 	res.Session = st["session"]
-	out, resent, err := c.Agent.Deliver(c.Ctx, pane, text, h, st["session"], path)
-	res.Resent = resent
-	switch out {
-	case agent.Uncertain:
-		c.save(ts, "status", "prompt_uncertain")
-		return nil, c.screenErr(apperr.New(apperr.PromptUncertain,
-			"cannot confirm the agent received the prompt; check tab %s before sending it again", tab).
-			WithHint("check tab %s before sending the prompt again", tab), pane)
-	case agent.Failed:
-		return nil, sendErr("sending the prompt failed", err)
+	if scratch {
+		c.save(ts, "status", "launched")
+	} else {
+		out, resent, err := c.Agent.Deliver(c.Ctx, pane, text, h, st["session"], path)
+		res.Resent = resent
+		switch out {
+		case agent.Uncertain:
+			c.save(ts, "status", "prompt_uncertain")
+			return nil, c.screenErr(apperr.New(apperr.PromptUncertain,
+				"cannot confirm the agent received the prompt; check tab %s before sending it again", tab).
+				WithHint("check tab %s before sending the prompt again", tab), pane)
+		case agent.Failed:
+			return nil, sendErr("sending the prompt failed", err)
+		}
+		c.save(ts, "status", "submitted")
 	}
-	c.save(ts, "status", "submitted")
 	if o.Focus && !c.Dry {
 		if err := c.H.TabFocus(c.Ctx, tab); err != nil {
 			return nil, herdrErr(err)
@@ -189,8 +221,9 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 	return res, nil
 }
 
-// startTab reuses the ticket's idle tab in this workspace, or opens one.
-func (c *Ctx) startTab(id, path string, preset config.Preset) (tab, pane string, err error) {
+// startTab reuses the ticket's idle tab in this workspace, or opens one. busy
+// is the advice for a tab that is in use.
+func (c *Ctx) startTab(id, path string, preset config.Preset, busy string) (tab, pane string, err error) {
 	tabs, err := c.H.Tabs(c.Ctx)
 	if err != nil {
 		return "", "", herdrErr(err)
@@ -217,7 +250,7 @@ func (c *Ctx) startTab(id, path string, preset config.Preset) (tab, pane string,
 			}
 		}
 		if !idle || len(own) == 0 {
-			return "", "", apperr.New(apperr.TabInUse, "tab '%s' already belongs to %s; use tkt run or tkt resume, or close it", t.Label, id)
+			return "", "", apperr.New(apperr.TabInUse, "tab '%s' already belongs to %s; %s", t.Label, id, busy)
 		}
 		if !c.H.PaneIsShell(c.Ctx, own[0].PaneID) {
 			return "", "", apperr.New(apperr.TabInUse, "tab '%s' is busy", t.Label)

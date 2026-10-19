@@ -33,15 +33,25 @@
   "commands": [
     {
       "path": "start",
-      "use": "start [ID]",
+      "use": "start [ID | --scratch NAME]",
       "short": "Create the worktree and tab, start an agent and send it the prompt",
-      "long": "tkt start creates or reuses the ticket's worktree through worktrunk, opens a\nherdr tab named after the ticket, starts an agent in build mode (Claude Code\nwith --dangerously-skip-permissions, OpenCode on its Build agent) and sends it\nthe prompt, typically the dispatcher's start-ticket block.\n\nWithout an ID, tkt start takes the first ticket id in the prompt; with both,\nthey must match. Without a prompt, it sends the start stage line. --prompt -\nreads the prompt from stdin, which keeps a long prompt out of your shell\nhistory; --prompt-file reads it from a file.\n\nThe prompt's Model: line, when it has one, picks the preset (tkt help config);\n--as picks one yourself.\n\ntkt start refuses when an agent already runs in the worktree: use tkt run for\na fresh session, or tkt resume to bring back the last one. When the agent stops\nat a startup dialog, answer it in the tab and rerun the same tkt start: it\ncontinues where it stopped.",
-      "example": "  xclip -selection clipboard -o | tkt start --prompt -\n  tkt start ACM-12\n  tkt start ACM-12 --prompt-file plan-request.md --as fast\n  tkt start ACM-12 --dry-run",
+      "long": "tkt start creates or reuses the ticket's worktree through worktrunk, opens a\nherdr tab named after the ticket, starts an agent in build mode (Claude Code\nwith --dangerously-skip-permissions, OpenCode on its Build agent) and sends it\nthe prompt, typically the dispatcher's start-ticket block.\n\nWithout an ID, tkt start takes the first ticket id in the prompt; with both,\nthey must match. Without a prompt, it sends the start stage line. --prompt -\nreads the prompt from stdin, which keeps a long prompt out of your shell\nhistory; --prompt-file reads it from a file.\n\nThe prompt's Model: line, when it has one, picks the preset (tkt help config);\n--as picks one yourself.\n\ntkt start refuses when an agent already runs in the worktree: use tkt run for\na fresh session, or tkt resume to bring back the last one. When the agent stops\nat a startup dialog, answer it in the tab and rerun the same tkt start: it\ncontinues where it stopped.\n\n--scratch NAME starts work that has no ticket. tkt start makes the worktree\nand branch NAME and a tab named NAME, starts the agent and sends it nothing.\nNAME takes letters, digits, '-' and '_', and must not be a ticket id. Other\ntkt commands work on tickets only, so they do not see this worktree; remove\nit with wt remove NAME.",
+      "example": "  xclip -selection clipboard -o | tkt start --prompt -\n  tkt start ACM-12\n  tkt start ACM-12 --prompt-file plan-request.md --as fast\n  tkt start ACM-12 --dry-run\n  tkt start --scratch spike-login --as fast",
       "group": "lifecycle",
       "args": [
         {
           "name": "ID",
           "required": false,
+          "variadic": false
+        },
+        {
+          "name": "|",
+          "required": true,
+          "variadic": false
+        },
+        {
+          "name": "NAME",
+          "required": true,
           "variadic": false
         }
       ],
@@ -81,6 +91,12 @@
           "type": "string",
           "default": "",
           "usage": "send the text in the file PATH instead of the start stage line"
+        },
+        {
+          "name": "scratch",
+          "type": "string",
+          "default": "",
+          "usage": "start an agent in worktree NAME with no ticket, and send it nothing"
         }
       ],
       "result": {
@@ -97,6 +113,7 @@
         "pane": "string",
         "preset": "string",
         "resent": "boolean",
+        "scratch": "string",
         "session": "string",
         "stage": "string",
         "tab": "string",
@@ -692,6 +709,11 @@
       "code": "ticket_id_mismatch",
       "exit": 2,
       "summary": "the ticket id differs from the first ticket the prompt names"
+    },
+    {
+      "code": "invalid_scratch_name",
+      "exit": 2,
+      "summary": "the --scratch name is not a plain branch name, or it is a ticket id"
     },
     {
       "code": "unknown_preset",

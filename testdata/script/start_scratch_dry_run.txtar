@@ -1,0 +1,7 @@
+# A scratch dry run prints the commands, without a prompt, and changes nothing.
+exec tkt start --scratch spike-login --dry-run
+stderr 'dry run: wt -C '$REPO' switch --create spike-login'
+stderr 'dry run: herdr agent start spike-login'
+! stderr 'dry run: herdr agent prompt'
+! exists $FAKE_WT_ROOT/spike-login
+! logcontains 'herdr tab create'

@@ -11,8 +11,9 @@ import (
 
 // resolveOrCreateWorktree returns the ticket's worktree, creating it through
 // worktrunk when needed. In a dry run a worktree to create is the
-// placeholder "<worktree of ID>".
-func (c *Ctx) resolveOrCreateWorktree(id string) (path string, created bool, err error) {
+// placeholder "<worktree of ID>". again is the command that reruns this
+// start, for the hints.
+func (c *Ctx) resolveOrCreateWorktree(id, again string) (path string, created bool, err error) {
 	es, err := c.WT.List(c.Ctx)
 	if err != nil {
 		return "", false, err
@@ -27,7 +28,7 @@ func (c *Ctx) resolveOrCreateWorktree(id string) (path string, created bool, err
 		if !c.Force {
 			return "", false, apperr.New(apperr.BranchNoWorktree,
 				"branch %s exists without a worktree (%s); it may be a finished ticket. Reuse it with --force, or delete it with: git branch -d %s",
-				id, c.Git.LastCommit(c.Ctx, root, id), id).WithHint("tkt start %s --force", id)
+				id, c.Git.LastCommit(c.Ctx, root, id), id).WithHint("%s --force", again)
 		}
 		create = false
 	} else {
@@ -70,8 +71,8 @@ func (c *Ctx) resolveOrCreateWorktree(id string) (path string, created bool, err
 		if !r.OK() {
 			if found {
 				return "", false, apperr.New(apperr.WtHookFailed,
-					"wt created %s but a hook failed (see above). Fix it, run 'wt -C %s hook pre-start', then rerun tkt start %s",
-					e.Path, e.Path, id).WithHint("wt -C %s hook pre-start", e.Path)
+					"wt created %s but a hook failed (see above). Fix it, run 'wt -C %s hook pre-start', then rerun %s",
+					e.Path, e.Path, again).WithHint("wt -C %s hook pre-start", e.Path)
 			}
 			return "", false, apperr.New(apperr.WtSwitchFailed, "wt switch failed for %s (see above)", id)
 		}

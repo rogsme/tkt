@@ -26,6 +26,7 @@ const (
 	InvalidTicketID      Code = "invalid_ticket_id"
 	TicketIDMissing      Code = "ticket_id_missing"
 	TicketIDMismatch     Code = "ticket_id_mismatch"
+	InvalidScratchName   Code = "invalid_scratch_name"
 	UnknownPreset        Code = "unknown_preset"
 	UnknownStage         Code = "unknown_stage"
 	PresetModelMismatch  Code = "preset_model_mismatch"
@@ -108,6 +109,7 @@ var Registry = []Info{
 	{InvalidTicketID, ExitUsage, "an argument is not a ticket id under the tracker's id pattern"},
 	{TicketIDMissing, ExitUsage, "no ticket id was given and the prompt names none"},
 	{TicketIDMismatch, ExitUsage, "the ticket id differs from the first ticket the prompt names"},
+	{InvalidScratchName, ExitUsage, "the --scratch name is not a plain branch name, or it is a ticket id"},
 	{UnknownPreset, ExitUsage, "no preset has that name"},
 	{UnknownStage, ExitUsage, "no stage has that name"},
 	{PresetModelMismatch, ExitUsage, "the chosen preset does not serve the prompt's Model: value"},

@@ -15,3 +15,9 @@ tkt start refuses when an agent already runs in the worktree: use tkt run for
 a fresh session, or tkt resume to bring back the last one. When the agent stops
 at a startup dialog, answer it in the tab and rerun the same tkt start: it
 continues where it stopped.
+
+--scratch NAME starts work that has no ticket. tkt start makes the worktree
+and branch NAME and a tab named NAME, starts the agent and sends it nothing.
+NAME takes letters, digits, '-' and '_', and must not be a ticket id. Other
+tkt commands work on tickets only, so they do not see this worktree; remove
+it with wt remove NAME.

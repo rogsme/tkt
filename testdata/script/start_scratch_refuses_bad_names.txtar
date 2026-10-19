@@ -1,0 +1,19 @@
+# A scratch name must be a plain name, and not a ticket id.
+! exec tkt start --scratch acm-12
+rc 2
+stderr 'is a ticket id'
+stderr 'hint: tkt start ACM-12'
+
+! exec tkt start --scratch a/b
+rc 2
+stderr 'is not a scratch name'
+
+# --scratch takes no ticket id and no prompt.
+! exec tkt start ACM-12 --scratch spike
+rc 2
+! exec tkt start --scratch spike --prompt hi
+rc 2
+
+! exists $FAKE_WT_ROOT/ACM-12
+! exists $FAKE_WT_ROOT/spike
+! logcontains 'herdr tab create'
