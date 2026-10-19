@@ -612,6 +612,49 @@ send_prompt() {
   esac
 }
 
+# Counts the user turns a session has recorded, or prints nothing when it
+# cannot tell.
+session_user_turns() {
+  local harness=$1 sid=$2 path=$3 f
+  if [[ $harness == claude ]]; then
+    f=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(printf '%s' "$path" | sed 's/[^A-Za-z0-9]/-/g')/$sid.jsonl
+    if [[ ! -f $f ]]; then
+      printf '0'
+      return 0
+    fi
+    jq -s '[.[] | select(.type == "user" and ((.message.content | type) == "string"
+        or ([.message.content[]? | select(.type == "text")] | length) > 0))] | length' "$f" 2>/dev/null || true
+    return 0
+  fi
+  run timeout 30 opencode api GET "/api/session/$sid/message?type=user&limit=200"
+  if ((RC == 0)); then jq '[.data[]? | select(.type == "user")] | length' <<<"$OUT" 2>/dev/null || true; fi
+}
+
+# Sends text to the agent in a pane. When herdr cannot confirm the agent took
+# it, the session's own record decides: a prompt it never recorded, to an
+# agent that is still idle, is sent once more. Returns like send_prompt.
+deliver_prompt() {
+  local pane=$1 text=$2 harness=$3 sid=$4 path=$5 before after status rc=0
+  if ((DRY)); then
+    send_prompt "$pane" "$text"
+    return 0
+  fi
+  before=$(session_user_turns "$harness" "$sid" "$path")
+  send_prompt "$pane" "$text" || rc=$?
+  ((rc == 5)) || return "$rc"
+  [[ $before ]] || return 5
+  sleep 3
+  after=$(session_user_turns "$harness" "$sid" "$path")
+  [[ $after ]] || return 5
+  if ((after > before)); then return 0; fi
+  status=$(agent_on_pane "$pane" | jq -r '.agent_status // empty' 2>/dev/null || true)
+  [[ $status == idle || $status == 'done' ]] || return 5
+  info "the agent never recorded the prompt; sending it once more"
+  rc=0
+  send_prompt "$pane" "$text" || rc=$?
+  return "$rc"
+}
+
 # Exits the idle agent in a pane and waits until herdr sees a free shell.
 exit_agent() {
   local pane=$1 i
@@ -930,7 +973,7 @@ cmd_start() {
   fi
 
   local prc=0
-  send_prompt "$pane" "$PROMPT" || prc=$?
+  deliver_prompt "$pane" "$PROMPT" "$harness" "${ST[session]-}" "$path" || prc=$?
   if ((prc == 5)); then
     state_write "$path" status=prompt_uncertain
     show_screen "$pane"
@@ -1045,7 +1088,7 @@ cmd_run() {
   fi
   ((rc == 0)) || die 1 "$LAUNCH_ERR"
   local prc=0
-  send_prompt "$PANE" "$text" || prc=$?
+  deliver_prompt "$PANE" "$text" "$harness" "$sid" "$path" || prc=$?
   if ((prc == 5)); then
     state_write "$path" status=prompt_uncertain
     show_screen "$PANE"

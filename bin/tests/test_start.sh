@@ -139,10 +139,25 @@ test_start_stops_at_a_startup_dialog_then_continues() {
   assert_eq "$(grep -c 'end of prompt' "$FAKE_DIR/prompts")" 1
 }
 
-test_start_never_resends_a_stalled_prompt() {
+test_start_resends_a_prompt_the_session_never_recorded() {
   FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled tkt start ACM-12 --prompt "$(prompt_with ACM-12)"
+  expect_rc 0
+  assert_contains "$T_ERR" "sending it once more"
+  assert_eq "$(grep -c 'end of prompt' "$FAKE_DIR/prompts")" 2
+  assert_eq "$(state_of "$FAKE_WT_ROOT/ACM-12" status)" submitted
+}
+
+test_start_resends_only_once() {
+  FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled,agent_prompt_stalled tkt start ACM-12 --prompt "$(prompt_with ACM-12)"
   expect_rc 5
   assert_eq "$(state_of "$FAKE_WT_ROOT/ACM-12" status)" prompt_uncertain
+  assert_eq "$(grep -c 'end of prompt' "$FAKE_DIR/prompts")" 2
+}
+
+test_start_trusts_the_session_record_over_a_stall() {
+  FAKE_HERDR_RECORD_TURN=1 FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled tkt start ACM-12 --prompt "$(prompt_with ACM-12)"
+  expect_rc 0
+  assert_not_contains "$T_ERR" "once more"
   assert_eq "$(grep -c 'end of prompt' "$FAKE_DIR/prompts")" 1
 }
 

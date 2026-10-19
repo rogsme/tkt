@@ -129,6 +129,11 @@ case "$group $cmd" in
       exit 0
     fi
     printf '%s\n%s\n' "$text" '--- end of prompt ---' >>"$FAKE_DIR/prompts"
+    if [[ ${FAKE_HERDR_RECORD_TURN:-} == 1 ]]; then
+      dir=$HOME/.claude/projects/$(jq -r .cwd <<<"$a" | sed 's/[^A-Za-z0-9]/-/g')
+      mkdir -p "$dir"
+      echo '{"type": "user", "message": {"content": "prompt"}}' >>"$dir/$(jq -r .agent_session.value <<<"$a").jsonl"
+    fi
     if e=$(injected FAKE_HERDR_PROMPT_ERRORS); then fail "$e"; fi
     ok "$(jq -c '{agent: (. + {agent_status: "working"})}' <<<"$a")" ;;
   "agent wait")
