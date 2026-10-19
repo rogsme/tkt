@@ -22,7 +22,13 @@ Each test runs in a subshell with its own temporary `HOME`, a git repository wit
 
 Every fake appends its arguments to `$FAKE_LOG`, so tests assert the exact commands tkt ran. `assert_house_rules` checks the rules every command keeps: no `--no-hooks`, `--clobber` or `--yes` for `wt`, no worktree changes through git or herdr, and no direct `claude` call.
 
-Pure functions (configuration, presets, prompt guards, the review verdict and checks parsing, the next-step table) are tested by sourcing `bin/tkt`, which runs nothing when sourced.
+The `unit_*.sh` files test pure functions (configuration, presets, prompt guards, the review verdict and checks parsing, the next-step table) by sourcing `bin/tkt`, which runs nothing when sourced.
+
+To run the black-box tests against another build of tkt, set `TKT_BIN` to its path. The runner then skips the `unit_*.sh` files:
+
+```bash
+TKT_BIN=/path/to/tkt bash bin/tests/run
+```
 
 ## Manual check in herdr
 

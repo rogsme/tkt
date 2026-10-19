@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Runs the tkt tests: bash bin/tests/run [name-filter]
+# With TKT_BIN set, the tests run that executable and skip the unit_*.sh
+# files, which source bin/tkt.
 set -uo pipefail
 TESTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 export TESTS_DIR
@@ -10,7 +12,9 @@ export PATH=$TESTS_DIR/fakes:$PATH
 filter=${1:-}
 pass=0
 failed=0
-for file in "$TESTS_DIR"/test_*.sh; do
+files=("$TESTS_DIR"/test_*.sh)
+if [[ -z ${TKT_BIN:-} ]]; then files+=("$TESTS_DIR"/unit_*.sh); fi
+for file in "${files[@]}"; do
   while read -r name; do
     [[ -z $filter || $name == *"$filter"* ]] || continue
     if out=$(
