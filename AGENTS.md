@@ -51,16 +51,13 @@ An error message says what is wrong and, when it can, what to run next. Put the 
 
 ## Verification
 
-Run these before pushing:
+The `justfile` holds the common tasks; `just` lists them.
 
-```bash
-test -z "$(gofmt -l .)"
-go vet ./...
-go test -race ./...
-uv run --quiet --with shellcheck-py shellcheck install.sh
-for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -o /dev/null . ; done
-grep -rnP '[\x{2013}\x{2014}]' --exclude-dir=.git .
-```
+- `just run ARGS` runs the working tree's tkt on your terminal, such as `just run doctor`. `just build` writes `./tkt`, and `just install` replaces the tkt on PATH. These builds report a `dev-` version, so `tkt update` replaces them only with `--force`.
+- `just test` runs the tests with the race detector.
+- `just ci` runs every check that `.gitea/workflows/ci.yml` runs: gofmt, vet, the race tests, shellcheck on `install.sh`, the four release builds, and the search for en and em dashes. Run it before pushing. A change to either file's checks goes in both.
+
+The scripts in `testdata/script/` have no terminal, so they never see a view that only appears on one, such as `tkt doctor`'s. Cover that view with a unit test that sets `prettyTerminal` (see `internal/cli/show_test.go`), and try it with `just run` in both a passing and a failing case.
 
 The suite must stay well inside `go test`'s ten-minute default on the CI runner. Under `-race`, every fake is a race-built copy of the test binary, and such a binary sleeps a second as it exits. `GORACE=atexit_sleep_ms=0` in the sandbox (`setupSandbox` in `main_test.go`) keeps the suite at about twenty seconds; without it, CI times out.
 
@@ -68,19 +65,15 @@ The fakes cannot prove that herdr, worktrunk, Claude Code and OpenCode behave as
 
 ## CI and releases
 
-`.gitea/workflows/ci.yml` runs on every push and pull request to master. Tag only a commit whose CI run passed.
+`.gitea/workflows/ci.yml` runs on every push and pull request to master. `just release` runs the same checks locally, so a release does not wait for it.
 
 git.rogs.me answers its web pages with a Cloudflare challenge, but `/api/v1` is open, so read CI through the API:
 - `curl -s https://git.rogs.me/api/v1/repos/rogs/tkt/actions/tasks` lists the runs with their status.
 - A failed job's log needs a login: `tea api --login git.rogs.me /repos/rogs/tkt/actions/runs/RUN/jobs`, then `.../actions/jobs/JOB/logs`. RUN is the number in the run's URL.
 
-To release, tag a green commit `vX.Y.Z` and push the tag. `.gitea/workflows/release.yml` tests, builds the four binaries, and publishes them with `install.sh` and `SHA256SUMS`, using the job's automatic token. That token sufficed for v0.2.0; `RELEASE_TOKEN` is only a fallback.
+To release, run `just release vX.Y.Z` on master with a clean tree. It runs `just ci`, makes the annotated tag, and pushes master and the tag in one atomic push. `.gitea/workflows/release.yml` then tests, builds the four binaries, and publishes them with `install.sh` and `SHA256SUMS`, using the job's automatic token. That token sufficed for v0.2.0; `RELEASE_TOKEN` is only a fallback. `just release` waits for the files and installs the release the way the README does; it fails unless the installed tkt prints the new version.
 
-- A tag with a hyphen, such as `vX.Y.Z-rc.N`, becomes a prerelease. `latest`, and so the default `install.sh`, follow full releases only. Install a prerelease from its own URL: `curl -fsSL https://git.rogs.me/rogs/tkt/releases/download/vX.Y.Z-rc.N/install.sh | sh -s -- --version vX.Y.Z-rc.N`.
+- A tag with a hyphen, such as `vX.Y.Z-rc.N`, becomes a prerelease. `latest`, and so the default `install.sh`, follow full releases only. Install a prerelease from its own URL: `curl -fsSL https://git.rogs.me/rogs/tkt/releases/download/vX.Y.Z-rc.N/install.sh | sh -s -- --version vX.Y.Z-rc.N`. `just release` checks a prerelease that way.
 - Push a prerelease first after changing the release workflow or `install.sh`.
-- After a full release, check the install that the README gives. It must print the new version:
-  ```bash
-  curl -fsSL https://git.rogs.me/rogs/tkt/releases/download/latest/install.sh | TKT_INSTALL_DIR=$(mktemp -d) sh
-  ```
 
 The downloads work because a Cloudflare rule skips the challenge for `/rogs/tkt/releases/download/`; Gitea serves the assets there without redirecting to `/attachments/`. A 403 with `cf-mitigated: challenge` on a download means that rule changed. `go install gitlab.com/rogs/tkt@...` needs the public GitLab mirror. At v0.2.0 the mirror did not exist yet; a "could not read Username for 'https://gitlab.com'" error means it still does not. The README's "Maintainer setup" has the settings outside the repository.
