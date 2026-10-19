@@ -33,7 +33,7 @@ With Go 1.26 or newer:
 go install gitlab.com/rogs/tkt@latest
 ```
 
-To update an installed tkt to the latest release, run `tkt update`. It makes the same checksum check as the install script, runs the new binary once, and only then replaces the old one. `tkt update --check` reports without changing anything, and `tkt update vX.Y.Z` installs a given release, prereleases included. A development build whose `tkt --version` prints `dev` has no version to compare, so `tkt update` replaces it only with `--force`.
+To update an installed tkt to the latest release, run `tkt update`. It makes the same checksum check as the install script, runs the new binary once, and only then replaces the old one. `tkt update --check` reports without changing anything, and `tkt update vX.Y.Z` installs a given release, prereleases included. A development build, whose `tkt --version` prints `dev` or a `dev-` version, has no release to compare, so `tkt update` replaces it only with `--force`.
 
 ### Requirements
 
@@ -123,4 +123,20 @@ tkt keeps each ticket's state (preset, session, tab, pane) in the worktree's git
 
 ## Development
 
-[`AGENTS.md`](AGENTS.md) has the layout, the rules, the checks to run before pushing, and how CI and releases work. [`testdata/README.md`](testdata/README.md) describes the tests.
+You need Go 1.26 or newer, [just](https://just.systems), and [uv](https://docs.astral.sh/uv/) for the shellcheck step. Run `just` to list the recipes.
+
+To try a change, run tkt from the working tree on your own terminal. Arguments go to tkt as they are:
+
+```bash
+just run doctor
+just run ls --json
+just run start ACM-12 --dry-run
+```
+
+`just build` writes `./tkt`. `just install` builds the working tree over the tkt on PATH (`~/.local/bin`, or `TKT_INSTALL_DIR`), so herdr panes and agents use it too. These builds print a version such as `dev-v0.3.2-1-gabc1234`, so `tkt update` replaces them only with `--force`. Run `tkt update --force` to go back to the latest release.
+
+`just test` runs the tests with the race detector; `just test -run TestDoctorPretty` passes flags to `go test`. Before pushing, run `just ci`. It runs the same checks as CI: gofmt, vet, the race tests, shellcheck on `install.sh`, a build for each release target, and the search for en and em dashes.
+
+To release, run `just release vX.Y.Z` on a clean master. It runs `just ci`, pushes master and the tag together, waits for the release job to publish, and checks that the install script installs the new version. A tag with a hyphen, such as `vX.Y.Z-rc.1`, becomes a prerelease.
+
+[`AGENTS.md`](AGENTS.md) has the layout, the rules, and how CI and releases work. [`testdata/README.md`](testdata/README.md) describes the tests.
