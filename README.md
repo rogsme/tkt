@@ -1,36 +1,52 @@
 # tkt
 
-`tkt` runs the mechanical steps around the [rogs-skills](https://gitlab.com/rogs/skills) ticket lifecycle. It creates the ticket's worktree, opens a [herdr](https://herdr.dev) tab named after the ticket, starts Claude Code or OpenCode in that tab, and hands the agent its prompt. Each command is one step you take. Nothing chains stages together: you still approve plans, run the human verification steps and merge, and `tkt ls` only suggests the next command.
+`tkt` runs the mechanical steps around the [rogs-skills](https://gitlab.com/rogs/skills) ticket lifecycle from a [herdr](https://herdr.dev) pane. For each ticket it:
+
+- creates the ticket's worktree;
+- opens a tab named after the ticket;
+- starts Claude Code or OpenCode in that tab;
+- hands the agent its prompt.
+
+Each command is one step you take. Nothing chains stages together: you still approve plans, run the human verification steps and merge, and `tkt ls` only suggests the next command.
+
+People and programs both drive tkt. Every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
 
 ## Install
 
-Build it with Go 1.26 or newer:
+On Linux or macOS, the install script downloads the latest release, checks it against the release's `SHA256SUMS` and installs it to `~/.local/bin`:
+
+```bash
+curl -fsSL https://git.rogs.me/rogs/tkt/releases/download/latest/install.sh | sh
+```
+
+`sh -s -- --dir DIR --version vX.Y.Z` picks another directory or release. The checksum catches a broken download, not a compromised host.
+
+To download the binary yourself (this works in fish, bash and zsh; replace `linux_amd64` with `linux_arm64`, `darwin_amd64` or `darwin_arm64` for other systems):
+
+```bash
+mkdir -p ~/.local/bin && curl -fsSLo ~/.local/bin/tkt https://git.rogs.me/rogs/tkt/releases/download/latest/tkt_linux_amd64 && chmod +x ~/.local/bin/tkt
+```
+
+With Go 1.26 or newer:
 
 ```bash
 go install gitlab.com/rogs/tkt@latest
 ```
 
-Or build it from a clone:
+If `~/.local/bin/tkt` is still a symlink to the old bash script in a skills checkout, the install script replaces the link. `go build -o` would write through it, so delete the link first when you build by hand.
 
-```bash
-git clone https://gitlab.com/rogs/tkt.git
-cd tkt
-go build -o ~/.local/bin/tkt .
-```
-
-If `~/.local/bin/tkt` is still a symlink to the old bash script in a skills checkout, delete it first. `go build -o` would otherwise write through the link into that checkout.
-
-Requirements at run time:
+### Requirements
 
 - git 2.31 or newer;
 - herdr 0.9.3 or newer, with tkt running inside a herdr pane;
 - [worktrunk](https://worktrunk.dev) (`wt`) 0.68 or newer;
 - Claude Code or OpenCode;
-- the configuration that the `/setup-rogs` skill writes into the project.
+- the configuration that the `/setup-rogs` skill writes into the project;
+- `gh` for `tkt done` and the pull request columns of `tkt ls`, which support GitHub forges only.
 
-`tkt done` and `tkt ls` read pull requests through `gh`, so they support GitHub forges only.
+`tkt doctor` checks all of these.
 
-worktrunk must name each worktree directory after its branch. Put the setup an agent needs, such as copying `.env` files and dependencies, in a `pre-start` hook. worktrunk runs `post-start` hooks in the background, so an agent could start before they finish. For example:
+worktrunk must name each worktree directory after its branch. Put the setup an agent needs, such as copying `.env` files and dependencies, in a `pre-start` hook. worktrunk runs `post-start` hooks in the background, so an agent could start before they finish:
 
 ```toml
 worktree-path = "~/code/worktrees/{{ repo }}/{{ branch | sanitize_hash }}"
@@ -39,30 +55,79 @@ worktree-path = "~/code/worktrees/{{ repo }}/{{ branch | sanitize_hash }}"
 copy = "wt step copy-ignored"
 ```
 
-## A ticket from start to merge
+### Shell completion
 
-Each step is one command you run or one answer you give in the ticket's tab. `tkt ls` shows where every ticket stands and suggests the next step.
+Completion offers ticket ids, stages, presets and panes:
 
-1. Start the ticket:
-   - `xclip -selection clipboard -o | tkt start --prompt -`, with its start-ticket block on the clipboard;
-   - or `tkt start ACM-12`, which sends only the `start` stage line.
+```bash
+tkt completion fish > ~/.config/fish/completions/tkt.fish
+```
 
-   The agent investigates and ends with `Status: AWAITING_APPROVAL`.
-2. Read the plan in the tab, then approve it there or ask for changes. The same session goes on to implement it with `work-ticket`, so answer in the tab. `tkt run` would discard the plan.
-3. When the agent ends with `Status: READY_FOR_REVIEW`, run `tkt run ACM-12 review`. The reviewer must not be the session that wrote the change, and `tkt run` always starts a fresh one.
-4. Act on the verdict the review posts:
-   - `CHANGES_REQUESTED`: run `tkt run ACM-12 address`.
-   - `Status: BLOCKED_FOR_SYNC`: run `tkt run ACM-12 sync`.
-   - `READY_FOR_HUMAN`: go on to step 5.
+`tkt completion bash` and `tkt completion zsh` work the same way.
 
-   Both `address` and `sync` end with `Status: READY_FOR_REVIEW`, so go back to step 3.
-5. Do the human verification steps listed in the review summary. `tkt run ACM-12 verify` has an agent run them in a browser and report each one, but you decide whether each step passed.
-6. In the tab, tell the agent to merge and which steps passed, such as "Merge the PR. Human verification steps 1 to 3 passed." No stage sends this, because `finish-ticket` merges only on your explicit instruction. When a step failed, say what you saw instead. The agent records it on the pull request and ends with `Status: HUMAN_QA_FAILED`, and you run `tkt run ACM-12 address`.
-7. After the merge, run `tkt done ACM-12` from another tab.
+## Use
 
-When the checks fail on the pull request's head and no review is waiting to be addressed, run `tkt run ACM-12 ci`.
+| Command | What it does |
+|---|---|
+| `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
+| `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address`, `sync`, `ci`, `verify` or `start`. |
+| `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
+| `tkt done ID` | Closes a merged ticket's tabs and removes its worktree. |
+| `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
+| `tkt wait ID` | Blocks until the ticket's agent needs you or has finished. |
+| `tkt doctor` | Checks the tools, versions and configuration tkt needs. |
+| `tkt schema` | Describes every command, flag, result and error code as JSON. |
 
-`tkt --help` lists every command and option. [`testdata/README.md`](testdata/README.md) describes the tests.
+A ticket from start to merge, in short:
+
+1. Run `tkt start ACM-12`, or pipe in the dispatcher's block with `tkt start --prompt -`.
+2. Approve the plan in the ticket's tab.
+3. When the agent reports `Status: READY_FOR_REVIEW`, run `tkt run ACM-12 review`.
+4. Act on the verdict with `address` or `sync`, and review again.
+5. Verify, merge in the tab, then run `tkt done ACM-12`.
+
+`tkt help lifecycle` walks through each step. `tkt COMMAND --help` explains when to use a command and what it refuses.
+
+### Settings
+
+`~/.config/tkt/config.toml` holds presets, which choose the harness and model, and stage lines:
+
+```toml
+[presets.claude]
+harness = "claude"
+serves = ["frontier"]
+
+[presets.fast]
+harness = "opencode"
+model = "acme/small#max"
+serves = ["small"]
+
+[stages]
+lint = "Run the linter on {id} and fix what it reports."
+```
+
+Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. `tkt help config` has the details.
+
+Older versions read `presets` and `stages` column files. When only those exist, tkt stops and prints the equivalent `config.toml`.
+
+### Driving tkt from a program
+
+- `--json`, or `TKT_FORMAT=json` in the environment, makes stdout hold exactly one JSON document per run. On success it carries the command's result; on failure it carries an error with a stable `code`, the exit status, a `hint` naming what to do next, and `details` (`tkt help json`).
+- `tkt schema` describes every command's arguments, flags and result fields, every error code and the environment tkt reads.
+- `tkt wait ID` blocks until an agent needs you, so programs never have to poll.
+- In `tkt ls --json`, each row's `next` holds the suggested command as an argv list.
+- Exit statuses: 0 done, 1 an external command failed, 2 bad usage or input, 3 environment or configuration, 4 refused because of the current state, 5 uncertain outcome, so inspect the ticket's tab before you retry. `tkt help exit-codes` lists every code.
+- tkt never prompts when stdin is not a terminal.
+
+### State and logs
+
+tkt keeps each ticket's state (preset, session, tab, pane) in the worktree's git directory, so it disappears with the worktree. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. `-v` prints the same lines as tkt goes.
+
+## Development
+
+[`AGENTS.md`](AGENTS.md) has the layout, the rules and the checks to run before pushing. [`testdata/README.md`](testdata/README.md) describes the tests.
+
+To release, tag the commit `vX.Y.Z` and push the tag. The release workflow tests, builds the four binaries, and publishes them with `install.sh` and `SHA256SUMS`. A tag with a hyphen, such as `v0.2.0-rc.1`, becomes a prerelease, which `latest` skips.
 
 ## Maintainer setup
 
@@ -100,4 +165,4 @@ The Go module path is `gitlab.com/rogs/tkt`, so `go install` reads the mirror, n
 
 ### Gitea Actions
 
-Enable Actions on `rogs/tkt`. The workflows in `.gitea/workflows/` need a runner with the `ubuntu-latest` label. The release workflow creates releases with the job's automatic token. If that fails with a permission error, add a `RELEASE_TOKEN` secret with a personal access token that has the `write:repository` scope.
+Enable Actions on `rogs/tkt`. The workflows in `.gitea/workflows/` need a runner with the `ubuntu-latest` label. The release workflow creates releases with the job's automatic token. If that fails with a permission error, add a `RELEASE_TOKEN` secret with a personal access token that has the `write:repository` scope. Gitea's `[repository.release] ALLOWED_TYPES` setting must allow the asset names: binaries without an extension, `install.sh` and `SHA256SUMS`.
