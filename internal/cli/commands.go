@@ -180,3 +180,26 @@ func lsCmd(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&o.NoFetch, "no-fetch", false, "skip the git fetch that refreshes the commits-behind count")
 	return cmd
 }
+
+func waitCmd(g *globals) *cobra.Command {
+	var o app.WaitOpts
+	cmd := &cobra.Command{
+		Use:   "wait ID",
+		Short: "Block until the ticket's agent needs you or has finished",
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt wait ID")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Wait(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringSliceVar(&o.Until, "until", nil, "stop at STATE: idle, working, blocked or done; repeat it or separate with commas (default idle, blocked, done)")
+	cmd.Flags().DurationVar(&o.Timeout, "timeout", 0, "give up after DURATION, such as 30m (default: wait without limit)")
+	cmd.Flags().StringVar(&o.Pane, "pane", "", "wait for the agent in PANE when several run in the worktree")
+	return cmd
+}

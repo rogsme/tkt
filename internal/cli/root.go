@@ -136,7 +136,7 @@ take; nothing chains stages.`,
 		c.GroupID = "lifecycle"
 		root.AddCommand(c)
 	}
-	for _, c := range []*cobra.Command{lsCmd(g)} {
+	for _, c := range []*cobra.Command{lsCmd(g), waitCmd(g)} {
 		c.GroupID = "inspect"
 		root.AddCommand(c)
 	}

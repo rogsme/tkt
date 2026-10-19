@@ -1,0 +1,33 @@
+# tkt wait blocks until the ticket's agent needs you or has finished, and
+# reports its last status line.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env 'FAKE_HERDR_SCREEN=Plan ready. Status: AWAITING_APPROVAL'
+exec tkt wait 12 --timeout 5s
+stdout '^ACM-12  idle  pane w1:p10  last status AWAITING_APPROVAL$'
+logged herdr agent wait w1:p10 --until idle --until blocked --until done --timeout 5000
+
+exec tkt wait ACM-12 --until working,blocked --json
+envelope '.result | [.ticket, .pane, .agent, .status]' '["ACM-12","w1:p10","acm-12","idle"]'
+logged herdr agent wait w1:p10 --until working --until blocked
+
+# A timeout is a state, not a failure of herdr.
+env FAKE_HERDR_WAIT_ERRORS=timeout
+! exec tkt wait ACM-12 --timeout 1s --json
+rc 4
+envelope '.error.code' wait_timeout
+envelope '.error.hint' 'tkt wait ACM-12 again, or check pane w1:p10'
+env FAKE_HERDR_WAIT_ERRORS=
+
+# Only real states are accepted.
+! exec tkt wait ACM-12 --until asleep
+rc 2
+stderr 'until takes idle, working, blocked, done'
+
+# Without an agent, tkt wait points at tkt resume.
+jqedit $FAKE_DIR/herdr.json '.agents = []'
+! exec tkt wait ACM-12 --json
+rc 4
+envelope '.error.code' agent_missing
+envelope '.error.hint' 'tkt resume ACM-12'
