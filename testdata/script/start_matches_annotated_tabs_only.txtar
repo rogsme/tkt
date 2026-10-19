@@ -1,0 +1,6 @@
+# A tab named ACM-120 is not ACM-12's.
+jqedit $FAKE_DIR/herdr.json '.tabs += [{tab_id: "w1:t2", workspace_id: "w1", label: "ACM-120 (fast)"}] | .panes += [{pane_id: "w1:p2", tab_id: "w1:t2", workspace_id: "w1", cwd: $REPO, foreground_cwd: $REPO}]'
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label ACM-12

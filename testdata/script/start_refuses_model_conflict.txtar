@@ -1,0 +1,14 @@
+# --as must serve the prompt's Model: value.
+mkdir $HOME/.config/tkt
+cp $WORK/presets $HOME/.config/tkt/presets
+mkprompt $WORK/p.txt ACM-6 'Model: small'
+stdin $WORK/p.txt
+! exec tkt start ACM-6 --as claude --prompt -
+rc 2
+! logcontains 'wt -C'
+
+-- presets --
+# name  harness   model              serves
+claude  claude    -                  frontier
+big     opencode  acme/big#high      frontier
+fast     opencode  acme/fast#max      small

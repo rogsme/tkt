@@ -1,0 +1,10 @@
+# A branch without a worktree may be a finished ticket; --force reuses it.
+realgit -C $REPO branch ACM-12 main
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+! exec tkt start ACM-12 --prompt -
+rc 4
+stderr 'exists without a worktree'
+stdin $WORK/p.txt
+exec tkt start ACM-12 --force --prompt -
+logged wt -C $REPO switch ACM-12 --no-cd --format json

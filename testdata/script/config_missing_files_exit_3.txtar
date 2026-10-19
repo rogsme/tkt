@@ -1,0 +1,5 @@
+# Without the lifecycle configuration, tkt points at /setup-rogs.
+rm $REPO/docs/agents/forge.md
+! exec tkt start ACM-1 --dry-run
+rc 3
+stderr setup-rogs

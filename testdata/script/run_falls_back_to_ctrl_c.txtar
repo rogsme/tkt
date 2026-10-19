@@ -1,0 +1,11 @@
+# When /exit does not close the agent, Ctrl-C does.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+resetlog
+env FAKE_HERDR_EXIT_IGNORED=1
+exec tkt run ACM-12 verify
+logged herdr agent send-keys w1:p10 ctrl+c
+grep 'Human verification' $FAKE_DIR/prompts

@@ -1,0 +1,8 @@
+# A stall the session did record needs no resend.
+env FAKE_HERDR_RECORD_TURN=1
+env FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+! stderr 'once more'
+grep -count=1 'end of prompt' $FAKE_DIR/prompts

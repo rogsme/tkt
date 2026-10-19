@@ -1,0 +1,7 @@
+# The lifecycle skills need the worktree directory named after the branch.
+realgit -C $REPO worktree add -q -b ACM-12 $FAKE_WT_ROOT/ACM-12-a1b2 main
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+! exec tkt start ACM-12 --prompt -
+rc 3
+stderr 'branch = directory = ticket id'

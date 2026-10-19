@@ -1,0 +1,12 @@
+# A Claude session already running in another pane is not resumed twice.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+jqedit $FAKE_DIR/herdr.json '.agents = []'
+resetlog
+statevar $WT session SID
+jqedit $FAKE_DIR/herdr.json '.agents += [{name: "other", agent: "claude", agent_status: "idle", pane_id: "w1:p1", tab_id: "w1:t1", cwd: $REPO, foreground_cwd: $REPO, agent_session: {value: $SID}}]'
+! exec tkt resume ACM-12
+rc 4
+stderr 'already runs in pane w1:p1'

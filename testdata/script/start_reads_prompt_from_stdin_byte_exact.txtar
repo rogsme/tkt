@@ -1,0 +1,14 @@
+# A prompt read from stdin reaches the agent byte for byte.
+stdin $WORK/p3.txt
+exec tkt start --prompt -
+cmp $FAKE_DIR/prompts $WORK/want.txt
+
+-- p3.txt --
+Start ACM-3: it's "quoted" `code` $(not run) \ backslash
+
+More lines.
+-- want.txt --
+Start ACM-3: it's "quoted" `code` $(not run) \ backslash
+
+More lines.
+--- end of prompt ---

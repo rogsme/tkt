@@ -1,0 +1,5 @@
+# Only worktrees named after a ticket branch are rows.
+realgit -C $REPO worktree add -q -b chore/docs $FAKE_WT_ROOT/chore-docs main
+realgit -C $REPO worktree add -q -b someone/acm-9 $FAKE_WT_ROOT/ACM-9 main
+exec tkt ls --no-fetch
+stderr 'no ticket worktrees'

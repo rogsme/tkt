@@ -1,0 +1,18 @@
+# tkt start creates the worktree and tab, starts Claude Code in bypass mode
+# on a chosen session id, and sends the prompt.
+mkprompt $WORK/p.txt ACM-12 'Model: frontier'
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+rc 0
+exists $FAKE_WT_ROOT/ACM-12
+logged wt -C $REPO switch --create ACM-12 --no-cd --format json
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label ACM-12 --no-focus
+logged herdr agent start acm-12 --kind claude --pane w1:p10 --timeout 90000 -- --dangerously-skip-permissions --session-id
+grep 'Work in the ACM-12 worktree.' $FAKE_DIR/prompts
+state $FAKE_WT_ROOT/ACM-12 status submitted
+state $FAKE_WT_ROOT/ACM-12 preset claude
+state $FAKE_WT_ROOT/ACM-12 stage start
+statevar $FAKE_WT_ROOT/ACM-12 session SID
+jqeq $FAKE_DIR/herdr.json '.agents[0].agent_session.value' $SID
+stdout 'ACM-12  '$FAKE_WT_ROOT'/ACM-12  tab w1:t10  agent acm-12 \(claude, claude\)'
+houserules

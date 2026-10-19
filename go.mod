@@ -4,6 +4,8 @@ go 1.26.0
 
 require (
 	charm.land/fang/v2 v2.0.1
+	github.com/itchyny/gojq v0.12.19
+	github.com/rogpeppe/go-internal v1.16.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.47.0
@@ -21,6 +23,7 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-runewidth v0.0.20 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
@@ -33,4 +36,5 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/tools v0.26.0 // indirect
 )

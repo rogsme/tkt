@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-# Logs every git call tkt makes, then runs the real git.
-{
-  printf 'git' 
-  printf ' %q' "$@"
-  printf '\n'
-} >>"$FAKE_LOG"
-exec "$REAL_GIT" "$@"

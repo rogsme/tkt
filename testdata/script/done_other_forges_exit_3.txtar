@@ -1,0 +1,17 @@
+# tkt done reads pull requests through gh, so it supports GitHub only.
+cp $WORK/forge.md $REPO/docs/agents/forge.md
+! exec tkt done ACM-12
+rc 3
+stderr 'GitHub forges only'
+
+-- forge.md --
+<!-- rogs-skills config v1: forge -->
+# Forge
+
+## Forge
+
+- Kind: Gitea
+- Host: git.example.com
+- Repository: acme/app
+- Remote: origin
+- Base branch: main

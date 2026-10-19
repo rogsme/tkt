@@ -1,0 +1,7 @@
+# A failed worktrunk hook names the command to rerun it.
+env FAKE_WT_SWITCH_FAIL=1
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+! exec tkt start ACM-12 --prompt -
+rc 1
+stderr 'hook pre-start'

@@ -1,0 +1,24 @@
+# tkt done closes the merged ticket's tab and removes its worktree.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $WT push -q origin ACM-12
+realgit -C $REPO merge -q --no-ff -m 'Merge ACM-12' ACM-12
+realgit -C $REPO push -q origin main
+gitvar H1 $WT HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+env FAKE_GH_PRS=$WORK/prs.json
+resetlog
+exec tkt done ACM-12
+logged git -C $REPO fetch --prune --quiet origin
+logged herdr tab close w1:t10
+logged wt -C $REPO remove ACM-12 --foreground --reap --format json
+! exists $WT
+stdout 'removed '$WT' and branch ACM-12'
+jqeq $FAKE_DIR/herdr.json '[.tabs[].tab_id]' '["w1:t1"]'
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

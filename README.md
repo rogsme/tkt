@@ -62,7 +62,7 @@ Each step is one command you run or one answer you give in the ticket's tab. `tk
 
 When the checks fail on the pull request's head and no review is waiting to be addressed, run `tkt run ACM-12 ci`.
 
-`tkt --help` lists every command and option. [`bin/tests/README.md`](bin/tests/README.md) describes the tests.
+`tkt --help` lists every command and option. [`testdata/README.md`](testdata/README.md) describes the tests.
 
 ## Maintainer setup
 

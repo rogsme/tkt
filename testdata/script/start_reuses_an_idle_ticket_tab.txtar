@@ -1,0 +1,11 @@
+# An existing worktree and an idle tab of the ticket are reused.
+realgit -C $REPO worktree add -q -b ACM-12 $FAKE_WT_ROOT/ACM-12 main
+jqedit $FAKE_DIR/herdr.json '.tabs += [{tab_id: "w1:t2", workspace_id: "w1", label: "ACM-12 (blocked by 11)"}] | .panes += [{pane_id: "w1:p2", tab_id: "w1:t2", workspace_id: "w1", cwd: ($FAKE_WT_ROOT + "/ACM-12"), foreground_cwd: ($FAKE_WT_ROOT + "/ACM-12")}]'
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+stderr 'reusing worktree'
+stderr 'reusing tab w1:t2'
+! logcontains 'wt -C '$REPO' switch'
+! logcontains 'herdr tab create'
+logged herdr agent start acm-12 --kind claude --pane w1:p2

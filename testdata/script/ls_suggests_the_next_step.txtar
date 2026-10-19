@@ -1,0 +1,50 @@
+# tkt ls shows one row per ticket with the next step.
+mkprompt $WORK/p1.txt ACM-1
+mkprompt $WORK/p2.txt ACM-2
+mkprompt $WORK/p3.txt ACM-3
+mkprompt $WORK/p4.txt ACM-4
+stdin $WORK/p1.txt
+exec tkt start ACM-1 --prompt -
+stdin $WORK/p2.txt
+exec tkt start ACM-2 --prompt -
+stdin $WORK/p3.txt
+exec tkt start ACM-3 --prompt -
+stdin $WORK/p4.txt
+exec tkt start ACM-4 --prompt -
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+gitvar H2 $FAKE_WT_ROOT/ACM-2 HEAD
+gitvar H3 $FAKE_WT_ROOT/ACM-3 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1SHORT"; $H1[0:7]) | gsub("H1"; $H1) | gsub("H2"; $H2) | gsub("H3"; $H3) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+env 'FAKE_HERDR_SCREEN=Plan ready. Status: AWAITING_APPROVAL'
+exec tkt ls --no-fetch
+stdout '^TICKET'
+stdout '^ACM-1 .*CLEAR.*tkt run ACM-1 verify'
+stdout '^ACM-1 .*ok 1'
+stdout '^ACM-2 .*CHANGES_REQUESTED.*tkt run ACM-2 address'
+stdout '^ACM-3 .*#3 merged.*tkt done ACM-3'
+stdout '^ACM-4 .*AWAITING_APPROVAL.*approve the plan in its tab'
+! stdout main
+
+# A failed pull request query shows ? and exits 1.
+env FAKE_GH_FAIL=1
+! exec tkt ls --no-fetch
+rc 1
+stdout '^ACM-1 .*\?'
+env FAKE_GH_FAIL=
+
+# Outside herdr the next step still shows.
+env HERDR_ENV=
+exec tkt ls --no-fetch
+stdout '^ACM-1 .*tkt run ACM-1 verify'
+
+-- prs.json --
+[
+  {"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** \u00b7 head `H1SHORT` \u00b7 reviewed against ACM-1", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]},
+  {"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "H2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"author": {"login": "dev"}, "body": "Reviewed head: H2\nReviewed base: abc\nVerdict: CHANGES_REQUESTED", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H2"}}]},
+  {"number": 3, "state": "MERGED", "headRefName": "ACM-3", "headRefOid": "H3", "headRepository": {"nameWithOwner": "acme/app"}}
+]

@@ -1,0 +1,6 @@
+# tkt start runs only inside a herdr pane.
+env HERDR_ENV=
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+! exec tkt start ACM-12 --prompt -
+rc 3

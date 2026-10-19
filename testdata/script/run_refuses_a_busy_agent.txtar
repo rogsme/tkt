@@ -1,0 +1,11 @@
+# tkt run never replaces a working agent.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+resetlog
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+! exec tkt run ACM-12 address
+rc 4
+! logcontains /exit

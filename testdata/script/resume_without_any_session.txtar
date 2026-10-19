@@ -1,0 +1,5 @@
+# With no session anywhere, tkt resume points at tkt run.
+realgit -C $REPO worktree add -q -b ACM-12 $FAKE_WT_ROOT/ACM-12 main
+! exec tkt resume ACM-12
+rc 4
+stderr 'found no session'

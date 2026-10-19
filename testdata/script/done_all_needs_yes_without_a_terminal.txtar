@@ -1,0 +1,20 @@
+# tkt done --all asks first, so without a terminal it needs --yes.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $WT push -q origin ACM-12
+realgit -C $REPO merge -q --no-ff -m 'Merge ACM-12' ACM-12
+realgit -C $REPO push -q origin main
+gitvar H1 $WT HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+env FAKE_GH_PRS=$WORK/prs.json
+resetlog
+! exec tkt done --all
+rc 2
+exec tkt done --all --yes
+! exists $WT
+
+-- prs.json --
+[{"number": 7, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

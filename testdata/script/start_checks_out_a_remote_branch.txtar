@@ -1,0 +1,7 @@
+# A branch that exists on the remote is checked out, not created.
+realgit -C $REPO push -q origin main:ACM-12
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+stderr 'exists on origin'
+logged wt -C $REPO switch ACM-12 --no-cd --format json

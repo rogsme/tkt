@@ -1,0 +1,23 @@
+# An open pull request keeps the worktree.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $WT push -q origin ACM-12
+realgit -C $REPO merge -q --no-ff -m 'Merge ACM-12' ACM-12
+realgit -C $REPO push -q origin main
+gitvar H1 $WT HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+env FAKE_GH_PRS=$WORK/prs.json
+resetlog
+jqedit $WORK/prs.json '.[0].state = "OPEN"'
+! exec tkt done ACM-12
+rc 4
+stderr 'pull request #7 is still open'
+! logcontains 'herdr tab close'
+! logcontains 'remove ACM-12'
+exists $WT
+
+-- prs.json --
+[{"number": 7, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

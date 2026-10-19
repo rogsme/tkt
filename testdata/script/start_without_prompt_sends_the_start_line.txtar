@@ -1,0 +1,3 @@
+# Without --prompt, tkt start sends the start stage line.
+exec tkt start ACM-4
+grep 'Use the start-ticket skill to start ticket ACM-4.' $FAKE_DIR/prompts

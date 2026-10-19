@@ -1,0 +1,9 @@
+# The id given must match the prompt's first ticket, unless --force.
+mkprompt $WORK/p13.txt ACM-13
+stdin $WORK/p13.txt
+! exec tkt start ACM-12 --prompt -
+rc 2
+stderr 'first ticket is ACM-13'
+! exists $FAKE_WT_ROOT/ACM-12
+stdin $WORK/p13.txt
+exec tkt start ACM-12 --force --prompt -

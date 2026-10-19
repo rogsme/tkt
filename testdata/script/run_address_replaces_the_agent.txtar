@@ -1,0 +1,19 @@
+# tkt run exits the idle agent and starts a fresh session with the stage line.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+resetlog
+statevar $WT session OLD
+exec tkt run ACM-12 address
+logged herdr agent prompt w1:p10 /exit
+logged herdr agent start acm-12 --kind claude --pane w1:p10 --timeout 90000 -- --dangerously-skip-permissions --session-id
+cmp $FAKE_DIR/prompts $WORK/want.txt
+state $WT stage address
+! state $WT session $OLD
+houserules
+
+-- want.txt --
+Use the address-pr-review skill to address the review on this branch's pull request.
+--- end of prompt ---

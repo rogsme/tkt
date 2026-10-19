@@ -1,0 +1,13 @@
+# An agent that will not exit gets nothing sent.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+resetlog
+env FAKE_HERDR_EXIT_IGNORED=1
+env FAKE_HERDR_CTRLC_IGNORED=1
+! exec tkt run ACM-12 address
+rc 5
+stderr 'nothing was sent'
+! exists $FAKE_DIR/prompts

@@ -1,0 +1,8 @@
+# A second stall ends with an uncertain outcome and no third send.
+env FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled,agent_prompt_stalled
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+! exec tkt start ACM-12 --prompt -
+rc 5
+state $FAKE_WT_ROOT/ACM-12 status prompt_uncertain
+grep -count=2 'end of prompt' $FAKE_DIR/prompts

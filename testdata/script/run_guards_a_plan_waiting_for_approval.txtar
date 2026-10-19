@@ -1,0 +1,8 @@
+# A ticket still in planning may hold a plan waiting for approval.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+! exec tkt run ACM-12 address
+rc 4
+stderr 'still in planning'
+exec tkt run ACM-12 address --force

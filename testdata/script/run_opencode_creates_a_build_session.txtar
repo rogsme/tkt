@@ -1,0 +1,18 @@
+# On an OpenCode preset, tkt run creates a fresh build session.
+mkdir $HOME/.config/tkt
+cp $WORK/presets $HOME/.config/tkt/presets
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --as fast --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+resetlog
+exec tkt run ACM-12 sync
+logged herdr agent start acm-12 --kind opencode --pane w1:p10 --timeout 90000 -- -s ses_fake2 $WT
+grep 'sync the PR with the base' $FAKE_DIR/prompts
+
+-- presets --
+# name  harness   model              serves
+claude  claude    -                  frontier
+big     opencode  acme/big#high      frontier
+fast     opencode  acme/fast#max      small

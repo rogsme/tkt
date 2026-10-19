@@ -1,0 +1,8 @@
+# A configuration file without the v1 marker is refused.
+cp $WORK/tracker.md $REPO/docs/agents/issue-tracker.md
+! exec tkt ls --no-fetch
+rc 3
+
+-- tracker.md --
+<!-- rogs-skills config v2: issue-tracker -->
+- Ticket ids: `ACM-<number>`, matched by `^ACM-[1-9][0-9]*$`.

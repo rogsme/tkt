@@ -1,0 +1,9 @@
+# When herdr reports a stalled prompt and the session never recorded it,
+# tkt sends it once more.
+env FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+stderr 'sending it once more'
+grep -count=2 'end of prompt' $FAKE_DIR/prompts
+state $FAKE_WT_ROOT/ACM-12 status submitted

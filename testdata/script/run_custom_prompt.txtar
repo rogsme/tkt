@@ -1,0 +1,10 @@
+# --prompt sends a line of your own.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+resetlog
+exec tkt run ACM-12 --prompt 'Check the flaky test in ACM-12 again.'
+grep 'Check the flaky test' $FAKE_DIR/prompts
+state $WT stage custom

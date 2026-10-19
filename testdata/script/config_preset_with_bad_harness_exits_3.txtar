@@ -1,0 +1,9 @@
+# A preset whose harness is neither claude nor opencode is refused.
+mkdir $HOME/.config/tkt
+cp $WORK/presets $HOME/.config/tkt/presets
+! exec tkt start ACM-1 --dry-run
+rc 3
+stderr 'claude or opencode'
+
+-- presets --
+odd vim - *

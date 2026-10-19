@@ -21,11 +21,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install test tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq shellcheck bsdextrautils
-
       - name: Format
         run: |
           unformatted=$(gofmt -l .)
@@ -37,17 +32,8 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Unit tests
+      - name: Test
         run: go test -race ./...
-
-      - name: Shellcheck
-        run: shellcheck -x bin/tests/run bin/tests/*.sh bin/tests/fakes/*
-
-      - name: Black-box tests
-        run: |
-          dir=$(mktemp -d)
-          go build -race -o "$dir/tkt" .
-          TKT_BIN="$dir/tkt" bash bin/tests/run
 
       - name: Build every release target
         run: |

@@ -1,0 +1,10 @@
+# An unknown stage is a usage error.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+resetlog
+! exec tkt run ACM-12 deploy
+rc 2
+stderr 'unknown stage'

@@ -2,7 +2,7 @@
 
 tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills](https://gitlab.com/rogs/skills) ticket lifecycle from a herdr pane. People and agents both drive it, so every change keeps two readers in mind: a person at a terminal and a program that parses the output.
 
-`bin/tests/` holds the black-box tests carried over from the bash version, which the Go build passes unchanged.
+`testdata/script/` holds the black-box tests: testscript scripts that run tkt against fakes of every outside tool. [`testdata/README.md`](testdata/README.md) describes them and the commands the scripts use.
 
 ## Layout
 
@@ -10,10 +10,13 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 - `internal/cli` wires cobra and fang: flags, help, completion, error printing. It holds no command logic.
 - `internal/app` runs each command and returns a typed result plus an error. The `*Opts` structs are a command's arguments.
 - `internal/apperr` holds every error code and its exit status, in `codes.go`. It is the only place an exit status is assigned.
+- `internal/fake` holds the fake herdr, wt, gh, opencode, claude and git that the black-box tests put on PATH.
 - `internal/contract` holds what tkt reads from the skills repository, with verbatim fixtures in `testdata/`.
 - The other `internal/` packages each wrap one outside system: `gitx`, `wt` (worktrunk), `herdr`, `harness` (Claude Code and OpenCode), `forge` (gh), and the agent flows in `agent`.
 
 ## Rules
+
+- A change in behavior comes with a script in `testdata/script/` that shows it, or a unit test next to the code.
 
 - Every external command runs through `runner.Runner`, so it is logged and tests can replace it. Polls that repeat many times a second set `Quiet`.
 - Every failure a person or program sees is an `*apperr.Error` with a registered code. Add the code to `Registry` with its exit status and a summary. Codes never change meaning once released.
@@ -54,9 +57,8 @@ Run these before pushing:
 test -z "$(gofmt -l .)"
 go vet ./...
 go test -race ./...
-bash bin/tests/run
 for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -o /dev/null . ; done
 grep -rnP '[\x{2013}\x{2014}]' --exclude-dir=.git .
 ```
 
-The fakes cannot prove that herdr, worktrunk, Claude Code and OpenCode behave as assumed. After changing how tkt talks to one of them, run the manual check in [`bin/tests/README.md`](bin/tests/README.md).
+The fakes cannot prove that herdr, worktrunk, Claude Code and OpenCode behave as assumed. After changing how tkt talks to one of them, run the manual check in [`testdata/README.md`](testdata/README.md).

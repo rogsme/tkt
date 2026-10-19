@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-# tkt launches Claude through herdr, never directly.
-{
-  printf 'claude' 
-  printf ' %q' "$@"
-  printf '\n'
-} >>"$FAKE_LOG"
-exit 99

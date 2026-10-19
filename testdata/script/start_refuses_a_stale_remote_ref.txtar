@@ -1,0 +1,7 @@
+# A remote-tracking branch the remote no longer has may be a merged ticket.
+realgit -C $REPO update-ref refs/remotes/origin/ACM-12 HEAD
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+! exec tkt start ACM-12 --prompt -
+rc 4
+stderr 'is stale'

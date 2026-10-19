@@ -1,0 +1,4 @@
+# A ticket without a worktree needs tkt start first.
+! exec tkt run ACM-99 address
+rc 4
+stderr 'tkt start ACM-99'

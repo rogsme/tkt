@@ -1,0 +1,17 @@
+# A startup dialog stops tkt start before the prompt; the rerun continues.
+env FAKE_HERDR_START_STATUS=blocked
+env 'FAKE_HERDR_SCREEN=Yes, I trust this folder'
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+! exec tkt start ACM-12 --prompt -
+rc 5
+stderr 'Yes, I trust this folder'
+state $FAKE_WT_ROOT/ACM-12 status not_ready
+! exists $FAKE_DIR/prompts
+env FAKE_HERDR_START_STATUS=
+env FAKE_HERDR_SCREEN=
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+stderr 'continuing the start'
+grep -count=1 'end of prompt' $FAKE_DIR/prompts

@@ -1,0 +1,5 @@
+# tkt reads wt list's schema 2 as well as schema 1.
+env FAKE_WT_SCHEMA=2
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -

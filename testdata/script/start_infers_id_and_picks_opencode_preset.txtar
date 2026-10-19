@@ -1,0 +1,22 @@
+# Without an id, tkt start takes the prompt's first ticket, and the prompt's
+# Model: line picks the preset.
+mkdir $HOME/.config/tkt
+cp $WORK/presets $HOME/.config/tkt/presets
+mkprompt $WORK/p.txt ACM-5 'Model: small (acme/fast)'
+stdin $WORK/p.txt
+exec tkt start --prompt -
+stderr 'ticket ACM-5 \(the first id in the prompt\)'
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-5 --label 'ACM-5 (fast)' --no-focus
+logged opencode api POST /api/session -d
+logcontains '\"agent\":\"build\"'
+logcontains '\"model\":\{\"providerID\":\"acme\"\,\"id\":\"fast\"\,\"variant\":\"max\"\}'
+logged herdr agent start acm-5 --kind opencode --pane w1:p10 --timeout 90000 -- -s ses_fake1 $FAKE_WT_ROOT/ACM-5
+state $FAKE_WT_ROOT/ACM-5 harness opencode
+state $FAKE_WT_ROOT/ACM-5 session ses_fake1
+houserules
+
+-- presets --
+# name  harness   model              serves
+claude  claude    -                  frontier
+big     opencode  acme/big#high      frontier
+fast     opencode  acme/fast#max      small

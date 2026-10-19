@@ -1,0 +1,8 @@
+# With an agent running, tkt resume says where and changes nothing.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+resetlog
+exec tkt resume ACM-12
+stderr 'already has an agent'
+! logcontains 'herdr agent start'

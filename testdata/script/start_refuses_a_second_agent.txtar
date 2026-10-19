@@ -1,0 +1,9 @@
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+resetlog
+stdin $WORK/p.txt
+! exec tkt start ACM-12 --prompt -
+rc 4
+stderr 'already runs in'
+! logcontains 'herdr tab create'
