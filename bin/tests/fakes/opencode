@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016
+# Fake OpenCode CLI for the tkt tests.
+set -euo pipefail
+{
+  printf 'opencode' 
+  printf ' %q' "$@"
+  printf '\n'
+} >>"$FAKE_LOG"
+if [[ $1 == service ]]; then exit 0; fi
+[[ $1 == api ]] || {
+  echo "fake opencode: unsupported: $*" >&2
+  exit 2
+}
+case "$2 $3" in
+  "POST /api/session")
+    n=$(cat "$FAKE_DIR/oc.count" 2>/dev/null || echo 0)
+    echo $((n + 1)) >"$FAKE_DIR/oc.count"
+    jq -c --arg id "ses_fake$((n + 1))" '{data: (. + {id: $id})}' <<<"$5" ;;
+  "GET /api/session/active")
+    if [[ ${FAKE_OC_ACTIVE:-} ]]; then printf '%s\n' "$FAKE_OC_ACTIVE"; else echo '{"data":{}}'; fi ;;
+  "GET /api/session"*) cat "${FAKE_OC_SESSIONS:-/dev/null}" 2>/dev/null || echo '{"data":[]}' ;;
+  *)
+    echo "fake opencode: unsupported: $2 $3" >&2
+    exit 2 ;;
+esac

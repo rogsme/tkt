@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Runs the tkt tests: bash bin/tests/run [name-filter]
+set -uo pipefail
+TESTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+export TESTS_DIR
+REAL_GIT=$(command -v git)
+export REAL_GIT
+ln -sf ../tkt "$TESTS_DIR/tkt-link"
+export PATH=$TESTS_DIR/fakes:$PATH
+filter=${1:-}
+pass=0
+failed=0
+for file in "$TESTS_DIR"/test_*.sh; do
+  while read -r name; do
+    [[ -z $filter || $name == *"$filter"* ]] || continue
+    if out=$(
+      set -eEuo pipefail
+      # shellcheck source=bin/tests/lib.sh
+      source "$TESTS_DIR/lib.sh"
+      # shellcheck disable=SC1090
+      source "$file"
+      setup_sandbox
+      trap 'rm -rf "$T"' EXIT
+      "$name" </dev/null
+    ) 2>&1; then
+      printf 'ok    %s\n' "$name"
+      pass=$((pass + 1))
+    else
+      printf 'FAIL  %s\n      %s\n' "$name" "${out//$'\n'/$'\n'      }"
+      failed=$((failed + 1))
+    fi
+  done < <(grep -oE '^test_[a-z0-9_]+' "$file")
+done
+rm -f "$TESTS_DIR/tkt-link"
+printf '%d passed, %d failed\n' "$pass" "$failed"
+((failed == 0))
