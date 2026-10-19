@@ -33,7 +33,18 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test -race ./...
+        run: |
+          # The race detector needs cgo; without a C compiler, test without it.
+          if command -v gcc >/dev/null; then
+            go test -race ./...
+          else
+            go test ./...
+          fi
+
+      - name: Shellcheck install.sh
+        run: |
+          command -v shellcheck >/dev/null || { sudo apt-get update && sudo apt-get install -y shellcheck; }
+          shellcheck install.sh
 
       - name: Build every release target
         run: |

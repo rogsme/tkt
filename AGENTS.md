@@ -57,8 +57,13 @@ Run these before pushing:
 test -z "$(gofmt -l .)"
 go vet ./...
 go test -race ./...
+uv run --quiet --with shellcheck-py shellcheck install.sh
 for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -o /dev/null . ; done
 grep -rnP '[\x{2013}\x{2014}]' --exclude-dir=.git .
 ```
 
 The fakes cannot prove that herdr, worktrunk, Claude Code and OpenCode behave as assumed. After changing how tkt talks to one of them, run the manual check in [`testdata/README.md`](testdata/README.md).
+
+## Releases
+
+Tag a commit on master `vX.Y.Z` and push the tag; `.gitea/workflows/release.yml` tests, builds and publishes. Push `vX.Y.Z-rc.N` first after changing the release workflow or `install.sh`: a prerelease does not move `latest`. The README's "Maintainer setup" lists the settings outside the repository that releases need.

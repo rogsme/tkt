@@ -1,0 +1,26 @@
+# install.sh downloads this system's binary, checks it against SHA256SUMS
+# and moves it into place, replacing a symlink to the old bash script.
+[!exec:sh] skip
+[!exec:sha256sum] skip
+mkdir $WORK/rel/v9.9.9 $WORK/bin
+exec sh -c 'for a in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do cp "$WORK/fake-tkt" "$WORK/rel/v9.9.9/tkt_$a"; done; cd "$WORK/rel/v9.9.9" && sha256sum tkt_* > SHA256SUMS && ln -s "$WORK/old-tkt" "$WORK/bin/tkt"'
+env TKT_RELEASES=file://$WORK/rel
+exec sh $SRC/install.sh --dir $WORK/bin --version v9.9.9
+stdout '^tkt version v9.9.9$'
+stderr 'installed .*/bin/tkt'
+stderr 'is not on your PATH'
+exists $WORK/old-tkt
+exec sh -c 'test ! -L "$WORK/bin/tkt"'
+
+# A binary that does not match SHA256SUMS is not installed.
+exec sh -c 'cd "$WORK/rel/v9.9.9" && for f in tkt_*; do echo tampered >> "$f"; done'
+! exec sh $SRC/install.sh --dir $WORK/other --version v9.9.9
+stderr 'does not match SHA256SUMS; nothing was installed'
+! exists $WORK/other/tkt
+
+-- fake-tkt --
+#!/bin/sh
+echo "tkt version v9.9.9"
+-- old-tkt --
+#!/bin/sh
+echo "the old bash tkt"

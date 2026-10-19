@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Build
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os=${target%/*}
+            arch=${target#*/}
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
+              -ldflags "-s -w -X main.version=$TAG" -o "dist/tkt_${os}_${arch}" .
+          done
+          cp install.sh dist/
+          (cd dist && sha256sum tkt_* install.sh > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Publish the release
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITEA_TOKEN }}
+          API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          command -v jq >/dev/null || { sudo apt-get update && sudo apt-get install -y jq; }
+          auth="Authorization: token $TOKEN"
+          # A rerun reuses the release; a tag with a hyphen is a prerelease,
+          # which does not move "latest".
+          id=$(curl -fsS -H "$auth" "$API/releases/tags/$TAG" | jq -r '.id // empty' || true)
+          if [ -z "$id" ]; then
+            body=$(jq -nc --arg t "$TAG" '{tag_name: $t, name: $t, prerelease: ($t | test("-"))}')
+            id=$(curl -fsS -X POST -H "$auth" -H 'Content-Type: application/json' -d "$body" "$API/releases" | jq -r .id)
+          fi
+          for f in dist/*; do
+            name=$(basename "$f")
+            old=$(curl -fsS -H "$auth" "$API/releases/$id/assets" | jq -r --arg n "$name" '.[] | select(.name == $n) | .id')
+            for a in $old; do
+              curl -fsS -X DELETE -H "$auth" "$API/releases/$id/assets/$a"
+            done
+            curl -fsS -X POST -H "$auth" -F "attachment=@$f" "$API/releases/$id/assets?name=$name" >/dev/null
+            echo "uploaded $name"
+          done

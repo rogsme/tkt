@@ -54,11 +54,18 @@ func TestScripts(t *testing.T) {
 	if realGit == "" {
 		t.Skip("git is not installed")
 	}
+	src, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	testscript.Run(t, testscript.Params{
 		Dir:                 "testdata/script",
 		RequireExplicitExec: true,
-		Setup:               func(env *testscript.Env) error { return setupSandbox(env, realGit) },
-		Cmds:                commands,
+		Setup: func(env *testscript.Env) error {
+			env.Setenv("SRC", src)
+			return setupSandbox(env, realGit)
+		},
+		Cmds: commands,
 	})
 }
 
