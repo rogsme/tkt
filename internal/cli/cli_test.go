@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,5 +73,32 @@ func TestArgsOf(t *testing.T) {
 	got = argsOf("done [ID...]")
 	if len(got) != 1 || got[0].Required || !got[0].Variadic || got[0].Name != "ID" {
 		t.Errorf("done: %+v", got)
+	}
+}
+
+func TestEveryCommandHasHelpAndExamples(t *testing.T) {
+	for _, c := range buildSchema(testRoot().root, "test").Commands {
+		if strings.HasPrefix(c.Path, "completion") {
+			continue
+		}
+		if c.Long == "" {
+			t.Errorf("%s has no long help", c.Path)
+		}
+		if c.Example == "" {
+			t.Errorf("%s has no examples", c.Path)
+		}
+	}
+}
+
+func TestHelpIsPlainASCII(t *testing.T) {
+	entries, _ := helpFiles.ReadDir("help")
+	for _, e := range entries {
+		text := helpText(strings.TrimSuffix(e.Name(), ".txt"))
+		for i, r := range text {
+			if r > 0x7e || (r < 0x20 && r != '\n') {
+				t.Errorf("%s: character %U at byte %d", e.Name(), r, i)
+				break
+			}
+		}
 	}
 }

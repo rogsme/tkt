@@ -1,0 +1,26 @@
+tkt run closes the ticket's idle agent and starts a fresh session in the same
+pane, on the ticket's preset, then sends the stage's line. The new agent
+remembers nothing of the old conversation and does not need to: every stage
+reads what it needs from the branch, the pull request and the tracker. Use it
+to begin the next stage with a clean context.
+
+Stages:
+  review   review-pr reviews the pull request at its head and posts a verdict.
+           Run it when the agent ends with Status: READY_FOR_REVIEW.
+  address  address-pr-review fixes the valid findings, answers the rest and
+           pushes. Run it when the review asks for changes, you left comments,
+           or the merge stopped with Status: HUMAN_QA_FAILED.
+  sync     address-pr-review merges the base into the branch. Run it on
+           Status: BLOCKED_FOR_SYNC, or when the pull request conflicts.
+  ci       finds why the checks fail at the head, fixes it and pushes once.
+  verify   runs the pull request's human verification steps in a browser and
+           reports each one. It changes no code and posts nothing.
+  start    runs start-ticket again and returns a new plan.
+
+config.toml can change these lines or add stages (tkt help config).
+
+tkt run refuses while the agent works or waits for your answer (tkt wait
+blocks until it is done). It also refuses while the ticket is still in
+planning, because that agent may hold a plan waiting for your approval;
+approve it in the tab instead. --force replaces it anyway, and also replaces
+an agent in a state tkt does not recognize.

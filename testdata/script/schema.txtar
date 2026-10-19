@@ -5,7 +5,7 @@ envelope '[.result.commands[].path]' '["start","run","resume","done","ls","wait"
 envelope '.result.commands[] | select(.path == "run") | [.args[] | "\(.name):\(.required)"]' '["ID:true","STAGE:false"]'
 envelope '.result.commands[] | select(.path == "ls") | .result.rows[0].next' '{"argv":"array of string","kind":"string","text":"string"}'
 envelope '[.result.errors[] | select(.code == "wait_timeout") | .exit]' '[4]'
-envelope '[.result.topics[].name]' '["json","exit-codes","config"]'
+envelope '[.result.topics[].name]' '["lifecycle","json","exit-codes","config"]'
 
 # Without --json it prints the description itself.
 exec tkt schema

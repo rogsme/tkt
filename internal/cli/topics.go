@@ -29,6 +29,7 @@ func topic(name, short, long string) *cobra.Command {
 
 func topics() []*cobra.Command {
 	return []*cobra.Command{
+		topic("lifecycle", "A ticket from start to merge, step by step", helpText("lifecycle")),
 		topic("json", "Machine-readable output with --json", helpText("json")),
 		topic("exit-codes", "Exit statuses and error codes", exitCodesText()),
 		topic("config", "Presets, stage lines and the config.toml file", helpText("config")),

@@ -1,0 +1,30 @@
+# Shell completion offers ticket ids, stages, presets and states.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+realgit -C $REPO worktree add -q -b chore/docs $FAKE_WT_ROOT/chore-docs main
+resetlog
+rm $HOME/.local/state/tkt/tkt.log
+
+exec tkt __complete run ''
+stdout '^ACM-12$'
+! stdout chore
+stdout '^:4$'
+
+exec tkt __complete run ACM-12 ''
+stdout '^address\tUse the address-pr-review skill'
+stdout '^verify\t'
+
+exec tkt __complete start --as ''
+stdout '^claude\tclaude, default model$'
+stdout '^opencode\topencode, default model$'
+
+exec tkt __complete wait ACM-12 --until ''
+stdout '^blocked$'
+
+exec tkt __complete done ACM-12 ''
+! stdout ACM-12
+
+# Completion leaves no trace in the command log.
+! exists $HOME/.local/state/tkt/tkt.log
+! logcontains 'wt '

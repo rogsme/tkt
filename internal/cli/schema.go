@@ -252,7 +252,8 @@ definitions as the help, so the two always agree.
 
 Without --json it prints the description itself; with --json it is the result
 of the usual envelope.`,
-		Args: cobra.NoArgs,
+		Example: "  tkt schema\n  tkt schema --json | jq '.result.errors[] | select(.exit == 4) | .code'",
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s := buildSchema(cmd.Root(), versionString(g.version))
 			if g.json {

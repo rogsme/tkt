@@ -1,0 +1,10 @@
+tkt resume brings back the ticket's last conversation when no agent runs for
+it: you closed the tab, the agent exited or crashed, herdr restarted, or the
+machine rebooted. It relaunches the newest session (the one tkt recorded,
+otherwise the newest Claude Code or OpenCode session in the worktree) in
+bypass mode, in the ticket's tab or a new one, and sends nothing, so the agent
+waits where it stopped.
+
+Use it instead of tkt run when the conversation matters, such as a plan
+waiting for approval. When an agent already runs, tkt resume says where and
+changes nothing; --focus switches to its tab.

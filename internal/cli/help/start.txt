@@ -1,0 +1,17 @@
+tkt start creates or reuses the ticket's worktree through worktrunk, opens a
+herdr tab named after the ticket, starts an agent in build mode (Claude Code
+with --dangerously-skip-permissions, OpenCode on its Build agent) and sends it
+the prompt, typically the dispatcher's start-ticket block.
+
+Without an ID, tkt start takes the first ticket id in the prompt; with both,
+they must match. Without a prompt, it sends the start stage line. --prompt -
+reads the prompt from stdin, which keeps a long prompt out of your shell
+history; --prompt-file reads it from a file.
+
+The prompt's Model: line, when it has one, picks the preset (tkt help config);
+--as picks one yourself.
+
+tkt start refuses when an agent already runs in the worktree: use tkt run for
+a fresh session, or tkt resume to bring back the last one. When the agent stops
+at a startup dialog, answer it in the tab and rerun the same tkt start: it
+continues where it stopped.

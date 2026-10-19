@@ -113,7 +113,11 @@ func newRoot(g *globals, envJSON bool) *cobra.Command {
 		Long: `tkt runs the mechanical steps around the rogs-skills ticket lifecycle: it creates
 the ticket's worktree, opens a herdr tab named after the ticket, starts Claude Code
 or OpenCode in it, and hands the agent its prompt. Each command is one step you
-take; nothing chains stages.`,
+take; nothing chains stages.
+
+Start with tkt help lifecycle. Programs that drive tkt want --json (tkt help
+json), tkt schema and tkt wait. tkt help exit-codes lists every error code, and
+tkt help config describes the settings file.`,
 		SilenceUsage:               true,
 		SuggestionsMinimumDistance: 2,
 	}

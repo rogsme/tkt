@@ -1,0 +1,21 @@
+tkt ls lists every ticket worktree, or the tickets given, with its tab, agent
+state, the last Status: line on the agent's screen, pull request, checks,
+review verdict at the head, commits behind the base, and the next step.
+
+The next step is the first of these rules that matches:
+  1. The pull request is merged: tkt done ID.
+  2. The agent works: wait (tkt wait ID); or it waits for an answer: answer it.
+  3. No pull request yet: tkt resume ID when no agent runs; otherwise approve
+     the plan, read the agent's reason, or check the agent in its tab.
+  4. The checks are pending: wait for CI.
+  5. The review says the base moved, or the pull request conflicts: tkt run ID sync.
+  6. The review at the head has findings: tkt run ID address.
+  7. The checks fail: tkt run ID ci.
+  8. The review at the head is clear: tkt run ID verify.
+  9. Anything else: wait for review, or tkt run ID review when no automated
+     reviewer runs on the forge.
+
+A verdict on an older head does not count, so after every push the next step
+waits for a new review. With --json each row's next step is an object whose
+argv, when set, is the command to run. tkt ls reads pull requests through gh,
+so outside GitHub forges those columns show ?.

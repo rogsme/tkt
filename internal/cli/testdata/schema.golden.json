@@ -35,8 +35,8 @@
       "path": "start",
       "use": "start [ID]",
       "short": "Create the worktree and tab, start an agent and send it the prompt",
-      "long": "",
-      "example": "",
+      "long": "tkt start creates or reuses the ticket's worktree through worktrunk, opens a\nherdr tab named after the ticket, starts an agent in build mode (Claude Code\nwith --dangerously-skip-permissions, OpenCode on its Build agent) and sends it\nthe prompt, typically the dispatcher's start-ticket block.\n\nWithout an ID, tkt start takes the first ticket id in the prompt; with both,\nthey must match. Without a prompt, it sends the start stage line. --prompt -\nreads the prompt from stdin, which keeps a long prompt out of your shell\nhistory; --prompt-file reads it from a file.\n\nThe prompt's Model: line, when it has one, picks the preset (tkt help config);\n--as picks one yourself.\n\ntkt start refuses when an agent already runs in the worktree: use tkt run for\na fresh session, or tkt resume to bring back the last one. When the agent stops\nat a startup dialog, answer it in the tab and rerun the same tkt start: it\ncontinues where it stopped.",
+      "example": "  xclip -selection clipboard -o | tkt start --prompt -\n  tkt start ACM-12\n  tkt start ACM-12 --prompt-file plan-request.md --as fast\n  tkt start ACM-12 --dry-run",
       "group": "lifecycle",
       "args": [
         {
@@ -109,8 +109,8 @@
       "path": "run",
       "use": "run ID [STAGE]",
       "short": "Replace the ticket's idle agent with a fresh session and send a stage line",
-      "long": "",
-      "example": "",
+      "long": "tkt run closes the ticket's idle agent and starts a fresh session in the same\npane, on the ticket's preset, then sends the stage's line. The new agent\nremembers nothing of the old conversation and does not need to: every stage\nreads what it needs from the branch, the pull request and the tracker. Use it\nto begin the next stage with a clean context.\n\nStages:\n  review   review-pr reviews the pull request at its head and posts a verdict.\n           Run it when the agent ends with Status: READY_FOR_REVIEW.\n  address  address-pr-review fixes the valid findings, answers the rest and\n           pushes. Run it when the review asks for changes, you left comments,\n           or the merge stopped with Status: HUMAN_QA_FAILED.\n  sync     address-pr-review merges the base into the branch. Run it on\n           Status: BLOCKED_FOR_SYNC, or when the pull request conflicts.\n  ci       finds why the checks fail at the head, fixes it and pushes once.\n  verify   runs the pull request's human verification steps in a browser and\n           reports each one. It changes no code and posts nothing.\n  start    runs start-ticket again and returns a new plan.\n\nconfig.toml can change these lines or add stages (tkt help config).\n\ntkt run refuses while the agent works or waits for your answer (tkt wait\nblocks until it is done). It also refuses while the ticket is still in\nplanning, because that agent may hold a plan waiting for your approval;\napprove it in the tab instead. --force replaces it anyway, and also replaces\nan agent in a state tkt does not recognize.",
+      "example": "  tkt run ACM-12 review\n  tkt run ACM-12 review --as big\n  tkt run ACM-12 address\n  tkt run ACM-12 --prompt \"Check the flaky login test again.\"",
       "group": "lifecycle",
       "args": [
         {
@@ -186,8 +186,8 @@
       "path": "resume",
       "use": "resume ID",
       "short": "Relaunch the ticket's newest session when no agent runs for it",
-      "long": "",
-      "example": "",
+      "long": "tkt resume brings back the ticket's last conversation when no agent runs for\nit: you closed the tab, the agent exited or crashed, herdr restarted, or the\nmachine rebooted. It relaunches the newest session (the one tkt recorded,\notherwise the newest Claude Code or OpenCode session in the worktree) in\nbypass mode, in the ticket's tab or a new one, and sends nothing, so the agent\nwaits where it stopped.\n\nUse it instead of tkt run when the conversation matters, such as a plan\nwaiting for approval. When an agent already runs, tkt resume says where and\nchanges nothing; --focus switches to its tab.",
+      "example": "  tkt resume ACM-12\n  tkt resume ACM-12 --focus\n  tkt resume ACM-12 --session 22222222-2222-2222-2222-222222222222",
       "group": "lifecycle",
       "args": [
         {
@@ -245,8 +245,8 @@
       "path": "done",
       "use": "done [ID...]",
       "short": "Close a merged ticket's tabs and remove its worktree",
-      "long": "",
-      "example": "",
+      "long": "tkt done closes the ticket's tabs and removes its worktree once its pull\nrequest is merged. worktrunk deletes the branch when it is merged into the\nbase; after a squash merge the branch stays.\n\nIt keeps the worktree, and says why, when:\n  - the pull request is still open, or no merged pull request has the branch;\n  - the worktree has uncommitted changes;\n  - the branch tip is neither the merged head nor in the base;\n  - an agent in the worktree works or waits for an answer;\n  - tkt runs inside the worktree or in the ticket's own tab;\n  - a pane outside the ticket's tabs, or the OpenCode service, works in it.\n\n--all checks every ticket worktree and asks before removing them; pass --yes\nwhen stdin is not a terminal. It reads pull requests through gh, so it\nsupports GitHub forges only.",
+      "example": "  tkt done ACM-12\n  tkt done ACM-12 --dry-run\n  tkt done --all --yes",
       "group": "lifecycle",
       "args": [
         {
@@ -299,8 +299,8 @@
       "path": "ls",
       "use": "ls [ID...]",
       "short": "List ticket worktrees with their state and the next step",
-      "long": "",
-      "example": "",
+      "long": "tkt ls lists every ticket worktree, or the tickets given, with its tab, agent\nstate, the last Status: line on the agent's screen, pull request, checks,\nreview verdict at the head, commits behind the base, and the next step.\n\nThe next step is the first of these rules that matches:\n  1. The pull request is merged: tkt done ID.\n  2. The agent works: wait (tkt wait ID); or it waits for an answer: answer it.\n  3. No pull request yet: tkt resume ID when no agent runs; otherwise approve\n     the plan, read the agent's reason, or check the agent in its tab.\n  4. The checks are pending: wait for CI.\n  5. The review says the base moved, or the pull request conflicts: tkt run ID sync.\n  6. The review at the head has findings: tkt run ID address.\n  7. The checks fail: tkt run ID ci.\n  8. The review at the head is clear: tkt run ID verify.\n  9. Anything else: wait for review, or tkt run ID review when no automated\n     reviewer runs on the forge.\n\nA verdict on an older head does not count, so after every push the next step\nwaits for a new review. With --json each row's next step is an object whose\nargv, when set, is the command to run. tkt ls reads pull requests through gh,\nso outside GitHub forges those columns show ?.",
+      "example": "  tkt ls\n  tkt ls ACM-12 --json\n  tkt ls --json | jq -r '.result.rows[] | select(.next.kind == \"command\") | .next.text'",
       "group": "inspect",
       "args": [
         {
@@ -385,8 +385,8 @@
       "path": "wait",
       "use": "wait ID",
       "short": "Block until the ticket's agent needs you or has finished",
-      "long": "",
-      "example": "",
+      "long": "tkt wait blocks until the ticket's agent is idle, blocked or done, that is,\nuntil it has finished or needs you, then prints its state and the last\nStatus: line on its screen. --until picks other states.\n\nA program that drives tkt waits with it instead of polling tkt ls. With\n--timeout, a wait that runs out ends with exit 4 and the code wait_timeout.",
+      "example": "  tkt wait ACM-12\n  tkt wait ACM-12 --timeout 30m --json\n  tkt wait ACM-12 --until blocked",
       "group": "inspect",
       "args": [
         {
@@ -428,8 +428,8 @@
       "path": "doctor",
       "use": "doctor",
       "short": "Check the tools, versions and configuration tkt needs",
-      "long": "",
-      "example": "",
+      "long": "tkt doctor checks what the other commands need and reports each check as ok,\nwarn, fail or skip: git, worktrunk and herdr at their minimum versions, the\nherdr pane, gh when the forge is GitHub, the harness of every preset, the\nproject's lifecycle configuration, config.toml, worktrunk's hooks and the log\ndirectory. It exits 3 when a check fails.",
+      "example": "  tkt doctor\n  tkt doctor --json",
       "group": "setup",
       "args": [],
       "flags": [],
@@ -450,7 +450,7 @@
       "use": "schema",
       "short": "Describe every command, flag, result and error code as JSON",
       "long": "tkt schema prints a JSON description of tkt for programs that drive it: every\ncommand with its arguments, flags and result fields, the exit statuses and\nerror codes, and the environment variables tkt reads. It is built from the same\ndefinitions as the help, so the two always agree.\n\nWithout --json it prints the description itself; with --json it is the result\nof the usual envelope.",
-      "example": "",
+      "example": "  tkt schema\n  tkt schema --json | jq '.result.errors[] | select(.exit == 4) | .code'",
       "group": "setup",
       "args": [],
       "flags": [],
@@ -592,6 +592,10 @@
     }
   ],
   "topics": [
+    {
+      "name": "lifecycle",
+      "short": "A ticket from start to merge, step by step"
+    },
     {
       "name": "json",
       "short": "Machine-readable output with --json"
