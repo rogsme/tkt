@@ -1,0 +1,7 @@
+Reviewed head: <full SHA>
+Reviewed base: <full SHA>
+Reviewed against: <ticket ids, lead first, or "the pull request description">
+1. BUG `path:line`: one-sentence claim (inline)
+2. QUESTION `path:line`: one-sentence claim (inline)
+Resolved: <links, or none>. Not reviewed: <areas outside your judgment, or none>.
+Verdict: CHANGES_REQUESTED

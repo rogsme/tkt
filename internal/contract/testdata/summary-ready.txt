@@ -1,0 +1,8 @@
+Reviewed head: <full SHA>
+Reviewed base: <full SHA>
+Reviewed against: <ticket ids, lead first>
+Since the previous review: <one sentence; omit the line on a first review>
+Verified: <one sentence naming what you traced or ran>
+Resolved: <links, or none>
+NIT `path:line`: one-sentence note (inline)
+Verdict: READY_FOR_HUMAN
