@@ -33,8 +33,6 @@ With Go 1.26 or newer:
 go install gitlab.com/rogs/tkt@latest
 ```
 
-If `~/.local/bin/tkt` is still a symlink to the old bash script in a skills checkout, the install script replaces the link. `go build -o` would write through it, so delete the link first when you build by hand.
-
 ### Requirements
 
 - git 2.31 or newer;
@@ -72,7 +70,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
 | `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address`, `sync`, `ci`, `verify` or `start`. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
-| `tkt done ID` | Closes a merged ticket's tabs and removes its worktree. |
+| `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees. `--all` checks every ticket worktree. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
 | `tkt wait ID` | Blocks until the ticket's agent needs you or has finished. |
 | `tkt doctor` | Checks the tools, versions and configuration tkt needs. |
@@ -108,8 +106,6 @@ lint = "Run the linter on {id} and fix what it reports."
 
 Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. `tkt help config` has the details.
 
-Older versions read `presets` and `stages` column files. When only those exist, tkt stops and prints the equivalent `config.toml`.
-
 ### Driving tkt from a program
 
 - `--json`, or `TKT_FORMAT=json` in the environment, makes stdout hold exactly one JSON document per run. On success it carries the command's result; on failure it carries an error with a stable `code`, the exit status, a `hint` naming what to do next, and `details` (`tkt help json`).
@@ -125,44 +121,4 @@ tkt keeps each ticket's state (preset, session, tab, pane) in the worktree's git
 
 ## Development
 
-[`AGENTS.md`](AGENTS.md) has the layout, the rules and the checks to run before pushing. [`testdata/README.md`](testdata/README.md) describes the tests.
-
-To release, tag the commit `vX.Y.Z` and push the tag. The release workflow tests, builds the four binaries, and publishes them with `install.sh` and `SHA256SUMS`. A tag with a hyphen, such as `v0.2.0-rc.1`, becomes a prerelease, which `latest` skips.
-
-## Maintainer setup
-
-These one-time settings outside the repository keep releases and installs working.
-
-### Cloudflare
-
-Cloudflare sits in front of git.rogs.me. On every path outside `/api/v1`, it answers curl, wget and the Go HTTP client with a challenge (`cf-mitigated: challenge`, HTTP 403). Downloads from releases must skip that challenge.
-
-| Path prefix on git.rogs.me | Why it must skip the challenge | Needed |
-|---|---|---|
-| `/rogs/tkt/releases/download/` | `install.sh`, the binaries and `SHA256SUMS` that the install commands fetch | Always |
-| `/attachments/` | Gitea may redirect a release download here, depending on its storage settings | Only when the check below shows a redirect to it |
-| `/rogs/tkt.git/` and `/rogs/tkt/info/refs` | HTTPS clones from git.rogs.me | Only to allow HTTPS clones from git.rogs.me. The README clones from the GitLab mirror instead |
-
-When a custom WAF rule issues the challenge, exclude the paths in that rule's expression, for example:
-
-```
-... and not starts_with(http.request.uri.path, "/rogs/tkt/releases/download/")
-```
-
-Use a custom rule with the Skip action when a managed feature issues the challenge, such as Super Bot Fight Mode or Under Attack mode. The free plan's Bot Fight Mode cannot be skipped by path, so replace it with a custom challenge rule that has these exclusions.
-
-Check after the first release. Expect `200` and no `cf-mitigated` header:
-
-```bash
-curl -sSI https://git.rogs.me/rogs/tkt/releases/download/latest/SHA256SUMS
-```
-
-A `303` to `/attachments/...` means that prefix needs the exclusion too.
-
-### GitLab mirror
-
-The Go module path is `gitlab.com/rogs/tkt`, so `go install` reads the mirror, never git.rogs.me. Keep `gitlab.com/rogs/tkt` public, and have the push mirror send tags as well as branches.
-
-### Gitea Actions
-
-Enable Actions on `rogs/tkt`. The workflows in `.gitea/workflows/` need a runner with the `ubuntu-latest` label. The release workflow creates releases with the job's automatic token. If that fails with a permission error, add a `RELEASE_TOKEN` secret with a personal access token that has the `write:repository` scope. Gitea's `[repository.release] ALLOWED_TYPES` setting must allow the asset names: binaries without an extension, `install.sh` and `SHA256SUMS`.
+[`AGENTS.md`](AGENTS.md) has the layout, the rules, the checks to run before pushing, and how CI and releases work. [`testdata/README.md`](testdata/README.md) describes the tests.
