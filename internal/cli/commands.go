@@ -203,3 +203,15 @@ func waitCmd(g *globals) *cobra.Command {
 	cmd.Flags().StringVar(&o.Pane, "pane", "", "wait for the agent in PANE when several run in the worktree")
 	return cmd
 }
+
+func doctorCmd(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "doctor",
+		Short: "Check the tools, versions and configuration tkt needs",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().Doctor(cmd.Context())
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+}

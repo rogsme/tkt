@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -140,6 +139,10 @@ take; nothing chains stages.`,
 		c.GroupID = "inspect"
 		root.AddCommand(c)
 	}
+	for _, c := range []*cobra.Command{doctorCmd(g)} {
+		c.GroupID = "setup"
+		root.AddCommand(c)
+	}
 	for _, c := range topics() {
 		c.GroupID = "topics"
 		root.AddCommand(c)
@@ -155,7 +158,7 @@ func (g *globals) app() *app.App {
 		dir = cwd
 	}
 	tty := g.io.Stdin != nil && term.IsTerminal(int(g.io.Stdin.Fd()))
-	log := &runner.Log{Path: logPath(g.io.Getenv)}
+	log := &runner.Log{Path: app.LogPath(g.io.Getenv)}
 	if g.verbose {
 		log.Verbose = g.io.Stderr
 	}
@@ -174,13 +177,6 @@ func (g *globals) app() *app.App {
 		Now:      time.Now,
 		Sleep:    time.Sleep,
 	}
-}
-
-func logPath(getenv func(string) string) string {
-	if d := getenv("XDG_STATE_HOME"); d != "" {
-		return filepath.Join(d, "tkt", "tkt.log")
-	}
-	return filepath.Join(getenv("HOME"), ".local", "state", "tkt", "tkt.log")
 }
 
 // classify gives every error a code: cobra's own errors are usage errors and

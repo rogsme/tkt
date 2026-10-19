@@ -79,18 +79,27 @@ func Git() {
 }
 
 // Claude fails: tkt launches Claude Code through herdr, never directly.
+// Only --version answers, for tkt doctor.
 func Claude() {
 	logCall("claude")
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Println("2.1.303 (Claude Code)")
+		os.Exit(0)
+	}
 	os.Exit(99)
 }
 
 // GH answers `gh pr list` from the JSON file in $FAKE_GH_PRS.
 func GH() {
 	logCall("gh")
+	args := os.Args[1:]
+	if len(args) == 1 && args[0] == "--version" {
+		fmt.Println("gh version 2.100.0 (2026-09-04)")
+		os.Exit(0)
+	}
 	if os.Getenv("FAKE_GH_FAIL") == "1" {
 		die(1, "HTTP 502")
 	}
-	args := os.Args[1:]
 	if len(args) < 2 || args[0] != "pr" || args[1] != "list" {
 		die(2, "fake gh: unsupported: %s", strings.Join(args, " "))
 	}

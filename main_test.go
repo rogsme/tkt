@@ -202,7 +202,7 @@ func cmdHouseRules(ts *testscript.TestScript, _ bool, _ []string) {
 			ts.Fatalf("tkt changed worktrees with git: %s", l)
 		case strings.HasPrefix(l, "herdr worktree"):
 			ts.Fatalf("tkt used herdr worktrees: %s", l)
-		case strings.HasPrefix(l, "claude"):
+		case strings.HasPrefix(l, "claude") && l != "claude --version":
 			ts.Fatalf("tkt ran claude directly: %s", l)
 		}
 	}

@@ -1,0 +1,39 @@
+# tkt doctor checks the tools, the environment and both configurations.
+exec tkt doctor
+stdout '^ok    git '
+stdout '^ok    lifecycle        tickets match \^ACM-\[1-9\]\[0-9\]\*\$; forge GitHub acme/app, base origin/main$'
+stdout '^ok    herdr            herdr 0.9.3$'
+stdout '^ok    wt               wt v0.68.0$'
+stdout '^ok    gh '
+stdout '^ok    harness.claude   2.1.303'
+stdout '^ok    harness.opencode '
+stdout '^ok    config           presets claude, opencode from built-in presets$'
+
+# An old herdr fails the run with exit 3.
+env FAKE_HERDR_VERSION=0.9.2
+! exec tkt doctor --json
+rc 3
+envelope '.error.code' checks_failed
+envelope '[.error.details.checks[] | select(.status == "fail") | .id]' '["herdr"]'
+envelope '.error.details.checks[] | select(.id == "herdr") | .hint' 'update herdr to 0.9.3 or newer'
+env FAKE_HERDR_VERSION=
+
+# Outside herdr and outside a repository, checks warn or skip.
+env HERDR_ENV=
+cd $WORK
+! exec tkt doctor --json
+envelope '[.error.details.checks[] | select(.id == "repository" or .id == "lifecycle" or .id == "herdr_env") | .status]' '["fail","skip","warn"]'
+cd $REPO
+
+# A config.toml next to the old files works, with a warning to delete them.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+cp $WORK/config.toml $HOME/.config/tkt/presets
+exec tkt doctor
+stdout '^warn  config           presets fast from .*ignoring .*presets$'
+! stdout 'harness.claude'
+
+-- config.toml --
+[presets.fast]
+harness = "opencode"
+model = "acme/fast#max"
