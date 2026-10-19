@@ -98,6 +98,9 @@ func setupSandbox(env *testscript.Env, realGit string) error {
 		"HERDR_TAB_ID":        "w1:t1",
 		"HERDR_PANE_ID":       "w1:p1",
 		"NO_COLOR":            "1",
+		// Under -race every fake is a race-built copy of this test binary,
+		// which by default sleeps a second as it exits.
+		"GORACE": "atexit_sleep_ms=0",
 	}
 	for k, v := range vars {
 		env.Setenv(k, v)
