@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"os"
 
@@ -38,16 +39,30 @@ func show[T texter](g *globals, cmd *cobra.Command, res T, isNil bool, err error
 		return err
 	}
 	out := cmd.OutOrStdout()
-	if p, ok := any(res).(prettier); ok && isTerminal(out) {
-		width, _, _ := term.GetSize(int(out.(*os.File).Fd()))
-		p.Pretty(colorprofile.NewWriter(out, os.Environ()), g.io.Getenv("HOME"), width)
+	if p, ok := any(res).(prettier); ok && prettyTerminal(out) {
+		p.Pretty(colorprofile.NewWriter(out, os.Environ()), g.io.Getenv("HOME"), terminalWidth(out))
 		// The view ends with a summary of the failing checks, so the error
 		// box would repeat it.
-		g.errShown = apperr.As(err).Code == apperr.ChecksFailed
+		var e *apperr.Error
+		g.errShown = errors.As(err, &e) && e.Code == apperr.ChecksFailed
 		return err
 	}
 	res.Text(out)
 	return err
+}
+
+// prettyTerminal decides whether a result gets its terminal view. Tests
+// replace it, since they have no terminal.
+var prettyTerminal = isTerminal
+
+// terminalWidth returns w's width in columns, or 0 when it is unknown.
+func terminalWidth(w io.Writer) int {
+	f, ok := w.(*os.File)
+	if !ok {
+		return 0
+	}
+	width, _, _ := term.GetSize(int(f.Fd()))
+	return width
 }
 
 type promptFlags struct{ text, file string }
