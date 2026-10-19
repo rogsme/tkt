@@ -86,7 +86,7 @@ A ticket from start to merge, in short:
 4. Act on the verdict with `address` or `sync`, and review again.
 5. Verify, merge in the tab, then run `tkt done ACM-12`.
 
-`tkt help lifecycle` walks through each step. `tkt COMMAND --help` explains when to use a command and what it refuses.
+`tkt help lifecycle` walks through each step. [`docs/lifecycle.md`](docs/lifecycle.md) follows a ticket from the tracker to a merged pull request, with diagrams of how tkt, the skills, herdr, worktrunk, the tracker and the forge fit together. `tkt COMMAND --help` explains when to use a command and what it refuses.
 
 ### Settings
 
