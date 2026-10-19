@@ -40,11 +40,12 @@ type globals struct {
 	ui      *output.UI
 	root    *cobra.Command
 	args    []string
+	version string
 }
 
 // Main runs tkt with args and returns the exit status.
 func Main(ctx context.Context, args []string, version string, sio IO) int {
-	g := &globals{io: sio, ui: &output.UI{Err: sio.Stderr}, args: args}
+	g := &globals{io: sio, ui: &output.UI{Err: sio.Stderr}, args: args, version: version}
 	envJSON, err := formatFromEnv(sio.Getenv)
 	if err != nil {
 		g.printError(err)
@@ -139,7 +140,7 @@ take; nothing chains stages.`,
 		c.GroupID = "inspect"
 		root.AddCommand(c)
 	}
-	for _, c := range []*cobra.Command{doctorCmd(g)} {
+	for _, c := range []*cobra.Command{doctorCmd(g), schemaCmd(g)} {
 		c.GroupID = "setup"
 		root.AddCommand(c)
 	}

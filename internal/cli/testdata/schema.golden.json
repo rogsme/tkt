@@ -1,0 +1,942 @@
+{
+  "schema": 1,
+  "name": "tkt",
+  "version": "test",
+  "contract_version": 1,
+  "envelope": {
+    "description": "with --json or TKT_FORMAT=json, stdout holds one document per run; see tkt help json",
+    "error": "{\"schema\": 1, \"ok\": false, \"command\": PATH, \"error\": {\"code\": CODE, \"exit\": STATUS, \"message\": STRING, \"hint\": STRING, \"details\": OBJECT}, \"warnings\": [STRING]}",
+    "success": "{\"schema\": 1, \"ok\": true, \"command\": PATH, \"result\": RESULT, \"warnings\": [STRING]}"
+  },
+  "global_flags": [
+    {
+      "name": "dir",
+      "shorthand": "C",
+      "type": "string",
+      "default": "",
+      "usage": "run as if tkt started in DIR"
+    },
+    {
+      "name": "json",
+      "type": "bool",
+      "default": "false",
+      "usage": "print one JSON document on stdout (also TKT_FORMAT=json); see tkt help json"
+    },
+    {
+      "name": "verbose",
+      "shorthand": "v",
+      "type": "bool",
+      "default": "false",
+      "usage": "print every external command to stderr"
+    }
+  ],
+  "commands": [
+    {
+      "path": "start",
+      "use": "start [ID]",
+      "short": "Create the worktree and tab, start an agent and send it the prompt",
+      "long": "",
+      "example": "",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "as",
+          "type": "string",
+          "default": "",
+          "usage": "run on PRESET instead of the one the prompt's Model: line picks"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "focus",
+          "type": "bool",
+          "default": "false",
+          "usage": "switch to the ticket's tab afterwards"
+        },
+        {
+          "name": "force",
+          "type": "bool",
+          "default": "false",
+          "usage": "override the safety refusals"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "default": "",
+          "usage": "send TEXT instead of the start stage line; - reads it from stdin"
+        },
+        {
+          "name": "prompt-file",
+          "type": "string",
+          "default": "",
+          "usage": "send the text in the file PATH instead of the start stage line"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "agent": "string",
+        "continued": "boolean",
+        "dry_run": "boolean",
+        "harness": "string",
+        "pane": "string",
+        "preset": "string",
+        "resent": "boolean",
+        "session": "string",
+        "stage": "string",
+        "tab": "string",
+        "ticket": "string",
+        "worktree": "string",
+        "worktree_created": "boolean"
+      }
+    },
+    {
+      "path": "run",
+      "use": "run ID [STAGE]",
+      "short": "Replace the ticket's idle agent with a fresh session and send a stage line",
+      "long": "",
+      "example": "",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        },
+        {
+          "name": "STAGE",
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "as",
+          "type": "string",
+          "default": "",
+          "usage": "run on PRESET instead of the ticket's"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "force",
+          "type": "bool",
+          "default": "false",
+          "usage": "replace an agent that is planning or in an unknown state"
+        },
+        {
+          "name": "pane",
+          "type": "string",
+          "default": "",
+          "usage": "use PANE when several agents run in the worktree"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "default": "",
+          "usage": "send TEXT instead of the stage line; - reads it from stdin"
+        },
+        {
+          "name": "prompt-file",
+          "type": "string",
+          "default": "",
+          "usage": "send the text in the file PATH instead of the stage line"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "agent": "string",
+        "dry_run": "boolean",
+        "harness": "string",
+        "pane": "string",
+        "preset": "string",
+        "replaced_session": "string",
+        "resent": "boolean",
+        "session": "string",
+        "stage": "string",
+        "tab": "string",
+        "ticket": "string"
+      }
+    },
+    {
+      "path": "resume",
+      "use": "resume ID",
+      "short": "Relaunch the ticket's newest session when no agent runs for it",
+      "long": "",
+      "example": "",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "as",
+          "type": "string",
+          "default": "",
+          "usage": "resume on PRESET, and with it its harness"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "focus",
+          "type": "bool",
+          "default": "false",
+          "usage": "switch to the ticket's tab afterwards"
+        },
+        {
+          "name": "session",
+          "type": "string",
+          "default": "",
+          "usage": "resume ID instead of the newest session"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "agent": "string",
+        "already_running": "boolean",
+        "dry_run": "boolean",
+        "harness": "string",
+        "pane": "string",
+        "preset": "string",
+        "session": "string",
+        "status": "string",
+        "tab": "string",
+        "ticket": "string"
+      }
+    },
+    {
+      "path": "done",
+      "use": "done [ID...]",
+      "short": "Close a merged ticket's tabs and remove its worktree",
+      "long": "",
+      "example": "",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": false,
+          "variadic": true
+        }
+      ],
+      "flags": [
+        {
+          "name": "all",
+          "type": "bool",
+          "default": "false",
+          "usage": "check every ticket worktree"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "yes",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip the confirmation that --all asks for"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "dry_run": "boolean",
+        "tickets": [
+          {
+            "branch_deleted": "boolean",
+            "closed_tabs": "array of string",
+            "outcome": "string",
+            "path": "string",
+            "reasons": "array of string",
+            "ticket": "string"
+          }
+        ]
+      }
+    },
+    {
+      "path": "ls",
+      "use": "ls [ID...]",
+      "short": "List ticket worktrees with their state and the next step",
+      "long": "",
+      "example": "",
+      "group": "inspect",
+      "args": [
+        {
+          "name": "ID",
+          "required": false,
+          "variadic": true
+        }
+      ],
+      "flags": [
+        {
+          "name": "no-fetch",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip the git fetch that refreshes the commits-behind count"
+        }
+      ],
+      "result": {
+        "rows": [
+          {
+            "agent": {
+              "fields": {
+                "harness": "string",
+                "name": "string",
+                "pane_id": "string",
+                "status": "string"
+              },
+              "nullable": true
+            },
+            "behind": "integer or null",
+            "checks": {
+              "fields": {
+                "failing": "array of string",
+                "pending": "integer",
+                "state": "string",
+                "total": "integer"
+              },
+              "nullable": true
+            },
+            "last_status": "string",
+            "next": {
+              "argv": "array of string",
+              "kind": "string",
+              "text": "string"
+            },
+            "path": "string",
+            "pr": {
+              "fields": {
+                "head": "string",
+                "mergeable": "string",
+                "number": "integer",
+                "state": "string"
+              },
+              "nullable": true
+            },
+            "review": {
+              "fields": {
+                "at_head": "boolean",
+                "head": "string",
+                "submitted_at": "string",
+                "verdict": "string"
+              },
+              "nullable": true
+            },
+            "tabs": [
+              {
+                "label": "string",
+                "tab_id": "string",
+                "workspace_id": "string"
+              }
+            ],
+            "ticket": "string"
+          }
+        ],
+        "sources": {
+          "fetch": "string",
+          "forge": "string",
+          "herdr": "string"
+        }
+      }
+    },
+    {
+      "path": "wait",
+      "use": "wait ID",
+      "short": "Block until the ticket's agent needs you or has finished",
+      "long": "",
+      "example": "",
+      "group": "inspect",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "pane",
+          "type": "string",
+          "default": "",
+          "usage": "wait for the agent in PANE when several run in the worktree"
+        },
+        {
+          "name": "timeout",
+          "type": "duration",
+          "default": "0s",
+          "usage": "give up after DURATION, such as 30m (default: wait without limit)"
+        },
+        {
+          "name": "until",
+          "type": "stringSlice",
+          "default": "[]",
+          "usage": "stop at STATE: idle, working, blocked or done; repeat it or separate with commas (default idle, blocked, done)"
+        }
+      ],
+      "result": {
+        "agent": "string",
+        "last_status": "string",
+        "pane": "string",
+        "status": "string",
+        "ticket": "string",
+        "waited_ms": "integer"
+      }
+    },
+    {
+      "path": "doctor",
+      "use": "doctor",
+      "short": "Check the tools, versions and configuration tkt needs",
+      "long": "",
+      "example": "",
+      "group": "setup",
+      "args": [],
+      "flags": [],
+      "result": {
+        "checks": [
+          {
+            "hint": "string",
+            "id": "string",
+            "message": "string",
+            "status": "string",
+            "want": "string"
+          }
+        ]
+      }
+    },
+    {
+      "path": "schema",
+      "use": "schema",
+      "short": "Describe every command, flag, result and error code as JSON",
+      "long": "tkt schema prints a JSON description of tkt for programs that drive it: every\ncommand with its arguments, flags and result fields, the exit statuses and\nerror codes, and the environment variables tkt reads. It is built from the same\ndefinitions as the help, so the two always agree.\n\nWithout --json it prints the description itself; with --json it is the result\nof the usual envelope.",
+      "example": "",
+      "group": "setup",
+      "args": [],
+      "flags": [],
+      "result": {
+        "commands": [
+          {
+            "args": [
+              {
+                "name": "string",
+                "required": "boolean",
+                "variadic": "boolean"
+              }
+            ],
+            "example": "string",
+            "flags": [
+              {
+                "default": "string",
+                "name": "string",
+                "shorthand": "string",
+                "type": "string",
+                "usage": "string"
+              }
+            ],
+            "group": "string",
+            "long": "string",
+            "path": "string",
+            "result": "object",
+            "short": "string",
+            "use": "string"
+          }
+        ],
+        "contract_version": "integer",
+        "envelope": "object",
+        "environment": [
+          {
+            "description": "string",
+            "name": "string"
+          }
+        ],
+        "errors": [
+          {
+            "code": "string",
+            "exit": "integer",
+            "summary": "string"
+          }
+        ],
+        "exit_codes": "object",
+        "global_flags": [
+          {
+            "default": "string",
+            "name": "string",
+            "shorthand": "string",
+            "type": "string",
+            "usage": "string"
+          }
+        ],
+        "name": "string",
+        "schema": "integer",
+        "topics": [
+          {
+            "name": "string",
+            "short": "string"
+          }
+        ],
+        "version": "string"
+      }
+    }
+  ],
+  "topics": [
+    {
+      "name": "json",
+      "short": "Machine-readable output with --json"
+    },
+    {
+      "name": "exit-codes",
+      "short": "Exit statuses and error codes"
+    },
+    {
+      "name": "config",
+      "short": "Presets, stage lines and the config.toml file"
+    }
+  ],
+  "exit_codes": [
+    {
+      "exit": 0,
+      "meaning": "done"
+    },
+    {
+      "exit": 1,
+      "meaning": "an external command failed"
+    },
+    {
+      "exit": 2,
+      "meaning": "bad usage or refused input"
+    },
+    {
+      "exit": 3,
+      "meaning": "environment or configuration"
+    },
+    {
+      "exit": 4,
+      "meaning": "refused because of the current state"
+    },
+    {
+      "exit": 5,
+      "meaning": "uncertain outcome: inspect the ticket's tab before you retry"
+    }
+  ],
+  "errors": [
+    {
+      "code": "usage",
+      "exit": 2,
+      "summary": "the command line is wrong: an unknown command or flag, or a missing or extra argument"
+    },
+    {
+      "code": "invalid_ticket_id",
+      "exit": 2,
+      "summary": "an argument is not a ticket id under the tracker's id pattern"
+    },
+    {
+      "code": "ticket_id_missing",
+      "exit": 2,
+      "summary": "no ticket id was given and the prompt names none"
+    },
+    {
+      "code": "ticket_id_mismatch",
+      "exit": 2,
+      "summary": "the ticket id differs from the first ticket the prompt names"
+    },
+    {
+      "code": "unknown_preset",
+      "exit": 2,
+      "summary": "no preset has that name"
+    },
+    {
+      "code": "unknown_stage",
+      "exit": 2,
+      "summary": "no stage has that name"
+    },
+    {
+      "code": "preset_model_mismatch",
+      "exit": 2,
+      "summary": "the chosen preset does not serve the prompt's Model: value"
+    },
+    {
+      "code": "ambiguous_model",
+      "exit": 2,
+      "summary": "the prompt names several Model: values"
+    },
+    {
+      "code": "no_preset_for_model",
+      "exit": 2,
+      "summary": "no preset serves the prompt's Model: value"
+    },
+    {
+      "code": "prompt_too_large",
+      "exit": 2,
+      "summary": "the prompt is over the size limit"
+    },
+    {
+      "code": "prompt_empty",
+      "exit": 2,
+      "summary": "the prompt is empty"
+    },
+    {
+      "code": "prompt_shell_escape",
+      "exit": 2,
+      "summary": "the prompt starts with '!', which switches the agent to shell mode"
+    },
+    {
+      "code": "prompt_slash_command",
+      "exit": 2,
+      "summary": "the prompt starts with '/' and has several lines"
+    },
+    {
+      "code": "prompt_invalid",
+      "exit": 2,
+      "summary": "the prompt holds a NUL byte"
+    },
+    {
+      "code": "prompt_file_unreadable",
+      "exit": 2,
+      "summary": "the prompt file cannot be read"
+    },
+    {
+      "code": "confirmation_required",
+      "exit": 2,
+      "summary": "the command needs --yes when stdin is not a terminal"
+    },
+    {
+      "code": "cancelled",
+      "exit": 2,
+      "summary": "the answer to a confirmation was no"
+    },
+    {
+      "code": "tool_missing",
+      "exit": 3,
+      "summary": "a required program is not installed"
+    },
+    {
+      "code": "tool_too_old",
+      "exit": 3,
+      "summary": "a required program is older than tkt supports"
+    },
+    {
+      "code": "not_a_repository",
+      "exit": 3,
+      "summary": "the directory is not inside a git repository"
+    },
+    {
+      "code": "lifecycle_config_missing",
+      "exit": 3,
+      "summary": "the project has no lifecycle configuration; run /setup-rogs"
+    },
+    {
+      "code": "lifecycle_config_marker",
+      "exit": 3,
+      "summary": "a lifecycle configuration file lacks its rogs-skills marker"
+    },
+    {
+      "code": "lifecycle_config_version",
+      "exit": 3,
+      "summary": "the lifecycle configuration uses a contract version tkt does not read"
+    },
+    {
+      "code": "ticket_pattern_missing",
+      "exit": 3,
+      "summary": "the tracker configuration has no ticket id pattern"
+    },
+    {
+      "code": "ticket_pattern_invalid",
+      "exit": 3,
+      "summary": "the ticket id pattern does not compile"
+    },
+    {
+      "code": "forge_config_incomplete",
+      "exit": 3,
+      "summary": "the forge configuration lacks a required field"
+    },
+    {
+      "code": "forge_unsupported",
+      "exit": 3,
+      "summary": "the command does not support this forge"
+    },
+    {
+      "code": "config_invalid",
+      "exit": 3,
+      "summary": "tkt's own configuration file is invalid"
+    },
+    {
+      "code": "config_legacy",
+      "exit": 3,
+      "summary": "tkt's configuration is in the old presets and stages files"
+    },
+    {
+      "code": "herdr_env_missing",
+      "exit": 3,
+      "summary": "tkt does not run inside a herdr pane"
+    },
+    {
+      "code": "worktree_layout",
+      "exit": 3,
+      "summary": "the worktree directory is not named after its branch"
+    },
+    {
+      "code": "worktree_branch_mismatch",
+      "exit": 3,
+      "summary": "the worktree is not on the ticket's branch"
+    },
+    {
+      "code": "no_preset_for_harness",
+      "exit": 3,
+      "summary": "no preset uses the session's harness"
+    },
+    {
+      "code": "checks_failed",
+      "exit": 3,
+      "summary": "tkt doctor found a failing check"
+    },
+    {
+      "code": "ticket_locked",
+      "exit": 4,
+      "summary": "another tkt command is working on the ticket"
+    },
+    {
+      "code": "worktree_lock_timeout",
+      "exit": 4,
+      "summary": "another tkt start kept the worktree lock too long"
+    },
+    {
+      "code": "worktree_missing",
+      "exit": 4,
+      "summary": "the ticket has no worktree"
+    },
+    {
+      "code": "branch_without_worktree",
+      "exit": 4,
+      "summary": "the ticket's branch exists without a worktree"
+    },
+    {
+      "code": "stale_remote_ref",
+      "exit": 4,
+      "summary": "the remote-tracking branch is gone from the remote"
+    },
+    {
+      "code": "agent_running",
+      "exit": 4,
+      "summary": "an agent already runs in the ticket's worktree"
+    },
+    {
+      "code": "agent_busy",
+      "exit": 4,
+      "summary": "the agent is working or waiting for an answer"
+    },
+    {
+      "code": "agent_state_unknown",
+      "exit": 4,
+      "summary": "the agent is in a state tkt does not recognize"
+    },
+    {
+      "code": "agent_missing",
+      "exit": 4,
+      "summary": "no agent runs for the ticket"
+    },
+    {
+      "code": "ambiguous_pane",
+      "exit": 4,
+      "summary": "several panes could be the ticket's; pick one with --pane"
+    },
+    {
+      "code": "pane_outside_worktree",
+      "exit": 4,
+      "summary": "the pane works outside the ticket's worktree"
+    },
+    {
+      "code": "pane_is_self",
+      "exit": 4,
+      "summary": "the pane is the one running tkt"
+    },
+    {
+      "code": "pane_busy",
+      "exit": 4,
+      "summary": "the pane is not at a shell prompt"
+    },
+    {
+      "code": "tab_in_use",
+      "exit": 4,
+      "summary": "the ticket's tab is busy or holds other work"
+    },
+    {
+      "code": "ticket_in_planning",
+      "exit": 4,
+      "summary": "the ticket is still in planning, so its agent may hold a plan waiting for approval"
+    },
+    {
+      "code": "session_missing",
+      "exit": 4,
+      "summary": "the ticket has no session to resume"
+    },
+    {
+      "code": "session_in_use",
+      "exit": 4,
+      "summary": "the session already runs in another pane"
+    },
+    {
+      "code": "tickets_kept",
+      "exit": 4,
+      "summary": "tkt done kept one or more tickets"
+    },
+    {
+      "code": "wait_timeout",
+      "exit": 4,
+      "summary": "the agent did not reach a requested state in time"
+    },
+    {
+      "code": "wt_failed",
+      "exit": 1,
+      "summary": "worktrunk failed or printed output tkt cannot read"
+    },
+    {
+      "code": "wt_switch_failed",
+      "exit": 1,
+      "summary": "wt switch failed"
+    },
+    {
+      "code": "wt_hook_failed",
+      "exit": 1,
+      "summary": "wt created the worktree but one of its hooks failed"
+    },
+    {
+      "code": "wt_remove_failed",
+      "exit": 1,
+      "summary": "wt remove failed"
+    },
+    {
+      "code": "git_failed",
+      "exit": 1,
+      "summary": "a git command failed"
+    },
+    {
+      "code": "herdr_failed",
+      "exit": 1,
+      "summary": "a herdr command failed"
+    },
+    {
+      "code": "agent_launch_failed",
+      "exit": 1,
+      "summary": "the agent could not be started"
+    },
+    {
+      "code": "prompt_send_failed",
+      "exit": 1,
+      "summary": "sending the prompt failed"
+    },
+    {
+      "code": "opencode_failed",
+      "exit": 1,
+      "summary": "the OpenCode API failed"
+    },
+    {
+      "code": "forge_query_failed",
+      "exit": 1,
+      "summary": "reading pull requests from the forge failed"
+    },
+    {
+      "code": "internal",
+      "exit": 1,
+      "summary": "an unexpected failure inside tkt"
+    },
+    {
+      "code": "agent_not_ready",
+      "exit": 5,
+      "summary": "the agent stopped at a startup dialog; answer it in its pane"
+    },
+    {
+      "code": "prompt_uncertain",
+      "exit": 5,
+      "summary": "tkt cannot confirm the agent received the prompt; check before sending it again"
+    },
+    {
+      "code": "agent_exit_failed",
+      "exit": 5,
+      "summary": "the old agent did not exit; nothing was sent"
+    },
+    {
+      "code": "interrupted",
+      "exit": 5,
+      "summary": "tkt was interrupted; check the ticket's pane before retrying"
+    }
+  ],
+  "environment": [
+    {
+      "name": "TKT_FORMAT",
+      "description": "json makes every command print the JSON envelope; text, or unset, prints text"
+    },
+    {
+      "name": "XDG_CONFIG_HOME",
+      "description": "tkt reads $XDG_CONFIG_HOME/tkt/config.toml (default ~/.config/tkt/config.toml)"
+    },
+    {
+      "name": "XDG_STATE_HOME",
+      "description": "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log (default ~/.local/state/tkt/tkt.log)"
+    },
+    {
+      "name": "HERDR_ENV",
+      "description": "herdr sets it to 1 inside its panes; start, run, resume, done and wait need it"
+    },
+    {
+      "name": "HERDR_WORKSPACE_ID",
+      "description": "the herdr workspace where tkt opens tabs"
+    },
+    {
+      "name": "HERDR_TAB_ID",
+      "description": "the tab tkt runs in; tkt done refuses to close it"
+    },
+    {
+      "name": "HERDR_PANE_ID",
+      "description": "the pane tkt runs in; tkt never starts an agent in it"
+    },
+    {
+      "name": "CLAUDE_CONFIG_DIR",
+      "description": "where Claude Code keeps its sessions (default ~/.claude)"
+    },
+    {
+      "name": "NO_COLOR",
+      "description": "turns off color in help and errors"
+    }
+  ]
+}
