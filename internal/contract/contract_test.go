@@ -1,0 +1,102 @@
+package contract_test
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+
+	"gitlab.com/rogs/tkt/internal/config"
+	"gitlab.com/rogs/tkt/internal/contract"
+	"gitlab.com/rogs/tkt/internal/forge"
+	"gitlab.com/rogs/tkt/internal/lifecycle"
+)
+
+// The fixtures in testdata/ copy text the skills repository produces; see
+// testdata/SOURCES.md.
+
+func read(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestSetupSeedsParse(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "docs/agents")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "issue-tracker.md"), []byte(read(t, "issue-tracker.md")), 0o644)
+	os.WriteFile(filepath.Join(dir, "forge.md"), []byte(read(t, "forge.md")), 0o644)
+	c, err := lifecycle.Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := lifecycle.Forge{Kind: "GitHub", Host: "github.com", Repo: "acme/app", Remote: "origin", Base: "main"}
+	if c.Forge != want || c.Prefix != "ACM" {
+		t.Errorf("forge %+v prefix %q", c.Forge, c.Prefix)
+	}
+	if id, err := c.NormalizeID("12"); err != nil || id != "ACM-12" {
+		t.Errorf("NormalizeID: %q, %v", id, err)
+	}
+}
+
+func TestReviewSummariesCarryVerdicts(t *testing.T) {
+	head := strings.Repeat("a1", 20)
+	for name, want := range map[string]string{
+		"summary-changes-requested.txt": contract.VerdictChangesRequested,
+		"summary-ready.txt":             contract.VerdictReadyForHuman,
+	} {
+		body := strings.ReplaceAll(read(t, name), "<full SHA>", head)
+		p := forge.PR{HeadRefOid: head, Reviews: []forge.Review{{Body: body, SubmittedAt: "2026-01-01T00:00:00Z"}}}
+		v := forge.LatestVerdict(p)
+		if v == nil || v.Value != want || !v.AtHead {
+			t.Errorf("%s: %+v", name, v)
+		}
+	}
+	p := forge.PR{HeadRefOid: "97c7506ffff", Reviews: []forge.Review{{Body: read(t, "automated-review.txt")}}}
+	if v := forge.LatestVerdict(p); v == nil || v.Value != contract.VerdictFindings || !v.AtHead {
+		t.Errorf("automated review: %+v", v)
+	}
+}
+
+func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
+	registry := read(t, "status-lines.md")
+	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked} {
+		if !strings.Contains(registry, "`Status: "+s+"`") {
+			t.Errorf("Status: %s is not in the registry", s)
+		}
+	}
+	for _, v := range []string{contract.VerdictChangesRequested, contract.VerdictReadyForHuman} {
+		if !strings.Contains(registry, "`Verdict: "+v+"`") {
+			t.Errorf("Verdict: %s is not in the registry", v)
+		}
+	}
+}
+
+func TestStageLinesNameRegisteredSkills(t *testing.T) {
+	registry := read(t, "status-lines.md")
+	for _, skill := range contract.Skills {
+		if !strings.Contains(registry, skill) {
+			t.Errorf("%s does not appear in the status-line registry", skill)
+		}
+	}
+	named := regexp.MustCompile(`the ([a-z]+(?:-[a-z]+)+) skill`)
+	for stage, line := range config.BuiltinStages {
+		for _, m := range named.FindAllStringSubmatch(line, -1) {
+			if m[1] == "playwright-cli" {
+				continue
+			}
+			found := false
+			for _, s := range contract.Skills {
+				found = found || s == m[1]
+			}
+			if !found {
+				t.Errorf("stage %s names %s, which contract.Skills does not list", stage, m[1])
+			}
+		}
+	}
+}

@@ -1,0 +1,110 @@
+// Package forge reads pull requests, their checks and their review verdicts.
+// Only GitHub, through gh, is supported.
+package forge
+
+import (
+	"context"
+	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+
+	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/runner"
+)
+
+// GH reads pull requests of one repository, named host/owner/name.
+type GH struct {
+	R    runner.Runner
+	Repo string
+	// Name is owner/name, which a pull request's head repository must match.
+	Name string
+}
+
+// PR is a pull request as gh pr list --json prints it.
+type PR struct {
+	Number         int    `json:"number"`
+	State          string `json:"state"`
+	HeadRefName    string `json:"headRefName"`
+	HeadRefOid     string `json:"headRefOid"`
+	HeadRepository *struct {
+		NameWithOwner string `json:"nameWithOwner"`
+	} `json:"headRepository"`
+	Mergeable         string   `json:"mergeable"`
+	StatusCheckRollup []Check  `json:"statusCheckRollup"`
+	Reviews           []Review `json:"reviews"`
+}
+
+// Check is a check run (Name, Status, Conclusion) or a commit status
+// (Context, State).
+type Check struct {
+	Name       string  `json:"name"`
+	Status     string  `json:"status"`
+	Conclusion string  `json:"conclusion"`
+	Context    *string `json:"context"`
+	State      string  `json:"state"`
+}
+
+// Review is a submitted review.
+type Review struct {
+	Body        string `json:"body"`
+	SubmittedAt string `json:"submittedAt"`
+	Commit      *struct {
+		Oid string `json:"oid"`
+	} `json:"commit"`
+}
+
+func (g GH) list(ctx context.Context, args ...string) ([]PR, error) {
+	argv := append([]string{"gh", "pr", "list", "--repo", g.Repo}, args...)
+	r := g.R.Run(ctx, runner.Cmd{Argv: argv, Timeout: 60 * time.Second})
+	if !r.OK() {
+		return nil, apperr.New(apperr.ForgeQueryFailed, "gh pr list failed: %s", runner.Head(strings.TrimSpace(r.ErrText()), 200))
+	}
+	var prs []PR
+	if strings.TrimSpace(r.Out()) == "" {
+		return prs, nil
+	}
+	if err := json.Unmarshal(r.Stdout, &prs); err != nil {
+		return nil, apperr.New(apperr.ForgeQueryFailed, "gh pr list printed output tkt cannot read").Wrap(err)
+	}
+	return prs, nil
+}
+
+// ListOpen returns the open pull requests with their checks and reviews.
+func (g GH) ListOpen(ctx context.Context) ([]PR, error) {
+	return g.list(ctx, "--state", "open", "--limit", "100",
+		"--json", "number,headRefName,headRefOid,headRepository,mergeable,statusCheckRollup,reviews")
+}
+
+// ListAll returns the latest pull requests in any state.
+func (g GH) ListAll(ctx context.Context) ([]PR, error) {
+	return g.list(ctx, "--state", "all", "--limit", "200", "--json", "number,state,headRefName,headRepository")
+}
+
+// ListHead returns every pull request whose head is branch.
+func (g GH) ListHead(ctx context.Context, branch string, full bool) ([]PR, error) {
+	fields := "number,state,headRefName,headRefOid,headRepository"
+	if full {
+		fields += ",mergeable,statusCheckRollup,reviews"
+	}
+	return g.list(ctx, "--head", branch, "--state", "all", "--limit", "100", "--json", fields)
+}
+
+// Mine keeps the pull requests whose head is branch in this repository, not
+// in a fork.
+func (g GH) Mine(prs []PR, branch string) []PR {
+	var out []PR
+	for _, p := range prs {
+		repo := g.Name
+		if p.HeadRepository != nil && p.HeadRepository.NameWithOwner != "" {
+			repo = p.HeadRepository.NameWithOwner
+		}
+		if p.HeadRefName == branch && strings.EqualFold(repo, g.Name) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Ref renders a pull request number as "#7".
+func Ref(n int) string { return "#" + strconv.Itoa(n) }
