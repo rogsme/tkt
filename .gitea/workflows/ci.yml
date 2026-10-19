@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq shellcheck bsdextrautils
+
+      - name: Shellcheck
+        run: shellcheck -x bin/tkt bin/tests/run bin/tests/*.sh bin/tests/fakes/*
+
+      - name: Black-box tests
+        run: bash bin/tests/run
