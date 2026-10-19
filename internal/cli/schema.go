@@ -25,6 +25,7 @@ var resultTypes = map[string]any{
 	"ls":     app.LsResult{},
 	"wait":   app.WaitResult{},
 	"doctor": app.DoctorResult{},
+	"update": app.UpdateResult{},
 	"schema": Schema{},
 }
 
@@ -104,6 +105,8 @@ var environment = []SchemaVariable{
 	{"HERDR_WORKSPACE_ID", "the herdr workspace where tkt opens tabs"},
 	{"HERDR_TAB_ID", "the tab tkt runs in; tkt done refuses to close it"},
 	{"HERDR_PANE_ID", "the pane tkt runs in; tkt never starts an agent in it"},
+	{"TKT_RELEASES", "where tkt update downloads releases from (default https://git.rogs.me/rogs/tkt/releases/download); install.sh reads it too"},
+	{"TKT_RELEASES_API", "the Gitea API that tkt update asks for the latest release (default https://git.rogs.me/api/v1/repos/rogs/tkt)"},
 	{"CLAUDE_CONFIG_DIR", "where Claude Code keeps its sessions (default ~/.claude)"},
 	{"NO_COLOR", "turns off color in help and errors"},
 }

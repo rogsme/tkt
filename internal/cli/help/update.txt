@@ -1,0 +1,17 @@
+tkt update replaces the running tkt with the latest full release from
+git.rogs.me, or with the release VERSION names. It downloads the binary for
+this system and the release's SHA256SUMS, checks the checksum, runs the new
+binary once with --version, and only then renames it over the old one. If a
+step fails, the old binary stays. The checksum catches a broken download, not
+a compromised host.
+
+Without VERSION, tkt update does nothing when tkt is already at the latest
+release or newer. The latest release skips prereleases; name one, such as
+v0.3.0-rc.1, to install it. A named VERSION also installs an older release.
+
+A development build, whose tkt --version prints dev, has no version to
+compare, so tkt update replaces it only with --force. A go build inside a git
+checkout prints a version such as v0.2.1-0.20261019212235-569e7a5572c4, which
+counts as newer than v0.2.0. --check reports what tkt update would do and
+changes nothing. When tkt runs through a symlink, tkt update
+replaces the file the link points to.

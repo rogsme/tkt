@@ -1,0 +1,26 @@
+# tkt update downloads the latest release, checks it, runs it once and renames
+# it over the file the symlink points to; the symlink stays.
+[!exec:sh] skip
+mkrelease v9.9.9
+env TKT_RELEASES=file://$WORK/rel
+env TKT_RELEASES_API=file://$WORK/api
+env TKT_UPDATE_TARGET=$WORK/bin/tkt
+mkdir $WORK/bin
+symlink $WORK/bin/tkt -> $WORK/opt/tkt
+exec tkt update --force
+stdout '^updated .*/opt/tkt from test to v9.9.9$'
+stderr '^tkt: downloading tkt_.* \(v9.9.9\)$'
+logged new-tkt --version
+cmp $WORK/opt/tkt $WORK/rel/v9.9.9/tkt_linux_amd64
+exec sh -c 'test -L "$WORK/bin/tkt"'
+exec $WORK/bin/tkt --version
+stdout '^tkt version v9.9.9$'
+
+# With --json the result says what changed.
+exec tkt update --force --json
+envelope '.result | [.from, .to, .updated, .available]' '["test","v9.9.9",true,true]'
+
+-- api/releases/latest --
+{"id":1,"tag_name":"v9.9.9","prerelease":false}
+-- opt/tkt --
+the old tkt

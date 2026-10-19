@@ -259,3 +259,32 @@ func doctorCmd(g *globals) *cobra.Command {
 		},
 	}
 }
+
+func updateCmd(g *globals) *cobra.Command {
+	var o app.UpdateOpts
+	cmd := &cobra.Command{
+		Use:   "update [VERSION]",
+		Short: "Replace tkt with the latest release, or with VERSION",
+		Long:  helpText("update"),
+		Example: `  tkt update
+  tkt update --check
+  tkt update v0.3.0-rc.1`,
+		SuggestFor: []string{"upgrade", "self-update"},
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return usage("update takes one version")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				o.Version = args[0]
+			}
+			res, err := g.app().Update(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.Check, "check", false, "report whether a release would replace tkt, and change nothing")
+	cmd.Flags().BoolVar(&o.Force, "force", false, "replace a development build, or reinstall the same version")
+	return cmd
+}

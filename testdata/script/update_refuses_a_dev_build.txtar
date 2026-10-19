@@ -1,0 +1,21 @@
+# A development build has no version to compare, so tkt update replaces it
+# only with --force, and exits 4 without it.
+mkrelease v9.9.9
+env TKT_RELEASES=file://$WORK/rel
+env TKT_RELEASES_API=file://$WORK/api
+env TKT_UPDATE_TARGET=$WORK/bin/tkt
+! exec tkt update
+rc 4
+stderr '^tkt: this tkt is a development build \(test\), so tkt update does not replace it$'
+stderr '^tkt: hint: tkt update --force, or rebuild it from source$'
+cmp $WORK/bin/tkt $WORK/old
+
+! exec tkt update --json
+envelope '.error.code' update_dev_build
+
+-- api/releases/latest --
+{"tag_name":"v9.9.9"}
+-- bin/tkt --
+the old tkt
+-- old --
+the old tkt

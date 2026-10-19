@@ -39,6 +39,8 @@ type App struct {
 	R     runner.Runner
 	Now   func() time.Time
 	Sleep func(time.Duration)
+	// Version is the running tkt's version, such as v0.2.0, or dev.
+	Version string
 }
 
 // ConfigDir is tkt's own configuration directory.

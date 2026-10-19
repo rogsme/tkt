@@ -57,6 +57,8 @@ const (
 	WorktreeBranchMismatch Code = "worktree_branch_mismatch"
 	NoPresetForHarness     Code = "no_preset_for_harness"
 	ChecksFailed           Code = "checks_failed"
+	UpdateUnsupported      Code = "update_unsupported"
+	UpdateNotWritable      Code = "update_not_writable"
 
 	TicketLocked        Code = "ticket_locked"
 	WorktreeLockTimeout Code = "worktree_lock_timeout"
@@ -77,6 +79,7 @@ const (
 	SessionInUse        Code = "session_in_use"
 	TicketsKept         Code = "tickets_kept"
 	WaitTimeout         Code = "wait_timeout"
+	UpdateDevBuild      Code = "update_dev_build"
 
 	WtFailed          Code = "wt_failed"
 	WtSwitchFailed    Code = "wt_switch_failed"
@@ -88,6 +91,9 @@ const (
 	PromptSendFailed  Code = "prompt_send_failed"
 	OpenCodeFailed    Code = "opencode_failed"
 	ForgeQueryFailed  Code = "forge_query_failed"
+	ReleaseFailed     Code = "release_query_failed"
+	UpdateChecksum    Code = "update_checksum"
+	UpdateVerify      Code = "update_verify_failed"
 	Internal          Code = "internal"
 
 	AgentNotReady   Code = "agent_not_ready"
@@ -133,6 +139,8 @@ var Registry = []Info{
 	{WorktreeBranchMismatch, ExitEnvironment, "the worktree is not on the ticket's branch"},
 	{NoPresetForHarness, ExitEnvironment, "no preset uses the session's harness"},
 	{ChecksFailed, ExitEnvironment, "tkt doctor found a failing check"},
+	{UpdateUnsupported, ExitEnvironment, "no release build exists for this system"},
+	{UpdateNotWritable, ExitEnvironment, "tkt cannot replace its own binary"},
 
 	{TicketLocked, ExitState, "another tkt command is working on the ticket"},
 	{WorktreeLockTimeout, ExitState, "another tkt start kept the worktree lock too long"},
@@ -153,6 +161,7 @@ var Registry = []Info{
 	{SessionInUse, ExitState, "the session already runs in another pane"},
 	{TicketsKept, ExitState, "tkt done kept one or more tickets"},
 	{WaitTimeout, ExitState, "the agent did not reach a requested state in time"},
+	{UpdateDevBuild, ExitState, "this tkt is a development build; tkt update replaces it only with --force"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},
@@ -164,6 +173,9 @@ var Registry = []Info{
 	{PromptSendFailed, ExitTool, "sending the prompt failed"},
 	{OpenCodeFailed, ExitTool, "the OpenCode API failed"},
 	{ForgeQueryFailed, ExitTool, "reading pull requests from the forge failed"},
+	{ReleaseFailed, ExitTool, "reading or downloading a tkt release failed"},
+	{UpdateChecksum, ExitTool, "the downloaded binary does not match SHA256SUMS; nothing was replaced"},
+	{UpdateVerify, ExitTool, "the downloaded binary did not run or did not print its version; nothing was replaced"},
 	{Internal, ExitTool, "an unexpected failure inside tkt"},
 
 	{AgentNotReady, ExitUncertain, "the agent stopped at a startup dialog; answer it in its pane"},

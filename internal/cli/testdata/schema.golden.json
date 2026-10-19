@@ -519,6 +519,43 @@
       }
     },
     {
+      "path": "update",
+      "use": "update [VERSION]",
+      "short": "Replace tkt with the latest release, or with VERSION",
+      "long": "tkt update replaces the running tkt with the latest full release from\ngit.rogs.me, or with the release VERSION names. It downloads the binary for\nthis system and the release's SHA256SUMS, checks the checksum, runs the new\nbinary once with --version, and only then renames it over the old one. If a\nstep fails, the old binary stays. The checksum catches a broken download, not\na compromised host.\n\nWithout VERSION, tkt update does nothing when tkt is already at the latest\nrelease or newer. The latest release skips prereleases; name one, such as\nv0.3.0-rc.1, to install it. A named VERSION also installs an older release.\n\nA development build, whose tkt --version prints dev, has no version to\ncompare, so tkt update replaces it only with --force. A go build inside a git\ncheckout prints a version such as v0.2.1-0.20261019212235-569e7a5572c4, which\ncounts as newer than v0.2.0. --check reports what tkt update would do and\nchanges nothing. When tkt runs through a symlink, tkt update\nreplaces the file the link points to.",
+      "example": "  tkt update\n  tkt update --check\n  tkt update v0.3.0-rc.1",
+      "group": "setup",
+      "args": [
+        {
+          "name": "VERSION",
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "check",
+          "type": "bool",
+          "default": "false",
+          "usage": "report whether a release would replace tkt, and change nothing"
+        },
+        {
+          "name": "force",
+          "type": "bool",
+          "default": "false",
+          "usage": "replace a development build, or reinstall the same version"
+        }
+      ],
+      "result": {
+        "available": "boolean",
+        "from": "string",
+        "next": "string",
+        "path": "string",
+        "to": "string",
+        "updated": "boolean"
+      }
+    },
+    {
       "path": "completion bash",
       "use": "bash",
       "short": "Generate the autocompletion script for bash",
@@ -807,6 +844,16 @@
       "summary": "tkt doctor found a failing check"
     },
     {
+      "code": "update_unsupported",
+      "exit": 3,
+      "summary": "no release build exists for this system"
+    },
+    {
+      "code": "update_not_writable",
+      "exit": 3,
+      "summary": "tkt cannot replace its own binary"
+    },
+    {
       "code": "ticket_locked",
       "exit": 4,
       "summary": "another tkt command is working on the ticket"
@@ -902,6 +949,11 @@
       "summary": "the agent did not reach a requested state in time"
     },
     {
+      "code": "update_dev_build",
+      "exit": 4,
+      "summary": "this tkt is a development build; tkt update replaces it only with --force"
+    },
+    {
       "code": "wt_failed",
       "exit": 1,
       "summary": "worktrunk failed or printed output tkt cannot read"
@@ -950,6 +1002,21 @@
       "code": "forge_query_failed",
       "exit": 1,
       "summary": "reading pull requests from the forge failed"
+    },
+    {
+      "code": "release_query_failed",
+      "exit": 1,
+      "summary": "reading or downloading a tkt release failed"
+    },
+    {
+      "code": "update_checksum",
+      "exit": 1,
+      "summary": "the downloaded binary does not match SHA256SUMS; nothing was replaced"
+    },
+    {
+      "code": "update_verify_failed",
+      "exit": 1,
+      "summary": "the downloaded binary did not run or did not print its version; nothing was replaced"
     },
     {
       "code": "internal",
@@ -1005,6 +1072,14 @@
     {
       "name": "HERDR_PANE_ID",
       "description": "the pane tkt runs in; tkt never starts an agent in it"
+    },
+    {
+      "name": "TKT_RELEASES",
+      "description": "where tkt update downloads releases from (default https://git.rogs.me/rogs/tkt/releases/download); install.sh reads it too"
+    },
+    {
+      "name": "TKT_RELEASES_API",
+      "description": "the Gitea API that tkt update asks for the latest release (default https://git.rogs.me/api/v1/repos/rogs/tkt)"
     },
     {
       "name": "CLAUDE_CONFIG_DIR",

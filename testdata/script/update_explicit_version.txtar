@@ -1,0 +1,27 @@
+# tkt update VERSION installs that release, even a prerelease that the latest
+# release skips.
+[!exec:sh] skip
+mkrelease v9.9.9
+mkrelease v9.9.10-rc.1
+env TKT_RELEASES=file://$WORK/rel
+env TKT_RELEASES_API=file://$WORK/api
+env TKT_UPDATE_TARGET=$WORK/bin/tkt
+exec tkt update v9.9.10-rc.1 --force
+stdout ' from test to v9.9.10-rc.1$'
+logged new-tkt --version
+cmp $WORK/bin/tkt $WORK/rel/v9.9.10-rc.1/tkt_linux_amd64
+
+# A release that does not exist exits 1.
+! exec tkt update v1.0.0 --force
+rc 1
+stderr '^tkt: cannot download SHA256SUMS of v1.0.0: '
+
+# A VERSION that is not a tag is a usage error.
+! exec tkt update latest
+rc 2
+stderr 'is not a release tag such as v0.3.0'
+
+-- api/releases/latest --
+{"tag_name":"v9.9.9"}
+-- bin/tkt --
+the old tkt

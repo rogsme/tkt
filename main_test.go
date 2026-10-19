@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -169,6 +171,7 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"logcontains": cmdLogContains,
 	"claudedir":   cmdClaudeDir,
 	"gitvar":      cmdGitVar,
+	"mkrelease":   cmdMkRelease,
 }
 
 // rc N: the last tkt command exited with status N.
@@ -415,4 +418,23 @@ func cmdGitVar(ts *testscript.TestScript, _ bool, args []string) {
 	out, err := exec.Command(ts.Getenv("REAL_GIT"), "-C", ts.MkAbs(args[1]), "rev-parse", args[2]).Output()
 	ts.Check(err)
 	ts.Setenv(args[0], strings.TrimSpace(string(out)))
+}
+
+// mkrelease TAG: publish a fake release TAG under $WORK/rel, as install.sh
+// and tkt update read it: a binary for each system that logs its call and
+// prints "tkt version TAG", and SHA256SUMS.
+func cmdMkRelease(ts *testscript.TestScript, _ bool, args []string) {
+	if len(args) != 1 {
+		ts.Fatalf("usage: mkrelease TAG")
+	}
+	dir := filepath.Join(ts.Getenv("WORK"), "rel", args[0])
+	ts.Check(os.MkdirAll(dir, 0o755))
+	bin := fmt.Sprintf("#!/bin/sh\necho \"new-tkt $*\" >> \"$FAKE_LOG\"\necho \"tkt version %s\"\n", args[0])
+	sum := sha256.Sum256([]byte(bin))
+	var sums strings.Builder
+	for _, a := range []string{"linux_amd64", "linux_arm64", "darwin_amd64", "darwin_arm64"} {
+		ts.Check(os.WriteFile(filepath.Join(dir, "tkt_"+a), []byte(bin), 0o644))
+		fmt.Fprintf(&sums, "%s  tkt_%s\n", hex.EncodeToString(sum[:]), a)
+	}
+	ts.Check(os.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(sums.String()), 0o644))
 }

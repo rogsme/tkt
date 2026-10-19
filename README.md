@@ -33,6 +33,8 @@ With Go 1.26 or newer:
 go install gitlab.com/rogs/tkt@latest
 ```
 
+To update an installed tkt to the latest release, run `tkt update`. It makes the same checksum check as the install script, runs the new binary once, and only then replaces the old one. `tkt update --check` reports without changing anything, and `tkt update vX.Y.Z` installs a given release, prereleases included. A development build whose `tkt --version` prints `dev` has no version to compare, so `tkt update` replaces it only with `--force`.
+
 ### Requirements
 
 - git 2.31 or newer;

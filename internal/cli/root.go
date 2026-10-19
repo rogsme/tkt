@@ -144,7 +144,7 @@ tkt help config describes the settings file.`,
 		c.GroupID = "inspect"
 		root.AddCommand(c)
 	}
-	for _, c := range []*cobra.Command{doctorCmd(g), schemaCmd(g)} {
+	for _, c := range []*cobra.Command{doctorCmd(g), schemaCmd(g), updateCmd(g)} {
 		c.GroupID = "setup"
 		root.AddCommand(c)
 	}
@@ -181,6 +181,7 @@ func (g *globals) app() *app.App {
 		R:        runner.Logged{Inner: runner.Exec{Stdin: stdin, StdinTTY: tty, Stderr: g.io.Stderr}, Log: log},
 		Now:      time.Now,
 		Sleep:    time.Sleep,
+		Version:  versionString(g.version),
 	}
 }
 

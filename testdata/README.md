@@ -26,6 +26,8 @@ The fakes in `internal/fake` stand in for the real tools on `PATH`:
 - `claude` fails if anything calls it, because tkt starts agents through herdr only.
 - `git` logs each call, then runs the real git.
 
+The `update_` scripts point `TKT_RELEASES` and `TKT_RELEASES_API` at `file://` URLs under `$WORK`, and set `TKT_UPDATE_TARGET` to the file `tkt update` replaces. Only the tests set `TKT_UPDATE_TARGET`: without it, `tkt update` would replace the shared test binary.
+
 Every fake appends its command line to `$FAKE_LOG`, each word quoted like bash `printf %q`.
 
 The scripts use these commands beyond testscript's own:
@@ -44,6 +46,7 @@ The scripts use these commands beyond testscript's own:
 | `gitvar VAR DIR REV` | Sets VAR to a commit. |
 | `claudedir VAR PATH` | Sets VAR to Claude Code's project directory for PATH. |
 | `touchat FILE DATE` | Creates FILE with a modification time. |
+| `mkrelease TAG` | Publishes a fake release TAG under `$WORK/rel`: a binary for each system that logs `new-tkt ARGS` and prints `tkt version TAG`, and `SHA256SUMS`. |
 | `envelope [EXPR WANT]` | stdout holds exactly one JSON envelope, and EXPR applied to it gives WANT. |
 
 ## Manual check in herdr
