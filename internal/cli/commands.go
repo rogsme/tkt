@@ -31,17 +31,26 @@ func show[T texter](g *globals, cmd *cobra.Command, res T, isNil bool, err error
 	return err
 }
 
-func promptFlag(cmd *cobra.Command, text *string) {
-	cmd.Flags().StringVar(text, "prompt", "", "send TEXT instead of the stage line; - reads it from stdin")
+type promptFlags struct{ text, file string }
+
+func (p *promptFlags) add(cmd *cobra.Command, what string) {
+	cmd.Flags().StringVar(&p.text, "prompt", "", "send TEXT instead of "+what+"; - reads it from stdin")
+	cmd.Flags().StringVar(&p.file, "prompt-file", "", "send the text in the file PATH instead of "+what)
+	cmd.MarkFlagsMutuallyExclusive("prompt", "prompt-file")
+	cmd.MarkFlagFilename("prompt-file")
 }
 
-func promptSource(cmd *cobra.Command, text string) prompt.Source {
-	return prompt.Source{Text: text, Set: cmd.Flags().Changed("prompt")}
+func (p *promptFlags) set(cmd *cobra.Command) bool {
+	return cmd.Flags().Changed("prompt") || cmd.Flags().Changed("prompt-file")
+}
+
+func (p *promptFlags) source(cmd *cobra.Command) prompt.Source {
+	return prompt.Source{Text: p.text, File: p.file, Set: p.set(cmd)}
 }
 
 func startCmd(g *globals) *cobra.Command {
 	var o app.StartOpts
-	var text string
+	var pf promptFlags
 	cmd := &cobra.Command{
 		Use:   "start [ID]",
 		Short: "Create the worktree and tab, start an agent and send it the prompt",
@@ -55,12 +64,12 @@ func startCmd(g *globals) *cobra.Command {
 			if len(args) == 1 {
 				o.ID = args[0]
 			}
-			o.Prompt = promptSource(cmd, text)
+			o.Prompt = pf.source(cmd)
 			res, err := g.app().Start(cmd.Context(), o)
 			return show(g, cmd, res, res == nil, err)
 		},
 	}
-	promptFlag(cmd, &text)
+	pf.add(cmd, "the start stage line")
 	cmd.Flags().StringVar(&o.As, "as", "", "run on PRESET instead of the one the prompt's Model: line picks")
 	cmd.Flags().BoolVar(&o.Focus, "focus", false, "switch to the ticket's tab afterwards")
 	cmd.Flags().BoolVar(&o.Force, "force", false, "override the safety refusals")
@@ -70,7 +79,7 @@ func startCmd(g *globals) *cobra.Command {
 
 func runCmd(g *globals) *cobra.Command {
 	var o app.RunOpts
-	var text string
+	var pf promptFlags
 	cmd := &cobra.Command{
 		Use:   "run ID [STAGE]",
 		Short: "Replace the ticket's idle agent with a fresh session and send a stage line",
@@ -80,8 +89,8 @@ func runCmd(g *globals) *cobra.Command {
 				return usage("usage: tkt run ID STAGE")
 			case len(args) > 2:
 				return usage("run takes a ticket id and a stage")
-			case len(args) == 1 && !cmd.Flags().Changed("prompt"):
-				return usage("usage: tkt run ID STAGE (or --prompt TEXT)")
+			case len(args) == 1 && !pf.set(cmd):
+				return usage("usage: tkt run ID STAGE (or --prompt TEXT, or --prompt-file PATH)")
 			}
 			return nil
 		},
@@ -90,12 +99,12 @@ func runCmd(g *globals) *cobra.Command {
 			if len(args) == 2 {
 				o.Stage = args[1]
 			}
-			o.Prompt = promptSource(cmd, text)
+			o.Prompt = pf.source(cmd)
 			res, err := g.app().Run(cmd.Context(), o)
 			return show(g, cmd, res, res == nil, err)
 		},
 	}
-	promptFlag(cmd, &text)
+	pf.add(cmd, "the stage line")
 	cmd.Flags().StringVar(&o.As, "as", "", "run on PRESET instead of the ticket's")
 	cmd.Flags().StringVar(&o.Pane, "pane", "", "use PANE when several agents run in the worktree")
 	cmd.Flags().BoolVar(&o.Force, "force", false, "replace an agent that is planning or in an unknown state")

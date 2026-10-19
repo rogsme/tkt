@@ -1,0 +1,28 @@
+# --prompt-file sends a file's text, without its trailing newlines.
+exec tkt start ACM-12 --prompt-file $WORK/start.txt
+cmp $FAKE_DIR/prompts $WORK/want-start.txt
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m work
+resetlog
+exec tkt run ACM-12 --prompt-file $WORK/run.txt
+grep 'Check the flaky test' $FAKE_DIR/prompts
+state $FAKE_WT_ROOT/ACM-12 stage custom
+
+# --prompt and --prompt-file exclude each other.
+! exec tkt run ACM-12 --prompt hi --prompt-file $WORK/run.txt
+rc 2
+
+# A missing file is refused before anything changes.
+! exec tkt start ACM-13 --prompt-file $WORK/missing.txt
+rc 2
+stderr 'cannot read the prompt file'
+! exists $FAKE_WT_ROOT/ACM-13
+
+-- start.txt --
+Start ACM-12 from a file.
+
+
+-- want-start.txt --
+Start ACM-12 from a file.
+--- end of prompt ---
+-- run.txt --
+Check the flaky test in ACM-12 again.
