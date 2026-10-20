@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
 )
@@ -43,7 +44,49 @@ type Config struct {
 	OwnStages []string
 	// IgnoredLegacy lists old-format files that config.toml overrides.
 	IgnoredLegacy []string
+	Auto          Auto
+	Review        Review
+	Board         Board
 }
+
+// Auto holds tkt auto's settings.
+type Auto struct {
+	// MaxRounds caps the address, sync and ci runs since the plan's approval.
+	MaxRounds int
+	// Poll is how often a loop reads the forge while it waits for CI or a
+	// review.
+	Poll time.Duration
+	// MaxParallel caps the auto loops that run at once in a repository; 0
+	// means no cap.
+	MaxParallel int
+}
+
+// Review holds how tkt treats reviews.
+type Review struct {
+	// BotWait is how long a new head waits for the forge's automated
+	// reviewer before review-pr runs instead; 0 means there is no bot.
+	BotWait time.Duration
+}
+
+// Board holds what tkt ls marks for people.
+type Board struct {
+	// StaleAfter marks an agent that sat idle with no status line this long;
+	// 0 turns the mark off.
+	StaleAfter time.Duration
+}
+
+// The defaults for the settings above.
+const (
+	DefaultMaxRounds   = 5
+	DefaultPoll        = 30 * time.Second
+	DefaultMaxParallel = 3
+	DefaultBotWait     = 15 * time.Minute
+	DefaultStaleAfter  = 2 * time.Hour
+)
+
+// ApproveLine is what tkt approve sends to the planning session. It is not a
+// stage: tkt run starts a fresh session, and the plan lives in this one.
+const ApproveLine = "The plan is approved. Use the work-ticket skill to execute it."
 
 // BuiltinStages are the stage lines tkt run sends; {id} becomes the ticket.
 var BuiltinStages = map[string]string{
@@ -64,7 +107,10 @@ func BuiltinPresets() []Preset {
 }
 
 func builtin() Config {
-	c := Config{Source: "built-in presets", Presets: BuiltinPresets(), Stages: map[string]string{}}
+	c := Config{Source: "built-in presets", Presets: BuiltinPresets(), Stages: map[string]string{},
+		Auto:   Auto{MaxRounds: DefaultMaxRounds, Poll: DefaultPoll, MaxParallel: DefaultMaxParallel},
+		Review: Review{BotWait: DefaultBotWait},
+		Board:  Board{StaleAfter: DefaultStaleAfter}}
 	for k, v := range BuiltinStages {
 		c.Stages[k] = v
 	}
