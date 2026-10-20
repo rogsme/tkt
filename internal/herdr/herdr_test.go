@@ -71,3 +71,23 @@ func TestTicketTabs(t *testing.T) {
 		t.Error("Inside")
 	}
 }
+
+func TestNotify(t *testing.T) {
+	var got []string
+	c := Client{R: runner.Func(func(_ context.Context, cmd runner.Cmd) runner.Result {
+		got = cmd.Argv
+		if strings.Contains(strings.Join(cmd.Argv, " "), "fail") {
+			return runner.Result{Code: 1, Stderr: []byte(`{"error":{"code":"no_ui","message":"x"}}`)}
+		}
+		return runner.Result{}
+	})}
+	if err := c.Notify(context.Background(), "ACM-12: needs you", "a question", "request"); err != nil {
+		t.Fatal(err)
+	}
+	if want := "herdr notification show ACM-12: needs you --body a question --sound request"; strings.Join(got, " ") != want {
+		t.Errorf("argv: %q", got)
+	}
+	if err := c.Notify(context.Background(), "fail", "", ""); CodeOf(err) != "no_ui" {
+		t.Errorf("error: %v", err)
+	}
+}
