@@ -60,6 +60,8 @@ const (
 	ChecksFailed           Code = "checks_failed"
 	UpdateUnsupported      Code = "update_unsupported"
 	UpdateNotWritable      Code = "update_not_writable"
+	PiMissing              Code = "pi_missing"
+	TerminalRequired       Code = "terminal_required"
 
 	TicketLocked        Code = "ticket_locked"
 	WorktreeLockTimeout Code = "worktree_lock_timeout"
@@ -100,6 +102,7 @@ const (
 	UpdateChecksum    Code = "update_checksum"
 	UpdateVerify      Code = "update_verify_failed"
 	Internal          Code = "internal"
+	PiUnpackFailed    Code = "pi_unpack_failed"
 
 	AgentNotReady   Code = "agent_not_ready"
 	PromptUncertain Code = "prompt_uncertain"
@@ -147,6 +150,8 @@ var Registry = []Info{
 	{ChecksFailed, ExitEnvironment, "tkt doctor found a failing check"},
 	{UpdateUnsupported, ExitEnvironment, "no release build exists for this system"},
 	{UpdateNotWritable, ExitEnvironment, "tkt cannot replace its own binary"},
+	{PiMissing, ExitEnvironment, "tkt agent has no pi to run: this tkt has no bundled pi and TKT_PI names none"},
+	{TerminalRequired, ExitEnvironment, "the command is interactive and needs a terminal on stdin and stdout"},
 
 	{TicketLocked, ExitState, "another tkt command is working on the ticket"},
 	{WorktreeLockTimeout, ExitState, "another tkt start kept the worktree lock too long"},
@@ -187,6 +192,7 @@ var Registry = []Info{
 	{UpdateChecksum, ExitTool, "the downloaded binary does not match SHA256SUMS; nothing was replaced"},
 	{UpdateVerify, ExitTool, "the downloaded binary did not run or did not print its version; nothing was replaced"},
 	{Internal, ExitTool, "an unexpected failure inside tkt"},
+	{PiUnpackFailed, ExitTool, "tkt cannot unpack its bundled pi, or write the extension or settings it starts pi with"},
 
 	{AgentNotReady, ExitUncertain, "the agent stopped at a startup dialog; answer it in its pane"},
 	{PromptUncertain, ExitUncertain, "tkt cannot confirm the agent received the prompt; check before sending it again"},

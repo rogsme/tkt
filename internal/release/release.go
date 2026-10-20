@@ -23,11 +23,19 @@ const (
 	DefaultAPI      = "https://git.rogs.me/api/v1/repos/rogs/tkt"
 )
 
+// DefaultStall is how long a download may go without a byte before tkt
+// gives up. A release binary carries pi and weighs up to 50 MB, so a limit
+// on the whole download would fail a slow but working connection.
+const DefaultStall = 60 * time.Second
+
 // Client downloads from the release host.
 type Client struct {
 	HTTP     *http.Client
 	Releases string
 	API      string
+	// Stall ends a request that receives nothing for that long; zero
+	// waits without limit.
+	Stall time.Duration
 }
 
 // New returns a client for the given bases, or the defaults when they are
@@ -42,9 +50,10 @@ func New(releases, api string) Client {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/")))
 	return Client{
-		HTTP:     &http.Client{Transport: t, Timeout: 5 * time.Minute},
+		HTTP:     &http.Client{Transport: t},
 		Releases: strings.TrimRight(releases, "/"),
 		API:      strings.TrimRight(api, "/"),
+		Stall:    DefaultStall,
 	}
 }
 
@@ -70,22 +79,55 @@ func (c Client) Fetch(ctx context.Context, tag, name string, w io.Writer) error 
 }
 
 func (c Client) get(ctx context.Context, url string, w io.Writer) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	stalled := fmt.Errorf("%s: no data for %s", url, c.Stall)
+	tick := func() {}
+	if c.Stall > 0 {
+		timer := time.AfterFunc(c.Stall, func() { cancel(stalled) })
+		defer timer.Stop()
+		tick = func() { timer.Reset(c.Stall) }
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return err
+		return stallErr(ctx, stalled, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%s: %s", url, resp.Status)
 	}
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		return fmt.Errorf("%s: %w", url, err)
+	body := &progress{r: resp.Body, tick: tick}
+	if _, err := io.Copy(w, body); err != nil {
+		return stallErr(ctx, stalled, fmt.Errorf("%s: %w", url, err))
 	}
 	return nil
+}
+
+// stallErr reports a stalled request as such rather than as the cancelled
+// context it caused.
+func stallErr(ctx context.Context, stalled, err error) error {
+	if context.Cause(ctx) == stalled {
+		return stalled
+	}
+	return err
+}
+
+// progress calls tick whenever bytes arrive.
+type progress struct {
+	r    io.Reader
+	tick func()
+}
+
+func (p *progress) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	if n > 0 {
+		p.tick()
+	}
+	return n, err
 }
 
 // Asset names the release binary for a system, as the release workflow

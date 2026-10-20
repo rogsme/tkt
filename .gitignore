@@ -1,3 +1,5 @@
 # Build output.
 /tkt
 /dist/
+# The pi tarballs that go run ./internal/pi/fetch downloads.
+/internal/pi/bundle/

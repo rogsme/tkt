@@ -1,0 +1,55 @@
+# tkt agent starts pi in the repository's root with tkt's extension and
+# system prompt only, and its own settings directory. A dry run shows the
+# command line and the environment.
+env TKT_PI=pi
+exec tkt agent --dry-run --json
+envelope '.result.source' env
+envelope '.result.version' 1.3.0
+envelope '.result.pi == .result.argv[0]' true
+envelope '.result.dir == $REPO' true
+envelope '.result.argv[1:8]' '["--no-extensions","--no-skills","--no-prompt-templates","--no-themes","--no-context-files","--no-mcp","--no-builtin-tools"]'
+envelope '.result.argv[8:] == ["-e", .result.ext_dir + "/index.ts", "--system-prompt", .result.ext_dir + "/system.md"]' true
+envelope '.result.ext_dir | startswith($HOME + "/.local/share/tkt/ext/")' true
+envelope '.result.agent_dir == $HOME + "/.config/tkt/pi"' true
+envelope '.result.env.PI_CODING_AGENT_DIR == .result.agent_dir' true
+envelope '.result.env.PI_SKIP_VERSION_CHECK' 1
+envelope '.result.env.PI_TELEMETRY' 0
+envelope '.result.env.TKT_BIN | length > 0' true
+envelope '[.result.actions[].argv] == [.result.argv]' true
+logged pi --version
+stderr '^tkt: dry run: .*pi --no-extensions'
+
+# The extension lands on disk; the settings wait for a real run.
+exec sh -c 'cd "$HOME"/.local/share/tkt/ext && ls */'
+stdout '^index.ts$'
+stdout '^system.md$'
+! exists $HOME/.config/tkt/pi/settings.json
+
+# The [agent] table adds a model and extensions; --model and --continue win.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt agent --dry-run --json
+envelope '.result.argv[12:]' '["--model","acme/large","-e","/opt/acme/provider.ts"]'
+exec tkt agent --dry-run --json --model acme/small -c
+envelope '.result.argv[12:]' '["--model","acme/small","-e","/opt/acme/provider.ts","-c"]'
+
+# Text mode says where pi would start.
+exec tkt agent --dry-run
+stdout '^would start pi 1.3.0 from TKT_PI in '
+
+# The chat needs a terminal, so without one a real run refuses.
+! exec tkt agent
+rc 3
+stderr 'needs a terminal'
+! exec tkt agent --json --dry-run=false
+rc 2
+envelope '.error.code' usage
+
+# tkt doctor shows the pi that TKT_PI names.
+exec tkt doctor
+stdout '^ok    pi               pi 1.3.0 from TKT_PI '
+
+-- config.toml --
+[agent]
+model = "acme/large"
+extensions = ["/opt/acme/provider.ts"]

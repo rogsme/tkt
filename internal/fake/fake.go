@@ -1,4 +1,4 @@
-// Package fake holds the stand-ins for herdr, worktrunk, gh, OpenCode,
+// Package fake holds the stand-ins for herdr, worktrunk, gh, OpenCode, pi,
 // Claude Code and git that tkt's black-box tests put on PATH. Each one
 // appends its command line to $FAKE_LOG, so tests can assert what tkt ran.
 // Only the tests import it.

@@ -1,0 +1,16 @@
+# tkt alone opens the agent only for a person at a terminal. Here, with no
+# terminal, it prints help and runs nothing.
+env TKT_PI=pi
+exec tkt
+stdout 'tkt agent'
+! stderr .
+! grep . $FAKE_LOG
+
+exec tkt --json
+stdout 'tkt agent'
+! grep . $FAKE_LOG
+
+# An unknown command is still a usage error.
+! exec tkt bogus
+rc 2
+stderr 'unknown command'

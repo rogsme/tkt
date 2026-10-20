@@ -43,6 +43,14 @@ These are the defaults:
   [board]
   stale_after = "2h"    # mark an agent idle this long with no status; "0s" for never
 
+An [agent] table sets up tkt agent's chat. model is a pi model pattern, such as
+provider/id; leave it out for pi's default. extensions lists more pi extension
+files to load, as absolute paths or paths that start with ~/:
+
+  [agent]
+  model = "acme/large"
+  extensions = ["~/.pi/agent/extensions/acme-provider.ts"]
+
 An unknown key is an error, so a misspelling never passes silently. tkt doctor
 checks the file.
 

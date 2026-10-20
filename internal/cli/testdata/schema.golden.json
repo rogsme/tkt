@@ -32,6 +32,53 @@
   ],
   "commands": [
     {
+      "path": "agent",
+      "use": "agent",
+      "short": "Open the tkt agent, a chat that drives your tickets",
+      "long": "tkt agent opens a chat in this pane about the repository's tickets. It runs\npi, a coding agent that release builds of tkt carry inside them (MIT licensed,\nhttps://github.com/earendil-works/pi), with only tkt's own extension. Running\ntkt with no arguments opens it too, when you type it at a terminal in a herdr\npane inside a repository with the lifecycle configuration.\n\nThe chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:\nnot your extensions, skills, prompt templates or themes, and not the project's\nAGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in\n${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with\n/login inside the chat.\n\npi runs in the repository's root, where it keeps the sessions, so --continue\npicks up the last chat about this repository from any of its worktrees.\n\nIn config.toml, an [agent] table picks the model and loads more pi extensions,\nsuch as one that adds a model provider (tkt help config). --model overrides the\nmodel for one run.\n\ntkt unpacks the bundled pi the first time, under\n${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary\ninstead; tkt doctor shows which pi tkt agent runs.\n\ntkt agent replaces itself with pi, so it needs a terminal and prints no result.\n--dry-run prints how it would start pi, and with --json the exact command line\nand environment.",
+      "example": "  tkt agent\n  tkt agent --continue\n  tkt agent --model acme/large\n  tkt agent --dry-run --json",
+      "group": "lifecycle",
+      "args": [],
+      "flags": [
+        {
+          "name": "continue",
+          "shorthand": "c",
+          "type": "bool",
+          "default": "false",
+          "usage": "continue the last chat in this repository"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print how tkt would start pi instead of starting it"
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "default": "",
+          "usage": "use pi model PATTERN instead of the [agent] model, such as acme/large"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "agent_dir": "string",
+        "argv": "array of string",
+        "dir": "string",
+        "dry_run": "boolean",
+        "env": "object",
+        "ext_dir": "string",
+        "pi": "string",
+        "source": "string",
+        "version": "string"
+      }
+    },
+    {
       "path": "start",
       "use": "start [ID | --scratch NAME]",
       "short": "Create the worktree and tab, start an agent and send it the prompt",
@@ -1206,6 +1253,16 @@
       "summary": "tkt cannot replace its own binary"
     },
     {
+      "code": "pi_missing",
+      "exit": 3,
+      "summary": "tkt agent has no pi to run: this tkt has no bundled pi and TKT_PI names none"
+    },
+    {
+      "code": "terminal_required",
+      "exit": 3,
+      "summary": "the command is interactive and needs a terminal on stdin and stdout"
+    },
+    {
       "code": "ticket_locked",
       "exit": 4,
       "summary": "another tkt command is working on the ticket"
@@ -1396,6 +1453,11 @@
       "summary": "an unexpected failure inside tkt"
     },
     {
+      "code": "pi_unpack_failed",
+      "exit": 1,
+      "summary": "tkt cannot unpack its bundled pi, or write the extension or settings it starts pi with"
+    },
+    {
       "code": "agent_not_ready",
       "exit": 5,
       "summary": "the agent stopped at a startup dialog; answer it in its pane"
@@ -1430,8 +1492,12 @@
       "description": "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it (default ~/.local/state/tkt)"
     },
     {
+      "name": "XDG_DATA_HOME",
+      "description": "tkt unpacks its bundled pi and its extension under $XDG_DATA_HOME/tkt (default ~/.local/share/tkt)"
+    },
+    {
       "name": "HERDR_ENV",
-      "description": "herdr sets it to 1 inside its panes; start, approve, send, auto, run, resume, done, show and wait need it"
+      "description": "herdr sets it to 1 inside its panes; agent, start, approve, send, auto, run, resume, done, show and wait need it, and tkt alone opens the agent only there"
     },
     {
       "name": "HERDR_WORKSPACE_ID",
@@ -1452,6 +1518,10 @@
     {
       "name": "TKT_RELEASES_API",
       "description": "the Gitea API that tkt update asks for the latest release (default https://git.rogs.me/api/v1/repos/rogs/tkt)"
+    },
+    {
+      "name": "TKT_PI",
+      "description": "the pi binary tkt agent runs instead of the one bundled with tkt"
     },
     {
       "name": "CLAUDE_CONFIG_DIR",

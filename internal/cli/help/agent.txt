@@ -1,0 +1,26 @@
+tkt agent opens a chat in this pane about the repository's tickets. It runs
+pi, a coding agent that release builds of tkt carry inside them (MIT licensed,
+https://github.com/earendil-works/pi), with only tkt's own extension. Running
+tkt with no arguments opens it too, when you type it at a terminal in a herdr
+pane inside a repository with the lifecycle configuration.
+
+The chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:
+not your extensions, skills, prompt templates or themes, and not the project's
+AGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in
+${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with
+/login inside the chat.
+
+pi runs in the repository's root, where it keeps the sessions, so --continue
+picks up the last chat about this repository from any of its worktrees.
+
+In config.toml, an [agent] table picks the model and loads more pi extensions,
+such as one that adds a model provider (tkt help config). --model overrides the
+model for one run.
+
+tkt unpacks the bundled pi the first time, under
+${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary
+instead; tkt doctor shows which pi tkt agent runs.
+
+tkt agent replaces itself with pi, so it needs a terminal and prints no result.
+--dry-run prints how it would start pi, and with --json the exact command line
+and environment.

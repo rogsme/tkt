@@ -47,6 +47,15 @@ type Config struct {
 	Auto          Auto
 	Review        Review
 	Board         Board
+	Agent         Agent
+}
+
+// Agent holds the [agent] settings for tkt agent.
+type Agent struct {
+	// Model is a pi model pattern; empty keeps pi's default.
+	Model string
+	// Extensions are more pi extension files to load, as absolute paths.
+	Extensions []string
 }
 
 // Auto holds tkt auto's settings.

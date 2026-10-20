@@ -25,7 +25,16 @@ type Log struct {
 
 // Record writes the line for one finished command.
 func (l *Log) Record(ctx context.Context, c Cmd, r Result) {
-	line := fmt.Sprintf("%s rc=%d %dms %s", TicketFrom(ctx), r.Code, r.Dur.Milliseconds(), Display(c.Argv))
+	l.write(fmt.Sprintf("%s rc=%d %dms %s", TicketFrom(ctx), r.Code, r.Dur.Milliseconds(), Display(c.Argv)))
+}
+
+// RecordExec writes the line for a command that replaces tkt, before it
+// runs: no line could follow it. rc=exec stands for the status.
+func (l *Log) RecordExec(ctx context.Context, c Cmd) {
+	l.write(fmt.Sprintf("%s rc=exec 0ms %s", TicketFrom(ctx), Display(c.Argv)))
+}
+
+func (l *Log) write(line string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.Path != "" {
@@ -53,6 +62,18 @@ func (l Logged) Run(ctx context.Context, c Cmd) Result {
 		l.Log.Record(ctx, c, r)
 	}
 	return r
+}
+
+// Replace logs c, then replaces tkt with it through Inner.
+func (l Logged) Replace(ctx context.Context, c Cmd, env []string) error {
+	r, ok := l.Inner.(Replacer)
+	if !ok {
+		return fmt.Errorf("the runner cannot replace tkt with %s", c.Argv[0])
+	}
+	if l.Log != nil {
+		l.Log.RecordExec(ctx, c)
+	}
+	return r.Replace(ctx, c, env)
 }
 
 // Display renders argv for logs and dry runs: each argument shell-quoted,

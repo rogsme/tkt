@@ -489,3 +489,29 @@ func updateCmd(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Force, "force", false, "replace a development build, or reinstall the same version")
 	return cmd
 }
+
+func agentCmd(g *globals) *cobra.Command {
+	var o app.FrontOpts
+	cmd := &cobra.Command{
+		Use:   "agent",
+		Short: "Open the tkt agent, a chat that drives your tickets",
+		Long:  helpText("agent"),
+		Example: `  tkt agent
+  tkt agent --continue
+  tkt agent --model acme/large
+  tkt agent --dry-run --json`,
+		SuggestFor: []string{"chat", "pi"},
+		Args:       cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if g.json && !o.Dry {
+				return usage("tkt agent is a chat, so it prints no JSON; add --dry-run to see what it would run")
+			}
+			res, err := g.app().Front(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.Model, "model", "", "use pi model PATTERN instead of the [agent] model, such as acme/large")
+	cmd.Flags().BoolVarP(&o.Continue, "continue", "c", false, "continue the last chat in this repository")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print how tkt would start pi instead of starting it")
+	return cmd
+}

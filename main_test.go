@@ -21,6 +21,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/cli"
 	"gitlab.com/rogs/tkt/internal/fake"
 	"gitlab.com/rogs/tkt/internal/harness"
+	"gitlab.com/rogs/tkt/internal/pi"
 	"gitlab.com/rogs/tkt/internal/state"
 )
 
@@ -36,6 +37,7 @@ func TestMain(m *testing.M) {
 		"opencode": fake.OpenCode,
 		"claude":   fake.Claude,
 		"git":      fake.Git,
+		"pi":       fake.Pi,
 	})
 }
 
@@ -68,6 +70,15 @@ func TestScripts(t *testing.T) {
 			return setupSandbox(env, realGit)
 		},
 		Cmds: commands,
+		// [bundled_pi] holds when the test binary carries pi, as a build
+		// with the bundled_pi tag does.
+		Condition: func(cond string) (bool, error) {
+			if cond == "bundled_pi" {
+				_, ok := pi.Bundled()
+				return ok, nil
+			}
+			return false, fmt.Errorf("unknown condition %q", cond)
+		},
 	})
 }
 

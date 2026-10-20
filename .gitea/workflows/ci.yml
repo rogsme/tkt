@@ -51,3 +51,23 @@ jobs:
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
             CGO_ENABLED=0 GOOS=${target%/*} GOARCH=${target#*/} go build -trimpath -o /dev/null .
           done
+
+      - name: Build every release target with pi inside
+        run: |
+          targets="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64"
+          # fetch checks each tarball against internal/pi/pi.lock.
+          go run ./internal/pi/fetch $targets
+          for target in $targets; do
+            CGO_ENABLED=0 GOOS=${target%/*} GOARCH=${target#*/} go build -tags bundled_pi -trimpath -o /dev/null .
+          done
+
+      - name: No en or em dashes
+        run: |
+          # Bytes, not characters: in the C locale git grep cannot read
+          # \x{2014}, and an error must not pass as no match.
+          status=0
+          LC_ALL=C git grep -nP '\xE2\x80[\x93\x94]' || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "rewrite the lines above without dashes"
+            exit 1
+          fi

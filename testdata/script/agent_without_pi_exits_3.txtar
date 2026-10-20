@@ -1,0 +1,19 @@
+# The test binary carries no bundled pi, so without TKT_PI tkt agent has
+# nothing to run.
+[bundled_pi] skip 'this test binary carries pi'
+! exec tkt agent --dry-run --json
+rc 3
+envelope '.error.code' pi_missing
+envelope '.error.hint' 'install a release build of tkt (install.sh), or set TKT_PI to a pi binary'
+! grep '^pi ' $FAKE_LOG
+
+# A TKT_PI that names no program is the same error.
+env TKT_PI=$WORK/no-such-pi
+! exec tkt agent --dry-run
+rc 3
+stderr '^tkt: TKT_PI names .*no-such-pi, which is not a program tkt can run$'
+
+# tkt doctor warns, and still passes.
+env TKT_PI=
+exec tkt doctor
+stdout '^warn  pi               this tkt has no bundled pi'

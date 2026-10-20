@@ -26,6 +26,7 @@ The fakes in `internal/fake` stand in for the real tools on `PATH`:
 - `opencode` answers the session API calls, and a session's messages from the JSON file in `FAKE_OC_MESSAGES`.
 - `claude` fails if anything calls it, because tkt starts agents through herdr only.
 - `git` logs each call, then runs the real git.
+- `pi` answers `--version` with `1.3.0`. Any other call appends the variables tkt agent sets (`PI_CODING_AGENT_DIR`, `PI_SKIP_VERSION_CHECK`, `PI_TELEMETRY`, `TKT_BIN`) to `$FAKE_DIR/pi-env` and exits. The test binary has no bundled pi, so the `agent_` scripts set `TKT_PI=pi`; the condition `[bundled_pi]` holds when `go test -tags bundled_pi` built one in. A script has no terminal, so `tkt agent` never gets past its terminal check there: the scripts check its dry run, and unit tests in `internal/pi` and `internal/runner` cover the command line and the process replacement.
 
 The `update_` scripts point `TKT_RELEASES` and `TKT_RELEASES_API` at `file://` URLs under `$WORK`, and set `TKT_UPDATE_TARGET` to the file `tkt update` replaces. Only the tests set `TKT_UPDATE_TARGET`: without it, `tkt update` would replace the shared test binary.
 
@@ -71,3 +72,9 @@ After a change to how tkt reads sessions or drives tickets (`show`, `approve`, `
 3. `tkt wait ACM-1 --notify` shows a herdr notification when the agent stops.
 4. On another ticket, `tkt auto ACM-2 --approve-plan --notify` runs to `READY_FOR_HUMAN`. Check that it waits for CI and for the review bot, and that it stops with a notification when the agent asks a question.
 5. `tkt show ACM-2 --steps` lists the review's human verification steps. After the merge, `tkt done ACM-2` reports the time from start to merge, and `tkt stats` lists it.
+
+After a change to how tkt starts pi, or after `just bump-pi`, build with `just build` and check pi itself:
+
+1. Run `XDG_DATA_HOME=$(mktemp -d) ./tkt agent --dry-run --json`. It unpacks pi under that directory and prints the command line.
+2. Run that pi with `--version`, then with the same flags and `--help`: pi must accept every flag.
+3. Run `./tkt agent` in a herdr pane. The chat opens without a startup banner, with the built-in theme, and `/tkt-version` prints the tkt version. `/login` stores its credentials under `~/.config/tkt/pi`, not `~/.pi/agent`.

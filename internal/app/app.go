@@ -41,6 +41,8 @@ type App struct {
 	Sleep func(time.Duration)
 	// Version is the running tkt's version, such as v0.2.0, or dev.
 	Version string
+	// StdoutTTY is set when stdout is a terminal, which tkt agent needs.
+	StdoutTTY bool
 }
 
 // ConfigDir is tkt's own configuration directory.
@@ -49,6 +51,14 @@ func (a *App) ConfigDir() string {
 		return filepath.Join(d, "tkt")
 	}
 	return filepath.Join(a.Getenv("HOME"), ".config", "tkt")
+}
+
+// DataDir is where tkt unpacks its bundled pi and extension.
+func (a *App) DataDir() string {
+	if d := a.Getenv("XDG_DATA_HOME"); d != "" {
+		return filepath.Join(d, "tkt")
+	}
+	return filepath.Join(a.Getenv("HOME"), ".local", "share", "tkt")
 }
 
 // Action is one change a dry run would make.

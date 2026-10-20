@@ -56,3 +56,13 @@ func (e Exec) Run(ctx context.Context, c Cmd) Result {
 	}
 	return res
 }
+
+// Replace runs c in place of tkt with env as its environment. Only a failure
+// returns.
+func (e Exec) Replace(_ context.Context, c Cmd, env []string) error {
+	path, err := exec.LookPath(c.Argv[0])
+	if err != nil {
+		return err
+	}
+	return syscall.Exec(path, c.Argv, env)
+}

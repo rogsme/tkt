@@ -27,7 +27,7 @@ To download the binary yourself (this works in fish, bash and zsh; replace `linu
 mkdir -p ~/.local/bin && curl -fsSLo ~/.local/bin/tkt https://git.rogs.me/rogs/tkt/releases/download/latest/tkt_linux_amd64 && chmod +x ~/.local/bin/tkt
 ```
 
-With Go 1.26 or newer:
+With Go 1.26 or newer (this build lacks the pi that `tkt agent` runs; see [The tkt agent](#the-tkt-agent)):
 
 ```bash
 go install gitlab.com/rogs/tkt@latest
@@ -69,6 +69,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 
 | Command | What it does |
 |---|---|
+| `tkt agent` | Opens the tkt agent, a chat in your pane that drives your tickets. |
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
 | `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan. |
@@ -92,6 +93,22 @@ A ticket from start to merge, in short:
 5. Verify, merge in the tab, then run `tkt done ACM-12`.
 
 For work with no ticket, `tkt start --scratch spike-login` makes the worktree, branch and tab `spike-login` and starts the agent without sending it anything. The other commands work on tickets only, so remove that worktree with `wt remove spike-login`.
+
+### The tkt agent
+
+`tkt agent` opens a chat in your pane about the repository's tickets. Typing `tkt` alone opens it too, at a terminal in a herdr pane inside a configured repository; anywhere else, `tkt` alone prints help.
+
+The chat runs [pi](https://github.com/earendil-works/pi), an MIT-licensed coding agent. Release builds of tkt carry pi inside them and unpack it on first use under `~/.local/share/tkt/pi`. A tkt built with `go install` has no pi inside; set `TKT_PI` to a pi binary to use one.
+
+The chat stays apart from any pi you run yourself. It loads only tkt's own extension, and none of your pi extensions, skills, prompt templates or themes, nor the project's `AGENTS.md` or `CLAUDE.md`. It keeps its settings, logins and sessions in `~/.config/tkt/pi`, so log in to a model provider once with `/login` inside the chat. `tkt agent --continue` picks up the last chat about the repository.
+
+An `[agent]` table in `config.toml` picks the model and loads more pi extensions, such as one that adds a model provider:
+
+```toml
+[agent]
+model = "acme/large"
+extensions = ["~/.pi/agent/extensions/acme-provider.ts"]
+```
 
 `tkt help lifecycle` walks through each step. [`docs/lifecycle.md`](docs/lifecycle.md) follows a ticket from the tracker to a merged pull request, with diagrams of how tkt, the skills, herdr, worktrunk, the tracker and the forge fit together. `tkt COMMAND --help` explains when to use a command and what it refuses.
 
@@ -150,7 +167,9 @@ just run start ACM-12 --dry-run
 
 `just build` writes `./tkt`. `just install` builds the working tree over the tkt on PATH (`~/.local/bin`, or `TKT_INSTALL_DIR`), so herdr panes and agents use it too. These builds print a version such as `dev-v0.3.2-1-gabc1234`, so `tkt update` replaces them only with `--force`. Run `tkt update --force` to go back to the latest release.
 
-`just test` runs the tests with the race detector; `just test -run TestDoctorPretty` passes flags to `go test`. Before pushing, run `just ci`. It runs the same checks as CI: gofmt, vet, the race tests, shellcheck on `install.sh`, a build for each release target, and the search for en and em dashes.
+`just run`, `just build` and `just install` first download the pi tarball for your system from pi's GitHub releases, check it against `internal/pi/pi.lock`, and build it in with the `bundled_pi` tag. `just bump-pi VERSION` pins another pi release.
+
+`just test` runs the tests with the race detector; `just test -run TestDoctorPretty` passes flags to `go test`. Before pushing, run `just ci`. It runs the same checks as CI: gofmt, vet, the race tests, shellcheck on `install.sh`, a build for each release target without pi and with it, and the search for en and em dashes.
 
 To release, run `just release vX.Y.Z` on a clean master. It runs `just ci`, pushes master and the tag together, waits for the release job to publish, and checks that the install script installs the new version. A tag with a hyphen, such as `vX.Y.Z-rc.1`, becomes a prerelease.
 

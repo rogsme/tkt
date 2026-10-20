@@ -31,6 +31,11 @@ type presetTOML struct {
 	Serves  []string `toml:"serves"`
 }
 
+type agentTOML struct {
+	Model      string   `toml:"model"`
+	Extensions []string `toml:"extensions"`
+}
+
 type fileTOML struct {
 	Presets map[string]presetTOML `toml:"presets"`
 	Stages  map[string]string     `toml:"stages"`
@@ -45,6 +50,7 @@ type fileTOML struct {
 	Board *struct {
 		StaleAfter string `toml:"stale_after"`
 	} `toml:"board"`
+	Agent agentTOML `toml:"agent"`
 }
 
 // Load reads the settings from dir, tkt's configuration directory. Without
@@ -126,7 +132,7 @@ func parseTOML(c *Config, path, src string) error {
 	return parseSettings(c, path, f)
 }
 
-// parseSettings reads the [auto], [review] and [board] tables.
+// parseSettings reads the [auto], [review], [board] and [agent] tables.
 func parseSettings(c *Config, path string, f fileTOML) error {
 	bad := func(key, rule string) error {
 		return apperr.New(apperr.ConfigInvalid, "%s: %s %s", path, key, rule)
@@ -174,7 +180,30 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 			return err
 		}
 	}
+	c.Agent.Model = f.Agent.Model
+	for _, p := range f.Agent.Extensions {
+		abs, ok := absPath(p)
+		if !ok {
+			return apperr.New(apperr.ConfigInvalid, "%s: agent extension '%s' is not an absolute path", path, p).
+				WithHint("write the extension's full path, such as ~/.pi/agent/extensions/acme.ts")
+		}
+		c.Agent.Extensions = append(c.Agent.Extensions, abs)
+	}
 	return nil
+}
+
+// absPath expands a leading ~/ to the home directory and reports whether
+// the result is absolute: pi would resolve a relative path from the
+// repository it runs in.
+func absPath(p string) (string, bool) {
+	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return p, false
+		}
+		p = filepath.Join(home, rest)
+	}
+	return p, filepath.IsAbs(p)
 }
 
 // legacyFiles lists the old-format files present in dir.

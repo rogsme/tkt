@@ -50,6 +50,13 @@ type Runner interface {
 	Run(ctx context.Context, c Cmd) Result
 }
 
+// Replacer replaces tkt's process with a command, for the one command that
+// hands the terminal over for good. Replace returns only when it fails. It
+// is not part of Runner, so a test's Runner need not provide it.
+type Replacer interface {
+	Replace(ctx context.Context, c Cmd, env []string) error
+}
+
 // Func adapts a function to a Runner, for tests.
 type Func func(ctx context.Context, c Cmd) Result
 
