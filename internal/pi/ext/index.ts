@@ -37,5 +37,18 @@ export default function (pi: ExtensionAPI) {
 		hub.start(ctx);
 	});
 
-	pi.on("session_shutdown", () => hub.stop());
+	pi.on("session_shutdown", (event) => {
+		hub.stop();
+		if (event.reason === "quit") nameTktInResumeLine();
+	});
+}
+
+/** nameTktInResumeLine makes the line pi prints as it quits, "To resume
+ * this session: pi --session ID", name tkt agent: a bare pi would open the
+ * chat without tkt's extension. pi writes the line after the extension
+ * shuts down, so the extension rewrites it on its way out. */
+function nameTktInResumeLine(): void {
+	const write = process.stdout.write.bind(process.stdout) as (chunk: unknown, ...rest: unknown[]) => boolean;
+	process.stdout.write = ((chunk: unknown, ...rest: unknown[]) =>
+		write(typeof chunk === "string" ? chunk.replace(/\bpi (--session-dir \S+ )?--session (\S+)/, (_, dir: string | undefined, id: string) => `tkt agent --session ${id}${dir ? ` -- ${dir.trim()}` : ""}`) : chunk, ...rest)) as typeof process.stdout.write;
 }

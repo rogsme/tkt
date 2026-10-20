@@ -520,25 +520,35 @@ func updateCmd(g *globals) *cobra.Command {
 func agentCmd(g *globals) *cobra.Command {
 	var o app.FrontOpts
 	cmd := &cobra.Command{
-		Use:   "agent",
+		Use:   "agent [-- PI_FLAGS...]",
 		Short: "Open the tkt agent, a chat that drives your tickets",
 		Long:  helpText("agent"),
 		Example: `  tkt agent
   tkt agent --continue
+  tkt agent --session 01a15a4d
   tkt agent --model acme/large
+  tkt agent -- --thinking high
   tkt agent --dry-run --json`,
 		SuggestFor: []string{"chat", "pi"},
-		Args:       cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 && cmd.ArgsLenAtDash() != 0 {
+				return usage("tkt agent takes no arguments; put pi's own flags after --, such as tkt agent -- --thinking high")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
 			if g.json && !o.Dry {
 				return usage("tkt agent is a chat, so it prints no JSON; add --dry-run to see what it would run")
 			}
+			o.PiArgs = args
 			res, err := g.app().Front(cmd.Context(), o)
 			return show(g, cmd, res, res == nil, err)
 		},
 	}
 	cmd.Flags().StringVar(&o.Model, "model", "", "use pi model PATTERN instead of the [agent] model, such as acme/large")
 	cmd.Flags().BoolVarP(&o.Continue, "continue", "c", false, "continue the last chat in this repository")
+	cmd.Flags().StringVar(&o.Session, "session", "", "resume the chat with session ID, or a unique part of it, as the line pi prints on exit names it")
+	cmd.MarkFlagsMutuallyExclusive("continue", "session")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print how tkt would start pi instead of starting it")
 	return cmd
 }

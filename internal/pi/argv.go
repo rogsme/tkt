@@ -14,9 +14,13 @@ type Launch struct {
 	Extensions []string
 	// Continue resumes the newest session in the directory.
 	Continue bool
+	// Session resumes the session with this id, or a unique part of it.
+	Session string
 	// Theme is the theme pi starts with; empty keeps the one pi's settings
 	// name.
 	Theme string
+	// Args are more of pi's own flags, passed as they are, last.
+	Args []string
 }
 
 // Themes are the theme files beside the extension: tkt-dark and tkt-light,
@@ -53,7 +57,10 @@ func Argv(bin, extDir string, o Launch) []string {
 	if o.Continue {
 		argv = append(argv, "-c")
 	}
-	return argv
+	if o.Session != "" {
+		argv = append(argv, "--session", o.Session)
+	}
+	return append(argv, o.Args...)
 }
 
 // dropped are variables of the user's own pi that would point tkt's pi at

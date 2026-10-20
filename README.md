@@ -101,7 +101,7 @@ For work with no ticket, `tkt start --scratch spike-login` makes the worktree, b
 
 The chat runs [pi](https://github.com/earendil-works/pi), an MIT-licensed coding agent. Release builds of tkt carry pi inside them and unpack it on first use under `~/.local/share/tkt/pi`. A tkt built with `go install` has no pi inside; set `TKT_PI` to a pi binary to use one.
 
-The chat stays apart from any pi you run yourself. It loads only tkt's own extension, and none of your pi extensions, skills, prompt templates or themes, nor the project's `AGENTS.md` or `CLAUDE.md`. It keeps its settings, logins and sessions in `~/.config/tkt/pi`, so log in to a model provider once with `/login` inside the chat. `tkt agent --continue` picks up the last chat about the repository.
+The chat stays apart from any pi you run yourself. It loads only tkt's own extension, and none of your pi extensions, skills, prompt templates or themes, nor the project's `AGENTS.md` or `CLAUDE.md`. It keeps its settings, logins and sessions in `~/.config/tkt/pi`, so log in to a model provider once with `/login` inside the chat. `tkt agent --continue` picks up the last chat about the repository, and `tkt agent --session ID` the one whose id the chat printed when you quit. Flags after `--` go to pi as they are, such as `tkt agent -- --thinking high`.
 
 The chat brings its own themes, `tkt-dark` and `tkt-light`, and picks the one that suits the terminal. Overlays such as `/board` and `/peek` draw on a panel of their own, so they read well on a transparent terminal. A theme you pick in `/settings` wins from then on.
 

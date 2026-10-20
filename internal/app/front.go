@@ -25,7 +25,11 @@ type FrontOpts struct {
 	// Model overrides the [agent] model.
 	Model    string
 	Continue bool
-	Dry      bool
+	// Session resumes a chat by its id, as pi's exit line names it.
+	Session string
+	// PiArgs are pi's own flags, passed through as they are.
+	PiArgs []string
+	Dry    bool
 }
 
 // FrontResult is what tkt agent runs. A real run replaces tkt with pi, so
@@ -92,7 +96,7 @@ func (a *App) Front(ctx context.Context, o FrontOpts) (*FrontResult, error) {
 	if model == "" {
 		model = c.Cfg.Agent.Model
 	}
-	launch := pi.Launch{Model: model, Extensions: c.Cfg.Agent.Extensions, Continue: o.Continue}
+	launch := pi.Launch{Model: model, Extensions: c.Cfg.Agent.Extensions, Continue: o.Continue, Session: o.Session, Args: o.PiArgs}
 	if !themeSet(agentDir) {
 		launch.Theme = pi.Theme
 	}

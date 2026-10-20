@@ -78,7 +78,7 @@ After a change to how tkt starts pi, or after `just bump-pi`, build with `just b
 
 1. Run `XDG_DATA_HOME=$(mktemp -d) ./tkt agent --dry-run --json`. It unpacks pi under that directory and prints the command line.
 2. Run that pi with `--version`, then with the same flags and `--help`: pi must accept every flag.
-3. Run `./tkt agent` in a herdr pane. The chat opens without a startup banner, with tkt's theme, and the board pinned to the top starts with `tkt`, the repository and its ticket count, which shows that tkt's extension loaded. The chat scrolls below the board, in fullscreen mode and, after a switch in `/settings`, in regular mode, where the board sits above the editor. `/login` stores its credentials under `~/.config/tkt/pi`, not `~/.pi/agent`.
+3. Run `./tkt agent` in a herdr pane. The chat opens without a startup banner, with tkt's theme, and the board pinned to the top starts with `tkt`, the repository and its ticket count, which shows that tkt's extension loaded. The chat scrolls below the board, in fullscreen mode and, after a switch in `/settings`, in regular mode, where the board sits above the editor. `/login` stores its credentials under `~/.config/tkt/pi`, not `~/.pi/agent`. Quit after a reply: the last line says `tkt agent --session ID`, and that command opens the same chat.
 
 After a change to the extension in `internal/pi/ext`, run `just install`, then `tkt agent` in a herdr pane inside a configured scratch repository:
 

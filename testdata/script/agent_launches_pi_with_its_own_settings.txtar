@@ -35,6 +35,16 @@ envelope '.result.argv[18:]' '["--model","acme/large","-e","/opt/acme/provider.t
 exec tkt agent --dry-run --json --model acme/small -c
 envelope '.result.argv[18:]' '["--model","acme/small","-e","/opt/acme/provider.ts","-c"]'
 
+# --session resumes a chat by the id pi prints on exit, and pi's own flags
+# go after --, last.
+exec tkt agent --dry-run --json --session 01a15a4d -- --thinking high
+envelope '.result.argv[-6:]' '["-e","/opt/acme/provider.ts","--session","01a15a4d","--thinking","high"]'
+! exec tkt agent --dry-run --continue --session 01a15a4d
+rc 2
+! exec tkt agent --dry-run high
+rc 2
+stderr 'put pi.s own flags after --'
+
 # A theme picked in pi's /settings wins over tkt's.
 mkdir $HOME/.config/tkt/pi
 cp $WORK/settings.json $HOME/.config/tkt/pi/settings.json

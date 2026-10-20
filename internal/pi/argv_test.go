@@ -19,6 +19,11 @@ func TestArgv(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("Argv = %q\nwant %q", got, want)
 	}
+	got = Argv("/opt/pi/pi", "/data/ext/abc", Launch{Session: "01a1", Args: []string{"--thinking", "high"}})
+	want = append(slices.Clone(isolated), "--session", "01a1", "--thinking", "high")
+	if !slices.Equal(got, want) {
+		t.Errorf("Argv = %q\nwant %q", got, want)
+	}
 }
 
 func TestEnv(t *testing.T) {

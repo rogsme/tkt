@@ -44,7 +44,10 @@ draw on a panel of their own, so they read well on a transparent terminal. A
 theme you pick in /settings wins from then on.
 
 pi runs in the repository's root, where it keeps the sessions, so --continue
-picks up the last chat about this repository from any of its worktrees.
+picks up the last chat about this repository from any of its worktrees. When
+you quit, the chat prints the command that resumes it: tkt agent --session
+ID. Flags after -- go to pi as they are, such as tkt agent -- --thinking high;
+pi --help lists them.
 
 In config.toml, an [agent] table picks the model and loads more pi extensions,
 such as one that adds a model provider (tkt help config). --model overrides the
