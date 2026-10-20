@@ -51,6 +51,9 @@ test("a paused loop needs you, and says how it goes on", () => {
 	assert.equal(silent?.title, "review bot silent");
 	const plan = attentionOf(row({ phase: "awaiting_approval", auto: auto({ approve_plan: false, paused: "plan_awaits_approval" }) }), false);
 	assert.equal(plan?.kind, "plan");
+	// Right after you approve, the loop still says it paused for the plan
+	// until its next look, but the agent already builds it.
+	assert.equal(attentionOf(row({ phase: "building", agent: working, auto: auto({ approve_plan: false, paused: "plan_awaits_approval" }) }), false), undefined);
 });
 
 test("a ticket marked for auto with no loop has stalled", () => {

@@ -43,6 +43,9 @@ export function attentionOf(row: Row, inFlight: boolean): Attention | undefined 
 	const item = (kind: AttentionKind, title: string, text: string, byAuto = false): Attention => ({ key: `${kind}|${base}`, ticket: id, kind, title, text, byAuto });
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
 	if (a?.running) {
+		// A pause stays in the loop's state until its next look. Once the
+		// agent works again, you acted, such as approving the plan.
+		if (a.paused && row.agent?.status === "working") return undefined;
 		if (a.paused) return paused(row, item);
 		if (row.phase === "ready_for_human") return item("ready", "ready to verify", readyText(row), true);
 		return undefined;

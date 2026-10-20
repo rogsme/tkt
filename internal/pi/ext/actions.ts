@@ -209,14 +209,16 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	return `${id}: every step passed${t.skip ? ` (${t.skip} skipped)` : ""}. Merge it, then say "${id} is merged, remove it".`;
 }
 
-/** inbox walks what needs you, each with fixed answers. */
+/** inbox walks what needs you, each with fixed answers. It asks about each
+ * ticket's kind of item once: right after you answer, the board can still
+ * show the item under a new key, such as a plan you just approved. */
 export async function inbox(hub: Hub, ctx: ExtensionContext): Promise<string> {
 	await hub.refresh();
 	const seen = new Set<string>();
 	for (;;) {
-		const a = hub.items.find((x) => !seen.has(x.key));
+		const a = hub.items.find((x) => !seen.has(`${x.ticket}|${x.kind}`));
 		if (!a) break;
-		seen.add(a.key);
+		seen.add(`${a.ticket}|${a.kind}`);
 		const reply = await answer(hub, ctx, a);
 		if (reply === undefined) break;
 		if (reply) hub.post(reply);

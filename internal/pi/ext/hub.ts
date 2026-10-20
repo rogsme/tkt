@@ -43,6 +43,8 @@ export class Hub {
 	 * once; dismissed holds the ones you set aside. */
 	private announced = new Set<string>();
 	private dismissed = new Set<string>();
+	/** told is the last boardNote the model got. */
+	private told = "";
 	private failed: { item: Attention; at: number }[] = [];
 	private watchers = new Map<string, AbortController>();
 	private timers: ReturnType<typeof setInterval>[] = [];
@@ -206,14 +208,25 @@ export class Hub {
 		this.render();
 	}
 
-	/** announce tells about an item once: a herdr notification, unless the
-	 * tkt auto loop that drives the ticket sent one already, and a line the
-	 * model reads with your next message. The chat itself stays clean: the
-	 * board shows the item until it is done. */
+	/** announce tells about an item once with a herdr notification, unless
+	 * the tkt auto loop that drives the ticket sent one already. The chat
+	 * itself stays clean: the board shows the item until it is done, and the
+	 * model reads it in boardNote. */
 	private announce(a: Attention): void {
 		this.announced.add(a.key);
 		if (!a.byAuto) this.toast(`${a.ticket}: ${a.title}`, a.text, sound(a));
-		this.pi.sendMessage({ customType: "tkt", content: `[board] ${a.text}`, display: false }, { deliverAs: "nextTurn" });
+	}
+
+	/** boardNote is what needs you now, for the model with your next
+	 * message, or undefined when that has not changed since the last note.
+	 * It describes the items as they stand, so the model never reads one
+	 * that went away while you were not typing. */
+	boardNote(): string | undefined {
+		let note = this.items.map((a) => `[board] ${a.text}`).join("\n");
+		if (!note && this.told) note = "[board] Nothing needs the user now.";
+		if (note === this.told) return undefined;
+		this.told = note;
+		return note;
 	}
 
 	private status(): void {

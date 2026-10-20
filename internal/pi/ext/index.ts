@@ -20,6 +20,13 @@ export default function (pi: ExtensionAPI) {
 		return { action: "continue" };
 	});
 
+	// What needs you goes to the model with your message, as it stands now.
+	pi.on("before_agent_start", (event) => {
+		if (event.messageType !== "user") return;
+		const note = hub.boardNote();
+		if (note) return { message: { customType: "tkt", content: note, display: false } };
+	});
+
 	pi.on("session_start", (_event, ctx) => {
 		hub.stop();
 		restoreMarks(ctx.sessionManager.getEntries() as { type: string; customType?: string; data?: unknown }[]);
