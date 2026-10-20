@@ -14,18 +14,35 @@ type Launch struct {
 	Extensions []string
 	// Continue resumes the newest session in the directory.
 	Continue bool
+	// Theme is the theme pi starts with; empty keeps the one pi's settings
+	// name.
+	Theme string
 }
 
-// Argv is the command line that starts pi with tkt's extension and system
-// prompt and nothing else: none of the user's own pi extensions, skills,
-// prompt templates or themes, no AGENTS.md or CLAUDE.md, no MCP servers and
-// no built-in tools. extDir is where WriteExt put the extension.
+// Themes are the theme files beside the extension: tkt-dark and tkt-light,
+// from one palette. Theme picks between them by the terminal's background.
+var Themes = []string{"tkt-dark.json", "tkt-light.json"}
+
+// Theme is the theme setting for tkt's own themes.
+const Theme = "tkt-light/tkt-dark"
+
+// Argv is the command line that starts pi with tkt's extension, system
+// prompt and themes and nothing else: none of the user's own pi extensions,
+// skills, prompt templates or themes, no AGENTS.md or CLAUDE.md, no MCP
+// servers and no built-in tools. extDir is where WriteExt put the
+// extension.
 func Argv(bin, extDir string, o Launch) []string {
 	argv := []string{bin,
 		"--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes",
 		"--no-context-files", "--no-mcp", "--no-builtin-tools",
 		"-e", filepath.Join(extDir, "index.ts"),
 		"--system-prompt", filepath.Join(extDir, "system.md"),
+	}
+	for _, t := range Themes {
+		argv = append(argv, "--theme", filepath.Join(extDir, t))
+	}
+	if o.Theme != "" {
+		argv = append(argv, "--use-theme", o.Theme)
 	}
 	if o.Model != "" {
 		argv = append(argv, "--model", o.Model)

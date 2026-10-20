@@ -9,12 +9,13 @@ func TestArgv(t *testing.T) {
 	isolated := []string{"/opt/pi/pi",
 		"--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes",
 		"--no-context-files", "--no-mcp", "--no-builtin-tools",
-		"-e", "/data/ext/abc/index.ts", "--system-prompt", "/data/ext/abc/system.md"}
+		"-e", "/data/ext/abc/index.ts", "--system-prompt", "/data/ext/abc/system.md",
+		"--theme", "/data/ext/abc/tkt-dark.json", "--theme", "/data/ext/abc/tkt-light.json"}
 	if got := Argv("/opt/pi/pi", "/data/ext/abc", Launch{}); !slices.Equal(got, isolated) {
 		t.Errorf("Argv = %q", got)
 	}
-	got := Argv("/opt/pi/pi", "/data/ext/abc", Launch{Model: "acme/large", Extensions: []string{"/a.ts", "/b.ts"}, Continue: true})
-	want := append(slices.Clone(isolated), "--model", "acme/large", "-e", "/a.ts", "-e", "/b.ts", "-c")
+	got := Argv("/opt/pi/pi", "/data/ext/abc", Launch{Model: "acme/large", Extensions: []string{"/a.ts", "/b.ts"}, Continue: true, Theme: Theme})
+	want := append(slices.Clone(isolated), "--use-theme", "tkt-light/tkt-dark", "--model", "acme/large", "-e", "/a.ts", "-e", "/b.ts", "-c")
 	if !slices.Equal(got, want) {
 		t.Errorf("Argv = %q\nwant %q", got, want)
 	}

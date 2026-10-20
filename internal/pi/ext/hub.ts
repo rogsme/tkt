@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import type { OverlayHandle, TUI } from "@earendil-works/pi-tui";
+import { type Component, isViewportTUI, type TUI, VStack } from "@earendil-works/pi-tui";
 import { type Attention, attentionOf, sound } from "./attention.ts";
 import type { BoardState } from "./board.ts";
 import { Jobs, type Job } from "./jobs.ts";
@@ -49,7 +49,9 @@ export class Hub {
 	private refreshing?: Promise<void>;
 	private again = false;
 	private stopped = false;
-	private boardHandle?: OverlayHandle;
+	private boardHidden = false;
+	/** docked is the layout that holds the board, and pi's own inside it. */
+	private docked?: { stack: Component; root: Component };
 
 	constructor(pi: ExtensionAPI) {
 		this.pi = pi;
@@ -100,31 +102,55 @@ export class Hub {
 		this.watchers.clear();
 	}
 
-	/** pinBoard shows the board in a panel pinned to the top right of the
-	 * chat. It takes no keys, and it hides on a terminal too small for it. */
-	pinBoard(tui: TUI, theme: Theme): void {
-		this.boardHandle?.hide();
-		this.boardHandle = tui.showOverlay(hud(theme, () => this.state()), {
-			nonCapturing: true,
-			anchor: "top-right",
-			width: "55%",
-			minWidth: 68,
-			maxHeight: "50%",
-			margin: { top: 0, right: 1 },
-			visible: (w, h) => w >= 80 && h >= 20,
-		});
+	/** pinBoard pins the board to the top of the chat and returns the widget
+	 * the extension puts above the editor. In fullscreen mode, pi's own
+	 * layout gets rows for the board above the transcript, so it covers
+	 * nothing; the widget draws nothing and docks the board again when pi
+	 * rebuilds its layout, as it does after you switch modes. In regular
+	 * mode the terminal owns the scrollback, so the widget draws the board
+	 * above the editor. The board takes no keys. */
+	pinBoard(tui: TUI, theme: Theme): Component & { dispose(): void } {
+		const view = hud(theme, () => this.state(), () => tui.terminal.rows);
+		const board: Component = {
+			render: (width) => (this.boardHidden ? [] : view.render(width)),
+			invalidate() {},
+		};
 		this.render = () => tui.requestRender();
+		this.dock(tui, board);
+		return {
+			render: (width) => {
+				if (!isViewportTUI(tui)) return board.render(width);
+				if (layoutRoot(tui) !== this.docked?.stack) queueMicrotask(() => this.dock(tui, board));
+				return [];
+			},
+			invalidate() {},
+			dispose: () => this.unpinBoard(tui),
+		};
 	}
 
-	unpinBoard(): void {
-		this.boardHandle?.hide();
-		this.boardHandle = undefined;
+	/** dock puts the board above pi's fullscreen layout. pi exposes the
+	 * layout only to set it, so dock reads the one it set from the TUI. */
+	private dock(tui: TUI, board: Component): void {
+		if (!isViewportTUI(tui)) return;
+		const root = layoutRoot(tui);
+		if (!root || root === this.docked?.stack) return;
+		const stack = new VStack([
+			{ component: board, basis: "auto", grow: 0, shrink: 0, minSize: 0 },
+			{ component: root, basis: 0, grow: 1, shrink: 1, minSize: 1 },
+		]);
+		this.docked = { stack, root };
+		tui.setLayoutRoot(stack);
+	}
+
+	private unpinBoard(tui: TUI): void {
+		if (this.docked && isViewportTUI(tui) && layoutRoot(tui) === this.docked.stack) tui.setLayoutRoot(this.docked.root);
+		this.docked = undefined;
 		this.render = () => {};
 	}
 
 	/** showBoard hides the pinned board, or shows it again. */
 	showBoard(on: boolean): void {
-		this.boardHandle?.setHidden(!on);
+		this.boardHidden = !on;
 		this.render();
 	}
 
@@ -305,6 +331,11 @@ export class Hub {
 		this.dismissed.add(a.key);
 		this.update();
 	}
+}
+
+/** layoutRoot is the fullscreen layout the TUI draws. */
+function layoutRoot(tui: TUI): Component | undefined {
+	return (tui as unknown as { layoutRoot?: Component }).layoutRoot;
 }
 
 /** reasonOf says why tkt refused, with the reasons tkt done keeps a

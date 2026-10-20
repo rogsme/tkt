@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 )
 
-// extFiles is tkt's pi extension and the system prompt it starts pi with.
-// Tests under ext/test stay out.
+// extFiles is tkt's pi extension, the system prompt it starts pi with, and
+// its themes. Tests under ext/test stay out.
 //
-//go:embed ext/*.ts ext/system.md
+//go:embed ext/*.ts ext/system.md ext/*.json
 var extFiles embed.FS
 
 // WriteExt writes tkt's pi extension under dataDir/ext/SHA12, named after

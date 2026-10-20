@@ -1,7 +1,7 @@
 // The extension's views: a question with fixed answers, the board pinned
-// to the top, the /board overlay, the /peek screen and the verification
-// checklist. The question
-// view follows pi's examples/extensions/question.ts (MIT, Mario Zechner).
+// to the top, and the overlays: /board, the /peek screen and the
+// verification checklist. The question view follows pi's
+// examples/extensions/question.ts (MIT, Mario Zechner).
 
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Editor, type EditorTheme, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
@@ -119,17 +119,35 @@ export function frame(theme: Theme, width: number, title: string, lines: string[
 	return out;
 }
 
-/** hud is the board pinned to the top of the chat. It takes no keys; the
- * chat and the editor work under it. */
-export function hud(theme: Theme, state: () => BoardState): Component {
+/** hud is the board pinned to the top of the chat. It takes no keys. It
+ * keeps to two fifths of the terminal's rows, so the chat keeps the rest,
+ * and gives way on a terminal shorter than minRows. */
+export function hud(theme: Theme, state: () => BoardState, rows: () => number): Component {
 	return {
 		render(width: number): string[] {
+			const h = rows();
+			if (h < minRows) return [];
 			const s = state();
-			const lines = boardLines(s, Math.max(10, width - 4)).map((l) => paint(theme, l.tone, l.text));
-			return frame(theme, width, title(s), lines, "/board  /inbox  /board hide");
+			let lines = boardLines(s, Math.max(10, width - 4));
+			const max = Math.max(2, Math.floor(h * 0.4) - 2);
+			if (lines.length > max) lines = [...lines.slice(0, max - 1), { text: `${lines.length - max + 1} more lines: /board shows every ticket, /inbox what needs you`, tone: "muted" }];
+			return frame(theme, width, title(s), lines.map((l) => paint(theme, l.tone, l.text)), "/board  /inbox  /board hide");
 		},
 		invalidate() {},
 	};
+}
+
+/** minRows is the shortest terminal the pinned board shows on. */
+const minRows = 16;
+
+/** panel paints an overlay's lines on a background of their own, so the
+ * overlay reads as a solid box on a transparent terminal. pi's themes have
+ * no token for it; toolPendingBg is the neutral panel in each of them and
+ * in tkt's. Styled text resets the background as it ends, so the panel's
+ * goes back on after each reset. */
+export function panel(theme: Theme, lines: string[]): string[] {
+	const on = theme.getBgAnsi("toolPendingBg");
+	return lines.map((l) => on + l.replace(/\x1b\[(?:0|49)?m/g, (m) => m + on) + "\x1b[49m");
 }
 
 export type BoardAction = { key: "show" | "peek" | "check" | "approve" | "next" | "auto" | "done" | "inbox"; ticket: string };
@@ -160,7 +178,7 @@ export function board(ctx: ExtensionContext, rows: () => Row[]): Promise<BoardAc
 					const w = Math.max(24, width);
 					const body = grid(cols, w - 4, selected).map((l) => (l.includes(">") ? theme.fg("accent", l) : l));
 					if (cols.every((c) => c.cells.length === 0)) body.push(theme.fg("muted", 'No tickets yet. Say "start ACM-123".'));
-					return frame(theme, w, "tkt board", body, "arrows move  enter plan  p peek  c check  a approve  n next  o auto  d done  i inbox  esc close");
+					return panel(theme, frame(theme, w, "tkt board", body, "arrows move  enter plan  p peek  c check  a approve  n next  o auto  d done  i inbox  esc close"));
 				},
 				invalidate() {},
 				dispose() {
@@ -194,7 +212,7 @@ export function peek(ctx: ExtensionContext, ticket: string, read: () => Promise<
 				render(width: number): string[] {
 					const rows = Math.max(8, (process.stdout.rows || 40) - 12);
 					const body = screen.replace(/\s+$/, "").split("\n").slice(-rows);
-					return frame(theme, width, `${ticket}: the agent's screen, live`, body, "answer in the ticket's tab  esc closes");
+					return panel(theme, frame(theme, width, `${ticket}: the agent's screen, live`, body, "answer in the ticket's tab  esc closes"));
 				},
 				invalidate() {},
 				dispose() {
@@ -240,7 +258,7 @@ export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], 
 						const wrapped = wrapTextWithAnsi(s.text, Math.max(10, w - 17));
 						wrapped.forEach((l, j) => lines.push((j === 0 ? head : " ".repeat(12)) + (i === index ? theme.fg("accent", l) : l)));
 					});
-					return frame(theme, w, `${ticket}: human verification`, lines, "space cycles  p pass  f fail  s skip  enter or esc closes");
+					return panel(theme, frame(theme, w, `${ticket}: human verification`, lines, "space cycles  p pass  f fail  s skip  enter or esc closes"));
 				},
 				invalidate() {},
 			};

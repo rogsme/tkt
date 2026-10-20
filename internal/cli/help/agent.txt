@@ -10,10 +10,11 @@ remove it". Starting tickets and stages runs in the background and the prompt
 comes back at once, so you can start the next ticket while the first one
 plans. A board pinned to the top of the chat shows every ticket, and on top
 what needs you: a plan to approve, a question from its agent, a pull request
-ready for human verification, or a tkt auto loop that paused for you. An item
-leaves the board as soon as its ticket moves on, and the chat stays free of
-them. Each new one also shows a herdr notification. /board hide and /board
-show put the board away and back.
+ready for human verification, or a tkt auto loop that paused for you. The chat
+scrolls below the board, so it covers nothing. An item leaves the board as
+soon as its ticket moves on, and the chat stays free of them. Each new one
+also shows a herdr notification. /board hide and /board show put the board
+away and back.
 
 Ask how a ticket went, merged ones too: "how did ACM-12 go?", "what failed
 in ACM-12 and ACM-13?". The chat reads tkt history: each step with its time,
@@ -36,6 +37,11 @@ not your extensions, skills, prompt templates or themes, and not the project's
 AGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in
 ${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with
 /login inside the chat.
+
+The chat brings two themes of its own, tkt-dark and tkt-light, and picks the
+one that suits the terminal's background. Overlays such as /board and /peek
+draw on a panel of their own, so they read well on a transparent terminal. A
+theme you pick in /settings wins from then on.
 
 pi runs in the repository's root, where it keeps the sessions, so --continue
 picks up the last chat about this repository from any of its worktrees.

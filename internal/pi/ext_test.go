@@ -14,7 +14,7 @@ func TestExtEmbedsTheExtensionOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(names, "ext/index.ts") || !slices.Contains(names, "ext/system.md") {
+	if !slices.Contains(names, "ext/index.ts") || !slices.Contains(names, "ext/system.md") || !slices.Contains(names, "ext/tkt-dark.json") || !slices.Contains(names, "ext/tkt-light.json") {
 		t.Errorf("embedded %q", names)
 	}
 	for _, n := range names {

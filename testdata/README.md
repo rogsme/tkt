@@ -78,7 +78,7 @@ After a change to how tkt starts pi, or after `just bump-pi`, build with `just b
 
 1. Run `XDG_DATA_HOME=$(mktemp -d) ./tkt agent --dry-run --json`. It unpacks pi under that directory and prints the command line.
 2. Run that pi with `--version`, then with the same flags and `--help`: pi must accept every flag.
-3. Run `./tkt agent` in a herdr pane. The chat opens without a startup banner, with the built-in theme, and the board pinned to the top right starts with `tkt`, the repository and its ticket count, which shows that tkt's extension loaded. `/login` stores its credentials under `~/.config/tkt/pi`, not `~/.pi/agent`.
+3. Run `./tkt agent` in a herdr pane. The chat opens without a startup banner, with tkt's theme, and the board pinned to the top starts with `tkt`, the repository and its ticket count, which shows that tkt's extension loaded. The chat scrolls below the board, in fullscreen mode and, after a switch in `/settings`, in regular mode, where the board sits above the editor. `/login` stores its credentials under `~/.config/tkt/pi`, not `~/.pi/agent`.
 
 After a change to the extension in `internal/pi/ext`, run `just install`, then `tkt agent` in a herdr pane inside a configured scratch repository:
 
@@ -91,4 +91,4 @@ After a change to the extension in `internal/pi/ext`, run `just install`, then `
 7. When the review bot clears the head, the ticket is ready: `/check` offers verify first, then the checklist, with the steps from the pull request's body. Mark a step failed and start a fix session, then mark them all passed.
 8. Leave an uncommitted file in a merged ticket's worktree, then say "ACM-1 is merged, remove it". The chat confirms first, then says the worktree has uncommitted changes. Clean it up and ask again: it reports the time from start to merge, and `/stats` lists it.
 9. Quit the chat while an auto ticket works and open `tkt agent` again: the ticket kept moving, and the board shows where it is.
-10. Ask "how did ACM-1 go?": the answer names the reviews' findings and the commits that fixed them, from `tkt history`.
+10. Ask "how did ACM-1 go?": the answer names the reviews' findings and the commits that fixed them, from `tkt history`. `/board` and `/peek` draw on a solid panel on a transparent terminal.

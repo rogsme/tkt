@@ -25,18 +25,7 @@ export default function (pi: ExtensionAPI) {
 		restoreMarks(ctx.sessionManager.getEntries() as { type: string; customType?: string; data?: unknown }[]);
 		if (ctx.hasUI) {
 			ctx.ui.setTitle(`tkt ${hub.repo}`);
-			// The widget draws nothing: it hands the board, pinned to the top
-			// of the chat, the TUI it needs.
-			ctx.ui.setWidget("tkt-board", (tui, theme) => {
-				hub.pinBoard(tui, theme);
-				return {
-					render: () => [],
-					invalidate() {},
-					dispose() {
-						hub.unpinBoard();
-					},
-				};
-			});
+			ctx.ui.setWidget("tkt-board", (tui, theme) => hub.pinBoard(tui, theme));
 		}
 		hub.start(ctx);
 	});

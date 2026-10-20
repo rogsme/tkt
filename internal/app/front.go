@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -91,7 +92,11 @@ func (a *App) Front(ctx context.Context, o FrontOpts) (*FrontResult, error) {
 	if model == "" {
 		model = c.Cfg.Agent.Model
 	}
-	argv := pi.Argv(rt.Path, ext, pi.Launch{Model: model, Extensions: c.Cfg.Agent.Extensions, Continue: o.Continue})
+	launch := pi.Launch{Model: model, Extensions: c.Cfg.Agent.Extensions, Continue: o.Continue}
+	if !themeSet(agentDir) {
+		launch.Theme = pi.Theme
+	}
+	argv := pi.Argv(rt.Path, ext, launch)
 	res := &FrontResult{Pi: rt.Path, Version: rt.Version, Source: rt.Source, ExtDir: ext, AgentDir: agentDir,
 		Dir: c.Repo.Root, Argv: argv, Env: map[string]string{}, DryRun: c.Dry}
 	for _, kv := range pi.EnvVars(agentDir, self) {
@@ -152,6 +157,19 @@ func seedSettings(agentDir string) error {
 		err = cerr
 	}
 	return err
+}
+
+// themeSet reports whether pi's settings name a theme, as /settings saves
+// one. Until they do, tkt agent starts pi with tkt's themes.
+func themeSet(agentDir string) bool {
+	b, err := os.ReadFile(filepath.Join(agentDir, "settings.json"))
+	if err != nil {
+		return false
+	}
+	var s struct {
+		Theme string `json:"theme"`
+	}
+	return json.Unmarshal(b, &s) == nil && s.Theme != ""
 }
 
 // Configured reports whether Dir lies in a repository with the lifecycle
