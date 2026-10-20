@@ -1,17 +1,24 @@
 // tkt's extension for pi. tkt agent loads it, and only it, with -e; TKT_BIN
 // names the tkt that started pi. The extension gives the model tools that
 // run tkt and nothing else, slash commands for the same, a board pinned to
-// the top of the chat, and the watchers that tell you when a ticket needs
-// you.
+// the top of the chat, a dark background under a dark theme, and the
+// watchers that tell you when a ticket needs you.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { backgroundAnsi, isViewportTUI, parseColor } from "@earendil-works/pi-tui";
 import { restoreMarks } from "./actions.ts";
 import { registerCommands } from "./commands.ts";
 import { Hub } from "./hub.ts";
+import { painter } from "./paint.ts";
 import { registerTools } from "./tools.ts";
+
+/** page is the chat's background under a dark theme: the page tkt-dark
+ * gives an exported chat. */
+const page = parseColor("#0a0a0a");
 
 export default function (pi: ExtensionAPI) {
 	const hub = new Hub(pi);
+	const paint = painter();
 	registerTools(pi, hub);
 	registerCommands(pi, hub);
 
@@ -31,13 +38,25 @@ export default function (pi: ExtensionAPI) {
 		hub.stop();
 		restoreMarks(ctx.sessionManager.getEntries() as { type: string; customType?: string; data?: unknown }[]);
 		if (ctx.hasUI) {
+			paint.background = () => {
+				const theme = ctx.ui.theme;
+				return theme.appearance === "dark" ? backgroundAnsi(page, theme.getColorMode()) : undefined;
+			};
 			ctx.ui.setTitle(`tkt ${hub.repo}`);
-			ctx.ui.setWidget("tkt-board", (tui, theme) => hub.pinBoard(tui, theme));
+			ctx.ui.setWidget("tkt-board", (tui, theme) => {
+				// pi drew the first frames before the background was known,
+				// and redraws only the rows that change. A forced render in
+				// regular mode would clear the terminal's scrollback.
+				if (isViewportTUI(tui)) tui.requestRender(true);
+				return hub.pinBoard(tui, theme);
+			});
 		}
 		hub.start(ctx);
 	});
 
 	pi.on("session_shutdown", (event) => {
+		// The session's ctx goes stale once it ends.
+		paint.background = () => undefined;
 		hub.stop();
 		if (event.reason === "quit") nameTktInResumeLine();
 	});
