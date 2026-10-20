@@ -1,16 +1,14 @@
 // tkt's extension for pi. tkt agent loads it, and only it, with -e; TKT_BIN
 // names the tkt that started pi. The extension gives the model tools that
-// run tkt and nothing else, slash commands for the same, a board above the
-// prompt, and the watchers that tell you when a ticket needs you.
+// run tkt and nothing else, slash commands for the same, a board pinned to
+// the top of the chat, and the watchers that tell you when a ticket needs
+// you.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
 import { restoreMarks } from "./actions.ts";
-import { widgetLines } from "./board.ts";
 import { registerCommands } from "./commands.ts";
 import { Hub } from "./hub.ts";
 import { registerTools } from "./tools.ts";
-import { paint } from "./ui.ts";
 
 export default function (pi: ExtensionAPI) {
 	const hub = new Hub(pi);
@@ -27,23 +25,18 @@ export default function (pi: ExtensionAPI) {
 		restoreMarks(ctx.sessionManager.getEntries() as { type: string; customType?: string; data?: unknown }[]);
 		if (ctx.hasUI) {
 			ctx.ui.setTitle(`tkt ${hub.repo}`);
-			ctx.ui.setWidget(
-				"tkt-board",
-				(tui, theme) => {
-					hub.render = () => tui.requestRender();
-					return {
-						render(width: number): string[] {
-							const s = { rows: hub.rows, jobs: hub.labels, waiting: 0, now: Date.now(), tick: hub.tick, repo: hub.repo };
-							return widgetLines(s, width, hub.needsYou()).map((l) => truncateToWidth(paint(theme, l.tone, l.text), width));
-						},
-						invalidate() {},
-						dispose() {
-							hub.render = () => {};
-						},
-					};
-				},
-				{ placement: "aboveEditor" },
-			);
+			// The widget draws nothing: it hands the board, pinned to the top
+			// of the chat, the TUI it needs.
+			ctx.ui.setWidget("tkt-board", (tui, theme) => {
+				hub.pinBoard(tui, theme);
+				return {
+					render: () => [],
+					invalidate() {},
+					dispose() {
+						hub.unpinBoard();
+					},
+				};
+			});
 		}
 		hub.start(ctx);
 	});

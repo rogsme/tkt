@@ -11,6 +11,9 @@ export interface Job {
 	args: string[];
 	/** then runs after the job, with its envelope. */
 	then?: (env: Envelope) => void | Promise<void>;
+	/** quiet keeps a failure off the board, for a job whose caller shows
+	 * the result itself. */
+	quiet?: boolean;
 }
 
 export type Runner = (args: string[], signal: AbortSignal) => Promise<Envelope>;

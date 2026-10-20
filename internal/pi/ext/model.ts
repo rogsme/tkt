@@ -19,7 +19,9 @@ export interface Next {
 export interface Row {
 	ticket: string;
 	path: string;
-	agent: { pane_id: string; name: string; harness: string; status: string } | null;
+	/** background counts the tasks an idle agent waits on, such as a CI
+	 * watcher; it goes on by itself when they finish. */
+	agent: { pane_id: string; name: string; harness: string; status: string; background?: number } | null;
 	last_status: string;
 	pr: { number: number; state: string; mergeable?: string; head?: string } | null;
 	checks: { state: string; total: number; failing: string[]; pending: number } | null;
@@ -27,7 +29,9 @@ export interface Row {
 	next: Next;
 	stage: string;
 	launch: string;
-	auto: { wanted: boolean; approve_plan: boolean; running: boolean; rounds: number; stop: string; waiting: string } | null;
+	/** paused says why a running tkt auto loop waits for you, and why names
+	 * the rule behind it; both are empty while the loop drives the ticket. */
+	auto: { wanted: boolean; approve_plan: boolean; running: boolean; rounds: number; stop: string; waiting: string; paused?: string; why?: string } | null;
 	phase: string;
 	phase_since: string;
 	started: string;

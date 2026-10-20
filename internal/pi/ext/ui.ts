@@ -1,10 +1,11 @@
-// The extension's views: a question with fixed answers, the /board
-// overlay, the /peek screen and the verification checklist. The question
+// The extension's views: a question with fixed answers, the board pinned
+// to the top, the /board overlay, the /peek screen and the verification
+// checklist. The question
 // view follows pi's examples/extensions/question.ts (MIT, Mario Zechner).
 
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { Editor, type EditorTheme, Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { boardColumns, grid, order } from "./board.ts";
+import { type Component, Editor, type EditorTheme, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { type BoardState, boardColumns, boardLines, grid, order, title } from "./board.ts";
 import type { Row } from "./model.ts";
 import { cycle, type Mark } from "./report.ts";
 
@@ -98,6 +99,39 @@ export async function ask(ctx: ExtensionContext, question: string, options: Opti
 	});
 }
 
+/** frame draws a box around lines, with a title in its top border and a
+ * hint in its bottom one. Every line is padded to the full width, so an
+ * overlay covers what is under it and reads as one panel. */
+export function frame(theme: Theme, width: number, title: string, lines: string[], hint = ""): string[] {
+	const w = Math.max(10, width);
+	const inner = w - 4;
+	const b = (s: string) => theme.fg("border", s);
+	const edge = (left: string, label: string, right: string, color: (s: string) => string) => {
+		const text = label ? truncateToWidth(` ${label} `, inner) : "";
+		return b(left + "─") + color(text) + b("─".repeat(Math.max(0, w - 3 - visibleWidth(text))) + right);
+	};
+	const out = [edge("╭", title, "╮", (s) => theme.fg("accent", theme.bold(s)))];
+	for (const l of lines) {
+		const cut = truncateToWidth(l, inner);
+		out.push(b("│") + " " + cut + " ".repeat(Math.max(0, inner - visibleWidth(cut))) + " " + b("│"));
+	}
+	out.push(edge("╰", hint, "╯", (s) => theme.fg("dim", s)));
+	return out;
+}
+
+/** hud is the board pinned to the top of the chat. It takes no keys; the
+ * chat and the editor work under it. */
+export function hud(theme: Theme, state: () => BoardState): Component {
+	return {
+		render(width: number): string[] {
+			const s = state();
+			const lines = boardLines(s, Math.max(10, width - 4)).map((l) => paint(theme, l.tone, l.text));
+			return frame(theme, width, title(s), lines, "/board  /inbox  /board hide");
+		},
+		invalidate() {},
+	};
+}
+
 export type BoardAction = { key: "show" | "peek" | "check" | "approve" | "next" | "auto" | "done" | "inbox"; ticket: string };
 
 const boardKeys: Record<string, BoardAction["key"]> = { p: "peek", c: "check", a: "approve", n: "next", o: "auto", d: "done", i: "inbox" };
@@ -123,12 +157,10 @@ export function board(ctx: ExtensionContext, rows: () => Row[]): Promise<BoardAc
 				render(width: number): string[] {
 					const cols = boardColumns(rows(), Date.now());
 					if (!selected) selected = order(cols)[0] ?? "";
-					const w = Math.max(20, width);
-					const lines = [theme.fg("accent", truncateToWidth(" tkt board", w))];
-					for (const l of grid(cols, w, selected)) lines.push(truncateToWidth(l.includes(">") ? theme.fg("accent", l) : l, w));
-					if (cols.every((c) => c.cells.length === 0)) lines.push(theme.fg("muted", " No ticket worktrees. Say \"start ACM-123\" to begin."));
-					lines.push("", theme.fg("dim", truncateToWidth(" arrows move  enter plan  p peek  c check  a approve  n next  o auto on/off  d done  i inbox  esc close", w)));
-					return lines;
+					const w = Math.max(24, width);
+					const body = grid(cols, w - 4, selected).map((l) => (l.includes(">") ? theme.fg("accent", l) : l));
+					if (cols.every((c) => c.cells.length === 0)) body.push(theme.fg("muted", 'No tickets yet. Say "start ACM-123".'));
+					return frame(theme, w, "tkt board", body, "arrows move  enter plan  p peek  c check  a approve  n next  o auto  d done  i inbox  esc close");
 				},
 				invalidate() {},
 				dispose() {
@@ -160,15 +192,9 @@ export function peek(ctx: ExtensionContext, ticket: string, read: () => Promise<
 					if (matchesKey(data, Key.escape) || data === "q") done(undefined);
 				},
 				render(width: number): string[] {
-					const w = Math.max(20, width);
-					const body = screen.replace(/\s+$/, "").split("\n").slice(-30);
-					return [
-						theme.fg("accent", truncateToWidth(` ${ticket}: the agent's screen, live`, w)),
-						theme.fg("accent", "-".repeat(w)),
-						...body.map((l) => truncateToWidth(l, w)),
-						theme.fg("accent", "-".repeat(w)),
-						theme.fg("dim", truncateToWidth(" Answer in the ticket's tab. Esc closes.", w)),
-					];
+					const rows = Math.max(8, (process.stdout.rows || 40) - 12);
+					const body = screen.replace(/\s+$/, "").split("\n").slice(-rows);
+					return frame(theme, width, `${ticket}: the agent's screen, live`, body, "answer in the ticket's tab  esc closes");
 				},
 				invalidate() {},
 				dispose() {
@@ -177,7 +203,7 @@ export function peek(ctx: ExtensionContext, ticket: string, read: () => Promise<
 				},
 			};
 		},
-		{ overlay: true, overlayOptions: { width: "90%", maxHeight: "80%", anchor: "center" } },
+		{ overlay: true, overlayOptions: { width: "90%", maxHeight: "85%", anchor: "center" } },
 	);
 }
 
@@ -188,7 +214,7 @@ export interface Step {
 
 /** checklist lets you mark each human verification step passed, failed or
  * skipped. It returns the marks when you close it. */
-export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], start: Mark[]): Promise<Mark[]> {
+export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], start: Mark[], from = ""): Promise<Mark[]> {
 	return ctx.ui.custom<Mark[]>(
 		(tui, theme, _kb, done) => {
 			const marks = steps.map((_, i) => start[i] ?? "");
@@ -206,16 +232,15 @@ export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], 
 					tui.requestRender();
 				},
 				render(width: number): string[] {
-					const w = Math.max(20, width);
-					const lines = [theme.fg("accent", truncateToWidth(` ${ticket}: human verification`, w)), theme.fg("accent", "-".repeat(w))];
+					const w = Math.max(24, width);
+					const lines: string[] = [];
+					if (from) lines.push(theme.fg("muted", from), "");
 					steps.forEach((s, i) => {
 						const head = `${i === index ? ">" : " "} ${sign(marks[i])} ${s.n}. `;
-						const wrapped = wrapTextWithAnsi(s.text, Math.max(10, w - 13));
-						wrapped.forEach((l, j) => lines.push(truncateToWidth((j === 0 ? head : " ".repeat(12)) + (i === index ? theme.fg("accent", l) : l), w)));
+						const wrapped = wrapTextWithAnsi(s.text, Math.max(10, w - 17));
+						wrapped.forEach((l, j) => lines.push((j === 0 ? head : " ".repeat(12)) + (i === index ? theme.fg("accent", l) : l)));
 					});
-					lines.push(theme.fg("accent", "-".repeat(w)));
-					lines.push(theme.fg("dim", truncateToWidth(" space cycles  p pass  f fail  s skip  enter or esc closes", w)));
-					return lines;
+					return frame(theme, w, `${ticket}: human verification`, lines, "space cycles  p pass  f fail  s skip  enter or esc closes");
 				},
 				invalidate() {},
 			};

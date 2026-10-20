@@ -5,22 +5,27 @@ tkt with no arguments opens it too, when you type it at a terminal in a herdr
 pane inside a repository with the lifecycle configuration.
 
 Say what you want in plain words: "start ACM-12", "run ACM-13 to ACM-15 in
-auto", "I approved the plan for ACM-12, continue", "ACM-12 is merged, remove
-it". Every step runs in the background and the prompt comes back at once, so
-you can start the next ticket while the first one plans. The chat speaks up
-only when a ticket needs you: a plan to approve, a question from its agent, a
-pull request ready for human verification, or a tkt auto loop that stopped.
-Each of those also shows a herdr notification. Everything else only moves the
-board above the prompt.
+auto with sol", "I approved the plan for ACM-12, continue", "ACM-12 is merged,
+remove it". Starting tickets and stages runs in the background and the prompt
+comes back at once, so you can start the next ticket while the first one
+plans. A board pinned to the top of the chat shows every ticket, and on top
+what needs you: a plan to approve, a question from its agent, a pull request
+ready for human verification, or a tkt auto loop that paused for you. An item
+leaves the board as soon as its ticket moves on, and the chat stays free of
+them. Each new one also shows a herdr notification. /board hide and /board
+show put the board away and back.
 
-The same actions work without the model as slash commands: /start, /approve,
-/next, /auto, /send, /show, /peek (the agent's live screen), /check (the human
-verification checklist), /done, /inbox (what needs you, with fixed answers),
-/board (every ticket in columns) and /stats. A tool that changes a ticket your
-message did not name asks first, and removing a ticket always asks.
+The same actions work without the model as slash commands: /start (add "as
+PRESET" for a preset), /approve, /next, /auto, /send, /show, /peek (the
+agent's live screen), /check (the human verification checklist), /done,
+/inbox (what needs you, with fixed answers), /board (every ticket in columns)
+and /stats. A tool that changes a ticket your message did not name asks
+first, and removing a ticket always asks. Text for a busy agent waits in a
+queue and goes in when the agent stops.
 
 Tickets in auto run in tkt auto loops that outlive the chat, so they keep
-moving, and notify you, after you close it.
+moving, and notify you, after you close it. A loop that pauses for you goes on
+by itself once you act, such as answering the agent in its tab.
 
 The chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:
 not your extensions, skills, prompt templates or themes, and not the project's
@@ -33,7 +38,8 @@ picks up the last chat about this repository from any of its worktrees.
 
 In config.toml, an [agent] table picks the model and loads more pi extensions,
 such as one that adds a model provider (tkt help config). --model overrides the
-model for one run.
+model for one run. Without [agent] model, pi starts on its own default: in
+/model, press Ctrl+S on a model to make it the default for new chats.
 
 tkt unpacks the bundled pi the first time, under
 ${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary

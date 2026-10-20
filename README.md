@@ -102,20 +102,20 @@ The chat runs [pi](https://github.com/earendil-works/pi), an MIT-licensed coding
 
 The chat stays apart from any pi you run yourself. It loads only tkt's own extension, and none of your pi extensions, skills, prompt templates or themes, nor the project's `AGENTS.md` or `CLAUDE.md`. It keeps its settings, logins and sessions in `~/.config/tkt/pi`, so log in to a model provider once with `/login` inside the chat. `tkt agent --continue` picks up the last chat about the repository.
 
-Say what you want in plain words, such as "start ACM-12", "run ACM-13 to ACM-15 in auto", "I approved the plan for ACM-12, continue" or "ACM-12 is merged, remove it". Each step runs in the background and the prompt comes back at once, so you can start the next ticket while the first one plans. The chat speaks up only when a ticket needs you: a plan to approve, a question from its agent, a pull request ready for human verification, or a `tkt auto` loop that stopped. Each of those also shows a herdr notification; everything else only moves the board above the prompt. Tickets in auto run in `tkt auto` loops that outlive the chat.
+Say what you want in plain words, such as "start ACM-12", "run ACM-13 to ACM-15 in auto with sol", "I approved the plan for ACM-12, continue" or "ACM-12 is merged, remove it". Starting tickets and stages runs in the background and the prompt comes back at once, so you can start the next ticket while the first one plans. A board pinned to the top of the chat shows every ticket, and on top what needs you: a plan to approve, a question from its agent, a pull request ready for human verification, or a `tkt auto` loop that paused for you. An item leaves the board as soon as its ticket moves on, so the chat stays clean; each new one also shows a herdr notification. Tickets in auto run in `tkt auto` loops that outlive the chat, and a loop that paused for you goes on by itself once you act.
 
 | Command | What it does |
 |---|---|
-| `/start ID... [auto \| after-plan]` | Starts tickets: by hand, in full auto, or in auto once you approve the plan. |
+| `/start ID... [auto \| after-plan] [as PRESET]` | Starts tickets: by hand, in full auto, or in auto once you approve the plan, on a preset you name. |
 | `/approve ID [auto]` | Approves the plan; with `auto`, `tkt auto` takes over. |
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |
 | `/auto ID on \| off \| full` | Turns `tkt auto` on or off for a ticket. |
 | `/send ID TEXT`, `/show ID`, `/peek ID` | Talks to the ticket's agent, prints its last message, or watches its live screen. |
 | `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. |
-| `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns; how long tickets take. |
+| `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
 | `/done ID` | Removes a merged ticket. |
 
-An `[agent]` table in `config.toml` picks the model and loads more pi extensions, such as one that adds a model provider:
+Without an `[agent]` model, pi starts on its own default: in `/model`, press Ctrl+S on a model to make it the default for new chats. An `[agent]` table in `config.toml` picks the model and loads more pi extensions, such as one that adds a model provider:
 
 ```toml
 [agent]

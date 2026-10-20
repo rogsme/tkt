@@ -13,7 +13,7 @@ export function row(over: Partial<Row> = {}): Row {
 		next: { kind: "human", reason: "check_agent", argv: null, text: "check the agent in its tab" },
 		stage: "start",
 		launch: "submitted",
-		auto: { wanted: false, approve_plan: false, running: false, rounds: 0, stop: "", waiting: "" },
+		auto: { wanted: false, approve_plan: false, running: false, rounds: 0, stop: "", waiting: "", paused: "", why: "" },
 		phase: "needs_you",
 		phase_since: "2026-01-01T00:00:00Z",
 		started: "2026-01-01T00:00:00Z",

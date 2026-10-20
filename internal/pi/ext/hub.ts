@@ -4,13 +4,22 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
+import type { OverlayHandle, TUI } from "@earendil-works/pi-tui";
 import { type Attention, attentionOf, sound } from "./attention.ts";
+import type { BoardState } from "./board.ts";
 import { Jobs, type Job } from "./jobs.ts";
 import { keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf } from "./model.ts";
+import { hud } from "./ui.ts";
 
 /** pollMs is how often the board reads tkt ls while nothing else wakes it. */
-const pollMs = 30_000;
+const pollMs = 15_000;
+
+/** lsTimeoutMs bounds one tkt ls, so a stuck read never freezes the board. */
+const lsTimeoutMs = 60_000;
+
+/** failedForMs is how long a failed job stays on the board. */
+const failedForMs = 15 * 60_000;
 
 export class Hub {
 	readonly pi: ExtensionAPI;
@@ -20,7 +29,9 @@ export class Hub {
 	readonly herdr = process.env.HERDR_ENV === "1";
 	rows: Row[] = [];
 	key = "";
-	inbox: Attention[] = [];
+	/** items is what needs you now: one per ticket from tkt ls, and the
+	 * failed jobs. */
+	items: Attention[] = [];
 	/** lastInput is what you last typed, for the guards on tools. */
 	lastInput = "";
 	ctx?: ExtensionContext;
@@ -28,12 +39,17 @@ export class Hub {
 	readonly jobs: Jobs;
 	readonly labels = new Map<string, string>();
 	tick = 0;
-	private raised = new Set<string>();
+	/** announced holds the keys already told about, so each one is told
+	 * once; dismissed holds the ones you set aside. */
+	private announced = new Set<string>();
+	private dismissed = new Set<string>();
+	private failed: { item: Attention; at: number }[] = [];
 	private watchers = new Map<string, AbortController>();
 	private timers: ReturnType<typeof setInterval>[] = [];
 	private refreshing?: Promise<void>;
 	private again = false;
 	private stopped = false;
+	private boardHandle?: OverlayHandle;
 
 	constructor(pi: ExtensionAPI) {
 		this.pi = pi;
@@ -84,9 +100,42 @@ export class Hub {
 		this.watchers.clear();
 	}
 
-	/** refresh reads tkt ls, raises what newly needs you, and keeps one
-	 * watcher per ticket whose agent runs without a tkt auto loop. Calls that
-	 * arrive during a refresh run it once more after. */
+	/** pinBoard shows the board in a panel pinned to the top right of the
+	 * chat. It takes no keys, and it hides on a terminal too small for it. */
+	pinBoard(tui: TUI, theme: Theme): void {
+		this.boardHandle?.hide();
+		this.boardHandle = tui.showOverlay(hud(theme, () => this.state()), {
+			nonCapturing: true,
+			anchor: "top-right",
+			width: "55%",
+			minWidth: 68,
+			maxHeight: "50%",
+			margin: { top: 0, right: 1 },
+			visible: (w, h) => w >= 80 && h >= 20,
+		});
+		this.render = () => tui.requestRender();
+	}
+
+	unpinBoard(): void {
+		this.boardHandle?.hide();
+		this.boardHandle = undefined;
+		this.render = () => {};
+	}
+
+	/** showBoard hides the pinned board, or shows it again. */
+	showBoard(on: boolean): void {
+		this.boardHandle?.setHidden(!on);
+		this.render();
+	}
+
+	/** state is what the board draws. */
+	state(): BoardState {
+		return { rows: this.rows, jobs: this.labels, items: this.items, now: Date.now(), tick: this.tick, repo: this.repo };
+	}
+
+	/** refresh reads tkt ls, works out what needs you, and keeps one watcher
+	 * per ticket whose agent runs without a tkt auto loop. Calls that arrive
+	 * during a refresh run it once more after. */
 	refresh(): Promise<void> {
 		if (this.refreshing) {
 			this.again = true;
@@ -104,42 +153,52 @@ export class Hub {
 	}
 
 	private async read(): Promise<void> {
-		const env = await this.tkt<LsResult>(["ls", "--no-fetch"]);
+		const env = await this.tkt<LsResult>(["ls", "--no-fetch"], AbortSignal.timeout(lsTimeoutMs));
 		const rows = rowsOf(env);
 		if (!rows || this.stopped) return;
 		this.rows = rows;
 		this.key = keyOf(rows.map((r) => r.ticket)) || this.key;
-		const now = new Map<string, Attention>();
-		for (const row of rows) {
-			const a = attentionOf(row, this.jobs.inFlight(row.ticket));
-			if (!a) continue;
-			now.set(row.ticket, a);
-			if (!this.raised.has(a.key)) this.raise(a);
-		}
-		// An item goes once its ticket moved on; a failed job stays until
-		// you dismiss it.
-		this.inbox = this.inbox.filter((a) => a.kind === "failed" || now.get(a.ticket)?.key === a.key);
+		this.update();
 		this.watch(rows);
+	}
+
+	/** update works the items out again from the rows, tells about the new
+	 * ones once, and redraws. An item goes as soon as its ticket moves on. */
+	private update(): void {
+		const now = Date.now();
+		this.failed = this.failed.filter((f) => now - f.at < failedForMs && !this.dismissed.has(f.item.key));
+		const items: Attention[] = [];
+		for (const row of this.rows) {
+			const a = attentionOf(row, this.jobs.inFlight(row.ticket));
+			if (a && !this.dismissed.has(a.key)) items.push(a);
+		}
+		this.items = [...items, ...this.failed.map((f) => f.item)];
+		for (const a of this.items) {
+			if (!this.announced.has(a.key)) this.announce(a);
+		}
+		this.status();
 		this.render();
 	}
 
-	/** needsYou lists the tickets with an item in the inbox. */
-	needsYou(): Set<string> {
-		return new Set(this.inbox.map((a) => a.ticket));
-	}
-
-	raise(a: Attention): void {
-		this.raised.add(a.key);
-		this.inbox = this.inbox.filter((x) => x.ticket !== a.ticket || x.kind === "failed");
-		this.inbox.push(a);
-		this.post(a.text, a);
+	/** announce tells about an item once: a herdr notification, unless the
+	 * tkt auto loop that drives the ticket sent one already, and a line the
+	 * model reads with your next message. The chat itself stays clean: the
+	 * board shows the item until it is done. */
+	private announce(a: Attention): void {
+		this.announced.add(a.key);
 		if (!a.byAuto) this.toast(`${a.ticket}: ${a.title}`, a.text, sound(a));
-		this.render();
+		this.pi.sendMessage({ customType: "tkt", content: `[board] ${a.text}`, display: false }, { deliverAs: "nextTurn" });
 	}
 
-	/** post puts a line in the chat without starting a model turn. While the
-	 * model works, the line shows as a notice and reaches the model with the
-	 * next turn. */
+	private status(): void {
+		if (!this.ctx?.hasUI) return;
+		const n = new Set(this.items.map((a) => a.ticket)).size;
+		this.ctx.ui.setStatus("tkt", n ? `tkt: ${n} need${n === 1 ? "s" : ""} you (/inbox)` : undefined);
+	}
+
+	/** post puts a line in the chat for you, such as an answer to a slash
+	 * command, without starting a model turn. While the model works, the line
+	 * shows as a note and reaches the model with the next turn. */
 	post(text: string, details?: unknown): void {
 		const ctx = this.ctx;
 		if (ctx && !ctx.isIdle()) {
@@ -163,25 +222,44 @@ export class Hub {
 		this.render();
 	}
 
+	/** run runs a job in its ticket's queue and waits for its envelope, for
+	 * a quick step whose result the answer needs. */
+	run(job: Job): Promise<Envelope> {
+		return new Promise((resolve) => {
+			this.add({
+				...job,
+				then: async (env) => {
+					try {
+						if (job.then) await job.then(env);
+					} finally {
+						resolve(env);
+					}
+				},
+			});
+		});
+	}
+
 	private jobDone(job: Job, env: Envelope): void {
 		if (!this.jobs.inFlight(job.ticket)) this.labels.delete(job.ticket);
-		if (!env.ok && env.error) {
-			const e = env.error;
-			const hint = e.hint && !e.message.includes(e.hint) ? ` Next: ${e.hint}.` : "";
-			const text = `${job.ticket}: ${job.label} failed: ${e.message.replace(/[.\s]+$/, "")}.${hint}`;
-			this.raise({ key: `failed|${job.ticket}|${Date.now()}`, ticket: job.ticket, kind: "failed", title: `${job.label} failed`, text, byAuto: false });
+		if (!env.ok && env.error && !job.quiet) {
+			const text = `${job.ticket}: ${job.label} failed: ${reasonOf(env)}`;
+			this.failed.push({ item: { key: `failed|${job.ticket}|${Date.now()}`, ticket: job.ticket, kind: "failed", title: `${job.label} failed`, text, byAuto: false }, at: Date.now() });
 		}
 		void this.refresh();
 	}
 
 	/** startAuto starts a tkt auto loop that outlives this chat, so a ticket
-	 * in auto mode keeps moving after you close it. The loop notifies
-	 * through herdr when it stops; the board picks it up from tkt ls. */
-	startAuto(ticket: string, approvePlan: boolean): void {
+	 * in auto keeps moving after you close it. The loop notifies through
+	 * herdr when it pauses for you or ends; the board reads it from tkt ls. */
+	startAuto(ticket: string, approvePlan: boolean, as?: string): void {
 		const args = ["auto", ticket, "--notify"];
 		if (approvePlan) args.push("--approve-plan");
+		if (as) args.push("--as", as);
 		const child = spawn(this.bin, args, { cwd: this.cwd, detached: true, stdio: "ignore" });
-		child.on("error", (err) => this.raise({ key: `failed|${ticket}|${Date.now()}`, ticket, kind: "failed", title: "auto failed", text: `${ticket}: tkt auto did not start: ${err.message}`, byAuto: false }));
+		child.on("error", (err) => {
+			this.failed.push({ item: { key: `failed|${ticket}|${Date.now()}`, ticket, kind: "failed", title: "auto failed", text: `${ticket}: tkt auto did not start: ${err.message}`, byAuto: false }, at: Date.now() });
+			this.update();
+		});
 		child.unref();
 		setTimeout(() => void this.refresh(), 2000);
 	}
@@ -222,9 +300,18 @@ export class Hub {
 		return this.rows.find((r) => r.ticket === id);
 	}
 
-	/** dismiss takes an item out of the inbox. */
+	/** dismiss sets an item aside until its ticket's situation changes. */
 	dismiss(a: Attention): void {
-		this.inbox = this.inbox.filter((x) => x !== a);
-		this.render();
+		this.dismissed.add(a.key);
+		this.update();
 	}
+}
+
+/** reasonOf says why tkt refused, with the reasons tkt done keeps a
+ * worktree for, and the next step. */
+export function reasonOf(env: Envelope): string {
+	const e = env.error;
+	if (!e) return "tkt failed.";
+	const hint = e.hint && !e.message.includes(e.hint) ? ` Next: ${e.hint}.` : "";
+	return `${e.message.replace(/[.\s]+$/, "")}.${hint}`;
 }

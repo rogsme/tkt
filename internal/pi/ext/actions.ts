@@ -1,9 +1,10 @@
 // What the tools and the slash commands do. Slow work goes to the hub's
-// jobs, so each action returns a line at once.
+// jobs, so an action returns at once and says the work is queued; quick
+// steps, such as typing into a session, wait for tkt and say what happened.
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Attention } from "./attention.ts";
-import type { Hub } from "./hub.ts";
+import { type Hub, reasonOf } from "./hub.ts";
 import type { Envelope } from "./model.ts";
 import { fixPrompt, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
@@ -11,71 +12,72 @@ import { ask, checklist, peek, type Step } from "./ui.ts";
 export type Mode = "manual" | "auto" | "auto_after_plan";
 
 /** start starts tickets in the background: manual ones with tkt start,
- * the others with a tkt auto loop that starts the ticket itself. */
-export function start(hub: Hub, ids: string[], mode: Mode): string {
+ * the others with a tkt auto loop that starts the ticket itself. as picks
+ * a preset from config.toml, such as one that runs another model. */
+export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 	for (const id of ids) {
-		if (mode === "manual") hub.add({ ticket: id, label: "start", args: ["start", id] });
-		else hub.startAuto(id, mode === "auto");
+		if (mode === "manual") hub.add({ ticket: id, label: "start", args: ["start", id, ...(as ? ["--as", as] : [])] });
+		else hub.startAuto(id, mode === "auto", as);
 	}
 	const list = ids.join(", ");
+	const on = as ? ` on ${as}` : "";
 	switch (mode) {
 		case "auto":
-			return `Starting ${list} in full auto. tkt approves the plan and drives each ticket to READY_FOR_HUMAN; I will tell you when one needs you.`;
+			return `Queued: ${list} starting${on} in full auto. tkt approves the plan and drives each ticket until it is reviewed clean; the board shows when one needs you.`;
 		case "auto_after_plan":
-			return `Starting ${list} in auto. I will tell you when a plan is ready; after you approve it, tkt drives the ticket to READY_FOR_HUMAN.`;
+			return `Queued: ${list} starting${on} in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket.`;
 	}
-	return `Starting ${list} in the background. I will tell you when a plan is ready.`;
+	return `Queued: ${list} starting${on}. The board shows each plan when it is ready.`;
 }
 
-/** approve sends the approval; with then "auto", a tkt auto loop takes over
- * once the approval is in. */
-export function approve(hub: Hub, id: string, then: "manual" | "auto"): string {
-	hub.add({
-		ticket: id,
-		label: "approve",
-		args: ["approve", id],
-		then: (env) => {
-			if (env.ok && then === "auto") hub.startAuto(id, false);
-		},
-	});
-	return then === "auto"
-		? `Approving the plan for ${id}; tkt auto then drives it to READY_FOR_HUMAN.`
-		: `Approving the plan for ${id}; work-ticket starts in the same session. I will tell you when it finishes.`;
+/** approve sends the approval and waits for tkt's answer. With then auto,
+ * a tkt auto loop drives the ticket from there; a loop that already waits
+ * on the plan goes on by itself. */
+export async function approve(hub: Hub, id: string, then: "manual" | "auto"): Promise<string> {
+	const env = await hub.run({ ticket: id, label: "approve", args: ["approve", id], quiet: true });
+	if (!env.ok) return failure(id, env);
+	const row = hub.row(id);
+	if (then === "auto" && !row?.auto?.running) hub.startAuto(id, false);
+	if (then === "auto" || row?.auto?.running) return `Approved ${id}'s plan; work-ticket builds it in the same session, and tkt auto drives it from there.`;
+	return `Approved ${id}'s plan; work-ticket builds it in the same session.`;
 }
 
-export function send(hub: Hub, id: string, text: string): string {
-	hub.add({ ticket: id, label: "send", args: ["send", id, "--prompt", text] });
-	return `Sending your message to ${id}'s session.`;
+/** send types text into the ticket's session. An agent that is free takes
+ * it now; a busy one gets it when it stops, so the text waits in a queue. */
+export async function send(hub: Hub, id: string, text: string): Promise<string> {
+	const r = hub.row(id);
+	const busy = r?.agent && (r.agent.status === "working" || r.agent.status === "blocked" || (r.agent.background ?? 0) > 0);
+	if (busy) {
+		hub.add({ ticket: id, label: "send queued", args: ["send", id, "--wait", "--prompt", text] });
+		return `Queued, not sent yet: ${id}'s agent is busy, and the text goes in when it stops. The board shows if that fails.`;
+	}
+	const env = await hub.run({ ticket: id, label: "send", args: ["send", id, "--prompt", text], quiet: true });
+	if (!env.ok) return failure(id, env);
+	return `Sent to ${id}'s session.`;
 }
 
-export function stage(hub: Hub, id: string, name: string): string {
-	hub.add({ ticket: id, label: name, args: ["run", id, name] });
-	return `Running ${name} for ${id} in a fresh session.`;
+export function stage(hub: Hub, id: string, name: string, as = ""): string {
+	hub.add({ ticket: id, label: name, args: ["run", id, name, ...(as ? ["--as", as] : [])] });
+	return `Queued: ${name} for ${id} in a fresh session${as ? ` on ${as}` : ""}. The board shows when it needs you.`;
 }
 
-export function auto(hub: Hub, id: string, on: boolean, approvePlan: boolean): string {
+export async function auto(hub: Hub, id: string, on: boolean, approvePlan: boolean, as = ""): Promise<string> {
 	if (on) {
-		hub.startAuto(id, approvePlan);
-		return `tkt auto now drives ${id}${approvePlan ? ", approving its plan too" : ""}. I will tell you when it needs you.`;
+		hub.startAuto(id, approvePlan, as);
+		return `tkt auto now drives ${id}${approvePlan ? ", approving its plan too" : ""}. The board shows when it needs you.`;
 	}
-	hub.add({ ticket: id, label: "auto off", args: ["auto", id, "--stop"] });
-	return `Stopping tkt auto for ${id} at its next look.`;
+	const env = await hub.run({ ticket: id, label: "auto off", args: ["auto", id, "--stop"], quiet: true });
+	if (!env.ok) return failure(id, env);
+	return `Stopped tkt auto for ${id}; its loop ends at its next look.`;
 }
 
-export function done(hub: Hub, id: string): string {
-	hub.add({
-		ticket: id,
-		label: "done",
-		args: ["done", id],
-		then: (env) => {
-			const t = (env.result as { tickets?: { outcome: string; elapsed_s: number }[] } | undefined)?.tickets?.[0];
-			if (env.ok && t?.outcome === "removed") {
-				const took = t.elapsed_s > 0 ? ` It took ${duration(t.elapsed_s)} from start to merge.` : "";
-				hub.post(`${id} is done: its tabs are closed and its worktree is removed.${took}`);
-			}
-		},
-	});
-	return `Removing ${id}'s tabs and worktree once tkt done confirms the merge.`;
+export async function done(hub: Hub, id: string): Promise<string> {
+	const env = await hub.run({ ticket: id, label: "done", args: ["done", id], quiet: true });
+	if (!env.ok) return failure(id, env);
+	const t = (env.result as { tickets?: { outcome: string; elapsed_s: number }[] } | undefined)?.tickets?.[0];
+	if (t?.outcome !== "removed") return `${id}: tkt done did not remove it (${t?.outcome ?? "no result"}).`;
+	const took = t.elapsed_s > 0 ? ` It took ${duration(t.elapsed_s)} from start to merge.` : "";
+	return `${id} is done: its tabs are closed and its worktree is removed.${took}`;
 }
 
 function duration(s: number): string {
@@ -92,9 +94,8 @@ interface AutoOnce {
 }
 
 /** next takes the ticket's next step, as tkt auto would: it asks tkt for
- * the step first, without taking it, so it can say what happens, and asks
- * you when the review bot may still post. */
-export async function next(hub: Hub, ctx: ExtensionContext, id: string): Promise<string> {
+ * the step first, without taking it, so it can say what happens. */
+export async function next(hub: Hub, id: string): Promise<string> {
 	const dry = await hub.tkt<AutoOnce>(["auto", id, "--once", "--dry-run"]);
 	if (!dry.ok) {
 		if (dry.error?.code === "auto_running") return `tkt auto already drives ${id}; it goes on by itself.`;
@@ -103,13 +104,9 @@ export async function next(hub: Hub, ctx: ExtensionContext, id: string): Promise
 	const r = dry.result as AutoOnce;
 	if (r.did) {
 		hub.add({ ticket: id, label: r.did.stage || r.did.action, args: ["auto", id, "--once"] });
-		return `${id}: ${r.did.action === "approve" ? "approving the plan" : r.did.action === "start" ? "starting" : `running ${r.did.stage}`} in the background.`;
+		return `Queued: ${id} ${r.did.action === "approve" ? "approving the plan" : r.did.action === "start" ? "starting" : `running ${r.did.stage}`}.`;
 	}
-	if (r.wait === "awaiting_bot") {
-		const a = await ask(ctx, `${id} waits for the review bot. What now?`, [{ label: "Keep waiting for the bot" }, { label: "Run review-pr now" }], false);
-		if (a?.answer === "Run review-pr now") return stage(hub, id, "review");
-		return `${id} keeps waiting for the review bot; ${hub.row(id)?.next.text ?? "tkt ls shows it"}.`;
-	}
+	if (r.wait === "awaiting_bot") return `${id} waits for the review bot in CI; ${hub.row(id)?.next.text ?? "tkt ls shows it"}.`;
 	if (r.wait) return `${id} has nothing to do yet: ${r.next.text}.`;
 	switch (r.stop) {
 		case "plan_awaits_approval":
@@ -120,6 +117,8 @@ export async function next(hub: Hub, ctx: ExtensionContext, id: string): Promise
 			return `${id} is merged: /done ${id} removes it.`;
 		case "needs_you":
 			return `${id}'s agent needs you: /peek ${id}, then answer in its tab.`;
+		case "bot_silent":
+			return `${id}: the review bot has not reviewed the head. Check its job in CI.`;
 	}
 	return `${id} stops here (${r.stop}): ${r.next.text}.`;
 }
@@ -145,14 +144,11 @@ export async function stats(hub: Hub, ids: string[], sinceDays?: number): Promis
 	return statsText(env.result);
 }
 
-/** failure says why tkt refused, once: tkt's messages often name the
- * ticket and the command to run already. */
+/** failure says why tkt refused, with its reasons, once: tkt's messages
+ * often name the ticket and the command to run already. */
 export function failure(id: string, env: Envelope): string {
-	const e = env.error;
-	if (!e) return `${id}: tkt failed.`;
-	const msg = e.message.includes(id) ? e.message : `${id}: ${e.message}`;
-	const hint = e.hint && !e.message.includes(e.hint) ? ` Next: ${e.hint}.` : "";
-	return `${msg.replace(/[.\s]+$/, "")}.${hint}`;
+	const text = reasonOf(env);
+	return text.includes(id) ? text : `${id}: ${text}`;
 }
 
 /** watchPeek opens the live screen. */
@@ -180,11 +176,12 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	], false);
 	if (!first) return "Closed.";
 	if (first.answer.startsWith("Run")) return stage(hub, id, "verify");
-	const env = await hub.tkt<{ steps: Step[]; procedure: string; pr: number }>(["show", id, "--steps"]);
+	const env = await hub.tkt<{ steps: Step[]; procedure: string; pr: number; source: string }>(["show", id, "--steps"]);
 	if (!env.ok || !env.result) return failure(id, env);
 	const steps = env.result.steps;
+	const from = env.result.source === "pull_request" ? `The review bot cleared the head; these steps come from pull request #${env.result.pr}.` : "";
 	const key = `${id}@${hub.row(id)?.pr?.head ?? ""}`;
-	const got = await checklist(ctx, id, steps, marks.get(key) ?? []);
+	const got = await checklist(ctx, id, steps, marks.get(key) ?? [], from);
 	marks.set(key, got);
 	hub.pi.appendEntry("tkt-check", { key, marks: got });
 	const t = tally(got, steps.length);
@@ -195,7 +192,7 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 			const saw = await ctx.ui.input(`What did you see in step ${steps[i].n}?`, "the error, the page, the value");
 			if (saw?.trim()) {
 				hub.add({ ticket: id, label: "fix", args: ["run", id, "--prompt", fixPrompt(steps[i].n, steps[i].text, saw)] });
-				return `Starting a fix session for ${id}'s step ${steps[i].n}. /next ${id} reviews it after.`;
+				return `Queued: a fix session for ${id}'s step ${steps[i].n}.`;
 			}
 		}
 		return `${id}: ${t.fail} step${t.fail === 1 ? "" : "s"} failed.`;
@@ -204,18 +201,20 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	return `${id}: every step passed${t.skip ? ` (${t.skip} skipped)` : ""}. Merge it, then say "${id} is merged, remove it".`;
 }
 
-/** inbox walks what needs you, oldest first, each with fixed answers. */
+/** inbox walks what needs you, each with fixed answers. */
 export async function inbox(hub: Hub, ctx: ExtensionContext): Promise<string> {
-	let handled = 0;
-	while (hub.inbox.length > 0) {
-		const a = hub.inbox[0];
+	await hub.refresh();
+	const seen = new Set<string>();
+	for (;;) {
+		const a = hub.items.find((x) => !seen.has(x.key));
+		if (!a) break;
+		seen.add(a.key);
 		const reply = await answer(hub, ctx, a);
 		if (reply === undefined) break;
-		handled++;
 		if (reply) hub.post(reply);
 	}
-	if (hub.inbox.length === 0) return handled ? "The inbox is empty." : "Nothing needs you.";
-	return `${hub.inbox.length} item${hub.inbox.length === 1 ? "" : "s"} still need you. /inbox to go on.`;
+	const n = hub.items.length;
+	return n === 0 ? "Nothing needs you." : `${n} item${n === 1 ? "" : "s"} still ${n === 1 ? "needs" : "need"} you; the board lists ${n === 1 ? "it" : "them"}.`;
 }
 
 /** answer asks about one item. It returns the line to post, "" when the
@@ -227,11 +226,8 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 	let choice: string | undefined;
 	switch (a.kind) {
 		case "plan":
-			choice = await pick([{ label: "Approve" }, { label: "Approve and go auto", description: "tkt auto then drives it to READY_FOR_HUMAN." }, { label: "Show the plan" }, { label: "Ask for changes" }]);
-			if (choice === "Approve" || choice === "Approve and go auto") {
-				hub.dismiss(a);
-				return approve(hub, id, choice === "Approve" ? "manual" : "auto");
-			}
+			choice = await pick([{ label: "Approve" }, { label: "Approve and go auto", description: "tkt auto then drives it until it is reviewed clean." }, { label: "Show the plan" }, { label: "Ask for changes" }]);
+			if (choice === "Approve" || choice === "Approve and go auto") return approve(hub, id, choice === "Approve" ? "manual" : "auto");
 			if (choice === "Show the plan") {
 				hub.post(await show(hub, id, "message"));
 				return undefined;
@@ -239,11 +235,13 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 			if (choice === "Ask for changes" && ctx.hasUI) {
 				const text = await ctx.ui.editor(`What should change in ${id}'s plan?`, "");
 				if (!text?.trim()) return undefined;
-				hub.dismiss(a);
 				return send(hub, id, text.trim());
 			}
-			return undefined;
+			return choice === "Later" ? "" : undefined;
 		case "question":
+		case "check":
+		case "blocked":
+		case "paused":
 			choice = await pick([{ label: "Peek at the agent's screen" }, { label: "Show its last message" }, { label: "Dismiss" }]);
 			if (choice?.startsWith("Peek")) await watchPeek(hub, ctx, id);
 			else if (choice?.startsWith("Show")) hub.post(await show(hub, id, "message"));
@@ -251,53 +249,39 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 				hub.dismiss(a);
 				return "";
 			}
-			return undefined;
+			return choice === "Later" ? "" : undefined;
 		case "ready":
 			choice = await pick([{ label: "Open the checklist" }, { label: "Dismiss" }]);
-			if (choice === "Open the checklist") {
-				hub.dismiss(a);
-				return check(hub, ctx, id);
-			}
+			if (choice === "Open the checklist") return check(hub, ctx, id);
 			if (choice === "Dismiss") {
 				hub.dismiss(a);
 				return "";
 			}
-			return undefined;
+			return choice === "Later" ? "" : undefined;
 		case "next":
 			choice = await pick([{ label: "Continue" }, { label: "Show its last message" }]);
-			if (choice === "Continue") {
-				hub.dismiss(a);
-				return next(hub, ctx, id);
-			}
+			if (choice === "Continue") return next(hub, id);
 			if (choice?.startsWith("Show")) hub.post(await show(hub, id, "message"));
-			return undefined;
+			return choice === "Later" ? "" : undefined;
 		case "merged":
 			choice = await pick([{ label: "Remove it (tkt done)" }]);
-			if (choice?.startsWith("Remove")) {
-				hub.dismiss(a);
-				return done(hub, id);
-			}
-			return undefined;
-		case "auto_stop":
-		case "resume_auto":
-			choice = await pick([{ label: "Resume tkt auto" }, { label: "Show its last message" }, { label: "Dismiss" }]);
-			if (choice === "Resume tkt auto") {
-				hub.dismiss(a);
-				return auto(hub, id, true, hub.row(id)?.auto?.approve_plan ?? false);
-			}
-			if (choice?.startsWith("Show")) hub.post(await show(hub, id, "message"));
-			else if (choice === "Dismiss") {
+			if (choice?.startsWith("Remove")) return done(hub, id);
+			return choice === "Later" ? "" : undefined;
+		case "stalled":
+			choice = await pick([{ label: "Resume tkt auto" }, { label: "Dismiss" }]);
+			if (choice === "Resume tkt auto") return auto(hub, id, true, hub.row(id)?.auto?.approve_plan ?? false);
+			if (choice === "Dismiss") {
 				hub.dismiss(a);
 				return "";
 			}
-			return undefined;
+			return choice === "Later" ? "" : undefined;
 		case "failed":
 			choice = await pick([{ label: "Dismiss" }]);
 			if (choice === "Dismiss") {
 				hub.dismiss(a);
 				return "";
 			}
-			return undefined;
+			return choice === "Later" ? "" : undefined;
 	}
 	return undefined;
 }

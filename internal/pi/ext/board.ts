@@ -1,6 +1,8 @@
-// The board: a few lines above the prompt, and the /board columns. It
-// returns plain text with a tone per piece; the extension colors it.
+// The board: the panel pinned to the top of the chat, and the /board
+// columns. It returns plain text with a tone per line; the extension colors
+// it and draws the frame.
 
+import type { Attention, AttentionKind } from "./attention.ts";
 import { since, type Row } from "./model.ts";
 
 export type Tone = "text" | "accent" | "warning" | "muted" | "success" | "error";
@@ -33,46 +35,90 @@ export interface BoardState {
 	rows: Row[];
 	/** jobs maps a ticket to the label of its running job. */
 	jobs: Map<string, string>;
-	/** queued lists the tickets with a job waiting to start, such as an auto
-	 * loop still looking for a free slot before its ticket exists. */
-	waiting: number;
+	/** items is what needs you now, one per ticket at most. */
+	items: Attention[];
 	now: number;
 	tick: number;
 	repo: string;
 }
 
-/** widgetLines renders the board above the prompt: a summary line, then one
- * line per ticket, the ones that need you first. */
-export function widgetLines(s: BoardState, width: number, needsYou: Set<string>): Line[] {
-	const lines: Line[] = [];
+/** The command that acts on an item, shown beside it on the board. */
+const hints: Record<AttentionKind, (id: string) => string> = {
+	plan: (id) => `/show ${id}, /approve ${id}`,
+	question: (id) => `/peek ${id}`,
+	blocked: (id) => `/show ${id}`,
+	check: (id) => `/peek ${id}`,
+	ready: (id) => `/check ${id}`,
+	merged: (id) => `/done ${id}`,
+	next: (id) => `/next ${id}`,
+	paused: (id) => `/show ${id}`,
+	stalled: (id) => `/auto ${id} on`,
+	failed: () => "/inbox",
+};
+
+/** title is the board's heading: the repository, the tickets, and how many
+ * need you. */
+export function title(s: BoardState): string {
 	const n = s.rows.length;
-	const head = `tkt  ${s.repo}  ${n} ticket${n === 1 ? "" : "s"}`;
-	const flag = needsYou.size > 0 ? `, ${needsYou.size} need${needsYou.size === 1 ? "s" : ""} you (/inbox)` : "";
-	lines.push({ text: fit(head + flag, width), tone: needsYou.size > 0 ? "warning" : "muted" });
-	const rows = [...s.rows].sort((a, b) => Number(needsYou.has(b.ticket)) - Number(needsYou.has(a.ticket)) || a.ticket.localeCompare(b.ticket, undefined, { numeric: true }));
+	const k = new Set(s.items.map((a) => a.ticket)).size;
+	return `tkt  ${s.repo}  ${n} ticket${n === 1 ? "" : "s"}${k ? `  ${k} need${k === 1 ? "s" : ""} you` : ""}`;
+}
+
+/** boardLines renders the board's body for a width: one line per ticket,
+ * the ones that need you first, then what each of those needs. */
+export function boardLines(s: BoardState, width: number): Line[] {
+	const lines: Line[] = [];
+	const needs = new Set(s.items.map((a) => a.ticket));
+	const rows = [...s.rows].sort((a, b) => Number(needs.has(b.ticket)) - Number(needs.has(a.ticket)) || a.ticket.localeCompare(b.ticket, undefined, { numeric: true }));
+	if (rows.length === 0) lines.push({ text: fit('No tickets yet. Say "start ACM-123".', width), tone: "muted" });
 	for (const r of rows) {
-		lines.push({ text: fit(rowText(r, s), width), tone: needsYou.has(r.ticket) ? "warning" : r.stale ? "error" : "text" });
+		let tone: Tone = "text";
+		if (needs.has(r.ticket)) tone = "warning";
+		else if (r.stale) tone = "error";
+		else if (r.phase === "ready_for_human") tone = "success";
+		else if (r.phase === "merged" || r.phase === "closed" || r.phase === "queued") tone = "muted";
+		lines.push({ text: fit(rowText(r, s), width), tone });
+	}
+	if (s.items.length > 0) {
+		lines.push({ text: "", tone: "text" });
+		for (const a of s.items) {
+			lines.push({ text: fit(`! ${a.ticket} ${a.title}   ${hints[a.kind](a.ticket)}`, width), tone: "warning" });
+		}
 	}
 	return lines;
 }
 
+/** phaseLabel names a phase for people. */
+export function phaseLabel(phase: string): string {
+	return phase === "ready_for_human" ? "ready to verify" : phase.replaceAll("_", " ");
+}
+
 function rowText(r: Row, s: BoardState): string {
-	const parts = [pad(r.ticket, 9), pad(r.phase.replaceAll("_", " "), 17), pad(since(r.phase_since, s.now) || "-", 4)];
-	parts.push(pad(r.started ? since(r.started, s.now) : "-", 4));
-	parts.push(pad(r.agent ? r.agent.status : "no agent", 8));
-	parts.push(pad(r.pr ? `#${r.pr.number}` : "-", 5));
+	const agent = !r.agent ? "-" : (r.agent.background ?? 0) > 0 ? "waiting" : r.agent.status;
+	const parts = [pad(r.ticket, 9), pad(phaseLabel(r.phase), 17), pad(since(r.phase_since, s.now) || "-", 4), pad(agent, 8), pad(r.pr ? `#${r.pr.number}` : "-", 6)];
 	const flags: string[] = [];
-	if (r.auto?.running) flags.push(r.auto.approve_plan ? "auto full" : "auto");
-	else if (r.auto?.waiting === "slot") flags.push("queued");
+	if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : "auto");
+	else if (r.auto?.wanted) flags.push("auto stalled");
 	const job = s.jobs.get(r.ticket);
 	if (job) flags.push(`${job} ${spinner[s.tick % spinner.length]}`);
-	if (r.stale) flags.push("! stale");
-	parts.push(flags.join("  "));
+	if (r.stale) flags.push("stale");
+	parts.push(flags.join(", "));
 	return parts.join(" ").trimEnd();
 }
 
+/** statusText is the board as plain text, for the model. */
+export function statusText(s: BoardState): string {
+	const lines = [title(s), ...boardLines(s, 0).map((l) => l.text)];
+	if (s.items.length > 0) {
+		lines.push("", "Needs the user:", ...s.items.map((a) => `- ${a.text}`));
+	} else {
+		lines.push("", "Nothing needs the user.");
+	}
+	return lines.join("\n");
+}
+
 /** boardColumns lays the tickets out in the /board columns. Each cell is a
- * ticket id with its phase and time in it; rows of cells line up. */
+ * ticket id with its time in the phase; rows of cells line up. */
 export function boardColumns(rows: Row[], now: number): { title: string; cells: { ticket: string; text: string }[] }[] {
 	return columns.map((c) => ({
 		title: c.title,

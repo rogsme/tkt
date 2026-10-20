@@ -25,20 +25,27 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		return normalizeId(raw, hub.key);
 	};
 	const say = (text: string) => hub.post(text);
+	/** preset takes "as NAME" or "--as NAME" out of the words. */
+	const preset = (words: string[]): string => {
+		const i = words.findIndex((w) => w === "as" || w === "--as");
+		if (i < 0 || !words[i + 1]) return "";
+		return words.splice(i, 2)[1];
+	};
 
 	pi.registerCommand("start", {
-		description: "Start tickets: /start ACM-12 [ACM-13 ...] [auto | after-plan]",
+		description: "Start tickets: /start ACM-12 [ACM-13 ...] [auto | after-plan] [as PRESET]",
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const words = args.trim().split(/\s+/).filter(Boolean);
+			const as = preset(words);
 			const modeWord = words.find((w) => ["auto", "full", "after-plan", "manual"].includes(w.toLowerCase()))?.toLowerCase();
 			const list = expandIds(words.filter((w) => w.toLowerCase() !== modeWord).join(" "), hub.key);
 			const rest = words.filter((w) => w.toLowerCase() !== modeWord && /^\d+$/.test(w)).map((w) => normalizeId(w, hub.key));
 			const all = [...new Set([...list, ...rest])];
-			if (all.length === 0) return ctx.ui.notify("usage: /start ACM-12 [ACM-13 ...] [auto | after-plan]", "warning");
+			if (all.length === 0) return ctx.ui.notify("usage: /start ACM-12 [ACM-13 ...] [auto | after-plan] [as PRESET]", "warning");
 			const mode: act.Mode = modeWord === "auto" || modeWord === "full" ? "auto" : modeWord === "after-plan" ? "auto_after_plan" : "manual";
-			if (all.length > 1 && !(await ctx.ui.confirm(`Start ${all.length} tickets?`, all.join(", ")))) return;
-			say(act.start(hub, all, mode));
+			if (all.length > 1 && !(await ctx.ui.confirm(`Start ${all.join(", ")}?`, "Each ticket starts in its own tab."))) return;
+			say(act.start(hub, all, mode, as));
 		},
 	});
 
@@ -47,7 +54,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const id = one(args, ctx, "/approve ACM-12 [auto]");
-			if (id) say(act.approve(hub, id, /\bauto\b/i.test(args) ? "auto" : "manual"));
+			if (id) say(await act.approve(hub, id, /\bauto\b/i.test(args) ? "auto" : "manual"));
 		},
 	});
 
@@ -56,18 +63,20 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const id = one(args, ctx, "/next ACM-12");
-			if (id) say(await act.next(hub, ctx, id));
+			if (id) say(await act.next(hub, id));
 		},
 	});
 
 	pi.registerCommand("auto", {
-		description: "tkt auto for a ticket: /auto ACM-12 on | off | full",
+		description: "tkt auto for a ticket: /auto ACM-12 on | off | full [as PRESET]",
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
-			const id = one(args, ctx, "/auto ACM-12 on | off | full");
+			const id = one(args, ctx, "/auto ACM-12 on | off | full [as PRESET]");
 			if (!id) return;
-			const how = args.trim().split(/\s+/)[1]?.toLowerCase() ?? "on";
-			say(act.auto(hub, id, how !== "off", how === "full"));
+			const words = args.trim().split(/\s+/);
+			const as = preset(words);
+			const how = words[1]?.toLowerCase() ?? "on";
+			say(await act.auto(hub, id, how !== "off", how === "full", as));
 		},
 	});
 
@@ -78,7 +87,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 			const id = one(args, ctx, "/send ACM-12 TEXT");
 			const text = args.trim().split(/\s+/).slice(1).join(" ");
 			if (!id || !text) return ctx.ui.notify("usage: /send ACM-12 TEXT", "warning");
-			say(act.send(hub, id, text));
+			say(await act.send(hub, id, text));
 		},
 	});
 
@@ -114,7 +123,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const id = one(args, ctx, "/done ACM-12");
-			if (id && (await ctx.ui.confirm(`Remove ${id}?`, `Close ${id}'s tabs and remove its worktree, once tkt done confirms the merge.`))) say(act.done(hub, id));
+			if (id && (await ctx.ui.confirm(`Remove ${id}?`, "Close its tabs and remove its worktree, once tkt done confirms the merge."))) say(await act.done(hub, id));
 		},
 	});
 
@@ -124,8 +133,13 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerCommand("board", {
-		description: "Show every ticket in columns, and act on one",
-		handler: async (_args, ctx) => {
+		description: "Show every ticket in columns, and act on one; /board hide or /board show for the board pinned to the top",
+		handler: async (args, ctx) => {
+			const word = args.trim().toLowerCase();
+			if (word === "hide" || word === "show") {
+				hub.showBoard(word === "show");
+				return;
+			}
 			await hub.refresh();
 			const a = await board(ctx, () => hub.rows);
 			if (!a) return;
@@ -137,15 +151,15 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 				case "check":
 					return say(await act.check(hub, ctx, a.ticket));
 				case "approve":
-					return say(act.approve(hub, a.ticket, "manual"));
+					return say(await act.approve(hub, a.ticket, "manual"));
 				case "next":
-					return say(await act.next(hub, ctx, a.ticket));
+					return say(await act.next(hub, a.ticket));
 				case "auto": {
 					const r = hub.row(a.ticket);
-					return say(act.auto(hub, a.ticket, !(r?.auto?.running || r?.auto?.wanted), false));
+					return say(await act.auto(hub, a.ticket, !(r?.auto?.running || r?.auto?.wanted), false));
 				}
 				case "done":
-					if (await ctx.ui.confirm(`Remove ${a.ticket}?`, "Close its tabs and remove its worktree, once tkt done confirms the merge.")) say(act.done(hub, a.ticket));
+					if (await ctx.ui.confirm(`Remove ${a.ticket}?`, "Close its tabs and remove its worktree, once tkt done confirms the merge.")) say(await act.done(hub, a.ticket));
 					return;
 				case "inbox":
 					return say(await act.inbox(hub, ctx));

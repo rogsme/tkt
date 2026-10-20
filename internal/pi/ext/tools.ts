@@ -7,7 +7,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import * as act from "./actions.ts";
-import { widgetLines } from "./board.ts";
+import { phaseLabel, statusText } from "./board.ts";
 import type { Hub } from "./hub.ts";
 import { expandIds, mentions, normalizeId } from "./model.ts";
 import { ask } from "./ui.ts";
@@ -15,12 +15,20 @@ import { ask } from "./ui.ts";
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }], details: undefined });
 
 /** guard lets a change through when your last message names every ticket
- * it touches, or when you confirm it. */
-async function guard(hub: Hub, ctx: ExtensionContext, ids: string[], what: string): Promise<boolean> {
-	if (ids.length === 1 && mentions(hub.lastInput, ids[0])) return true;
+ * it touches, or when you confirm it. The question names the tickets; the
+ * line under it says what happens. */
+async function guard(hub: Hub, ctx: ExtensionContext, ids: string[], question: string, what: string): Promise<boolean> {
+	if (ids.length > 0 && ids.every((i) => mentions(hub.lastInput, i))) return true;
 	if (!ctx.hasUI) return false;
-	return ctx.ui.confirm(`${what}?`, `${what}: ${ids.join(", ")}`);
+	return ctx.ui.confirm(question, what);
 }
+
+/** list names tickets for a sentence: ACM-1, ACM-2 and ACM-3. */
+function list(ids: string[]): string {
+	return ids.length < 2 ? ids.join("") : `${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]}`;
+}
+
+const preset = Type.Optional(Type.String({ description: "A preset from the user's config.toml, such as sol or claude, when the user names one ('as sol', 'with sol', '--as sol'); otherwise leave it out" }));
 
 export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	const id = (raw: string) => normalizeId(raw, hub.key);
@@ -29,27 +37,34 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_status",
 		label: "tkt status",
-		description: "Read the board: every ticket's phase, agent, pull request and next step, and what needs the user. Pass ticket for one ticket's details.",
+		description: "Read the board: every ticket's phase, agent, pull request and auto state, and what needs the user. Pass ticket for one ticket's details.",
 		parameters: Type.Object({ ticket: Type.Optional(ticket) }),
 		executionMode: "sequential",
 		async execute(_id, p) {
 			await hub.refresh();
 			if (p.ticket) {
 				const r = hub.row(id(p.ticket));
-				if (!r) return text(`${id(p.ticket)} has no worktree. Known tickets: ${hub.rows.map((x) => x.ticket).join(", ") || "none"}.`);
+				if (!r) return text(`${id(p.ticket)} has no worktree and no tkt auto loop waits to start it. Known tickets: ${hub.rows.map((x) => x.ticket).join(", ") || "none"}.`);
+				const a = r.auto;
+				const auto = !a ? "off"
+					: a.running && a.waiting === "slot" ? "on, queued for a free slot"
+					: a.running && a.paused ? `on, paused for the user (${a.paused}${a.why ? `, ${a.why}` : ""}); it goes on by itself when the ticket moves`
+					: a.running ? `on${a.approve_plan ? ", approving plans" : ""}`
+					: a.wanted ? "stalled: marked for auto, but no loop runs"
+					: a.stop ? `off, last loop ended: ${a.stop}` : "off";
+				const agent = r.agent ? `${(r.agent.background ?? 0) > 0 ? "idle, waiting on its own background task" : r.agent.status} in pane ${r.agent.pane_id}` : "none";
+				const item = hub.items.find((x) => x.ticket === r.ticket);
 				const lines = [
-					`${r.ticket}: phase ${r.phase}${r.phase_since ? ` since ${r.phase_since}` : ""}, stage ${r.stage || "-"}`,
-					`agent: ${r.agent ? `${r.agent.status} in pane ${r.agent.pane_id}` : "none"}; last status: ${r.last_status || "none"}`,
+					`${r.ticket}: ${phaseLabel(r.phase)}${r.phase_since ? ` since ${r.phase_since}` : ""}, stage ${r.stage || "-"}`,
+					`agent: ${agent}; last status: ${r.last_status || "none"}`,
 					`pull request: ${r.pr ? `#${r.pr.number} ${r.pr.state}` : "none"}; checks: ${r.checks?.state ?? "-"}; review: ${r.review ? `${r.review.verdict}${r.review.at_head ? "" : " (old head)"}` : "-"}`,
-					`auto: ${r.auto?.running ? "running" : r.auto?.wanted ? "paused" : r.auto?.stop ? `stopped (${r.auto.stop})` : "off"}; rounds ${r.auto?.rounds ?? 0}`,
+					`auto: ${auto}; rounds ${a?.rounds ?? 0}`,
 					`next: ${r.next.text} (${r.next.reason})`,
+					item ? `needs the user: ${item.text}` : "needs the user: nothing",
 				];
 				return text(lines.join("\n"));
 			}
-			const s = { rows: hub.rows, jobs: hub.labels, waiting: 0, now: Date.now(), tick: 0, repo: hub.repo };
-			const board = widgetLines(s, 0, hub.needsYou()).map((l) => l.text);
-			const inbox = hub.inbox.map((a) => `- ${a.text}`);
-			return text([...board, "", inbox.length ? "Needs the user:" : "Nothing needs the user.", ...inbox].join("\n"));
+			return text(statusText(hub.state()));
 		},
 	});
 
@@ -69,10 +84,11 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		name: "tkt_start",
 		label: "tkt start",
 		description:
-			"Start tickets in the background and return at once. mode manual stops at the plan; auto_after_plan also stops at the plan, then tkt auto takes over once the user approves; auto approves the plan too and drives each ticket to READY_FOR_HUMAN. Expand ranges such as ACM-12 to ACM-15 into every id.",
+			"Queue tickets to start in the background; it returns before they start. mode manual stops at the plan; auto_after_plan also stops at the plan, then tkt auto takes over once the user approves; auto approves the plan too and drives each ticket until it is reviewed clean. Expand ranges such as ACM-12 to ACM-15 into every id. as picks the preset the agents run on.",
 		parameters: Type.Object({
 			tickets: Type.Array(ticket, { minItems: 1 }),
 			mode: StringEnum(["manual", "auto", "auto_after_plan"] as const),
+			as: preset,
 		}),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
@@ -81,8 +97,11 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 				return many.length > 0 ? many : [id(t)];
 			}))];
 			if (ids.length === 0) return text("Name the tickets to start, such as ACM-123.");
-			if (!(await guard(hub, ctx, ids, `Start ${ids.length} ticket${ids.length === 1 ? "" : "s"} (${p.mode.replaceAll("_", " ")})`))) return text("The user did not confirm; nothing started.");
-			return text(act.start(hub, ids, p.mode));
+			const how = p.mode === "auto" ? " in full auto" : p.mode === "auto_after_plan" ? " in auto after the plan" : "";
+			const on = p.as ? ` on ${p.as}` : "";
+			if (!(await guard(hub, ctx, ids, `Start ${list(ids)}${how}${on}?`, p.mode === "auto" ? "tkt auto starts each ticket, approves its plan, and drives it until it is reviewed clean." : "Each ticket starts in its own tab and stops at its plan.")))
+				return text("The user did not confirm; nothing started.");
+			return text(act.start(hub, ids, p.mode, p.as ?? ""));
 		},
 	});
 
@@ -94,21 +113,21 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!(await guard(hub, ctx, [t], "Approve the plan"))) return text("The user did not confirm; nothing was approved.");
-			return text(act.approve(hub, t, p.then));
+			if (!(await guard(hub, ctx, [t], `Approve ${t}'s plan?`, "work-ticket then builds it in the same session."))) return text("The user did not confirm; nothing was approved.");
+			return text(await act.approve(hub, t, p.then));
 		},
 	});
 
 	pi.registerTool({
 		name: "tkt_send",
 		label: "tkt send",
-		description: "Type text into a ticket's running session, such as a change the user wants in the plan. The user sees the text and confirms first.",
+		description: "Type text into a ticket's running session, only when the user asks you to tell the ticket's agent something, such as a change to the plan. A busy agent gets it when it stops: the result then says queued, not sent. The user sees the text and confirms first.",
 		parameters: Type.Object({ ticket, text: Type.String({ description: "The text, in the user's words" }) }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
 			if (!ctx.hasUI || !(await ctx.ui.confirm(`Send this to ${t}?`, p.text))) return text("The user did not confirm; nothing was sent.");
-			return text(act.send(hub, t, p.text));
+			return text(await act.send(hub, t, p.text));
 		},
 	});
 
@@ -120,34 +139,34 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!(await guard(hub, ctx, [t], "Take the next step"))) return text("The user did not confirm; nothing ran.");
-			return text(await act.next(hub, ctx, t));
+			if (!(await guard(hub, ctx, [t], `Take ${t}'s next step?`, "tkt takes the step tkt auto would take."))) return text("The user did not confirm; nothing ran.");
+			return text(await act.next(hub, t));
 		},
 	});
 
 	pi.registerTool({
 		name: "tkt_stage",
 		label: "tkt run",
-		description: "Run a stage in a fresh session: review, address, sync, ci, verify or start. Prefer tkt_continue, which picks the stage itself.",
-		parameters: Type.Object({ ticket, stage: Type.String({ description: "review, address, sync, ci, verify, start, or a stage from config.toml" }) }),
+		description: "Queue a stage in a fresh session: review, address (which merges the base first, so it also syncs), ci, verify or start. Prefer tkt_continue, which picks the stage itself. Never run review where the repository has a review bot in CI unless the user asks for it.",
+		parameters: Type.Object({ ticket, stage: Type.String({ description: "review, address, ci, verify, start, or a stage from config.toml" }), as: preset }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!(await guard(hub, ctx, [t], `Run ${p.stage}`))) return text("The user did not confirm; nothing ran.");
-			return text(act.stage(hub, t, p.stage));
+			if (!(await guard(hub, ctx, [t], `Run ${p.stage} for ${t}?`, "It replaces the ticket's idle agent with a fresh session."))) return text("The user did not confirm; nothing ran.");
+			return text(act.stage(hub, t, p.stage, p.as ?? ""));
 		},
 	});
 
 	pi.registerTool({
 		name: "tkt_auto",
 		label: "tkt auto",
-		description: "Turn tkt auto on or off for a ticket. On, it drives the ticket to READY_FOR_HUMAN and stops when the ticket needs the user; approve_plan lets it approve the plan too.",
-		parameters: Type.Object({ ticket, on: Type.Boolean(), approve_plan: Type.Optional(Type.Boolean()) }),
+		description: "Turn tkt auto on or off for a ticket. On, it drives the ticket until it is reviewed clean, pauses when the ticket needs the user and goes on by itself after; approve_plan lets it approve the plan too.",
+		parameters: Type.Object({ ticket, on: Type.Boolean(), approve_plan: Type.Optional(Type.Boolean()), as: preset }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!(await guard(hub, ctx, [t], p.on ? "Turn tkt auto on" : "Turn tkt auto off"))) return text("The user did not confirm; nothing changed.");
-			return text(act.auto(hub, t, p.on, p.approve_plan ?? false));
+			if (!(await guard(hub, ctx, [t], p.on ? `Turn tkt auto on for ${t}?` : `Turn tkt auto off for ${t}?`, p.on ? "tkt auto drives the ticket in the background." : "Its loop ends at its next look."))) return text("The user did not confirm; nothing changed.");
+			return text(await act.auto(hub, t, p.on, p.approve_plan ?? false, p.as ?? ""));
 		},
 	});
 
@@ -159,8 +178,8 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!ctx.hasUI || !(await ctx.ui.confirm(`Remove ${t}?`, `Close ${t}'s tabs and remove its worktree. tkt checks that its pull request is merged first.`))) return text("The user did not confirm; nothing was removed.");
-			return text(act.done(hub, t));
+			if (!ctx.hasUI || !(await ctx.ui.confirm(`Remove ${t}?`, `Close its tabs and remove its worktree. tkt checks that its pull request is merged first.`))) return text("The user did not confirm; nothing was removed.");
+			return text(await act.done(hub, t));
 		},
 	});
 

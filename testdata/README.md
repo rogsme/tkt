@@ -78,15 +78,16 @@ After a change to how tkt starts pi, or after `just bump-pi`, build with `just b
 
 1. Run `XDG_DATA_HOME=$(mktemp -d) ./tkt agent --dry-run --json`. It unpacks pi under that directory and prints the command line.
 2. Run that pi with `--version`, then with the same flags and `--help`: pi must accept every flag.
-3. Run `./tkt agent` in a herdr pane. The chat opens without a startup banner, with the built-in theme, and the board above the prompt starts with `tkt`, the repository and its ticket count, which shows that tkt's extension loaded. `/login` stores its credentials under `~/.config/tkt/pi`, not `~/.pi/agent`.
+3. Run `./tkt agent` in a herdr pane. The chat opens without a startup banner, with the built-in theme, and the board pinned to the top right starts with `tkt`, the repository and its ticket count, which shows that tkt's extension loaded. `/login` stores its credentials under `~/.config/tkt/pi`, not `~/.pi/agent`.
 
 After a change to the extension in `internal/pi/ext`, run `just install`, then `tkt agent` in a herdr pane inside a configured scratch repository:
 
-1. Say "start ACM-1", then right away "run ACM-2 to ACM-3 in auto". Each reply comes back in seconds while the tickets launch in their own tabs, and the batch asks once for both ids.
-2. Keep typing while they launch: nothing takes the focus, and the board shows them as starting, then planning.
-3. Only ACM-1's plan raises a line in the chat and a herdr notification. The auto tickets move on the board without a word.
-4. `/inbox` offers fixed answers for the plan; approve it from there.
-5. `/peek` an agent that asks a question, then answer it in its tab.
-6. At ready_for_human, `/check` offers verify first, then the checklist. Mark a step failed and start a fix session, then mark them all passed.
-7. Merge, then say "ACM-1 is merged, remove it". The chat confirms first, then reports the time from start to merge, and `/stats` lists it.
-8. Quit the chat while an auto ticket works and open `tkt agent` again: the ticket kept moving, and the board shows where it is.
+1. Say "start ACM-1", then right away "run ACM-2 to ACM-3 in auto with fast" (a preset in config.toml). Each reply comes back in seconds while the tickets launch in their own tabs, on that preset, and the batch asks once, in one line, for both ids. With `[auto] max_parallel = 1`, ACM-3 shows as queued before it has a worktree.
+2. Keep typing while they launch: nothing takes the focus, and the board shows them as starting, then planning. The auto tickets' tabs read `ACM-2 (fast, auto)`.
+3. Only ACM-1's plan shows on the board as needing you, with a herdr notification; nothing new appears in the chat. The auto tickets move on the board without a word.
+4. `/inbox` offers fixed answers for the plan; approve it from there, and the item leaves the board.
+5. When an auto ticket's agent asks a question, the board shows it as paused. `/peek` it, then answer in its tab: the ticket goes on by itself, and the item leaves the board.
+6. While an agent waits on its own CI watcher, the board shows it as waiting, not as needing you. Tell a working agent something: the chat says the text is queued, and it goes in when the agent stops.
+7. When the review bot clears the head, the ticket is ready: `/check` offers verify first, then the checklist, with the steps from the pull request's body. Mark a step failed and start a fix session, then mark them all passed.
+8. Leave an uncommitted file in a merged ticket's worktree, then say "ACM-1 is merged, remove it". The chat confirms first, then says the worktree has uncommitted changes. Clean it up and ask again: it reports the time from start to merge, and `/stats` lists it.
+9. Quit the chat while an auto ticket works and open `tkt agent` again: the ticket kept moving, and the board shows where it is.
