@@ -33,6 +33,8 @@ type PR struct {
 	Mergeable         string   `json:"mergeable"`
 	StatusCheckRollup []Check  `json:"statusCheckRollup"`
 	Reviews           []Review `json:"reviews"`
+	CreatedAt         string   `json:"createdAt"`
+	MergedAt          string   `json:"mergedAt"`
 }
 
 // Check is a check run (Name, Status, Conclusion) or a commit status
@@ -83,7 +85,7 @@ func (g GH) ListAll(ctx context.Context) ([]PR, error) {
 
 // ListHead returns every pull request whose head is branch.
 func (g GH) ListHead(ctx context.Context, branch string, full bool) ([]PR, error) {
-	fields := "number,state,headRefName,headRefOid,headRepository"
+	fields := "number,state,headRefName,headRefOid,headRepository,createdAt,mergedAt"
 	if full {
 		fields += ",mergeable,statusCheckRollup,reviews"
 	}

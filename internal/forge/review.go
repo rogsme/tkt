@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -121,4 +122,91 @@ func Summarize(p PR) Checks {
 		c.State = "ok"
 	}
 	return c
+}
+
+// Step is one numbered step of a human verification procedure.
+type Step struct {
+	N    int    `json:"n"`
+	Text string `json:"text"`
+}
+
+// Procedure is the Human verification section of review-pr's ready summary:
+// the whole section as written, and its numbered steps.
+type Procedure struct {
+	Head        string `json:"head"`
+	SubmittedAt string `json:"submitted_at"`
+	Section     string `json:"section"`
+	Steps       []Step `json:"steps"`
+}
+
+// HumanVerification returns the procedure in the newest review that says
+// READY_FOR_HUMAN about the pull request's current head, or nil.
+func HumanVerification(p PR) *Procedure {
+	var best *Procedure
+	for _, r := range p.Reviews {
+		m := contract.VerdictRE.FindStringSubmatch(r.Body)
+		if m == nil || m[1] != contract.VerdictReadyForHuman {
+			continue
+		}
+		oid := ""
+		if r.Commit != nil {
+			oid = r.Commit.Oid
+		}
+		head := firstGroup(contract.ReviewedHeadRE, r.Body, oid)
+		if head == "" || !strings.HasPrefix(p.HeadRefOid, head) {
+			continue
+		}
+		section, steps, ok := ParseProcedure(r.Body)
+		if !ok || best != nil && best.SubmittedAt > r.SubmittedAt {
+			continue
+		}
+		best = &Procedure{Head: head, SubmittedAt: r.SubmittedAt, Section: section, Steps: steps}
+	}
+	return best
+}
+
+var stepRE = regexp.MustCompile(`^ {0,3}(\d+)[.)][ \t]+(.*)$`)
+
+// ParseProcedure reads the Human verification section of a review body: the
+// text up to the next level-two heading, and its numbered steps. A step's
+// indented or wrapped lines belong to it; a blank line followed by text that
+// is neither indented nor numbered, such as a cleanup paragraph, ends it.
+func ParseProcedure(body string) (section string, steps []Step, ok bool) {
+	loc := contract.HumanVerificationRE.FindStringIndex(body)
+	if loc == nil {
+		return "", nil, false
+	}
+	rest := body[loc[1]:]
+	var lines []string
+	for _, l := range strings.Split(rest, "\n") {
+		if strings.HasPrefix(l, "## ") {
+			break
+		}
+		lines = append(lines, strings.TrimRight(l, " \t\r"))
+	}
+	section = strings.TrimSpace(strings.Join(lines, "\n"))
+	blank := false
+	for _, l := range lines {
+		if m := stepRE.FindStringSubmatch(l); m != nil {
+			n, _ := strconv.Atoi(m[1])
+			steps = append(steps, Step{N: n, Text: strings.TrimSpace(m[2])})
+			blank = false
+			continue
+		}
+		if strings.TrimSpace(l) == "" {
+			blank = true
+			continue
+		}
+		indented := strings.HasPrefix(l, "  ") || strings.HasPrefix(l, "\t")
+		if len(steps) > 0 && (indented || !blank) && !strings.HasPrefix(l, "#") {
+			s := &steps[len(steps)-1]
+			s.Text += "\n" + strings.TrimSpace(l)
+			blank = false
+			continue
+		}
+		if len(steps) > 0 {
+			break
+		}
+	}
+	return section, steps, len(steps) > 0
 }

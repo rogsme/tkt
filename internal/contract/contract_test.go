@@ -65,7 +65,8 @@ func TestReviewSummariesCarryVerdicts(t *testing.T) {
 
 func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	registry := read(t, "status-lines.md")
-	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked} {
+	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked, contract.StatusSetupRequired,
+		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval} {
 		if !strings.Contains(registry, "`Status: "+s+"`") {
 			t.Errorf("Status: %s is not in the registry", s)
 		}
@@ -85,7 +86,11 @@ func TestStageLinesNameRegisteredSkills(t *testing.T) {
 		}
 	}
 	named := regexp.MustCompile(`the ([a-z]+(?:-[a-z]+)+) skill`)
+	lines := map[string]string{"approve": config.ApproveLine}
 	for stage, line := range config.BuiltinStages {
+		lines[stage] = line
+	}
+	for stage, line := range lines {
 		for _, m := range named.FindAllStringSubmatch(line, -1) {
 			if m[1] == "playwright-cli" {
 				continue
@@ -98,5 +103,29 @@ func TestStageLinesNameRegisteredSkills(t *testing.T) {
 				t.Errorf("stage %s names %s, which contract.Skills does not list", stage, m[1])
 			}
 		}
+	}
+}
+
+func TestReadySummaryCarriesHumanVerification(t *testing.T) {
+	head := strings.Repeat("b2", 20)
+	body := strings.ReplaceAll(read(t, "summary-ready-verification.txt"), "<full SHA>", head)
+	p := forge.PR{HeadRefOid: head, Reviews: []forge.Review{{Body: body, SubmittedAt: "2026-01-01T00:00:00Z"}}}
+	proc := forge.HumanVerification(p)
+	if proc == nil || len(proc.Steps) != 3 {
+		t.Fatalf("procedure: %+v", proc)
+	}
+	if s := proc.Steps[0]; s.N != 1 || !strings.HasPrefix(s.Text, "Open http://localhost:3000/login") || !strings.Contains(s.Text, "Expected: the form shows") {
+		t.Errorf("step 1: %+v", s)
+	}
+	if s := proc.Steps[2]; strings.Contains(s.Text, "Cleanup") {
+		t.Errorf("step 3 took the cleanup paragraph: %q", s.Text)
+	}
+	if !strings.HasPrefix(proc.Section, "Setup:") || !strings.Contains(proc.Section, "Not verifiable here") {
+		t.Errorf("section: %q", proc.Section)
+	}
+	// A verdict on an older head has no steps to run.
+	p.HeadRefOid = strings.Repeat("c3", 20)
+	if proc := forge.HumanVerification(p); proc != nil {
+		t.Errorf("old head: %+v", proc)
 	}
 }

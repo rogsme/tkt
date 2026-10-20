@@ -1,0 +1,26 @@
+## Review brief
+
+Change: the login form shows an error when the password is wrong.
+
+Reviewed head: <full SHA>
+Reviewed base: <full SHA>
+Reviewed against: ACM-123
+Verified: ran the login tests and traced the error path.
+Resolved: none
+Verdict: READY_FOR_HUMAN
+
+## Human verification
+
+Setup: run `make dev` and open http://localhost:3000 in Firefox with the
+`dev@example.com` test account.
+
+1. Open http://localhost:3000/login and sign in with a wrong password.
+   Expected: the form shows "Wrong email or password" under the password field.
+2. Sign in with the right password.
+   Expected: the dashboard opens and no error shows.
+3. Sign out, then press Back in the browser.
+   Expected: the login page shows again, not the dashboard (regression check).
+
+Cleanup: none; the test account keeps no state.
+
+Not verifiable here: the production identity provider.
