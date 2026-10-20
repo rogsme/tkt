@@ -194,13 +194,21 @@ func (c *Ctx) readState(worktree string) (*ticketState, error) {
 }
 
 // save records key=value pairs, and writes them unless this is a dry run.
+// It writes only these keys, so what another tkt wrote since ts was read
+// stays, and ts then holds the file as written.
 func (c *Ctx) save(ts *ticketState, kv ...string) {
 	ts.st.Set(kv...)
 	if c.Dry || ts.path == "" {
 		return
 	}
-	if err := ts.st.Save(ts.path, c.Now()); err != nil {
+	st, err := state.Update(ts.path, c.Now(), kv...)
+	if err != nil {
 		c.UI.Warn("cannot write %s: %v", ts.path, err)
+		return
+	}
+	// Callers hold ts.st itself, so it is updated in place.
+	for k, v := range st {
+		ts.st[k] = v
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -71,4 +72,27 @@ func (s State) Save(path string, now time.Time) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// Update sets key=value pairs in the state file and keeps every other key as
+// the file has it now. tkt auto, tkt run and tkt ls write one ticket's state
+// from separate processes, so a write of a whole state read earlier would
+// drop the keys another process wrote since. A lock beside the file makes
+// the read and the write one step.
+func Update(path string, now time.Time, kv ...string) (State, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	l, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	defer l.Close()
+	if err := syscall.Flock(int(l.Fd()), syscall.LOCK_EX); err != nil {
+		return nil, err
+	}
+	defer syscall.Flock(int(l.Fd()), syscall.LOCK_UN)
+	s := Read(path)
+	s.Set(kv...)
+	return s, s.Save(path, now)
 }
