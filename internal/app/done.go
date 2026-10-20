@@ -210,7 +210,20 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 	}
 	res.Actions = c.Plan
 	if len(kept) > 0 && !o.All {
-		return res, apperr.New(apperr.TicketsKept, "kept %s; see the reasons above", strings.Join(kept, ", ")).
+		// The reasons go in the message itself: a program reading --json
+		// never sees the lines above.
+		var why []string
+		for _, dt := range res.Tickets {
+			if slices.Contains(kept, dt.Ticket) {
+				switch {
+				case len(dt.Reasons) > 0:
+					why = append(why, dt.Ticket+": "+strings.Join(dt.Reasons, "; "))
+				case dt.Outcome == "missing":
+					why = append(why, dt.Ticket+": no worktree")
+				}
+			}
+		}
+		return res, apperr.New(apperr.TicketsKept, "kept %s", strings.Join(why, "; ")).
 			WithHint("fix the reasons, then rerun tkt done").
 			With("tickets", res.Tickets)
 	}
