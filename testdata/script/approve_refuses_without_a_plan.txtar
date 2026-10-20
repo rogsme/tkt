@@ -1,0 +1,28 @@
+# tkt approve refuses unless the agent's last status is AWAITING_APPROVAL;
+# --force sends the approval anyway.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env 'FAKE_HERDR_SCREEN=Still reading the code.'
+! exec tkt approve ACM-12 --json
+rc 4
+envelope '.error.code' no_plan_to_approve
+envelope '.error.details.last_status' none
+! grep 'The plan is approved' $FAKE_DIR/prompts
+
+# A working agent has no plan to approve yet either.
+env 'FAKE_HERDR_SCREEN=Status: AWAITING_APPROVAL'
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+! exec tkt approve ACM-12
+rc 4
+stderr 'has no plan waiting for approval \(the agent is working'
+
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+env 'FAKE_HERDR_SCREEN=Status: BLOCKED'
+exec tkt approve ACM-12 --force
+grep 'The plan is approved' $FAKE_DIR/prompts
+
+# A dry run sends nothing.
+env 'FAKE_HERDR_SCREEN=Status: AWAITING_APPROVAL'
+exec tkt approve ACM-12 --dry-run --json
+envelope '[.result.actions[].argv[0:3] | join(" ")]' '["herdr agent prompt"]'

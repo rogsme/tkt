@@ -1,0 +1,32 @@
+# With no verdict at the head, tkt ls waits [review] bot_wait for the review
+# bot from the moment it first sees the head waiting, then suggests review-pr.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env FAKE_GH_PRS=$WORK/prs.json
+exec tkt ls --no-fetch
+stdout '^ACM-12 .*waiting_review .*wait for review$'
+
+mkdir $HOME/.config/tkt
+cp $WORK/fast.toml $HOME/.config/tkt/config.toml
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0].next.reason' awaiting_bot
+exec sleep 2
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0].next | [.reason, .text]' '["needs_review","tkt run ACM-12 review"]'
+envelope '.result.rows[0].phase' waiting_review
+
+# Without a bot, review-pr is next at once.
+cp $WORK/nobot.toml $HOME/.config/tkt/config.toml
+exec tkt ls --no-fetch
+stdout '^ACM-12 .*tkt run ACM-12 review$'
+
+-- fast.toml --
+[review]
+bot_wait = "1s"
+-- nobot.toml --
+[review]
+bot_wait = "0s"
+-- prs.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": []}]

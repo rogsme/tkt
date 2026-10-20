@@ -1,0 +1,14 @@
+tkt stats reads the history tkt keeps in ${XDG_STATE_HOME:-~/.local/state}/tkt/history.jsonl
+and shows, for this repository's tickets, how long each took from tkt start to
+the merge, how much of that it waited for you (a plan to approve, a question,
+the human verification), and how many address, sync and ci rounds it needed.
+Tickets still in progress show their time so far. The summary gives the
+median and the 90th percentile of the merged ones.
+
+tkt records the start and the merge exactly: the start when tkt start first
+starts the ticket, the merge from the forge when tkt done removes it. Time in
+each phase is as exact as the commands that watch it: tkt ls, tkt auto and the
+tkt agent's board record a phase when they see it change.
+
+The history outlives worktrees and only grows. Tickets started before tkt
+kept a history have no recorded start and are left out.

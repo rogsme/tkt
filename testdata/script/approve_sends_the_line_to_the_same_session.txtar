@@ -1,0 +1,26 @@
+# tkt approve types the approval into the planning session, which keeps the
+# plan, instead of starting a fresh one, and records it in the history.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env 'FAKE_HERDR_SCREEN=1. Do it.\nStatus: AWAITING_APPROVAL'
+resetlog
+exec tkt approve 12
+stdout '^ACM-12  plan approved  pane w1:p10; work-ticket runs in the same session$'
+grep '^The plan is approved. Use the work-ticket skill to execute it.$' $FAKE_DIR/prompts
+logged herdr agent prompt w1:p10 'The plan is approved. Use the work-ticket skill to execute it.' --wait
+! logged herdr agent start
+! logged herdr agent prompt w1:p10 /exit
+state $FAKE_WT_ROOT/ACM-12 stage work
+state $FAKE_WT_ROOT/ACM-12 rounds 0
+grep '"ticket":"ACM-12","event":"approved"' $HOME/.local/state/tkt/history.jsonl
+houserules
+
+# tkt run's planning refusal now points at tkt approve.
+exec tkt start ACM-13 --prompt-file $WORK/p13.txt
+! exec tkt run ACM-13 review --json
+envelope '.error.code' ticket_in_planning
+envelope '.error.hint' 'read the plan with tkt show ACM-13, then tkt approve ACM-13, or pass --force'
+
+-- p13.txt --
+Load the start-ticket skill and follow it for ACM-13.

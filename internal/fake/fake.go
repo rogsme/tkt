@@ -112,7 +112,12 @@ func GH() {
 			state = args[i+1]
 		}
 	}
-	b, err := os.ReadFile(os.Getenv("FAKE_GH_PRS"))
+	// Turns mode swaps the pull requests in $FAKE_DIR/prs.json as the agent
+	// works; otherwise $FAKE_GH_PRS names them.
+	b, err := os.ReadFile(filepath.Join(os.Getenv("FAKE_DIR"), "prs.json"))
+	if err != nil {
+		b, err = os.ReadFile(os.Getenv("FAKE_GH_PRS"))
+	}
 	if err != nil {
 		os.Exit(0)
 	}
@@ -163,6 +168,12 @@ func OpenCode() {
 			fmt.Println(a)
 		} else {
 			fmt.Println(`{"data":{}}`)
+		}
+	case args[1] == "GET" && strings.HasPrefix(args[2], "/api/session/") && strings.Contains(args[2], "/message"):
+		if b, err := os.ReadFile(os.Getenv("FAKE_OC_MESSAGES")); err == nil {
+			os.Stdout.Write(b)
+		} else {
+			fmt.Println(`{"data":[]}`)
 		}
 	case args[1] == "GET" && strings.HasPrefix(args[2], "/api/session"):
 		if b, err := os.ReadFile(os.Getenv("FAKE_OC_SESSIONS")); err == nil {

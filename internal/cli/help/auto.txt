@@ -1,0 +1,33 @@
+tkt auto drives one ticket through the lifecycle until it needs a person. It
+reads the same facts as tkt ls, then:
+
+  - starts the ticket when it has no worktree yet;
+  - waits while the agent works;
+  - approves the plan when start-ticket ends with AWAITING_APPROVAL, but only
+    with --approve-plan; without it the loop stops there for you;
+  - waits for CI, then gives the review bot [review] bot_wait to review the
+    new head;
+  - runs address on findings, sync when the base moved, ci when checks fail,
+    each in a fresh session, and review when the bot stays silent or says
+    CLEAR, because only review-pr gives READY_FOR_HUMAN and the human
+    verification steps;
+  - stops with success when review-pr's verdict at the head is
+    READY_FOR_HUMAN, or when the pull request is merged.
+
+It never merges, never runs verify, and never removes a worktree.
+
+It stops for you, with exit 4 and the code auto_stopped, when the agent asks a
+question or ends with Status: BLOCKED (needs_you), when the plan waits and
+--approve-plan is off (plan_awaits_approval), when no agent runs
+(agent_missing), after [auto] max_rounds fix runs since the plan's approval
+(round_limit), and when a step would repeat on the same head with nothing
+changed (no_progress). details.stop says which, and the hint what to do.
+
+At most [auto] max_parallel loops run at once in a repository; the others wait
+for a free slot and show as queued in tkt ls. A loop holds its slot until it
+stops. tkt auto --stop stops the loop at its next look. Ctrl-C ends it with
+exit 5 and leaves the ticket marked for auto, so tkt ls shows auto.wanted.
+
+--once takes at most one step and exits 0, saying what it did, what it waits
+for, or why it would stop. With --dry-run it prints the step instead.
+--notify shows a herdr notification when the loop stops.

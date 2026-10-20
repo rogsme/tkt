@@ -11,6 +11,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/harness"
 	"gitlab.com/rogs/tkt/internal/herdr"
+	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/prompt"
 )
 
@@ -164,6 +165,10 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 			return nil, err
 		}
 		c.save(ts, "ticket", id, "preset", preset.Name, "harness", h, "stage", stage, "tab", tab, "pane", pane, "agent", name, "status", "tab")
+		if !scratch && st["started"] == "" {
+			c.save(ts, "started", c.Now().UTC().Format(history.TimeFormat))
+			c.record(history.Event{Ticket: id, Event: history.Started})
+		}
 		if !c.Dry {
 			c.Agent.WaitPaneFree(c.Ctx, pane, 40)
 			p, err := c.H.PaneGet(c.Ctx, pane)

@@ -116,7 +116,8 @@ func newRoot(g *globals, envJSON bool) *cobra.Command {
 		Long: `tkt runs the mechanical steps around the rogs-skills ticket lifecycle: it creates
 the ticket's worktree, opens a herdr tab named after the ticket, starts Claude Code
 or OpenCode in it, and hands the agent its prompt. Each command is one step you
-take; nothing chains stages.
+take. tkt auto chains the steps for one ticket when you ask it to, and stops
+where a person decides: it never merges.
 
 Start with tkt help lifecycle. Programs that drive tkt want --json (tkt help
 json), tkt schema and tkt wait. tkt help exit-codes lists every error code, and
@@ -139,11 +140,11 @@ tkt help config describes the settings file.`,
 	)
 	root.SetHelpCommandGroupID("setup")
 	root.SetCompletionCommandGroupID("setup")
-	for _, c := range []*cobra.Command{startCmd(g), runCmd(g), resumeCmd(g), doneCmd(g)} {
+	for _, c := range []*cobra.Command{startCmd(g), approveCmd(g), sendCmd(g), autoCmd(g), runCmd(g), resumeCmd(g), doneCmd(g)} {
 		c.GroupID = "lifecycle"
 		root.AddCommand(c)
 	}
-	for _, c := range []*cobra.Command{lsCmd(g), waitCmd(g)} {
+	for _, c := range []*cobra.Command{lsCmd(g), showCmd(g), waitCmd(g), statsCmd(g)} {
 		c.GroupID = "inspect"
 		root.AddCommand(c)
 	}

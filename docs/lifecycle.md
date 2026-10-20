@@ -14,8 +14,8 @@ This page follows one ticket, `ACM-123`, from the tracker to a merged pull reque
 | Claude Code or OpenCode | The harness that runs a skill. tkt calls the pair of harness and model a preset. |
 | herdr | The terminal multiplexer. It holds one tab per ticket and knows whether each agent is working, blocked, idle or done. |
 | worktrunk (`wt`) | Creates and removes worktrees, and runs their hooks. |
-| tkt | Runs the mechanical steps between stages: worktrees, tabs, agent sessions, prompts and cleanup. |
-| You | Approve the plan, run the human verification steps, and authorize the merge. |
+| tkt | Runs the mechanical steps between stages: worktrees, tabs, agent sessions, prompts and cleanup. `tkt auto` chains them for a ticket you hand over. |
+| You | Approve the plan (or let `tkt auto --approve-plan` approve it), run the human verification steps, and merge. |
 
 ```mermaid
 flowchart LR
@@ -93,7 +93,7 @@ flowchart TD
   merge -->|Status: DONE| done
 ```
 
-Every arrow out of a stage is a status line or a verdict on the screen or the pull request. Every arrow into a stage is something you do: a tkt command or an answer in the tab. Nothing moves on its own. `tkt ls` reads the same facts and prints the next step for each ticket, and `tkt wait ACM-123` blocks until the agent finishes or needs you.
+Every arrow out of a stage is a status line or a verdict on the screen or the pull request. Every arrow into a stage is something you do: a tkt command or an answer in the tab. Nothing moves on its own unless you hand the ticket to `tkt auto`, which takes the same steps for you and stops where a person decides (see [Letting tkt auto drive](#letting-tkt-auto-drive)). `tkt ls` reads the same facts and prints the next step for each ticket, and `tkt wait ACM-123` blocks until the agent finishes or needs you.
 
 ## Step by step
 
@@ -141,7 +141,7 @@ The agent ends with `Status: AWAITING_APPROVAL`, and the tracker is unchanged.
 
 ### 4. You approve, and work-ticket builds
 
-Answer in the ticket's tab. Do not use `tkt run` here: it starts a fresh session, and the plan lives in this one. Ask for changes until the plan is right, then approve it. The same session goes on with `work-ticket`:
+Read the plan with `tkt show ACM-123`, which prints the agent's last message from its session's record. Ask for changes with `tkt send ACM-123 "what to change"` until the plan is right, then approve it with `tkt approve ACM-123`. Both type into the planning session, as an answer in the tab would. Do not use `tkt run` here: it starts a fresh session, and the plan lives in this one. The same session goes on with `work-ticket`:
 
 1. It posts the plan as an `## Approved implementation plan` comment and moves the ticket to `in-progress`.
 2. It implements the plan, test-first where the configuration says so, and commits each unit through `commit`.
@@ -182,7 +182,7 @@ Act on the verdict, then review again:
 
 ### 7. You verify
 
-When the verdict is `READY_FOR_HUMAN`, run the numbered steps in the review summary yourself. `tkt run ACM-123 verify` can have an agent run them in a browser and report what it saw for each one. It changes no code and posts nothing, and you still decide whether each step passed.
+When the verdict is `READY_FOR_HUMAN`, run the numbered steps in the review summary yourself; `tkt show ACM-123 --steps` prints them. `tkt run ACM-123 verify` can have an agent run them in a browser and report what it saw for each one. It changes no code and posts nothing, and you still decide whether each step passed.
 
 ### 8. finish-ticket merges
 
@@ -207,7 +207,28 @@ Before it merges, `finish-ticket` requires green CI for the exact head, a `READY
 tkt done ACM-123
 ```
 
-Run it from another tab. It confirms through `gh` that the pull request merged, closes the ticket's tabs, and removes the worktree through `wt remove`. It keeps the worktree, and says why, when the worktree has uncommitted changes, the branch tip is neither the merged head nor in the base, or an agent still works there. `tkt done --all` checks every ticket worktree at once.
+Run it from another tab. It confirms through `gh` that the pull request merged, closes the ticket's tabs, and removes the worktree through `wt remove`. It keeps the worktree, and says why, when the worktree has uncommitted changes, the branch tip is neither the merged head nor in the base, or an agent still works there. `tkt done --all` checks every ticket worktree at once. It also records the merge in tkt's history, so `tkt stats` can tell how long the ticket took from `tkt start` to the merge, and how much of that it waited for you.
+
+## Letting tkt auto drive
+
+`tkt auto ACM-123` takes the steps above for one ticket and stops where a person decides. It reads the same facts as `tkt ls`, so it does nothing you could not do by hand:
+
+| The ticket | tkt auto |
+|---|---|
+| Has no worktree yet | Runs `tkt start`. |
+| The agent works | Waits for it. |
+| `Status: AWAITING_APPROVAL` | Runs `tkt approve` with `--approve-plan`; without it, stops for you. |
+| Checks pending | Waits for CI. |
+| A new head with green CI and no review | Waits `[review] bot_wait` (15 minutes) for the review bot. |
+| Bot `FINDINGS` or `Verdict: CHANGES_REQUESTED` | Runs `tkt run ACM-123 address`. |
+| Bot `STALE_BASE`, a conflict, or `BLOCKED_FOR_SYNC` behind the base | Runs `tkt run ACM-123 sync`. |
+| Checks fail | Runs `tkt run ACM-123 ci`. |
+| Bot `CLEAR`, or no bot review in time | Runs `tkt run ACM-123 review`, because only review-pr gives `READY_FOR_HUMAN` and the human verification steps. |
+| `Verdict: READY_FOR_HUMAN` at the head | Stops: the ticket is yours to verify and merge. |
+
+It also stops, with exit 4 and `auto_stopped`, when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. At most `[auto] max_parallel` loops (3) run at once in a repository; the others wait, queued.
+
+`tkt agent` opens a chat that does all of this for many tickets at once: you say "start ACM-123 in auto", get the prompt back, and hear from it only when a ticket needs you.
 
 ## Who changes the tracker
 
@@ -236,7 +257,7 @@ stateDiagram-v2
 - Only `finish-ticket` merges, and only when you say so.
 - Every claim that CI passed, the change was reviewed, or the steps were verified names the exact head, and that head contains the current base.
 - Branches take the base by merging it. Nothing rebases or force-pushes a published branch.
-- The skills never start one another. tkt suggests the next step in `tkt ls`, but you run it.
+- The skills never start one another. tkt suggests the next step in `tkt ls`; you run it, or `tkt auto` runs it for a ticket you hand over. `tkt auto` never merges.
 
 ## When something stops
 

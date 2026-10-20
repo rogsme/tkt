@@ -1,0 +1,10 @@
+tkt approve tells the ticket's planning session that you approve its plan. The
+same session then goes on with work-ticket, so the plan it wrote stays in its
+context. tkt run would start a fresh session and lose it.
+
+Read the plan first with tkt show ID. tkt approve refuses unless the agent is
+idle and its last status line since your last message is
+Status: AWAITING_APPROVAL; --force sends the approval anyway. To ask for
+changes instead, use tkt send ID "what to change".
+
+tkt approve resets the round count that tkt auto caps.

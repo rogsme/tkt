@@ -1,0 +1,12 @@
+tkt send types text into the ticket's running session and waits until the
+agent takes it. The session keeps its whole conversation, so use it to ask for
+changes to a plan, or to answer a question the agent asked in its last
+message.
+
+It refuses while the agent works (tkt wait blocks until it is done) and while
+it waits in its own dialog, such as a question with options: typed text does
+not reach that dialog, so answer it in the ticket's tab. tkt show ID --screen
+prints what the dialog asks.
+
+To start a stage in a fresh session instead, use tkt run. To approve a plan,
+use tkt approve.

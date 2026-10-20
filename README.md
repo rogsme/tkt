@@ -7,7 +7,7 @@
 - starts Claude Code or OpenCode in that tab;
 - hands the agent its prompt.
 
-Each command is one step you take. Nothing chains stages together: you still approve plans, run the human verification steps and merge, and `tkt ls` only suggests the next command.
+Each command is one step you take, and `tkt ls` suggests the next one. When you want, `tkt auto` takes the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
 
 People and programs both drive tkt. Every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
 
@@ -70,18 +70,23 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | Command | What it does |
 |---|---|
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
+| `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
+| `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan. |
+| `tkt auto ID` | Drives the ticket until it needs you: approves the plan with `--approve-plan`, waits for CI and the review bot, runs review and the fixes, and stops at `READY_FOR_HUMAN`. |
 | `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address`, `sync`, `ci`, `verify` or `start`. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
 | `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees. `--all` checks every ticket worktree. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
+| `tkt show ID` | Prints the agent's last message, such as the plan; `--screen` its live screen; `--steps` the human verification steps. |
 | `tkt wait ID` | Blocks until the ticket's agent needs you or has finished. |
+| `tkt stats` | Shows how long tickets took from start to merge, and how long they waited for you. |
 | `tkt doctor` | Checks the tools, versions and configuration tkt needs. |
 | `tkt schema` | Describes every command, flag, result and error code as JSON. |
 
 A ticket from start to merge, in short:
 
 1. Run `tkt start ACM-12`, or pipe in the dispatcher's block with `tkt start --prompt -`.
-2. Approve the plan in the ticket's tab.
+2. Read the plan with `tkt show ACM-12`, then `tkt approve ACM-12`.
 3. When the agent reports `Status: READY_FOR_REVIEW`, run `tkt run ACM-12 review`.
 4. Act on the verdict with `address` or `sync`, and review again.
 5. Verify, merge in the tab, then run `tkt done ACM-12`.
@@ -106,6 +111,12 @@ serves = ["small"]
 
 [stages]
 lint = "Run the linter on {id} and fix what it reports."
+
+[review]
+bot_wait = "15m"   # how long a new head waits for the review bot; "0s" without one
+
+[auto]
+max_parallel = 3   # tkt auto loops at once in a repository
 ```
 
 Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. `tkt help config` has the details.
@@ -121,7 +132,9 @@ Without the file, tkt runs Claude Code and OpenCode on their default models. The
 
 ### State and logs
 
-tkt keeps each ticket's state (preset, session, tab, pane) in the worktree's git directory, so it disappears with the worktree. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. `-v` prints the same lines as tkt goes.
+tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. `-v` prints the same lines as tkt goes.
+
+What has to outlive a worktree goes to `~/.local/state/tkt/history.jsonl`, one JSON event per line: when tkt started a ticket, each phase it saw it enter, each stage, each `tkt auto` step, and the merge. `tkt stats` reads it.
 
 ## Development
 

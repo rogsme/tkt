@@ -11,6 +11,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/harness"
 	"gitlab.com/rogs/tkt/internal/herdr"
+	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/prompt"
 )
 
@@ -105,7 +106,7 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 	if st["stage"] == "start" && !o.Force && c.Git.Count(c.Ctx, path, "refs/remotes/"+c.LC.Forge.Remote+"/"+c.LC.Forge.Base+"..HEAD") <= 0 && c.Git.Clean(c.Ctx, path) {
 		return nil, apperr.New(apperr.TicketInPlanning,
 			"%s is still in planning (no commits yet); its agent may be waiting for plan approval. Pass --force to replace it", id).
-			WithHint("answer the agent in its tab, or pass --force")
+			WithHint("read the plan with tkt show %s, then tkt approve %s, or pass --force", id, id)
 	}
 	if err := c.lockTicket(id); err != nil {
 		return nil, err
@@ -167,6 +168,7 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 		return nil, sendErr("sending the stage line failed", err)
 	}
 	c.save(ts, "status", "submitted")
+	c.record(history.Event{Ticket: id, Event: history.Stage, Stage: stage})
 	res.Actions = c.Plan
 	return res, nil
 }

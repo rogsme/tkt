@@ -22,5 +22,5 @@ config.toml can change these lines or add stages (tkt help config).
 tkt run refuses while the agent works or waits for your answer (tkt wait
 blocks until it is done). It also refuses while the ticket is still in
 planning, because that agent may hold a plan waiting for your approval;
-approve it in the tab instead. --force replaces it anyway, and also replaces
+approve it with tkt approve instead. --force replaces it anyway, and also replaces
 an agent in a state tkt does not recognize.

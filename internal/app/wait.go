@@ -24,6 +24,8 @@ type WaitOpts struct {
 	Until   []string
 	Timeout time.Duration
 	Pane    string
+	// Notify shows a herdr notification when the wait ends.
+	Notify bool
 }
 
 // WaitResult is the agent's state when the wait ended.
@@ -76,34 +78,9 @@ func (a *App) Wait(ctx context.Context, o WaitOpts) (*WaitResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	agents, err := c.H.Agents(c.Ctx)
+	target, err := c.ticketAgent(id, path, o.Pane, ts.st)
 	if err != nil {
-		return nil, herdrErr(err)
-	}
-	inPath := herdr.AgentsInPath(agents, path)
-	var target herdr.Agent
-	switch {
-	case o.Pane != "":
-		i := slices.IndexFunc(inPath, func(ag herdr.Agent) bool { return ag.PaneID == o.Pane })
-		if i < 0 {
-			return nil, apperr.New(apperr.AgentMissing, "no agent of %s runs in pane %s", id, o.Pane).WithHint("tkt ls %s", id)
-		}
-		target = inPath[i]
-	case len(inPath) == 0:
-		return nil, apperr.New(apperr.AgentMissing, "no agent runs for %s", id).WithHint("tkt resume %s", id)
-	case len(inPath) == 1:
-		target = inPath[0]
-	default:
-		i := slices.IndexFunc(inPath, func(ag herdr.Agent) bool { return ag.PaneID == ts.st["pane"] })
-		if i < 0 {
-			panes := make([]string, len(inPath))
-			for j, ag := range inPath {
-				panes[j] = ag.PaneID
-			}
-			return nil, apperr.New(apperr.AmbiguousPane, "%d agents run in %s; pick one with --pane (%s)", len(inPath), path, strings.Join(panes, ", ")).
-				WithHint("pass --pane %s", panes[0]).With("panes", panes)
-		}
-		target = inPath[i]
+		return nil, err
 	}
 	wctx := c.Ctx
 	if o.Timeout > 0 {
@@ -129,7 +106,38 @@ func (a *App) Wait(ctx context.Context, o WaitOpts) (*WaitResult, error) {
 	}
 	res.Status = status
 	if status == herdr.Idle || status == herdr.Done {
-		res.LastStatus = agent.LastStatus(c.H.Read(c.Ctx, target.PaneID, 40))
+		target.Status = status
+		turn, _ := c.lastTurn(c.Ctx, &target, ts.st, path)
+		res.LastStatus = agent.LastStatus(turn.All)
+	}
+	if o.Notify {
+		c.notify(id, waitNotice(res))
 	}
 	return res, nil
+}
+
+// waitNotice says why a wait ended, for its notification.
+func waitNotice(r *WaitResult) notice {
+	if r.Status == herdr.Blocked {
+		return notice{"needs you", "the agent asks a question in its tab", "request"}
+	}
+	if r.LastStatus != "" {
+		return notice{"finished", "Status: " + r.LastStatus, "done"}
+	}
+	return notice{"finished", "the agent is " + r.Status, "done"}
+}
+
+// notice is a herdr notification about a ticket.
+type notice struct{ title, body, sound string }
+
+// notify shows a notification about a ticket. A failed notification is a
+// warning: the result already says what happened.
+func (c *Ctx) notify(id string, n notice) {
+	if c.Dry {
+		c.Would(herdr.NotifyArgv(id+": "+n.title, n.body, n.sound))
+		return
+	}
+	if err := c.H.Notify(c.Ctx, id+": "+n.title, n.body, n.sound); err != nil {
+		c.UI.Warn("could not show a notification: %v", err)
+	}
 }

@@ -1,0 +1,21 @@
+# tkt ls records each ticket's phase when it changes, once, in the worktree
+# and in the history that tkt stats reads.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+grep -count=1 '"ticket":"ACM-12","event":"started"' $HOME/.local/state/tkt/history.jsonl
+env 'FAKE_HERDR_SCREEN=Status: AWAITING_APPROVAL'
+exec tkt ls --no-fetch
+stdout '^ACM-12 .*awaiting_approval +[0-9]+s +read the plan'
+exec tkt ls --no-fetch
+grep -count=1 '"event":"phase","phase":"awaiting_approval"' $HOME/.local/state/tkt/history.jsonl
+
+env 'FAKE_HERDR_SCREEN=Status: BLOCKED'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .stage, .launch, .auto.wanted, .auto.running]' '["needs_you","start","submitted",false,false]'
+grep -count=1 '"event":"phase","phase":"needs_you","from":"awaiting_approval"' $HOME/.local/state/tkt/history.jsonl
+
+# Outside herdr, tkt ls cannot see the agent and records nothing.
+env HERDR_ENV=
+exec tkt ls --no-fetch
+! grep '"phase":"no_agent"' $HOME/.local/state/tkt/history.jsonl

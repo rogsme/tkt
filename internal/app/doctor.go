@@ -284,7 +284,7 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 		if a.Getenv("HERDR_ENV") == "1" && a.Getenv("HERDR_WORKSPACE_ID") != "" {
 			return Check{ID: "herdr_env", Status: CheckOK, Message: "inside herdr workspace " + a.Getenv("HERDR_WORKSPACE_ID")}
 		}
-		return Check{ID: "herdr_env", Status: CheckWarn, Message: "not inside a herdr pane; start, run, resume, done and wait need one",
+		return Check{ID: "herdr_env", Status: CheckWarn, Message: "not inside a herdr pane; start, approve, send, auto, run, resume, done, show and wait need one",
 			Hint: "open a herdr pane and run tkt there"}
 	})
 	add(func() Check {

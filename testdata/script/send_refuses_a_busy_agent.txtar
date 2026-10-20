@@ -1,0 +1,33 @@
+# tkt send types text into the ticket's running session, and refuses an
+# agent that works or waits in its own dialog.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+resetlog
+exec tkt send ACM-12 'Keep the old endpoint and drop step 4.'
+stdout '^ACM-12  sent  pane w1:p10  agent acm-12$'
+grep '^Keep the old endpoint and drop step 4.$' $FAKE_DIR/prompts
+! logged herdr agent start
+
+stdin $WORK/answer.md
+exec tkt send ACM-12 --prompt -
+grep '^Use the second option.$' $FAKE_DIR/prompts
+
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "blocked"'
+! exec tkt send ACM-12 'hello' --json
+rc 4
+envelope '.error.code' agent_busy
+envelope '.error.details.status' blocked
+
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+! exec tkt send ACM-12 'hello' --json
+rc 4
+envelope '.error.hint' 'tkt wait ACM-12'
+
+! exec tkt send ACM-12
+rc 2
+! exec tkt send ACM-12 'a' --prompt 'b'
+rc 2
+
+-- answer.md --
+Use the second option.

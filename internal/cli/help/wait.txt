@@ -1,6 +1,7 @@
 tkt wait blocks until the ticket's agent is idle, blocked or done, that is,
 until it has finished or needs you, then prints its state and the last
-Status: line on its screen. --until picks other states.
+Status: line it wrote since your last message. --until picks other states.
 
 A program that drives tkt waits with it instead of polling tkt ls. With
 --timeout, a wait that runs out ends with exit 4 and the code wait_timeout.
+--notify shows a herdr notification when the wait ends.

@@ -1,0 +1,51 @@
+# tkt show prints the agent's last message from its session's own record, so
+# a plan that scrolled off the screen still shows, and tkt ls reads the last
+# status from the same record.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+statevar $FAKE_WT_ROOT/ACM-12 session SID
+claudedir CD $FAKE_WT_ROOT/ACM-12
+mkdir $CD
+cp $WORK/transcript.jsonl $CD/$SID.jsonl
+env 'FAKE_HERDR_SCREEN=Status: BLOCKED'
+exec tkt show ACM-12
+stdout '^Here is the plan\.$'
+stdout '^Status: AWAITING_APPROVAL$'
+! stdout BLOCKED
+exec tkt show ACM-12 --json
+envelope '.result | [.view, .source, .last_status, .at]' '["message","transcript","AWAITING_APPROVAL","2026-01-01T10:00:06Z"]'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.last_status, .phase, .idle_since]' '["AWAITING_APPROVAL","awaiting_approval","2026-01-01T10:00:06Z"]'
+
+# --screen prints the live screen instead.
+exec tkt show ACM-12 --screen
+stdout '^Status: BLOCKED$'
+
+# Without a transcript, the recent output stands in.
+rm $CD/$SID.jsonl
+exec tkt show ACM-12 --json
+envelope '.result | [.source, .last_status]' '["screen","BLOCKED"]'
+logged herdr agent read w1:p10 --source recent --lines 200
+
+# OpenCode's last message comes from its API.
+exec tkt start ACM-13 --as opencode --prompt-file $WORK/p13.txt
+env FAKE_OC_MESSAGES=$WORK/messages.json
+exec tkt show ACM-13 --json
+envelope '.result | [.source, .harness, .session, .last_status, .message]' '["api","opencode","ses_fake1","READY_FOR_REVIEW","Pull request opened.\nStatus: READY_FOR_REVIEW"]'
+logged opencode api GET '/api/session/ses_fake1/message?limit=50'
+
+-- p13.txt --
+Use the start-ticket skill for ACM-13.
+-- transcript.jsonl --
+{"type":"user","timestamp":"2026-01-01T10:00:00.000Z","message":{"role":"user","content":"Use the start-ticket skill to start ticket ACM-12."}}
+{"type":"assistant","timestamp":"2026-01-01T10:00:02.000Z","message":{"id":"m1","role":"assistant","content":[{"type":"tool_use","name":"Read"}]}}
+{"type":"user","timestamp":"2026-01-01T10:00:03.000Z","message":{"role":"user","content":[{"type":"tool_result","content":"x"}]}}
+{"type":"assistant","timestamp":"2026-01-01T10:00:05.000Z","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"Here is the plan."}]}}
+{"type":"assistant","timestamp":"2026-01-01T10:00:06.000Z","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"1. Do it.\n\nStatus: AWAITING_APPROVAL"}]}}
+-- messages.json --
+{"data":[
+ {"id":"m3","type":"assistant","finish":"stop","time":{"created":1767261600000},"content":[{"type":"text","text":"Pull request opened.\nStatus: READY_FOR_REVIEW"}]},
+ {"id":"m2","type":"user","text":"The plan is approved."},
+ {"id":"m1","type":"assistant","finish":"stop","content":[{"type":"text","text":"Status: AWAITING_APPROVAL"}]}
+]}

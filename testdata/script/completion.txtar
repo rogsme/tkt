@@ -11,6 +11,13 @@ stdout '^ACM-12$'
 ! stdout chore
 stdout '^:4$'
 
+exec tkt __complete approve ''
+stdout '^ACM-12$'
+exec tkt __complete auto ''
+stdout '^ACM-12$'
+exec tkt __complete show ACM-12 --pane ''
+stdout '^:4$'
+
 exec tkt __complete run ACM-12 ''
 stdout '^address\tUse the address-pr-review skill'
 stdout '^verify\t'

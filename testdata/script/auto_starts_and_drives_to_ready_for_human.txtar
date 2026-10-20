@@ -1,0 +1,41 @@
+# tkt auto --approve-plan starts a ticket that has no worktree, approves its
+# plan, runs review-pr when no bot reviews the head, and stops with success at
+# READY_FOR_HUMAN. The fake agent ends each turn as turns.json says.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+jqedit $WORK/turns.json 'map(if .prs then .prs = $WORK + "/" + .prs else . end)'
+env FAKE_HERDR_TURNS=$WORK/turns.json
+exec tkt auto ACM-12 --approve-plan --poll 1s --json
+envelope '.result | [.stop, .phase, .rounds]' '["ready_for_human","ready_for_human",0]'
+envelope '[.result.steps[] | .action + ":" + (.stage // "")]' '["start:","approve:","run:review"]'
+exec cat $FAKE_DIR/prompts
+stdout -count=1 'Use the start-ticket skill to start ticket ACM-12.'
+stdout -count=1 'The plan is approved. Use the work-ticket skill to execute it.'
+stdout -count=1 'Use the review-pr skill to review the current PR.'
+state $FAKE_WT_ROOT/ACM-12 auto ''
+state $FAKE_WT_ROOT/ACM-12 auto_stop ready_for_human
+state $FAKE_WT_ROOT/ACM-12 stage review
+grep '"event":"auto","action":"approve"' $HOME/.local/state/tkt/history.jsonl
+grep '"event":"auto","stop":"ready_for_human"' $HOME/.local/state/tkt/history.jsonl
+houserules
+
+# Once there, a single step has nothing left to do.
+exec tkt auto ACM-12 --once --json
+envelope '.result | [.stop, .did]' '["ready_for_human",null]'
+
+-- config.toml --
+[review]
+bot_wait = "0s"
+-- turns.json --
+[
+  {"screen": "1. Do it.\nStatus: AWAITING_APPROVAL"},
+  {"screen": "Pull request opened.\nStatus: READY_FOR_REVIEW", "prs": "prs1.json"},
+  {"screen": "Review posted.\nStatus: READY_FOR_HUMAN", "prs": "prs2.json"}
+]
+-- prs1.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": []}]
+-- prs2.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]

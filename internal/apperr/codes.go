@@ -81,6 +81,10 @@ const (
 	TicketsKept         Code = "tickets_kept"
 	WaitTimeout         Code = "wait_timeout"
 	UpdateDevBuild      Code = "update_dev_build"
+	NoPlanToApprove     Code = "no_plan_to_approve"
+	NoVerification      Code = "no_verification_steps"
+	AutoRunning         Code = "auto_running"
+	AutoStopped         Code = "auto_stopped"
 
 	WtFailed          Code = "wt_failed"
 	WtSwitchFailed    Code = "wt_switch_failed"
@@ -164,6 +168,10 @@ var Registry = []Info{
 	{TicketsKept, ExitState, "tkt done kept one or more tickets"},
 	{WaitTimeout, ExitState, "the agent did not reach a requested state in time"},
 	{UpdateDevBuild, ExitState, "this tkt is a development build; tkt update replaces it only with --force"},
+	{NoPlanToApprove, ExitState, "the agent's last status is not AWAITING_APPROVAL, so there is no plan to approve"},
+	{NoVerification, ExitState, "no review says READY_FOR_HUMAN at the pull request's head with Human verification steps"},
+	{AutoRunning, ExitState, "a tkt auto loop already drives the ticket"},
+	{AutoStopped, ExitState, "tkt auto stopped because the ticket needs a person; details.stop says why"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},

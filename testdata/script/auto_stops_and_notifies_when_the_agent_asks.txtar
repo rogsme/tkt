@@ -1,0 +1,37 @@
+# tkt auto stops for a person with exit 4 and auto_stopped, says why in
+# details.stop, and with --notify shows a herdr notification.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "blocked"'
+! exec tkt auto ACM-12 --notify --json
+rc 4
+envelope '.error.code' auto_stopped
+envelope '.error.details | [.stop, .phase, .next.reason]' '["needs_you","needs_you","agent_blocked"]'
+envelope '.error.hint' 'answer the agent in its tab (tkt show ACM-12 --screen), then tkt auto ACM-12'
+logged herdr notification show 'ACM-12: needs you'
+state $FAKE_WT_ROOT/ACM-12 auto ''
+state $FAKE_WT_ROOT/ACM-12 auto_stop needs_you
+
+# Without --approve-plan, a plan waiting for approval stops the loop.
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+env 'FAKE_HERDR_SCREEN=Status: AWAITING_APPROVAL'
+! exec tkt auto ACM-12
+rc 4
+stderr 'tkt auto stopped ACM-12: plan_awaits_approval'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0].auto | [.wanted, .running, .stop]' '[false,false,"plan_awaits_approval"]'
+
+# --once --dry-run says what one step would do, and does nothing.
+resetlog
+exec tkt auto ACM-12 --once --dry-run --approve-plan --json
+envelope '.result | [.did.action, .dry_run]' '["approve",true]'
+envelope '[.result.actions[].argv[0:3] | join(" ")]' '["herdr agent prompt"]'
+! logged herdr agent prompt
+! exec tkt auto ACM-12 --dry-run
+rc 2
+
+# --stop clears the ticket's auto mark.
+exec tkt auto ACM-12 --stop --json
+envelope '.result.stop' stopped
+state $FAKE_WT_ROOT/ACM-12 auto_stop stopped

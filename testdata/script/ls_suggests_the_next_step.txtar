@@ -23,7 +23,7 @@ stdout '^ACM-1 .*CLEAR.*tkt run ACM-1 verify'
 stdout '^ACM-1 .*ok 1'
 stdout '^ACM-2 .*CHANGES_REQUESTED.*tkt run ACM-2 address'
 stdout '^ACM-3 .*#3 merged.*tkt done ACM-3'
-stdout '^ACM-4 .*AWAITING_APPROVAL.*approve the plan in its tab'
+stdout '^ACM-4 .*AWAITING_APPROVAL.*awaiting_approval .*read the plan with tkt show ACM-4, then tkt approve ACM-4'
 ! stdout main
 
 # A failed pull request query shows ? and exits 1.

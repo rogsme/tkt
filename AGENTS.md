@@ -13,6 +13,8 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 - `internal/fake` holds the fake herdr, wt, gh, opencode, claude and git that the black-box tests put on PATH.
 - `internal/contract` holds what tkt reads from the skills repository, with verbatim fixtures in `testdata/`.
 - The other `internal/` packages each wrap one outside system: `gitx`, `wt` (worktrunk), `herdr`, `harness` (Claude Code and OpenCode), `forge` (gh), and the agent flows in `agent`.
+- `internal/history` appends ticket events to `$XDG_STATE_HOME/tkt/history.jsonl`, the one file that outlives worktrees, and builds the timelines `tkt stats` shows. A failed history write is a warning, never a failure.
+- `internal/app/next.go` holds the one rule list: `NextStep` gives `tkt ls` its next step and a stable `reason`, and `PhaseOf` names the phase. `tkt auto` (`auto.go`) maps the same reasons to actions in `autoStep`; keep the two in step.
 
 ## Rules
 
