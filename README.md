@@ -81,6 +81,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt show ID` | Prints the agent's last message, such as the plan; `--screen` its live screen; `--steps` the human verification steps. |
 | `tkt wait ID` | Blocks until the ticket's agent needs you or has finished. |
 | `tkt stats` | Shows how long tickets took from start to merge, and how long they waited for you. |
+| `tkt history ID...` | Shows what happened to tickets, merged ones too: each event with its time, and the pull request's commits and reviews. |
 | `tkt doctor` | Checks the tools, versions and configuration tkt needs. |
 | `tkt schema` | Describes every command, flag, result and error code as JSON. |
 
@@ -104,6 +105,8 @@ The chat stays apart from any pi you run yourself. It loads only tkt's own exten
 
 Say what you want in plain words, such as "start ACM-12", "run ACM-13 to ACM-15 in auto with sol", "I approved the plan for ACM-12, continue" or "ACM-12 is merged, remove it". Starting tickets and stages runs in the background and the prompt comes back at once, so you can start the next ticket while the first one plans. A board pinned to the top of the chat shows every ticket, and on top what needs you: a plan to approve, a question from its agent, a pull request ready for human verification, or a `tkt auto` loop that paused for you. An item leaves the board as soon as its ticket moves on, so the chat stays clean; each new one also shows a herdr notification. Tickets in auto run in `tkt auto` loops that outlive the chat, and a loop that paused for you goes on by itself once you act.
 
+Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what failed in ACM-12 and ACM-13?". The chat reads `tkt history`: each step with its time, and the pull request's commits and reviews with the review bot's findings.
+
 | Command | What it does |
 |---|---|
 | `/start ID... [auto \| after-plan] [as PRESET]` | Starts tickets: by hand, in full auto, or in auto once you approve the plan, on a preset you name. |
@@ -113,6 +116,7 @@ Say what you want in plain words, such as "start ACM-12", "run ACM-13 to ACM-15 
 | `/send ID TEXT`, `/show ID`, `/peek ID` | Talks to the ticket's agent, prints its last message, or watches its live screen. |
 | `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. |
 | `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
+| `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |
 
 Without an `[agent]` model, pi starts on its own default: in `/model`, press Ctrl+S on a model to make it the default for new chats. An `[agent]` table in `config.toml` picks the model and loads more pi extensions, such as one that adds a model provider:
@@ -164,7 +168,7 @@ Without the file, tkt runs Claude Code and OpenCode on their default models. The
 
 tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. `-v` prints the same lines as tkt goes.
 
-What has to outlive a worktree goes to `~/.local/state/tkt/history.jsonl`, one JSON event per line: when tkt started a ticket, each phase it saw it enter, each stage, each `tkt auto` step, and the merge. `tkt stats` reads it.
+What has to outlive a worktree goes to `~/.local/state/tkt/history.jsonl`, one JSON event per line: when tkt started a ticket, each phase it saw it enter, each stage, each `tkt auto` step, and the merge. `tkt stats` and `tkt history` read it.
 
 ## Development
 

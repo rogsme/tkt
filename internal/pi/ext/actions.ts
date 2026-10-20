@@ -6,7 +6,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Attention } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
 import type { Envelope } from "./model.ts";
-import { fixPrompt, statsText, tally, type Mark, type StatsResult } from "./report.ts";
+import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
 export type Mode = "manual" | "auto" | "auto_after_plan";
@@ -142,6 +142,14 @@ export async function stats(hub: Hub, ids: string[], sinceDays?: number): Promis
 	const env = await hub.tkt<StatsResult>(args);
 	if (!env.ok || !env.result) return failure("stats", env);
 	return statsText(env.result);
+}
+
+/** history reads what happened to tickets. bodies adds each review's
+ * findings, for the model. */
+export async function history(hub: Hub, ids: string[], bodies: boolean): Promise<string> {
+	const env = await hub.tkt<HistoryResult>(["history", ...ids]);
+	if (!env.ok || !env.result) return failure(ids.join(", "), env);
+	return historyText(env.result, bodies);
 }
 
 /** failure says why tkt refused, with its reasons, once: tkt's messages

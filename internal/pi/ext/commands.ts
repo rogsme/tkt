@@ -167,6 +167,16 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		},
 	});
 
+	pi.registerCommand("history", {
+		description: "What happened to tickets, merged ones too: events, commits and reviews: /history ACM-12 [ACM-13 ...]",
+		getArgumentCompletions: ids,
+		handler: async (args, ctx) => {
+			const list = expandIds(args, hub.key);
+			if (list.length === 0) return ctx.ui.notify("usage: /history ACM-12 [ACM-13 ...]", "warning");
+			say(await act.history(hub, list, false));
+		},
+	});
+
 	pi.registerCommand("stats", {
 		description: "How long tickets took from start to merge: /stats [ACM-12 ...]",
 		getArgumentCompletions: ids,

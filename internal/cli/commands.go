@@ -437,7 +437,7 @@ func statsCmd(g *globals) *cobra.Command {
 		Example: `  tkt stats
   tkt stats --since 720h
   tkt stats ACM-12 --json`,
-		SuggestFor:        []string{"history", "metrics"},
+		SuggestFor:        []string{"metrics"},
 		ValidArgsFunction: g.completeTickets(true),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.IDs = args
@@ -448,6 +448,30 @@ func statsCmd(g *globals) *cobra.Command {
 	cmd.Flags().DurationVar(&o.Since, "since", 0, "only tickets started within DURATION, such as 720h for 30 days")
 	cmd.Flags().BoolVar(&o.AllRepos, "all-repos", false, "include the tickets of every repository in the history")
 	return cmd
+}
+
+func historyCmd(g *globals) *cobra.Command {
+	var o app.HistoryOpts
+	return &cobra.Command{
+		Use:   "history ID...",
+		Short: "Show what happened to tickets: their events, commits and reviews",
+		Long:  helpText("history"),
+		Example: `  tkt history ACM-12
+  tkt history ACM-12 ACM-13 --json`,
+		SuggestFor:        []string{"log", "timeline", "recap"},
+		ValidArgsFunction: g.completeTickets(true),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return usage("usage: tkt history ID...")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.IDs = args
+			res, err := g.app().History(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
 }
 
 func doctorCmd(g *globals) *cobra.Command {

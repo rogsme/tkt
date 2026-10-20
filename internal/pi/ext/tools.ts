@@ -195,6 +195,23 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerTool({
+		name: "tkt_history",
+		label: "tkt history",
+		description:
+			"Read what happened to tickets, merged ones too: each event from start to merge with its time (phases, the plan's approval, stage runs, tkt auto's steps and pauses), the time spent waiting on the user, the rounds, and each pull request's commits and reviews with the review bot's findings. Use it to say how a ticket went, what failed and what went well.",
+		parameters: Type.Object({ tickets: Type.Array(ticket, { minItems: 1 }) }),
+		executionMode: "sequential",
+		async execute(_id, p) {
+			const ids = [...new Set(p.tickets.flatMap((t) => {
+				const many = expandIds(t, hub.key);
+				return many.length > 0 ? many : [id(t)];
+			}))];
+			const out = await act.history(hub, ids, true);
+			return text(out.length > 40000 ? `${out.slice(0, 40000)}\n[cut at 40000 characters; ask about fewer tickets for the rest]` : out);
+		},
+	});
+
+	pi.registerTool({
 		name: "ask_user",
 		label: "Question",
 		description: "Ask the user one question with fixed answers whenever a request is ambiguous: which ticket, which mode, what to do next. The user can also type an answer.",

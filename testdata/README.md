@@ -91,3 +91,4 @@ After a change to the extension in `internal/pi/ext`, run `just install`, then `
 7. When the review bot clears the head, the ticket is ready: `/check` offers verify first, then the checklist, with the steps from the pull request's body. Mark a step failed and start a fix session, then mark them all passed.
 8. Leave an uncommitted file in a merged ticket's worktree, then say "ACM-1 is merged, remove it". The chat confirms first, then says the worktree has uncommitted changes. Clean it up and ask again: it reports the time from start to merge, and `/stats` lists it.
 9. Quit the chat while an auto ticket works and open `tkt agent` again: the ticket kept moving, and the board shows where it is.
+10. Ask "how did ACM-1 go?": the answer names the reviews' findings and the commits that fixed them, from `tkt history`.

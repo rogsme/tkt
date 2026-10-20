@@ -37,6 +37,20 @@ type PR struct {
 	MergedAt          string   `json:"mergedAt"`
 	// Body is read only by ListBodies.
 	Body string `json:"body"`
+	// Title, URL, the size and the commits are read only by ListHistory.
+	Title        string   `json:"title"`
+	URL          string   `json:"url"`
+	Additions    int      `json:"additions"`
+	Deletions    int      `json:"deletions"`
+	ChangedFiles int      `json:"changedFiles"`
+	Commits      []Commit `json:"commits"`
+}
+
+// Commit is a commit of a pull request.
+type Commit struct {
+	Oid             string `json:"oid"`
+	MessageHeadline string `json:"messageHeadline"`
+	CommittedDate   string `json:"committedDate"`
 }
 
 // Check is a check run (Name, Status, Conclusion) or a commit status
@@ -56,6 +70,9 @@ type Review struct {
 	Commit      *struct {
 		Oid string `json:"oid"`
 	} `json:"commit"`
+	Author *struct {
+		Login string `json:"login"`
+	} `json:"author"`
 }
 
 func (g GH) list(ctx context.Context, args ...string) ([]PR, error) {
@@ -97,6 +114,13 @@ func (g GH) ListHead(ctx context.Context, branch string, full bool) ([]PR, error
 		fields += ",mergeable,statusCheckRollup,reviews"
 	}
 	return g.list(ctx, "--head", branch, "--state", "all", "--limit", "100", "--json", fields)
+}
+
+// ListHistory returns every pull request whose head is branch, with what
+// tkt history shows: the title, the size, the commits and the reviews.
+func (g GH) ListHistory(ctx context.Context, branch string) ([]PR, error) {
+	return g.list(ctx, "--head", branch, "--state", "all", "--limit", "20", "--json",
+		"number,state,title,url,headRefName,headRefOid,headRepository,createdAt,mergedAt,additions,deletions,changedFiles,commits,reviews")
 }
 
 // Mine keeps the pull requests whose head is branch in this repository, not

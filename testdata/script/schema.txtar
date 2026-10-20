@@ -1,7 +1,7 @@
 # tkt schema describes the commands for programs; it works anywhere.
 cd $WORK
 exec tkt schema --json
-envelope '[.result.commands[].path]' '["agent","start","approve","send","auto","run","resume","done","ls","show","wait","stats","doctor","schema","update","completion bash","completion zsh","completion fish","completion powershell"]'
+envelope '[.result.commands[].path]' '["agent","start","approve","send","auto","run","resume","done","ls","show","wait","stats","history","doctor","schema","update","completion bash","completion zsh","completion fish","completion powershell"]'
 envelope '.result.commands[] | select(.path == "run") | [.args[] | "\(.name):\(.required)"]' '["ID:true","STAGE:false"]'
 envelope '.result.commands[] | select(.path == "ls") | .result.rows[0].next' '{"argv":"array of string","kind":"string","reason":"string","text":"string"}'
 envelope '[.result.errors[] | select(.code == "wait_timeout") | .exit]' '[4]'

@@ -24,6 +24,7 @@ var resultTypes = map[string]any{
 	"send":    app.SendResult{},
 	"auto":    app.AutoResult{},
 	"show":    app.ShowResult{},
+	"history": app.HistoryResult{},
 	"run":     app.RunResult{},
 	"resume":  app.ResumeResult{},
 	"done":    app.DoneResult{},

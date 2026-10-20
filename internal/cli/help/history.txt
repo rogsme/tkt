@@ -1,0 +1,15 @@
+tkt history shows what happened to each ticket you name, oldest first: every
+event in the history tkt keeps in ${XDG_STATE_HOME:-~/.local/state}/tkt/history.jsonl
+(the start, each phase, the plan's approval, each stage run, what tkt auto did
+and why it stopped, the merge), and the timeline tkt stats counts from them.
+
+On a GitHub forge, it also reads each pull request of the ticket's branch
+through gh: its title, size, commits and reviews. A review's verdict and the
+head it names come from review-pr's Verdict: line or the review bot's
+summary, and the body holds its findings. Reviews with only line comments
+and no body are left out. When gh fails, tkt warns, prints the history
+alone, and forge says failed.
+
+A ticket keeps its history after tkt done removes its worktree, so this
+works for merged tickets too. tkt history is read only. The tkt agent reads it
+to answer how a ticket went.

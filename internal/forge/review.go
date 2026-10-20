@@ -22,33 +22,48 @@ type Verdict struct {
 // LatestVerdict returns the newest review that carries a verdict, from
 // review-pr or from the forge's automated reviewer, or nil.
 func LatestVerdict(p PR) *Verdict {
-	var vs []Verdict
-	for _, r := range p.Reviews {
-		oid := ""
-		if r.Commit != nil {
-			oid = r.Commit.Oid
-		}
-		var v Verdict
-		switch {
-		case contract.AutomatedReviewRE.MatchString(r.Body):
-			v.Value = contract.AutomatedReviewRE.FindStringSubmatch(r.Body)[1]
-			v.Head = firstGroup(contract.AutomatedHeadRE, r.Body, oid)
-		case contract.VerdictRE.MatchString(r.Body):
-			v.Value = contract.VerdictRE.FindStringSubmatch(r.Body)[1]
-			v.Head = firstGroup(contract.ReviewedHeadRE, r.Body, oid)
-		default:
-			continue
-		}
-		v.SubmittedAt = r.SubmittedAt
-		vs = append(vs, v)
-	}
+	vs := Verdicts(p)
 	if len(vs) == 0 {
 		return nil
 	}
-	sort.SliceStable(vs, func(i, j int) bool { return vs[i].SubmittedAt < vs[j].SubmittedAt })
 	v := vs[len(vs)-1]
 	v.AtHead = v.Head != "" && strings.HasPrefix(p.HeadRefOid, v.Head)
 	return &v
+}
+
+// Verdicts returns every review's verdict, oldest first, with the review it
+// came from. A review without a verdict is left out.
+func Verdicts(p PR) []Verdict {
+	var vs []Verdict
+	for _, r := range p.Reviews {
+		if v, ok := ReviewVerdict(r); ok {
+			vs = append(vs, v)
+		}
+	}
+	sort.SliceStable(vs, func(i, j int) bool { return vs[i].SubmittedAt < vs[j].SubmittedAt })
+	return vs
+}
+
+// ReviewVerdict reads the verdict of one review, from review-pr or from the
+// forge's automated reviewer. The head defaults to the commit the review
+// was submitted on.
+func ReviewVerdict(r Review) (Verdict, bool) {
+	oid := ""
+	if r.Commit != nil {
+		oid = r.Commit.Oid
+	}
+	v := Verdict{SubmittedAt: r.SubmittedAt}
+	switch {
+	case contract.AutomatedReviewRE.MatchString(r.Body):
+		v.Value = contract.AutomatedReviewRE.FindStringSubmatch(r.Body)[1]
+		v.Head = firstGroup(contract.AutomatedHeadRE, r.Body, oid)
+	case contract.VerdictRE.MatchString(r.Body):
+		v.Value = contract.VerdictRE.FindStringSubmatch(r.Body)[1]
+		v.Head = firstGroup(contract.ReviewedHeadRE, r.Body, oid)
+	default:
+		return Verdict{}, false
+	}
+	return v, true
 }
 
 func firstGroup(re interface{ FindStringSubmatch(string) []string }, s, def string) string {
