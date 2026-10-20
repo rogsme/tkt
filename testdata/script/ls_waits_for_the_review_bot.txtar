@@ -1,11 +1,13 @@
 # With no verdict at the head, tkt ls waits [review] bot_wait for the review
-# bot from the moment it first sees the head waiting, then suggests review-pr.
+# bot from the moment it first sees the head waiting. The bot in CI is the
+# reviewer: when it stays silent, the ticket needs you, and review-pr is the
+# next step only in a repository with no bot.
 mkprompt $WORK/p.txt ACM-12
 stdin $WORK/p.txt
 exec tkt start ACM-12 --prompt -
 env FAKE_GH_PRS=$WORK/prs.json
 exec tkt ls --no-fetch
-stdout '^ACM-12 .*waiting_review .*wait for review$'
+stdout '^ACM-12 +waiting_review .*wait for the review bot$'
 exec tkt ls --no-fetch --json
 envelope '.result.rows[0].next.reason' awaiting_bot
 
@@ -13,8 +15,8 @@ envelope '.result.rows[0].next.reason' awaiting_bot
 # that started long ago has run out.
 cp $WORK/phase-old $REPO/.git/worktrees/ACM-12/tkt/phase
 exec tkt ls --no-fetch --json
-envelope '.result.rows[0].next | [.reason, .text]' '["needs_review","tkt run ACM-12 review"]'
-envelope '.result.rows[0] | [.phase, .phase_since]' '["waiting_review","2020-01-01T00:00:00Z"]'
+envelope '.result.rows[0].next | [.reason, .kind]' '["bot_silent","human"]'
+envelope '.result.rows[0].phase' needs_you
 
 # A new head starts the clock again.
 jqedit $WORK/prs.json '.[0].headRefOid = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"'

@@ -72,9 +72,9 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt agent` | Opens the tkt agent, a chat in your pane that drives your tickets. |
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
-| `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan. |
-| `tkt auto ID` | Drives the ticket until it needs you: approves the plan with `--approve-plan`, waits for CI and the review bot, runs review and the fixes, and stops at `READY_FOR_HUMAN`. |
-| `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address`, `sync`, `ci`, `verify` or `start`. |
+| `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan; `--wait` queues it until the agent stops. |
+| `tkt auto ID` | Drives the ticket: approves the plan with `--approve-plan`, waits for CI and the review bot, runs the fixes, pauses when the ticket needs you, and stops when the head is reviewed clean. |
+| `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first; `sync` is its old name), `ci`, `verify` or `start`. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
 | `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees. `--all` checks every ticket worktree. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
@@ -89,7 +89,7 @@ A ticket from start to merge, in short:
 1. Run `tkt start ACM-12`, or pipe in the dispatcher's block with `tkt start --prompt -`.
 2. Read the plan with `tkt show ACM-12`, then `tkt approve ACM-12`.
 3. When the agent reports `Status: READY_FOR_REVIEW`, run `tkt run ACM-12 review`.
-4. Act on the verdict with `address` or `sync`, and review again.
+4. Act on the verdict with `address`, which also merges a moved base, and review again.
 5. Verify, merge in the tab, then run `tkt done ACM-12`.
 
 For work with no ticket, `tkt start --scratch spike-login` makes the worktree, branch and tab `spike-login` and starts the agent without sending it anything. The other commands work on tickets only, so remove that worktree with `wt remove spike-login`.
@@ -143,10 +143,10 @@ serves = ["small"]
 lint = "Run the linter on {id} and fix what it reports."
 
 [review]
-bot_wait = "15m"   # how long a new head waits for the review bot; "0s" without one
+bot_wait = "15m"   # how long a new head waits for the review bot; "0s" without one, so review-pr reviews
 
 [auto]
-max_parallel = 3   # tkt auto loops at once in a repository
+max_parallel = 3   # tkt auto agents at work at once in a repository
 ```
 
 Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. `tkt help config` has the details.

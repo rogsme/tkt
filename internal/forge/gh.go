@@ -35,6 +35,8 @@ type PR struct {
 	Reviews           []Review `json:"reviews"`
 	CreatedAt         string   `json:"createdAt"`
 	MergedAt          string   `json:"mergedAt"`
+	// Body is read only by ListBodies.
+	Body string `json:"body"`
 }
 
 // Check is a check run (Name, Status, Conclusion) or a commit status
@@ -70,6 +72,11 @@ func (g GH) list(ctx context.Context, args ...string) ([]PR, error) {
 		return nil, apperr.New(apperr.ForgeQueryFailed, "gh pr list printed output tkt cannot read").Wrap(err)
 	}
 	return prs, nil
+}
+
+// ListBodies returns the branch's open pull requests with their bodies.
+func (g GH) ListBodies(ctx context.Context, branch string) ([]PR, error) {
+	return g.list(ctx, "--head", branch, "--state", "open", "--limit", "10", "--json", "number,state,headRefName,headRefOid,headRepository,body")
 }
 
 // ListOpen returns the open pull requests with their checks and reviews.

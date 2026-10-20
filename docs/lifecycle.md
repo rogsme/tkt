@@ -65,8 +65,7 @@ flowchart TD
   wk[work-ticket<br/>commits, PR, exact-head CI, handoff]
   review[tkt run ACM-123 review<br/>review-pr in a fresh session]
   verdict{Verdict at the head}
-  address[tkt run ACM-123 address<br/>address-pr-review, at most two rounds]
-  sync[tkt run ACM-123 sync<br/>merge the base into the branch]
+  address[tkt run ACM-123 address<br/>address-pr-review: merge the base, then at most two rounds]
   cifix[tkt run ACM-123 ci<br/>fix the failing checks, push once]
   human[You run the human verification steps<br/>optional: tkt run ACM-123 verify]
   merge[You tell the agent in the tab to merge<br/>finish-ticket]
@@ -81,19 +80,18 @@ flowchart TD
   wk -->|Status: READY_FOR_REVIEW| review
   review --> verdict
   verdict -->|Verdict: CHANGES_REQUESTED| address
-  verdict -->|Status: BLOCKED_FOR_SYNC| sync
+  verdict -->|Status: BLOCKED_FOR_SYNC| address
   verdict -->|checks fail at the head| cifix
   verdict -->|Verdict: READY_FOR_HUMAN| human
   address -->|Status: READY_FOR_REVIEW| review
-  sync -->|Status: READY_FOR_REVIEW| review
   cifix --> review
   human --> merge
   merge -->|Status: HUMAN_QA_FAILED| address
-  merge -->|Status: BLOCKED_FOR_SYNC| sync
+  merge -->|Status: BLOCKED_FOR_SYNC| address
   merge -->|Status: DONE| done
 ```
 
-Every arrow out of a stage is a status line or a verdict on the screen or the pull request. Every arrow into a stage is something you do: a tkt command or an answer in the tab. Nothing moves on its own unless you hand the ticket to `tkt auto`, which takes the same steps for you and stops where a person decides (see [Letting tkt auto drive](#letting-tkt-auto-drive)). `tkt ls` reads the same facts and prints the next step for each ticket, and `tkt wait ACM-123` blocks until the agent finishes or needs you.
+Every arrow out of a stage is a status line or a verdict on the screen or the pull request. Every arrow into a stage is something you do: a tkt command or an answer in the tab. Nothing moves on its own unless you hand the ticket to `tkt auto`, which takes the same steps for you and pauses where a person decides (see [Letting tkt auto drive](#letting-tkt-auto-drive)). `tkt ls` reads the same facts and prints the next step for each ticket, and `tkt wait ACM-123` blocks until the agent finishes or needs you.
 
 ## Step by step
 
@@ -166,7 +164,7 @@ tkt run ACM-123 review
 - `Verdict: CHANGES_REQUESTED`, ending with `Status: REVIEW_POSTED`;
 - `Verdict: READY_FOR_HUMAN`, ending with `Status: READY_FOR_HUMAN`, with the final human verification procedure in the summary.
 
-When the forge runs an automated reviewer instead, it posts an `Automated review: CLEAR`, `FINDINGS` or `STALE_BASE` line, and tkt reads that the same way. A verdict counts only for the head it names, so after every push the ticket waits for a new review.
+When the forge runs an automated reviewer in CI instead, it posts an `Automated review: CLEAR`, `FINDINGS` or `STALE_BASE` line, and tkt reads that the same way: the bot's `CLEAR` counts like `READY_FOR_HUMAN`, and the steps to verify are then the pull request's own Human verification section. A verdict counts only for the head it names, so after every push the ticket waits for a new review.
 
 ### 6. The review loop
 
@@ -174,15 +172,14 @@ Act on the verdict, then review again:
 
 | What you see | Run | What happens |
 |---|---|---|
-| `Verdict: CHANGES_REQUESTED`, or comments you left | `tkt run ACM-123 address` | `address-pr-review` checks each finding, fixes the valid ones at their root cause, answers the rest with evidence, pushes, waits for CI and replies to every comment. It runs at most two rounds and never resolves a thread. |
-| `Status: BLOCKED_FOR_SYNC`, or the pull request conflicts | `tkt run ACM-123 sync` | `address-pr-review` merges the base into the branch, reruns the checks and refreshes the review brief. |
+| `Verdict: CHANGES_REQUESTED`, comments you left, `Status: BLOCKED_FOR_SYNC`, or a conflict | `tkt run ACM-123 address` | `address-pr-review` first merges the base when it moved, resolving conflicts. Then it checks each finding, fixes the valid ones at their root cause, answers the rest with evidence, pushes, waits for CI and replies to every comment. It runs at most two rounds and never resolves a thread. `sync` is the old name of the same stage. |
 | The checks fail at the head, with no review to address | `tkt run ACM-123 ci` | A fresh agent finds the cause, fixes it, and pushes once. An infrastructure failure gets a rerun instead of a code change. |
 
-`address` and `sync` both end with `Status: READY_FOR_REVIEW`, which leads back to step 5. On a re-review, `review-pr` checks each earlier thread against the new head and resolves the ones that are fixed.
+`address` ends with `Status: READY_FOR_REVIEW`, which leads back to step 5. On a re-review, `review-pr` checks each earlier thread against the new head and resolves the ones that are fixed.
 
 ### 7. You verify
 
-When the verdict is `READY_FOR_HUMAN`, run the numbered steps in the review summary yourself; `tkt show ACM-123 --steps` prints them. `tkt run ACM-123 verify` can have an agent run them in a browser and report what it saw for each one. It changes no code and posts nothing, and you still decide whether each step passed.
+When the verdict is `READY_FOR_HUMAN`, or the bot's `CLEAR`, run the numbered steps yourself; `tkt show ACM-123 --steps` prints them from the review summary, or from the pull request's body after the bot. `tkt run ACM-123 verify` can have an agent run them in a browser and report what it saw for each one. It changes no code and posts nothing, and you still decide whether each step passed.
 
 ### 8. finish-ticket merges
 
@@ -198,7 +195,7 @@ Before it merges, `finish-ticket` requires green CI for the exact head, a `READY
 |---|---|
 | `Status: DONE` | Step 9. |
 | `Status: HUMAN_QA_FAILED` | A step failed. The agent records what you saw on the pull request; run `tkt run ACM-123 address`. |
-| `Status: BLOCKED_FOR_SYNC` | The base moved after the review. Even a clean merge would ship an integration nobody reviewed, so run `tkt run ACM-123 sync` and review again. |
+| `Status: BLOCKED_FOR_SYNC` | The base moved after the review. Even a clean merge would ship an integration nobody reviewed, so run `tkt run ACM-123 address` and review again. |
 | `Status: BLOCKED_POST_MERGE` | The merge landed but post-merge CI failed. The ticket stays in `in-review`; look at the base branch's checks. |
 
 ### 9. tkt done cleans up
@@ -211,22 +208,21 @@ Run it from another tab. It confirms through `gh` that the pull request merged, 
 
 ## Letting tkt auto drive
 
-`tkt auto ACM-123` takes the steps above for one ticket and stops where a person decides. It reads the same facts as `tkt ls`, so it does nothing you could not do by hand:
+`tkt auto ACM-123` takes the steps above for one ticket and pauses where a person decides. It reads the same facts as `tkt ls`, so it does nothing you could not do by hand:
 
 | The ticket | tkt auto |
 |---|---|
 | Has no worktree yet | Runs `tkt start`. With `--approve-plan`, the start line says the run is unattended: start-ticket skips the browser plan presentation and asks every open question with the harness's question tool, so no decision hides in a plan nobody reads. |
-| The agent works | Waits for it. |
-| `Status: AWAITING_APPROVAL` | Runs `tkt approve` with `--approve-plan`; without it, stops for you. |
+| The agent works, or waits on its own background task such as a CI watcher | Waits for it. |
+| `Status: AWAITING_APPROVAL` | Runs `tkt approve` with `--approve-plan`; without it, pauses for you. |
 | Checks pending | Waits for CI. |
-| A new head with green CI and no review | Waits `[review] bot_wait` (15 minutes) for the review bot. |
-| Bot `FINDINGS` or `Verdict: CHANGES_REQUESTED` | Runs `tkt run ACM-123 address`. |
-| Bot `STALE_BASE`, a conflict, or `BLOCKED_FOR_SYNC` behind the base | Runs `tkt run ACM-123 sync`. |
+| A new head with green CI and no review | Waits for the review bot in CI. |
+| Bot `FINDINGS`, `STALE_BASE`, a conflict, `Verdict: CHANGES_REQUESTED`, or `BLOCKED_FOR_SYNC` behind the base | Runs `tkt run ACM-123 address`, which merges the base first. |
 | Checks fail | Runs `tkt run ACM-123 ci`. |
-| Bot `CLEAR`, or no bot review in time | Runs `tkt run ACM-123 review`, because only review-pr gives `READY_FOR_HUMAN` and the human verification steps. |
-| `Verdict: READY_FOR_HUMAN` at the head | Stops: the ticket is yours to verify and merge. |
+| Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head | Stops: the ticket is yours to verify and merge. |
+| No bot review after `[review] bot_wait` (15 minutes) | Pauses for you. With no bot (`bot_wait = "0s"`) it runs `tkt run ACM-123 review` instead. |
 
-It also stops, with exit 4 and `auto_stopped`, when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. At most `[auto] max_parallel` loops (3) run at once in a repository; the others wait, queued.
+Where a person decides, it pauses rather than ends: when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. It notifies once, shows the ticket as paused, and goes on by itself when the ticket moves, such as after you answer the agent in its tab. While it drives a ticket, the tab reads `ACM-123 (auto)`. At most `[auto] max_parallel` tkt auto agents (3) work at once in a repository; a loop gives up its slot while it waits for CI, the bot or you, and the others wait, queued.
 
 `tkt agent` opens a chat that does all of this for many tickets at once: you say "start ACM-123 in auto", get the prompt back, and hear from it only when a ticket needs you.
 

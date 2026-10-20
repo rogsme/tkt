@@ -6,7 +6,7 @@ exec tkt start ACM-12 --prompt -
 grep -count=1 '"ticket":"ACM-12","event":"started"' $HOME/.local/state/tkt/history.jsonl
 env 'FAKE_HERDR_SCREEN=Status: AWAITING_APPROVAL'
 exec tkt ls --no-fetch
-stdout '^ACM-12 .*awaiting_approval +[0-9]+[smh] +read the plan'
+stdout '^ACM-12 +awaiting_approval +[0-9]+[smh] +idle .*read the plan'
 exec tkt ls --no-fetch
 grep -count=1 '"event":"phase","phase":"awaiting_approval"' $HOME/.local/state/tkt/history.jsonl
 

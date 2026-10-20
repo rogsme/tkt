@@ -23,6 +23,7 @@ const (
 	ReasonMerged               = "merged"
 	ReasonClosed               = "closed"
 	ReasonAgentWorking         = "agent_working"
+	ReasonAgentWaiting         = "agent_waiting"
 	ReasonAgentBlocked         = "agent_blocked"
 	ReasonNoAgent              = "no_agent"
 	ReasonPlanAwaitsApproval   = "plan_awaits_approval"
@@ -37,6 +38,7 @@ const (
 	ReasonBotClear             = "bot_clear"
 	ReasonReviewClear          = "review_clear"
 	ReasonAwaitingBot          = "awaiting_bot"
+	ReasonBotSilent            = "bot_silent"
 	ReasonNeedsReview          = "needs_review"
 	ReasonUnknown              = "unknown"
 )
@@ -60,11 +62,14 @@ func human(reason, text string) Next {
 // request; Agent is the agent's status, "" without one; Checks is ok, fail,
 // pending or none; Verdict is "" without a review. Behind is -1 when unknown.
 // Waited is how long the head has waited for a review; BotWait is how long to
-// give the automated reviewer before review-pr runs instead.
+// give the automated reviewer, and 0 means the repository has none, so
+// review-pr reviews instead. Background says an idle agent waits on its
+// own background tasks, such as a CI watcher, and goes on by itself.
 type Facts struct {
 	ID         string
 	PRState    string
 	Agent      string
+	Background bool
 	LastStatus string
 	Checks     string
 	Verdict    string
@@ -75,6 +80,7 @@ type Facts struct {
 	Stage      string
 	Launch     string
 	AutoWait   string
+	AutoPause  string
 	BotWait    time.Duration
 	Waited     time.Duration
 }
@@ -89,6 +95,8 @@ func NextStep(f Facts) Next {
 		return human(ReasonClosed, "closed without merging")
 	case f.Agent == herdr.Working:
 		return Next{Kind: "wait", Reason: ReasonAgentWorking, Argv: []string{"tkt", "wait", id}, Text: "wait (agent working)"}
+	case f.Background:
+		return Next{Kind: "wait", Reason: ReasonAgentWaiting, Text: "wait (the agent waits on a background task)"}
 	case f.Agent == herdr.Blocked:
 		return human(ReasonAgentBlocked, "answer the agent in its tab")
 	case f.PRState == "":
@@ -109,7 +117,7 @@ func NextStep(f Facts) Next {
 		return Next{Kind: "wait", Reason: ReasonCIPending, Text: "wait for CI"}
 	case f.AtHead && f.Verdict == contract.VerdictStaleBase, f.Mergeable == "CONFLICTING",
 		f.LastStatus == contract.StatusBlockedForSync && f.Behind > 0:
-		return command(ReasonBaseMoved, "tkt", "run", id, "sync")
+		return command(ReasonBaseMoved, "tkt", "run", id, "address")
 	case f.LastStatus == contract.StatusHumanQAFailed:
 		return command(ReasonQAFailed, "tkt", "run", id, "address")
 	case f.AtHead && (f.Verdict == contract.VerdictFindings || f.Verdict == contract.VerdictChangesRequested):
@@ -120,10 +128,12 @@ func NextStep(f Facts) Next {
 		return command(ReasonBotClear, "tkt", "run", id, "verify")
 	case f.AtHead && f.Verdict == contract.VerdictReadyForHuman:
 		return command(ReasonReviewClear, "tkt", "run", id, "verify")
+	case f.BotWait == 0:
+		return command(ReasonNeedsReview, "tkt", "run", id, "review")
 	case f.Waited < f.BotWait:
-		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for review"}
+		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
 	}
-	return command(ReasonNeedsReview, "tkt", "run", id, "review")
+	return human(ReasonBotSilent, "the review bot has not reviewed this head; check its CI job, or run tkt run "+id+" review")
 }
 
 // The phases PhaseOf names: the board's columns, and the history's steps.
@@ -165,9 +175,12 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseNeedsYou
 	case f.Agent != herdr.Working && f.Agent != herdr.Blocked && f.AutoWait == "slot":
 		return PhaseQueued
+	case f.Agent != herdr.Working && !f.Background &&
+		(f.AutoPause == StopRoundLimit || f.AutoPause == StopNoProgress || f.AutoPause == StopUnknown):
+		return PhaseNeedsYou
 	}
 	switch n.Reason {
-	case ReasonAgentWorking:
+	case ReasonAgentWorking, ReasonAgentWaiting:
 		switch f.Stage {
 		case "start":
 			return PhasePlanning
@@ -181,7 +194,7 @@ func PhaseOf(f Facts, n Next) string {
 			return PhaseVerifying
 		}
 		return PhaseWorking
-	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval:
+	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval, ReasonBotSilent:
 		return PhaseNeedsYou
 	case ReasonNoAgent:
 		return PhaseNoAgent
@@ -189,11 +202,11 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseAwaitingApproval
 	case ReasonCIPending:
 		return PhaseCI
-	case ReasonAwaitingBot, ReasonNeedsReview, ReasonBotClear:
+	case ReasonAwaitingBot, ReasonNeedsReview:
 		return PhaseWaitingReview
 	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings, ReasonChecksFail:
 		return PhaseNeedsFix
-	case ReasonReviewClear:
+	case ReasonReviewClear, ReasonBotClear:
 		return PhaseReadyForHuman
 	}
 	return PhaseUnknown
@@ -203,7 +216,7 @@ func PhaseOf(f Facts, n Next) string {
 func factsFor(r Row) Facts {
 	f := Facts{ID: r.Ticket, LastStatus: r.LastStatus, Behind: -1, Stage: r.Stage, Launch: r.Launch}
 	if r.Agent != nil {
-		f.Agent = r.Agent.Status
+		f.Agent, f.Background = r.Agent.Status, r.Agent.Background > 0
 	}
 	if r.PR != nil {
 		f.PRState, f.Mergeable, f.Head = r.PR.State, r.PR.Mergeable, r.PR.Head
@@ -218,7 +231,7 @@ func factsFor(r Row) Facts {
 		f.Behind = *r.Behind
 	}
 	if r.Auto != nil {
-		f.AutoWait = r.Auto.Waiting
+		f.AutoWait, f.AutoPause = r.Auto.Waiting, r.Auto.Paused
 	}
 	return f
 }

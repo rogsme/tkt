@@ -9,7 +9,7 @@ realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
 resetlog
 exec tkt run ACM-12 sync
 logged herdr agent start acm-12 --kind opencode --pane w1:p10 --timeout 90000 -- -s ses_fake2 $WT
-grep 'sync the PR with the base' $FAKE_DIR/prompts
+grep 'address the review on this branch' $FAKE_DIR/prompts
 
 -- config.toml --
 [presets.claude]

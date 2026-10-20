@@ -32,13 +32,15 @@ Three more tables tune tkt auto, the review step and the marks tkt ls sets.
 These are the defaults:
 
   [auto]
-  max_rounds = 5        # address, sync and ci runs since the plan's approval
+  max_rounds = 5        # address and ci runs since the plan's approval
   poll = "30s"          # how often a loop reads the forge while it waits
-  max_parallel = 3      # tkt auto loops at once in a repository; 0 for no cap
+  max_parallel = 3      # tkt auto agents at work at once in a repository;
+                        # 0 for no cap
 
   [review]
-  bot_wait = "15m"      # how long a new head waits for the review bot; "0s"
-                        # when no bot reviews, so review-pr runs at once
+  bot_wait = "15m"      # how long a new head waits for the review bot before
+                        # tkt auto pauses for you; "0s" when no bot reviews,
+                        # so review-pr reviews instead
 
   [board]
   stale_after = "2h"    # mark an agent idle this long with no status; "0s" for never

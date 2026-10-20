@@ -1,0 +1,16 @@
+# tkt send --wait queues the text: it waits for a working agent to stop,
+# then types the text into the same session.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+env FAKE_HERDR_TURNS=$WORK/turns.json
+resetlog
+exec tkt send ACM-12 --wait 'Merge main before you push again.'
+stderr 'waits until it stops'
+logged herdr agent wait
+grep '^Merge main before you push again.$' $FAKE_DIR/prompts
+stdout '^ACM-12  sent  pane w1:p10  agent acm-12$'
+
+-- turns.json --
+[{"screen": "Pushed the fix."}]

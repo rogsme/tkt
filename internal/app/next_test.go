@@ -24,9 +24,9 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED"}, "read the agent's reason in its tab", "human", ReasonStatusBlocked},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "AWAITING_POST_APPROVAL"}, "approve or discard the review draft in its tab", "human", ReasonReviewAwaitsApproval},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending", Verdict: "FINDINGS", AtHead: true, Mergeable: "MERGEABLE"}, "wait for CI", "wait", ReasonCIPending},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "STALE_BASE", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 sync", "command", ReasonBaseMoved},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "CONFLICTING"}, "tkt run ACM-1 sync", "command", ReasonBaseMoved},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED_FOR_SYNC", Behind: 2}, "tkt run ACM-1 sync", "command", ReasonBaseMoved},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "STALE_BASE", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 address", "command", ReasonBaseMoved},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "CONFLICTING"}, "tkt run ACM-1 address", "command", ReasonBaseMoved},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED_FOR_SYNC", Behind: 2}, "tkt run ACM-1 address", "command", ReasonBaseMoved},
 		// review-pr also says BLOCKED_FOR_SYNC while CI is not green; with
 		// nothing behind, the review is what is missing.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED_FOR_SYNC", Behind: 0}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
@@ -37,8 +37,9 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 verify", "command", ReasonBotClear},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true}, "tkt run ACM-1 verify", "command", ReasonReviewClear},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: false, Mergeable: "MERGEABLE"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 5 * time.Minute}, "wait for review", "wait", ReasonAwaitingBot},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 15 * time.Minute}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 5 * time.Minute}, "wait for the review bot", "wait", ReasonAwaitingBot},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 15 * time.Minute}, "the review bot has not reviewed this head; check its CI job, or run tkt run ACM-1 review", "human", ReasonBotSilent},
+		{Facts{PRState: "OPEN", Agent: "idle", Background: true}, "wait (the agent waits on a background task)", "wait", ReasonAgentWaiting},
 	}
 	for _, tc := range cases {
 		tc.f.ID = "ACM-1"
@@ -80,7 +81,9 @@ func TestPhaseOf(t *testing.T) {
 		{Facts{}, PhaseNoAgent},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending"}, PhaseCI},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: time.Hour}, PhaseWaitingReview},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true}, PhaseWaitingReview},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true}, PhaseReadyForHuman},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: time.Hour, Waited: time.Hour}, PhaseNeedsYou},
+		{Facts{PRState: "OPEN", Agent: "idle", Background: true, Stage: "work"}, PhaseBuilding},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true}, PhaseNeedsFix},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true}, PhaseReadyForHuman},
 	}

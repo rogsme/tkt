@@ -1,7 +1,7 @@
 tkt stats reads the history tkt keeps in ${XDG_STATE_HOME:-~/.local/state}/tkt/history.jsonl
 and shows, for this repository's tickets, how long each took from tkt start to
 the merge, how much of that it waited for you (a plan to approve, a question,
-the human verification), and how many address, sync and ci rounds it needed.
+the human verification), and how many address and ci rounds it needed.
 Tickets still in progress show their time so far. The summary gives the
 median and the 90th percentile of the merged ones.
 

@@ -231,6 +231,7 @@ func sendCmd(g *globals) *cobra.Command {
 		},
 	}
 	pf.add(cmd, "TEXT")
+	cmd.Flags().BoolVar(&o.Wait, "wait", false, "when the agent is busy, wait for it to stop, then send")
 	cmd.Flags().StringVar(&o.Pane, "pane", "", "send to the agent in PANE when several run in the worktree")
 	cmd.RegisterFlagCompletionFunc("pane", g.completePanes)
 	cmd.Flags().BoolVar(&o.Force, "force", false, "override the safety refusals")
@@ -263,9 +264,11 @@ func autoCmd(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&o.ApprovePlan, "approve-plan", false, "approve the plan in your place when start-ticket ends with AWAITING_APPROVAL")
-	cmd.Flags().IntVar(&o.MaxRounds, "max-rounds", -1, "stop after N address, sync and ci runs since the plan's approval (default [auto] max_rounds)")
+	cmd.Flags().StringVar(&o.As, "as", "", "start the ticket's agents on PRESET")
+	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
+	cmd.Flags().IntVar(&o.MaxRounds, "max-rounds", -1, "pause for you after N address and ci runs since the plan's approval (default [auto] max_rounds)")
 	cmd.Flags().DurationVar(&o.Poll, "poll", 0, "read the forge every DURATION while waiting for CI or a review (default [auto] poll)")
-	cmd.Flags().BoolVar(&o.Notify, "notify", false, "show a herdr notification when the loop stops")
+	cmd.Flags().BoolVar(&o.Notify, "notify", false, "show a herdr notification when the loop needs you or stops")
 	cmd.Flags().BoolVar(&o.Once, "once", false, "take at most one step, then exit 0 with what it did or why not")
 	cmd.Flags().BoolVar(&o.Stop, "stop", false, "stop the loop that drives the ticket, at its next look")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "with --once, print the step instead of taking it")

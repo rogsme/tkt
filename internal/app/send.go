@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"gitlab.com/rogs/tkt/internal/agent"
 	"gitlab.com/rogs/tkt/internal/apperr"
@@ -19,8 +20,11 @@ type SendOpts struct {
 	ID     string
 	Prompt prompt.Source
 	Pane   string
-	Force  bool
-	Dry    bool
+	// Wait queues the text: when the agent works, waits on a background
+	// task or asks a question, tkt send waits for it to stop first.
+	Wait  bool
+	Force bool
+	Dry   bool
 }
 
 // ApproveOpts are tkt approve's arguments.
@@ -73,7 +77,56 @@ func (a *App) Send(ctx context.Context, o SendOpts) (*SendResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	if o.Wait && !c.Dry {
+		if target, err = c.waitToSend(id, path, o.Pane, ts, target); err != nil {
+			return nil, err
+		}
+	}
 	return c.sendTo(id, path, ts, target, text)
+}
+
+// waitToSend waits until the ticket's agent is free to read typed text: not
+// working, not waiting on its own background task, and not asking a
+// question in a dialog. It holds no lock while it waits, so tkt auto and
+// the other commands go on.
+func (c *Ctx) waitToSend(id, path, pane string, ts *ticketState, target herdr.Agent) (herdr.Agent, error) {
+	told := false
+	for {
+		free := target.Status == herdr.Idle || target.Status == herdr.Done
+		if free {
+			turn, _ := c.lastTurn(c.Ctx, &target, ts.st, path)
+			if turn.Pending == 0 || agent.LastStatus(turn.All) != "" || c.Now().Sub(turn.At) >= backgroundGrace {
+				return target, nil
+			}
+		}
+		if !told {
+			c.UI.Info("%s's agent is busy; the text waits until it stops", id)
+			told = true
+		}
+		if target.Status == herdr.Working {
+			_, err := c.H.Wait(c.Ctx, target.PaneID, []string{herdr.Idle, herdr.Blocked, herdr.Done}, waitSlice.Milliseconds())
+			if c.Ctx.Err() != nil {
+				return target, c.Ctx.Err()
+			}
+			switch herdr.CodeOf(err) {
+			case "", "timeout":
+			default:
+				return target, herdrErr(err)
+			}
+		} else {
+			t := time.NewTimer(15 * time.Second)
+			select {
+			case <-c.Ctx.Done():
+				t.Stop()
+				return target, c.Ctx.Err()
+			case <-t.C:
+			}
+		}
+		var err error
+		if target, err = c.ticketAgent(id, path, pane, ts.st); err != nil {
+			return target, err
+		}
+	}
 }
 
 // Approve tells the planning session that its plan is approved, so the same

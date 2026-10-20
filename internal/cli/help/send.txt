@@ -8,5 +8,10 @@ it waits in its own dialog, such as a question with options: typed text does
 not reach that dialog, so answer it in the ticket's tab. tkt show ID --screen
 prints what the dialog asks.
 
+--wait queues the text instead: tkt send waits until the agent stops working,
+stops waiting on its own background task, and has no question open, then
+types the text in. It holds no lock while it waits, so tkt auto and the other
+commands go on.
+
 To start a stage in a fresh session instead, use tkt run. To approve a plan,
 use tkt approve.

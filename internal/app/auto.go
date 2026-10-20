@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
@@ -19,12 +22,14 @@ import (
 type AutoOpts struct {
 	ID          string
 	ApprovePlan bool
-	MaxRounds   int
-	Poll        time.Duration
-	Notify      bool
-	Once        bool
-	Stop        bool
-	Dry         bool
+	// As is the preset for the agents the loop starts.
+	As        string
+	MaxRounds int
+	Poll      time.Duration
+	Notify    bool
+	Once      bool
+	Stop      bool
+	Dry       bool
 }
 
 // AutoStep is one thing tkt auto did: started the ticket, approved its
@@ -38,8 +43,8 @@ type AutoStep struct {
 }
 
 // AutoResult is how tkt auto ended. Stop says why a loop stopped, or why
-// --once took no step; Did is the step --once took, and Wait what it waits
-// for instead.
+// --once took no step, such as a pause for a person; Did is the step --once
+// took, and Wait what it waits for instead.
 type AutoResult struct {
 	Ticket  string     `json:"ticket"`
 	Stop    string     `json:"stop"`
@@ -74,7 +79,10 @@ func stepText(s AutoStep) string {
 	return "ran " + s.Stage
 }
 
-// The ways tkt auto stops.
+// The ways tkt auto stops, and the reasons it pauses for a person. A loop
+// ends only at ready_for_human, merged, closed or stopped. For the others it
+// notifies once, waits, and goes on when the ticket moves, such as after you
+// answer the agent's question in its tab.
 const (
 	StopReadyForHuman = "ready_for_human"
 	StopMerged        = "merged"
@@ -83,6 +91,7 @@ const (
 	StopNeedsYou      = "needs_you"
 	StopPlan          = "plan_awaits_approval"
 	StopAgentMissing  = "agent_missing"
+	StopBotSilent     = "bot_silent"
 	StopRoundLimit    = "round_limit"
 	StopNoProgress    = "no_progress"
 	StopUnknown       = "unknown"
@@ -105,12 +114,40 @@ func stopHint(stop, id string) string {
 		return "read the plan with tkt show " + id + ", then tkt approve " + id + " and tkt auto " + id
 	case StopAgentMissing:
 		return "tkt resume " + id + ", then tkt auto " + id
+	case StopBotSilent:
+		return "check the review bot's CI job, or run tkt run " + id + " review"
 	case StopRoundLimit:
 		return "read the review, then tkt run " + id + " address, or raise [auto] max_rounds"
 	case StopNoProgress:
 		return "the last step changed nothing; check the ticket's tab, then tkt auto " + id
 	}
 	return "check the agent in its tab, then tkt auto " + id
+}
+
+// pauseText says why a loop waits for you, from its pause and the rule
+// that matched.
+func pauseText(stop, reason string) string {
+	switch {
+	case reason == ReasonAgentBlocked:
+		return "the agent asks a question; answer it in its tab"
+	case reason == ReasonStatusBlocked:
+		return "the agent stopped with Status: BLOCKED; read its reason in its tab"
+	case reason == ReasonReviewAwaitsApproval:
+		return "review-pr waits for you to post or drop its draft"
+	case stop == StopPlan:
+		return "the plan is ready; read it, then tkt approve"
+	case stop == StopAgentMissing:
+		return "no agent runs in the worktree; tkt resume brings it back"
+	case stop == StopBotSilent:
+		return "the review bot has not reviewed this head; check its CI job"
+	case stop == StopRoundLimit:
+		return "it reached [auto] max_rounds fix runs since the plan; read the review"
+	case stop == StopNoProgress:
+		return "the last step changed nothing; check the ticket's tab"
+	case reason == ReasonCheckAgent:
+		return "the agent stopped without a status line; check its tab"
+	}
+	return "the agent needs you; check its tab"
 }
 
 // The actions autoStep picks.
@@ -121,6 +158,7 @@ const (
 	actApprove = "approve"
 	actRun     = "run"
 	actStop    = "stop"
+	actPause   = "pause"
 )
 
 // AutoPolicy is what one tkt auto run may do.
@@ -145,31 +183,34 @@ func (a autoAct) key(head string) string {
 }
 
 // autoStep decides tkt auto's next action from the rule tkt ls applies. It
-// differs from tkt ls on purpose: it never runs done, resume or verify, it
-// asks review-pr for a final verdict after the automated reviewer's CLEAR,
-// and it stops where a person decides.
+// differs from tkt ls on purpose: it never runs done, resume or verify; the
+// review bot's CLEAR ends the loop like review-pr's READY_FOR_HUMAN, since
+// the bot in CI is the reviewer; review-pr runs only where the repository
+// has no bot ([review] bot_wait = "0s"); and where a person decides, it
+// pauses.
 func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 	stop := func(why string) autoAct { return autoAct{Kind: actStop, Stop: why} }
+	pause := func(why string) autoAct { return autoAct{Kind: actPause, Stop: why} }
 	act := func(kind, stage string) autoAct {
 		a := autoAct{Kind: kind, Stage: stage}
 		if a.key(f.Head) == m.Last {
-			return stop(StopNoProgress)
+			return pause(StopNoProgress)
 		}
 		return a
 	}
 	fix := func(stage string) autoAct {
 		if m.Rounds >= p.MaxRounds {
-			return stop(StopRoundLimit)
+			return pause(StopRoundLimit)
 		}
 		return act(actRun, stage)
 	}
 	switch {
 	case f.Agent != herdr.Working && (f.Launch == "not_ready" || f.Launch == "prompt_uncertain"):
-		return stop(StopNeedsYou)
+		return pause(StopNeedsYou)
 	case f.Agent != herdr.Working && (f.Launch == "tab" || f.Launch == "launching"):
 		return autoAct{Kind: actPoll}
 	case f.Agent != "" && f.Agent != herdr.Idle && f.Agent != herdr.Done && f.Agent != herdr.Working && f.Agent != herdr.Blocked:
-		return stop(StopUnknown)
+		return pause(StopUnknown)
 	}
 	switch n.Reason {
 	case ReasonMerged:
@@ -178,29 +219,29 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 		return stop(StopClosed)
 	case ReasonAgentWorking:
 		return autoAct{Kind: actWait}
+	case ReasonAgentWaiting, ReasonCIPending, ReasonAwaitingBot:
+		return autoAct{Kind: actPoll}
 	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval:
-		return stop(StopNeedsYou)
+		return pause(StopNeedsYou)
 	case ReasonNoAgent:
-		return stop(StopAgentMissing)
+		return pause(StopAgentMissing)
 	case ReasonPlanAwaitsApproval:
 		if p.ApprovePlan {
 			return act(actApprove, "")
 		}
-		return stop(StopPlan)
-	case ReasonCIPending, ReasonAwaitingBot:
-		return autoAct{Kind: actPoll}
-	case ReasonBaseMoved:
-		return fix("sync")
-	case ReasonQAFailed, ReasonFindings:
+		return pause(StopPlan)
+	case ReasonBotSilent:
+		return pause(StopBotSilent)
+	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings:
 		return fix("address")
 	case ReasonChecksFail:
 		return fix("ci")
-	case ReasonNeedsReview, ReasonBotClear:
+	case ReasonNeedsReview:
 		return act(actRun, "review")
-	case ReasonReviewClear:
+	case ReasonReviewClear, ReasonBotClear:
 		return stop(StopReadyForHuman)
 	}
-	return stop(StopUnknown)
+	return pause(StopUnknown)
 }
 
 // autoView is one look at the ticket for tkt auto.
@@ -222,6 +263,14 @@ type autoWorld interface {
 	act(ctx context.Context, a autoAct) error
 	remember(m autoMemory, kv ...string)
 	stopped(stop string, v autoView)
+	// paused records that the loop waits for a person, and notifies once.
+	paused(why string, v autoView)
+	resumed()
+	// holdSlot takes one of [auto] max_parallel slots before the loop sets
+	// an agent to work, and says whether it had to wait for one; dropSlot
+	// frees it once the agent stops working.
+	holdSlot(ctx context.Context) (waited bool, err error)
+	dropSlot()
 	now() time.Time
 }
 
@@ -238,6 +287,8 @@ const maxForgeFailures = 5
 func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem autoMemory, poll time.Duration, once, dry bool) (*AutoResult, error) {
 	res := &AutoResult{Ticket: id, Steps: []AutoStep{}, DryRun: dry}
 	fails := 0
+	pausedOn := ""
+	defer w.dropSlot()
 	for {
 		v, err := w.look(ctx, false)
 		var fe errForge
@@ -262,6 +313,17 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 		if v.Started {
 			a = autoStep(v.Next, v.Facts, p, mem)
 		}
+		// A slot counts agents at work: the loop keeps it while its agent
+		// works or starts, and gives it up while it waits for CI, the bot
+		// or a person.
+		busy := a.Kind == actWait || a.Kind == actPoll && (v.Next.Reason == ReasonAgentWaiting || v.Phase == PhaseStarting)
+		if !busy && a.Kind != actStart && a.Kind != actApprove && a.Kind != actRun {
+			w.dropSlot()
+		}
+		if a.Kind != actPause && pausedOn != "" {
+			w.resumed()
+			pausedOn = ""
+		}
 		switch a.Kind {
 		case actStop:
 			res.Stop = a.Stop
@@ -269,6 +331,19 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 				w.stopped(res.Stop, v)
 			}
 			return res, nil
+		case actPause:
+			if once {
+				res.Stop = a.Stop
+				return res, nil
+			}
+			if key := a.Stop + "|" + v.Next.Reason + "|" + v.Facts.Head + "|" + v.Facts.LastStatus; key != pausedOn {
+				w.paused(a.Stop, v)
+				pausedOn = key
+			}
+			if err := w.sleep(ctx, poll); err != nil {
+				return nil, err
+			}
+			continue
 		case actWait, actPoll:
 			if once {
 				res.Wait = v.Next.Reason
@@ -298,6 +373,15 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 				continue
 			}
 			v = again
+		}
+		if !once && !dry {
+			waited, err := w.holdSlot(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if waited {
+				continue
+			}
 		}
 		mem.Last = a.key(v.Facts.Head)
 		if a.Kind == actRun && a.Stage != "review" {
@@ -344,6 +428,11 @@ func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 	if err := c.needHerdr(); err != nil {
 		return nil, err
 	}
+	if o.As != "" {
+		if _, err := c.Cfg.Preset(o.As); err != nil {
+			return nil, err
+		}
+	}
 	path := ""
 	if es, err := c.WT.List(c.Ctx); err != nil {
 		return nil, err
@@ -359,7 +448,7 @@ func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 	if o.Stop {
 		res := &AutoResult{Ticket: id, Stop: StopStopped, Steps: []AutoStep{}}
 		if ts != nil {
-			c.save(ts, "auto", "", "auto_stop", StopStopped, "auto_wait", "")
+			c.save(ts, "auto", "", "auto_stop", StopStopped, "auto_wait", "", "auto_pause", "")
 		}
 		return res, nil
 	}
@@ -384,17 +473,14 @@ func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 	if o.ApprovePlan {
 		mode = autoPlan
 	}
-	w := &ctxWorld{c: c, id: id, path: path, mode: mode, notify: o.Notify, once: o.Once}
+	w := &ctxWorld{c: c, id: id, path: path, mode: mode, as: o.As, notify: o.Notify, once: o.Once}
+	defer w.unqueue()
 	var mem autoMemory
 	if ts != nil {
 		mem = autoMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["auto_last"]}
 		if !o.Once {
-			c.save(ts, "auto", mode, "auto_stop", "")
-		}
-	}
-	if !o.Once {
-		if err := w.takeSlot(); err != nil {
-			return nil, err
+			c.save(ts, "auto", mode, "auto_stop", "", "auto_pause", "")
+			w.labelTab(true)
 		}
 	}
 	res, err := autoLoop(c.Ctx, w, id, p, mem, poll, o.Once, c.Dry)
@@ -423,9 +509,12 @@ type ctxWorld struct {
 	id      string
 	path    string
 	mode    string
+	as      string
 	notify  bool
 	once    bool
 	actions []Action
+	slot    *os.File
+	queued  string
 }
 
 func (w *ctxWorld) now() time.Time { return w.c.Now() }
@@ -493,15 +582,16 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 	var actions []Action
 	switch a.Kind {
 	case actStart:
-		res, err := c.App.Start(ctx, StartOpts{ID: w.id, Dry: c.Dry, Unattended: w.mode == autoPlan})
+		res, err := c.App.Start(ctx, StartOpts{ID: w.id, As: w.as, Dry: c.Dry, Unattended: w.mode == autoPlan})
 		if err != nil {
 			return err
 		}
 		actions = res.Actions
 		if !c.Dry {
 			w.path = res.Worktree
+			w.unqueue()
 			if ts, err := c.readState(w.path); err == nil && !w.once {
-				c.save(ts, "auto", w.mode, "auto_stop", "")
+				c.save(ts, "auto", w.mode, "auto_stop", "", "auto_pause", "")
 			}
 		}
 	case actApprove:
@@ -511,7 +601,7 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 		}
 		actions = res.Actions
 	case actRun:
-		res, err := c.App.Run(ctx, RunOpts{ID: w.id, Stage: a.Stage, Dry: c.Dry})
+		res, err := c.App.Run(ctx, RunOpts{ID: w.id, Stage: a.Stage, As: w.as, Dry: c.Dry})
 		if err != nil {
 			return err
 		}
@@ -519,6 +609,9 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 	}
 	w.actions = append(w.actions, actions...)
 	c.record(history.Event{Ticket: w.id, Event: history.Auto, Action: a.Kind, Stage: a.Stage})
+	if !w.once {
+		w.labelTab(true)
+	}
 	return nil
 }
 
@@ -538,12 +631,69 @@ func (w *ctxWorld) stopped(stop string, v autoView) {
 	c := w.c
 	if w.path != "" {
 		if ts, err := c.readState(w.path); err == nil {
-			c.save(ts, "auto", "", "auto_stop", stop, "auto_wait", "")
+			c.save(ts, "auto", "", "auto_stop", stop, "auto_wait", "", "auto_pause", "")
 		}
 	}
+	w.labelTab(false)
 	c.record(history.Event{Ticket: w.id, Event: history.Auto, Stop: stop})
 	if w.notify {
 		c.notify(w.id, autoNotice(stop, w.id))
+	}
+}
+
+// paused records that the loop waits for a person, and why, so tkt ls and
+// the board show it, and notifies once.
+func (w *ctxWorld) paused(why string, v autoView) {
+	c := w.c
+	w.remember(w.memoryNow(), "auto_pause", why, "auto_why", v.Next.Reason)
+	c.record(history.Event{Ticket: w.id, Event: history.Auto, Action: actPause, Stop: why})
+	if w.notify {
+		c.notify(w.id, notice{"needs you", pauseText(why, v.Next.Reason), "request"})
+	}
+}
+
+func (w *ctxWorld) resumed() {
+	w.remember(w.memoryNow(), "auto_pause", "", "auto_why", "")
+}
+
+// autoTabLabel marks a tab label for a ticket in auto: ACM-12 (auto), or
+// ACM-12 (fast, auto) for a preset's label.
+func autoTabLabel(label string) string {
+	if strings.HasSuffix(label, ")") {
+		return strings.TrimSuffix(label, ")") + ", auto)"
+	}
+	return label + " (auto)"
+}
+
+// labelTab marks the ticket's tab while tkt auto drives it, and takes the
+// mark off when the loop ends. A failed rename only costs the mark.
+func (w *ctxWorld) labelTab(on bool) {
+	c := w.c
+	if w.path == "" || c.Dry || w.once {
+		return
+	}
+	ts, err := c.readState(w.path)
+	if err != nil || ts.st["tab"] == "" {
+		return
+	}
+	preset := c.Cfg.Default().Name
+	if c.Cfg.Has(ts.st["preset"]) {
+		preset = ts.st["preset"]
+	}
+	want := c.Cfg.TabLabel(w.id, preset)
+	if on {
+		want = autoTabLabel(want)
+	}
+	tabs, err := c.H.Tabs(c.Ctx)
+	if err != nil {
+		return
+	}
+	for _, t := range tabs {
+		if t.TabID == ts.st["tab"] && t.Label != want {
+			if err := c.H.TabRename(c.Ctx, t.TabID, want); err != nil {
+				c.UI.Warn("cannot rename tab %s: %v", t.TabID, err)
+			}
+		}
 	}
 }
 
@@ -557,37 +707,73 @@ func autoNotice(stop, id string) notice {
 	return notice{"needs you", stop + ": " + stopHint(stop, id), "request"}
 }
 
-// takeSlot waits for one of [auto] max_parallel slots, so only that many
-// loops run at once in a repository. The slot is held until tkt exits.
-func (w *ctxWorld) takeSlot() error {
+// holdSlot waits for one of [auto] max_parallel slots, so only that many
+// tkt auto agents work at once in a repository. A ticket with no worktree
+// yet leaves a mark in queued/, so tkt ls can show it while it waits.
+func (w *ctxWorld) holdSlot(ctx context.Context) (bool, error) {
 	c := w.c
 	n := c.Cfg.Auto.MaxParallel
-	if n <= 0 || c.Dry {
-		return nil
+	if w.slot != nil || n <= 0 || c.Dry || w.once {
+		return false, nil
 	}
 	waiting := false
 	for {
 		for k := range n {
 			f, err := lock.Try(c.Repo.Common, "slot-"+strconv.Itoa(k))
 			if err == nil {
-				c.locks = append(c.locks, f)
+				w.slot = f
 				if waiting {
 					w.remember(w.memoryNow(), "auto_wait", "")
+					w.unqueue()
 				}
-				return nil
+				return waiting, nil
 			}
 			if !errors.Is(err, lock.ErrHeld) {
-				return apperr.New(apperr.Internal, "cannot take an auto slot: %v", err)
+				return false, apperr.New(apperr.Internal, "cannot take an auto slot: %v", err)
 			}
 		}
 		if !waiting {
 			waiting = true
-			c.UI.Info("%d tkt auto loops already run; %s waits for one to stop ([auto] max_parallel)", n, w.id)
+			c.UI.Info("%d tkt auto agents already work; %s waits for one to stop ([auto] max_parallel)", n, w.id)
 			w.remember(w.memoryNow(), "auto_wait", "slot")
+			w.queue()
 		}
-		if err := w.sleep(c.Ctx, 2*time.Second); err != nil {
-			return err
+		if err := w.sleep(ctx, 2*time.Second); err != nil {
+			return false, err
 		}
+	}
+}
+
+func (w *ctxWorld) dropSlot() {
+	if w.slot != nil {
+		w.slot.Close()
+		w.slot = nil
+	}
+}
+
+// queuedDir holds a file per ticket whose loop waits for a slot before the
+// ticket has a worktree.
+func queuedDir(common string) string { return filepath.Join(common, "tkt", "queued") }
+
+func (w *ctxWorld) queue() {
+	if w.path != "" {
+		return
+	}
+	dir := queuedDir(w.c.Repo.Common)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	p := filepath.Join(dir, w.id)
+	body := "mode=" + w.mode + "\nsince=" + w.c.Now().UTC().Format(history.TimeFormat) + "\n"
+	if os.WriteFile(p, []byte(body), 0o644) == nil {
+		w.queued = p
+	}
+}
+
+func (w *ctxWorld) unqueue() {
+	if w.queued != "" {
+		os.Remove(w.queued)
+		w.queued = ""
 	}
 }
 

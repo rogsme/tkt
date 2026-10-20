@@ -106,10 +106,12 @@ const UnattendedLine = "This run is unattended: no person watches this session u
 var BuiltinStages = map[string]string{
 	"start":   "Use the start-ticket skill to start ticket {id}.",
 	"address": "Use the address-pr-review skill to address the review on this branch's pull request.",
-	"sync":    "Use the address-pr-review skill to sync the PR with the base.",
-	"verify":  "Run every step of the Human verification section of this branch's pull request with the playwright-cli skill. Report each step as passed or failed with what you saw. Change no code and post nothing.",
-	"ci":      "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
-	"review":  "Use the review-pr skill to review the current PR.",
+	// sync is address under its old name: address-pr-review syncs with the
+	// base first on every run (rogs-skills 26cfa58).
+	"sync":   "Use the address-pr-review skill to address the review on this branch's pull request.",
+	"verify": "Run every step of the Human verification section of this branch's pull request with the playwright-cli skill. Report each step as passed or failed with what you saw. Change no code and post nothing.",
+	"ci":     "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
+	"review": "Use the review-pr skill to review the current PR.",
 }
 
 // BuiltinPresets apply when the settings define none.

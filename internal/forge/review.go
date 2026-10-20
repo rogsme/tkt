@@ -165,6 +165,17 @@ func HumanVerification(p PR) *Procedure {
 	return best
 }
 
+// BodyVerification reads the Human verification section that work-ticket
+// writes into the pull request body. It stands in for review-pr's procedure
+// when the review bot cleared the head and no review-pr review exists.
+func BodyVerification(p PR) *Procedure {
+	section, steps, ok := ParseProcedure(p.Body)
+	if !ok {
+		return nil
+	}
+	return &Procedure{Head: p.HeadRefOid, Section: section, Steps: steps}
+}
+
 var stepRE = regexp.MustCompile(`^ {0,3}(\d+)[.)][ \t]+(.*)$`)
 
 // ParseProcedure reads the Human verification section of a review body: the

@@ -43,6 +43,7 @@ The scripts use these commands beyond testscript's own:
 | `houserules` | No `wt` run used `--no-hooks`, `--clobber` or `--yes`; no git or herdr command changed worktrees; nothing ran `claude` directly. |
 | `jqedit FILE EXPR`, `jqeq FILE EXPR WANT` | Edits or checks a JSON file with a jq expression. Expressions can read `$REPO`, `$WORK`, `$WT`, `$FAKE_WT_ROOT`, `$FAKE_DIR`, `$HOME`, `$SID` and `$H1` to `$H3`. |
 | `state DIR KEY WANT`, `statevar DIR KEY VAR` | Checks or reads the ticket state of the worktree in DIR. |
+| `waitstate DIR KEY WANT` | Waits up to 30 seconds for the ticket state to record KEY=WANT, for a `tkt auto` loop started in the background with `exec ... &`. |
 | `mkprompt FILE ID [LINE...]` | Writes a start-ticket prompt for ID. |
 | `realgit ARGS...` | Runs the real git without logging, for setup. |
 | `gitvar VAR DIR REV` | Sets VAR to a commit. |

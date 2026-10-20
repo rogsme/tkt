@@ -1,13 +1,20 @@
-tkt ls lists every ticket worktree, or the tickets given, with its tab, agent
-state, the last Status: line the agent wrote since your last message, pull
-request, checks, review verdict at the head, commits behind the base, its
-phase and how long it has been there, and the next step. The last status comes
-from the session's own record, the Claude Code transcript or the OpenCode API;
-when tkt cannot read that, it comes from the agent's recent output.
+tkt ls lists every ticket worktree, or the tickets given, with its phase and
+how long it has been there (TIME), its agent, pull request, checks, review
+verdict, what tkt auto does with it, and the next step. On a terminal the
+phase is colored by who acts next: yellow for you, green when it is ready for
+you to verify, cyan while an agent works.
+
+The agent column says working, idle, blocked (it asks a question), or waiting
+when it is idle but waits on a background task of its own, such as a CI
+watcher, and goes on by itself. tkt reads the agent's last Status: line and
+its background tasks from the session's own record, the Claude Code
+transcript or the OpenCode API; when tkt cannot read that, from the agent's
+recent output.
 
 The next step is the first of these rules that matches:
   1. The pull request is merged: tkt done ID.
-  2. The agent works: wait (tkt wait ID); or it waits for an answer: answer it.
+  2. The agent works, or waits on its background task: wait; or it waits for
+     an answer: answer it.
   3. No pull request yet: tkt resume ID when no agent runs; otherwise read the
      plan and approve it (tkt show ID, tkt approve ID), read the agent's
      reason, or check the agent in its tab.
@@ -15,21 +22,25 @@ The next step is the first of these rules that matches:
      draft waits for your approval: do it in the tab.
   5. The checks are pending: wait for CI.
   6. The review says the base moved, the pull request conflicts, or the agent
-     said BLOCKED_FOR_SYNC with the branch behind the base: tkt run ID sync.
+     said BLOCKED_FOR_SYNC with the branch behind the base: tkt run ID
+     address, which merges the base first.
   7. The merge stopped with HUMAN_QA_FAILED, or the review at the head has
      findings: tkt run ID address.
   8. The checks fail: tkt run ID ci.
-  9. The review at the head is clear: tkt run ID verify.
- 10. No review at the head yet: wait [review] bot_wait for the review bot,
-     counted from when tkt first saw the head waiting, then tkt run ID review.
+  9. The review at the head is clear, from the bot or from review-pr: tkt run
+     ID verify, or the steps yourself.
+ 10. No review at the head yet: without a bot ([review] bot_wait = "0s"),
+     tkt run ID review. With one, wait bot_wait for it, counted from when tkt
+     first saw the head waiting; after that, check the bot's CI job.
 
 A verdict on an older head does not count, so after every push the next step
 waits for a new review. With --json each row's next step is an object whose
 argv, when set, is the command to run, and whose reason names the rule:
-merged, closed, agent_working, agent_blocked, no_agent, plan_awaits_approval,
-status_blocked, check_agent, review_awaits_approval, ci_pending, base_moved,
-qa_failed, findings, checks_fail, bot_clear, review_clear, awaiting_bot or
-needs_review.
+merged, closed, agent_working, agent_waiting, agent_blocked, no_agent,
+plan_awaits_approval, status_blocked, check_agent, review_awaits_approval,
+ci_pending, base_moved, qa_failed, findings, checks_fail, bot_clear,
+review_clear, awaiting_bot, bot_silent, needs_review, or awaiting_slot for a
+ticket whose tkt auto loop waits for a slot before the ticket has a worktree.
 
 The phase names where a ticket stands: queued, starting, planning,
 awaiting_approval, building, ci, waiting_review, reviewing, needs_fix, fixing,
@@ -38,6 +49,11 @@ tkt ls records a phase when it sees it change, in the worktree and in the
 history tkt stats reads, so the time in a phase is as exact as how often
 something runs tkt ls or tkt auto. An agent that sits idle with no status line
 longer than [board] stale_after is marked stale.
+
+The AUTO column says on while a tkt auto loop drives the ticket, paused while
+it waits for you (auto.paused and auto.why in --json say why), queued while it
+waits for a slot, and stalled when the ticket is marked for auto but no loop
+runs.
 
 tkt ls reads pull requests through gh, so outside GitHub forges those columns
 show ? and nothing is recorded.

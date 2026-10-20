@@ -157,6 +157,14 @@ func Herdr() {
 		herdrOK(obj{"type": "ok"})
 	case "tab focus":
 		herdrOK(obj{"type": "ok"})
+	case "tab rename":
+		for _, t := range s.Tabs {
+			if str(t, "tab_id") == args[0] {
+				t["label"] = strings.Join(args[1:], " ")
+			}
+		}
+		s.save()
+		herdrOK(obj{"type": "ok"})
 	case "pane list":
 		var panes []obj
 		for _, p := range s.Panes {

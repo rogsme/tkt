@@ -175,6 +175,7 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"jqeq":        cmdJQEq,
 	"state":       cmdState,
 	"statevar":    cmdStateVar,
+	"waitstate":   cmdWaitState,
 	"mkprompt":    cmdMkPrompt,
 	"realgit":     cmdRealGit,
 	"touchat":     cmdTouchAt,
@@ -322,6 +323,21 @@ func cmdState(ts *testscript.TestScript, neg bool, args []string) {
 	if (got == args[2]) == neg {
 		ts.Fatalf("state %s = %q, want %s%q", args[1], got, map[bool]string{true: "not ", false: ""}[neg], args[2])
 	}
+}
+
+// waitstate DIR KEY WANT: wait up to 30 seconds for the ticket state to
+// record KEY=WANT, for a tkt auto loop running in the background.
+func cmdWaitState(ts *testscript.TestScript, neg bool, args []string) {
+	if len(args) != 3 || neg {
+		ts.Fatalf("usage: waitstate DIR KEY WANT")
+	}
+	got := ""
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if got = readState(ts, args[0])[args[1]]; got == args[2] {
+			return
+		}
+	}
+	ts.Fatalf("state %s = %q after 30s, want %q", args[1], got, args[2])
 }
 
 // statevar DIR KEY VAR: set VAR to the state's KEY.

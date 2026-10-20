@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 func TestAutoStepTable(t *testing.T) {
 	open := Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "ok", Head: "h1", Behind: -1}
 	with := func(f Facts, edit func(*Facts)) Facts { edit(&f); return f }
+	pause := func(why string) autoAct { return autoAct{Kind: actPause, Stop: why} }
 	cases := []struct {
 		f    Facts
 		p    AutoPolicy
@@ -24,30 +26,36 @@ func TestAutoStepTable(t *testing.T) {
 		want autoAct
 	}{
 		{Facts{ID: "ACM-1", Agent: "working", Stage: "start"}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actWait}},
-		{Facts{ID: "ACM-1", Agent: "blocked"}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopNeedsYou}},
-		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL"}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopPlan}},
+		{Facts{ID: "ACM-1", Agent: "idle", Background: true}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actPoll}},
+		{Facts{ID: "ACM-1", Agent: "blocked"}, AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
+		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL"}, AutoPolicy{}, autoMemory{}, pause(StopPlan)},
 		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL"}, AutoPolicy{ApprovePlan: true}, autoMemory{}, autoAct{Kind: actApprove}},
-		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL"}, AutoPolicy{ApprovePlan: true}, autoMemory{Last: "approve:@"}, autoAct{Kind: actStop, Stop: StopNoProgress}},
-		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "BLOCKED"}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopNeedsYou}},
-		{Facts{ID: "ACM-1"}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopAgentMissing}},
-		{Facts{ID: "ACM-1", Agent: "idle", Launch: "not_ready"}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopNeedsYou}},
+		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL"}, AutoPolicy{ApprovePlan: true}, autoMemory{Last: "approve:@"}, pause(StopNoProgress)},
+		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "BLOCKED"}, AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
+		{Facts{ID: "ACM-1", Agent: "idle"}, AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
+		{Facts{ID: "ACM-1"}, AutoPolicy{}, autoMemory{}, pause(StopAgentMissing)},
+		{Facts{ID: "ACM-1", Agent: "idle", Launch: "not_ready"}, AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		{Facts{ID: "ACM-1", Launch: "launching"}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actPoll}},
-		{Facts{ID: "ACM-1", Agent: "unknown"}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopUnknown}},
+		{Facts{ID: "ACM-1", Agent: "unknown"}, AutoPolicy{}, autoMemory{}, pause(StopUnknown)},
 		{with(open, func(f *Facts) { f.Checks = "pending" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actPoll}},
 		{with(open, func(f *Facts) { f.BotWait = time.Hour }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actPoll}},
+		// With a bot, tkt auto never reviews: the bot in CI does.
+		{with(open, func(f *Facts) { f.BotWait, f.Waited = time.Hour, time.Hour }), AutoPolicy{}, autoMemory{}, pause(StopBotSilent)},
 		{open, AutoPolicy{}, autoMemory{}, autoAct{Kind: actRun, Stage: "review"}},
-		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actRun, Stage: "review"}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 1}, autoAct{Kind: actRun, Stage: "address"}},
-		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, autoAct{Kind: actStop, Stop: StopRoundLimit}},
-		{with(open, func(f *Facts) { f.Mergeable = "CONFLICTING" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "sync"}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, pause(StopRoundLimit)},
+		// address merges the base itself, so a moved base runs address.
+		{with(open, func(f *Facts) { f.Mergeable = "CONFLICTING" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "address"}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "address"}},
 		{with(open, func(f *Facts) { f.Checks = "fail" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "ci"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "READY_FOR_HUMAN", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
-		{with(open, func(f *Facts) { f.LastStatus = "AWAITING_POST_APPROVAL" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopNeedsYou}},
+		{with(open, func(f *Facts) { f.LastStatus = "AWAITING_POST_APPROVAL" }), AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		{with(open, func(f *Facts) { f.PRState = "MERGED" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopMerged}},
 		{with(open, func(f *Facts) { f.PRState = "CLOSED" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopClosed}},
-		// review-pr ended BLOCKED_FOR_SYNC with nothing to sync: running it
+		// address answered every finding without a new head: running it
 		// again on the same head would change nothing.
-		{with(open, func(f *Facts) { f.LastStatus, f.Behind = "BLOCKED_FOR_SYNC", 0 }), AutoPolicy{}, autoMemory{Last: "run:review@h1"}, autoAct{Kind: actStop, Stop: StopNoProgress}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 5}, autoMemory{Last: "run:address@h1"}, pause(StopNoProgress)},
 	}
 	for _, tc := range cases {
 		if got := autoStep(NextStep(tc.f), tc.f, tc.p, tc.m); got != tc.want {
@@ -67,7 +75,11 @@ type simWorld struct {
 	acts    []string
 	mem     autoMemory
 	stops   []string
+	pauses  []string
 	looks   int
+	// slot is whether the loop holds a slot; slots counts the takes.
+	slot  bool
+	slots int
 	// flip, when set, changes the facts on the confirming look.
 	flip     func(*Facts)
 	forgeErr int
@@ -129,7 +141,18 @@ func (w *simWorld) act(_ context.Context, a autoAct) error {
 
 func (w *simWorld) remember(m autoMemory, _ ...string) { w.mem = m }
 func (w *simWorld) stopped(stop string, _ autoView)    { w.stops = append(w.stops, stop) }
+func (w *simWorld) paused(why string, _ autoView)      { w.pauses = append(w.pauses, why) }
+func (w *simWorld) resumed()                           {}
+func (w *simWorld) dropSlot()                          { w.slot = false }
 func (w *simWorld) now() time.Time                     { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+
+func (w *simWorld) holdSlot(context.Context) (bool, error) {
+	if !w.slot {
+		w.slot = true
+		w.slots++
+	}
+	return false, nil
+}
 
 func idle(status string) func(*Facts) {
 	return func(f *Facts) { f.Agent, f.LastStatus = "idle", status }
@@ -152,46 +175,75 @@ func TestAutoLoopDrivesToReadyForHuman(t *testing.T) {
 		f:      Facts{ID: "ACM-1", Behind: -1, BotWait: 15 * time.Minute},
 		wanted: true,
 		turns: []func(*Facts){
-			idle("AWAITING_APPROVAL"),    // the plan
-			pushed("h1"),                 // work-ticket opens the pull request
-			pushed("h2"),                 // address after the bot's findings
-			verdict("CHANGES_REQUESTED"), // review-pr after the bot's CLEAR
-			pushed("h3"),                 // address after review-pr
-			verdict("READY_FOR_HUMAN"),   // review-pr after the bot stayed silent
+			idle("AWAITING_APPROVAL"), // the plan
+			pushed("h1"),              // work-ticket opens the pull request
+			pushed("h2"),              // address after the bot's findings
 		},
 		polls: []func(*Facts){
 			func(f *Facts) { f.Checks = "ok" }, // CI passes on h1
 			verdict("FINDINGS"),                // the bot reviews h1
 			func(f *Facts) { f.Checks = "ok" }, // CI passes on h2
 			verdict("CLEAR"),                   // the bot clears h2
-			func(f *Facts) { f.Checks = "ok" }, // CI passes on h3
-			func(f *Facts) { f.Waited = 5 * time.Minute },
-			func(f *Facts) { f.Waited = 15 * time.Minute }, // the bot stays silent
 		},
 	}
 	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true, MaxRounds: 5}, autoMemory{}, simPoll, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"start", "approve", "run:address", "run:review", "run:address", "run:review"}
+	want := []string{"start", "approve", "run:address"}
 	if !slices.Equal(w.acts, want) {
 		t.Errorf("acts: %v, want %v", w.acts, want)
 	}
-	if res.Stop != StopReadyForHuman || res.Rounds != 2 || len(res.Steps) != 6 || !slices.Equal(w.stops, []string{StopReadyForHuman}) {
+	if res.Stop != StopReadyForHuman || res.Rounds != 1 || len(res.Steps) != 3 || !slices.Equal(w.stops, []string{StopReadyForHuman}) {
 		t.Errorf("result: %+v, stops %v", res, w.stops)
 	}
-	if w.mem.Last != "run:review@h3" {
-		t.Errorf("memory: %+v", w.mem)
+	// A slot counts an agent at work: one from the start through the plan's
+	// approval, given up while the loop waits for CI and the bot, and one
+	// more for address.
+	if w.slots != 2 || w.slot {
+		t.Errorf("slots taken %d, held at the end %v", w.slots, w.slot)
 	}
 }
 
-func TestAutoLoopStops(t *testing.T) {
-	plan := Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL", Behind: -1}
-	t.Run("plan without approve-plan", func(t *testing.T) {
-		w := &simWorld{f: plan, started: true, wanted: true}
-		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, false, false)
-		if err != nil || res.Stop != StopPlan || len(w.acts) != 0 {
-			t.Errorf("%+v %v %v", res, err, w.acts)
+func TestAutoLoopReviewsWithoutABot(t *testing.T) {
+	w := &simWorld{
+		f:       Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", LastStatus: "READY_FOR_REVIEW", Head: "h1", Checks: "ok", Behind: -1},
+		started: true, wanted: true,
+		turns: []func(*Facts){verdict("READY_FOR_HUMAN")},
+	}
+	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, false, false)
+	if err != nil || res.Stop != StopReadyForHuman || !slices.Equal(w.acts, []string{"run:review"}) {
+		t.Errorf("%+v %v %v", res, err, w.acts)
+	}
+}
+
+func TestAutoLoopPausesForYou(t *testing.T) {
+	plan := Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL", Behind: -1, BotWait: time.Hour}
+	t.Run("a question, then on by itself", func(t *testing.T) {
+		w := &simWorld{f: Facts{ID: "ACM-1", Agent: "blocked", Stage: "start", Behind: -1}, started: true, wanted: true,
+			polls: []func(*Facts){
+				func(*Facts) {},                         // still asking
+				func(f *Facts) { f.Agent = "working" },  // you answered in its tab
+				func(f *Facts) { f.PRState = "MERGED" }, // merged
+			},
+			turns: []func(*Facts){idle("AWAITING_APPROVAL")}}
+		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, simPoll, false, false)
+		if err == nil || !slices.Equal(w.pauses, []string{StopNeedsYou}) {
+			t.Fatalf("%+v %v pauses %v", res, err, w.pauses)
+		}
+		// After the answer the plan came, and auto approved it.
+		if !slices.Equal(w.acts, []string{"approve"}) {
+			t.Errorf("acts: %v", w.acts)
+		}
+	})
+	t.Run("a plan without approve-plan", func(t *testing.T) {
+		w := &simWorld{f: plan, started: true, wanted: true, polls: []func(*Facts){
+			func(*Facts) {},
+			func(f *Facts) { f.Agent, f.Stage = "working", "work" }, // you approved it
+		}, turns: []func(*Facts){pushed("h1")}}
+		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, false, false)
+		if err == nil || !slices.Equal(w.pauses, []string{StopPlan}) || len(w.acts) != 0 {
+			t.Errorf("%v pauses %v acts %v", err, w.pauses, w.acts)
 		}
 	})
 	t.Run("round limit", func(t *testing.T) {
@@ -199,36 +251,40 @@ func TestAutoLoopStops(t *testing.T) {
 			started: true, wanted: true, turns: []func(*Facts){pushed("h2")}, polls: []func(*Facts){
 				func(f *Facts) { f.Checks = "ok" }, verdict("FINDINGS"),
 			}}
-		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 1}, autoMemory{}, simPoll, false, false)
-		if err != nil || res.Stop != StopRoundLimit || !slices.Equal(w.acts, []string{"run:address"}) {
-			t.Errorf("%+v %v %v", res, err, w.acts)
+		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 1}, autoMemory{}, simPoll, false, false)
+		if err == nil || !slices.Equal(w.pauses, []string{StopRoundLimit}) || !slices.Equal(w.acts, []string{"run:address"}) || w.slot {
+			t.Errorf("%v pauses %v acts %v slot %v", err, w.pauses, w.acts, w.slot)
 		}
 	})
+	t.Run("the decision changed before acting", func(t *testing.T) {
+		w := &simWorld{f: plan, started: true, wanted: true, flip: func(f *Facts) { f.Agent = "blocked" }}
+		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, simPoll, false, false)
+		if err == nil || !slices.Equal(w.pauses, []string{StopNeedsYou}) || len(w.acts) != 0 {
+			t.Errorf("%v pauses %v acts %v", err, w.pauses, w.acts)
+		}
+	})
+}
+
+func TestAutoLoopStops(t *testing.T) {
+	merged := Facts{ID: "ACM-1", PRState: "MERGED", Agent: "idle", Behind: -1}
 	t.Run("stopped", func(t *testing.T) {
-		w := &simWorld{f: plan, started: true}
+		w := &simWorld{f: merged, started: true}
 		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, false, false)
 		if err != nil || res.Stop != StopStopped {
 			t.Errorf("%+v %v", res, err)
 		}
 	})
-	t.Run("the decision changed before acting", func(t *testing.T) {
-		w := &simWorld{f: plan, started: true, wanted: true, flip: func(f *Facts) { f.Agent = "blocked" }}
-		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, simPoll, false, false)
-		if err != nil || res.Stop != StopNeedsYou || len(w.acts) != 0 {
-			t.Errorf("%+v %v %v", res, err, w.acts)
-		}
-	})
 	t.Run("the forge recovers", func(t *testing.T) {
-		w := &simWorld{f: plan, started: true, wanted: true, forgeErr: maxForgeFailures - 1, polls: make([]func(*Facts), maxForgeFailures)}
+		w := &simWorld{f: merged, started: true, wanted: true, forgeErr: maxForgeFailures - 1, polls: make([]func(*Facts), maxForgeFailures)}
 		for i := range w.polls {
 			w.polls[i] = func(*Facts) {}
 		}
-		if res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, false, false); err != nil || res.Stop != StopPlan {
+		if res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, false, false); err != nil || res.Stop != StopMerged {
 			t.Errorf("%+v %v", res, err)
 		}
 	})
 	t.Run("the forge keeps failing", func(t *testing.T) {
-		w := &simWorld{f: plan, started: true, wanted: true, forgeErr: maxForgeFailures, polls: make([]func(*Facts), maxForgeFailures)}
+		w := &simWorld{f: merged, started: true, wanted: true, forgeErr: maxForgeFailures, polls: make([]func(*Facts), maxForgeFailures)}
 		for i := range w.polls {
 			w.polls[i] = func(*Facts) {}
 		}
@@ -242,7 +298,7 @@ func TestAutoLoopStops(t *testing.T) {
 func TestAutoLoopOnce(t *testing.T) {
 	w := &simWorld{f: Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL", Behind: -1}, started: true}
 	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, simPoll, true, false)
-	if err != nil || res.Did == nil || res.Did.Action != actApprove || !slices.Equal(w.acts, []string{"approve"}) {
+	if err != nil || res.Did == nil || res.Did.Action != actApprove || !slices.Equal(w.acts, []string{"approve"}) || w.slots != 0 {
 		t.Errorf("approve: %+v %v", res, err)
 	}
 	w = &simWorld{f: Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "pending", Behind: -1}, started: true}
@@ -252,8 +308,8 @@ func TestAutoLoopOnce(t *testing.T) {
 	}
 	w = &simWorld{f: Facts{ID: "ACM-1", Agent: "blocked", Behind: -1}, started: true}
 	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, true, false)
-	if err != nil || res.Stop != StopNeedsYou || len(w.stops) != 0 {
-		t.Errorf("stop: %+v %v", res, err)
+	if err != nil || res.Stop != StopNeedsYou || len(w.stops) != 0 || len(w.pauses) != 0 {
+		t.Errorf("pause: %+v %v", res, err)
 	}
 }
 
@@ -269,7 +325,13 @@ func TestAutoSlots(t *testing.T) {
 	c := &Ctx{App: &App{UI: &output.UI{Err: &bytes.Buffer{}}, Now: time.Now}, Ctx: ctx, Repo: gitx.Repo{Common: common}, Cfg: cfg}
 	w := &ctxWorld{c: c, id: "ACM-2"}
 	done := make(chan error, 1)
-	go func() { done <- w.takeSlot() }()
+	go func() {
+		waited, err := w.holdSlot(ctx)
+		if err == nil && !waited {
+			err = errors.New("did not say it waited")
+		}
+		done <- err
+	}()
 	select {
 	case err := <-done:
 		t.Fatalf("took a slot while the only one is held: %v", err)
@@ -284,8 +346,12 @@ func TestAutoSlots(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("never took the freed slot")
 	}
-	c.release()
+	w.dropSlot()
 	if _, err := lock.Try(common, "slot-0"); err != nil {
-		t.Errorf("the slot stays held after release: %v", err)
+		t.Errorf("the slot stays held after dropSlot: %v", err)
+	}
+	// While it waited, a ticket with no worktree showed in queued/.
+	if entries, _ := os.ReadDir(queuedDir(common)); len(entries) != 0 {
+		t.Errorf("queued/ keeps %v after the slot came", entries)
 	}
 }

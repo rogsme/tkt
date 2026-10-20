@@ -31,7 +31,10 @@ type ShowResult struct {
 	AgentStatus string `json:"agent_status"`
 	Harness     string `json:"harness"`
 	Session     string `json:"session"`
-	// Source says where Message came from: transcript, api or screen.
+	// Source says where Message came from: transcript, api or screen. With
+	// --steps it says where the steps came from: review (review-pr's
+	// READY_FOR_HUMAN summary) or pull_request (the body, after the bot's
+	// CLEAR).
 	Source     string `json:"source"`
 	LastStatus string `json:"last_status"`
 	Message    string `json:"message"`
@@ -126,13 +129,28 @@ func (c *Ctx) showSteps(id string, res *ShowResult) error {
 		}
 		res.PR = p.Number
 		if proc := forge.HumanVerification(p); proc != nil {
-			res.Procedure, res.Steps = proc.Section, proc.Steps
+			res.Procedure, res.Steps, res.Source = proc.Section, proc.Steps, "review"
 			return nil
 		}
 	}
 	if res.PR == 0 {
 		return apperr.New(apperr.NoVerification, "%s has no open pull request", id).WithHint("tkt ls %s", id)
 	}
-	return apperr.New(apperr.NoVerification, "no review of pull request %s says READY_FOR_HUMAN at its head with Human verification steps", forge.Ref(res.PR)).
+	// The review bot's CLEAR leaves no review-pr procedure: the pull
+	// request's own Human verification section holds the steps.
+	bodies, err := gh.ListBodies(c.Ctx, id)
+	if err != nil {
+		return err
+	}
+	for _, p := range gh.Mine(bodies, id) {
+		if p.Number != res.PR {
+			continue
+		}
+		if proc := forge.BodyVerification(p); proc != nil {
+			res.Procedure, res.Steps, res.Source = proc.Section, proc.Steps, "pull_request"
+			return nil
+		}
+	}
+	return apperr.New(apperr.NoVerification, "pull request %s has no Human verification steps, in a review that says READY_FOR_HUMAN at its head or in its body", forge.Ref(res.PR)).
 		WithHint("tkt ls %s", id)
 }

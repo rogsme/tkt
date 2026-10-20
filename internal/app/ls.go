@@ -3,14 +3,18 @@ package app
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"golang.org/x/sync/errgroup"
 
 	"gitlab.com/rogs/tkt/internal/agent"
@@ -36,6 +40,9 @@ type RowAgent struct {
 	Name    string `json:"name"`
 	Harness string `json:"harness"`
 	Status  string `json:"status"`
+	// Background counts the tasks an idle agent waits on, such as a CI
+	// watcher; it goes on when they finish.
+	Background int `json:"background"`
 }
 
 // RowPR is a ticket's pull request.
@@ -59,7 +66,16 @@ type RowAuto struct {
 	Stop string `json:"stop"`
 	// Waiting is "slot" while the loop waits for a free slot.
 	Waiting string `json:"waiting"`
+	// Paused says why a running loop waits for you, such as needs_you, and
+	// Why names the rule behind it, such as agent_blocked. Both are empty
+	// while the loop drives the ticket.
+	Paused string `json:"paused"`
+	Why    string `json:"why"`
 }
+
+// ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
+// for a free slot before it starts the ticket.
+const ReasonAwaitingSlot = "awaiting_slot"
 
 // Row is one ticket in tkt ls. A null field is unknown or absent; Sources
 // says which sources were read. Times are UTC, as 2006-01-02T15:04:05Z.
@@ -105,35 +121,118 @@ type LsResult struct {
 	now     time.Time
 }
 
+// lsHeader names the columns of tkt ls. TIME is how long the ticket has been
+// in its phase.
+var lsHeader = []string{"TICKET", "PHASE", "TIME", "AGENT", "PR", "CHECKS", "REVIEW", "AUTO", "NEXT"}
+
 func (r *LsResult) Text(w io.Writer) {
 	if len(r.Rows) == 0 {
 		return
 	}
-	header := []string{"TICKET", "TAB", "AGENT", "LAST STATUS", "PR", "CHECKS", "REVIEW", "BEHIND", "PHASE", "AGE", "NEXT"}
 	var rows [][]string
 	for _, row := range r.Rows {
 		rows = append(rows, r.cells(row, r.now))
 	}
-	output.Table(w, header, rows)
+	output.Table(w, lsHeader, rows)
+}
+
+// Pretty is tkt ls on a terminal: the same columns, with the phase colored
+// by who acts next and the empty cells faint.
+func (r *LsResult) Pretty(w io.Writer, _ string, width int) {
+	if len(r.Rows) == 0 {
+		return
+	}
+	var (
+		head  = lipgloss.NewStyle().Bold(true).Faint(true)
+		faint = lipgloss.NewStyle().Faint(true)
+		bold  = lipgloss.NewStyle().Bold(true)
+		you   = lipgloss.NewStyle().Foreground(lipgloss.Yellow).Bold(true)
+		ready = lipgloss.NewStyle().Foreground(lipgloss.Green).Bold(true)
+		busy  = lipgloss.NewStyle().Foreground(lipgloss.Cyan)
+		bad   = lipgloss.NewStyle().Foreground(lipgloss.Red)
+	)
+	cells := make([][]string, len(r.Rows))
+	widths := make([]int, len(lsHeader))
+	for i, h := range lsHeader {
+		widths[i] = len(h)
+	}
+	for i, row := range r.Rows {
+		cells[i] = r.cells(row, r.now)
+		cells[i][1] = strings.ReplaceAll(cells[i][1], "_", " ")
+		for j, c := range cells[i] {
+			widths[j] = max(widths[j], len(c))
+		}
+	}
+	last := len(lsHeader) - 1
+	used := 2
+	for _, n := range widths[:last] {
+		used += n + 2
+	}
+	pad := func(s string, n int) string { return s + strings.Repeat(" ", max(0, n-len(s))) }
+	fmt.Fprintln(w)
+	line := "  "
+	for i, h := range lsHeader[:last] {
+		line += head.Render(pad(h, widths[i])) + "  "
+	}
+	fmt.Fprintln(w, line+head.Render(lsHeader[last]))
+	for i, row := range r.Rows {
+		line := "  "
+		for j, c := range cells[i][:last] {
+			s := pad(c, widths[j])
+			switch {
+			case j == 0:
+				s = bold.Render(s)
+			case j == 1:
+				s = phaseStyle(row.Phase, you, ready, busy, faint).Render(s)
+			case j == 2 && row.Stale:
+				s = bad.Render(s)
+			case c == "-":
+				s = faint.Render(s)
+			case j == 5 && row.Checks != nil && row.Checks.State == "fail":
+				s = bad.Render(s)
+			case j == 7 && (c == "paused" || c == "stalled"):
+				s = you.Render(s)
+			}
+			line += s + "  "
+		}
+		next := cells[i][last]
+		if width > used+10 && len(next) > width-used {
+			next = next[:width-used-3] + "..."
+		}
+		if row.Next.Kind == "wait" || row.Next.Kind == "unknown" {
+			next = faint.Render(next)
+		}
+		fmt.Fprintln(w, line+next)
+	}
+	fmt.Fprintln(w)
+}
+
+// phaseStyle colors a phase by who acts next: you, nobody (it is done or
+// ready), or an agent.
+func phaseStyle(phase string, you, ready, busy, faint lipgloss.Style) lipgloss.Style {
+	switch phase {
+	case PhaseAwaitingApproval, PhaseNeedsYou, PhaseNoAgent, PhaseUnknown:
+		return you
+	case PhaseReadyForHuman:
+		return ready
+	case PhaseMerged, PhaseClosed, PhaseQueued:
+		return faint
+	}
+	return busy
 }
 
 func (r *LsResult) cells(row Row, now time.Time) []string {
 	herdrOK := r.Sources.Herdr == "ok"
 	forgeOK := r.Sources.Forge == "ok"
-	tab, ag, last := "?", "?", "-"
+	ag := "?"
 	if herdrOK {
-		labels := make([]string, len(row.Tabs))
-		for i, t := range row.Tabs {
-			labels[i] = t.Label
-		}
-		tab = or(strings.Join(labels, ", "), "-")
 		ag = "-"
 		if row.Agent != nil {
 			ag = row.Agent.Status
+			if row.Agent.Background > 0 {
+				ag = "waiting"
+			}
 		}
-	}
-	if row.LastStatus != "" {
-		last = row.LastStatus
 	}
 	pr, checks, review, next := "?", "-", "-", "?"
 	if forgeOK {
@@ -144,6 +243,8 @@ func (r *LsResult) cells(row Row, now time.Time) []string {
 		pr = forge.Ref(row.PR.Number)
 		if row.PR.State != "OPEN" {
 			pr += " " + strings.ToLower(row.PR.State)
+		} else if row.Behind != nil && *row.Behind > 0 {
+			pr += " (" + strconv.Itoa(*row.Behind) + " behind)"
 		}
 	}
 	if row.Checks != nil {
@@ -152,12 +253,8 @@ func (r *LsResult) cells(row Row, now time.Time) []string {
 	if row.Review != nil {
 		review = row.Review.Value
 		if !row.Review.AtHead {
-			review += " (old head)"
+			review += " (old)"
 		}
-	}
-	behind := "-"
-	if row.Behind != nil {
-		behind = strconv.Itoa(*row.Behind)
 	}
 	phase := or(row.Phase, "-")
 	if row.Stale {
@@ -167,7 +264,25 @@ func (r *LsResult) cells(row Row, now time.Time) []string {
 	if t, err := time.Parse(time.RFC3339, row.PhaseSince); err == nil && !now.IsZero() {
 		age = Ago(now.Sub(t))
 	}
-	return []string{row.Ticket, tab, ag, last, pr, checks, review, behind, phase, age, next}
+	return []string{row.Ticket, phase, age, ag, pr, checks, review, autoCell(row.Auto), next}
+}
+
+// autoCell says what tkt auto does with a ticket: drives it, waits for you
+// or for a slot, or nothing because its loop is gone.
+func autoCell(a *RowAuto) string {
+	switch {
+	case a == nil:
+		return "-"
+	case a.Running && a.Waiting == "slot":
+		return "queued"
+	case a.Running && a.Paused != "":
+		return "paused"
+	case a.Running:
+		return "on"
+	case a.Wanted:
+		return "stalled"
+	}
+	return "-"
 }
 
 // Ago renders a duration for people: 45s, 12m, 3h, 2d.
@@ -264,7 +379,13 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 		})
 	}
 	rows.Wait()
-	if len(tickets) == 0 && len(want) == 0 {
+	for _, q := range c.queuedTickets() {
+		if (len(want) == 0 || slices.Contains(want, q.Ticket)) && !slices.ContainsFunc(tickets, func(t ticketWorktree) bool { return t.ID == q.Ticket }) {
+			res.Rows = append(res.Rows, q)
+			missing = slices.DeleteFunc(missing, func(id string) bool { return id == q.Ticket })
+		}
+	}
+	if len(res.Rows) == 0 && len(want) == 0 {
 		a.UI.Info("no ticket worktrees")
 	}
 	if res.Sources.Herdr != "ok" && l.forgeErr == nil && a.Getenv("HERDR_ENV") != "1" {
@@ -390,7 +511,10 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan, Rounds: atoi(st["rounds"]),
-		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID)}
+		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"]}
+	if !row.Auto.Running {
+		row.Auto.Paused, row.Auto.Why = "", ""
+	}
 	if l.src.Herdr == "ok" {
 		row.Tabs = herdr.TicketTabs(l.tabs, t.ID)
 		if row.Tabs == nil {
@@ -407,6 +531,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 				row.LastStatus = agent.LastStatus(turn.All)
 				if !turn.At.IsZero() {
 					row.IdleSince = turn.At.UTC().Format(history.TimeFormat)
+				}
+				if turn.Pending > 0 && row.LastStatus == "" && c.Now().Sub(turn.At) < backgroundGrace {
+					row.Agent.Background = turn.Pending
 				}
 			}
 		}
@@ -452,6 +579,33 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	return row, f
 }
+
+// queuedTickets lists the tickets whose tkt auto loop waits for a slot
+// before the ticket has a worktree. A mark whose loop is gone counts for
+// nothing.
+func (c *Ctx) queuedTickets() []Row {
+	dir := queuedDir(c.Repo.Common)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []Row
+	for _, e := range entries {
+		id := e.Name()
+		if e.IsDir() || !c.autoRunning(id) {
+			continue
+		}
+		st := state.Read(filepath.Join(dir, id))
+		out = append(out, Row{Ticket: id, Tabs: []herdr.Tab{}, Phase: PhaseQueued, PhaseSince: st["since"], Stage: "start",
+			Next: Next{Kind: "wait", Reason: ReasonAwaitingSlot, Text: "wait for a free auto slot ([auto] max_parallel)"},
+			Auto: &RowAuto{Wanted: true, ApprovePlan: st["mode"] == autoPlan, Running: true, Waiting: "slot"}})
+	}
+	return out
+}
+
+// backgroundGrace bounds how long an idle agent with unfinished background
+// tasks counts as busy. A dev server it left running never reports back.
+const backgroundGrace = time.Hour
 
 // closedPR picks a ticket's merged pull request, else its latest one.
 func closedPR(prs []forge.PR) (forge.PR, bool) {

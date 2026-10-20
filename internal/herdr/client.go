@@ -179,6 +179,12 @@ func (c Client) TabClose(ctx context.Context, tab string) error {
 	return err
 }
 
+// TabRename relabels a tab.
+func (c Client) TabRename(ctx context.Context, tab, label string) error {
+	_, err := c.call(ctx, false, "tab", "rename", tab, label)
+	return err
+}
+
 // TabFocus switches to a tab.
 func (c Client) TabFocus(ctx context.Context, tab string) error {
 	_, err := c.call(ctx, false, "tab", "focus", tab)
