@@ -68,8 +68,9 @@ jobs:
 
       - name: Test the pi extension
         # Node strips the TypeScript types itself; the tested files import
-        # nothing from pi.
-        run: node --test internal/pi/ext/test/
+        # nothing from pi. Node 24 reads a directory here as a module, so
+        # the glob names the files.
+        run: node --test 'internal/pi/ext/test/*.test.ts'
 
       - name: No en or em dashes
         run: |
