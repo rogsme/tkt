@@ -6,24 +6,31 @@ exec tkt start ACM-12 --prompt -
 env FAKE_GH_PRS=$WORK/prs.json
 exec tkt ls --no-fetch
 stdout '^ACM-12 .*waiting_review .*wait for review$'
-
-mkdir $HOME/.config/tkt
-cp $WORK/fast.toml $HOME/.config/tkt/config.toml
 exec tkt ls --no-fetch --json
 envelope '.result.rows[0].next.reason' awaiting_bot
-exec sleep 2
+
+# The wait counts from the phase file, which tkt ls wrote above; a clock
+# that started long ago has run out.
+cp $WORK/phase-old $REPO/.git/worktrees/ACM-12/tkt/phase
 exec tkt ls --no-fetch --json
 envelope '.result.rows[0].next | [.reason, .text]' '["needs_review","tkt run ACM-12 review"]'
-envelope '.result.rows[0].phase' waiting_review
+envelope '.result.rows[0] | [.phase, .phase_since]' '["waiting_review","2020-01-01T00:00:00Z"]'
+
+# A new head starts the clock again.
+jqedit $WORK/prs.json '.[0].headRefOid = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0].next.reason' awaiting_bot
 
 # Without a bot, review-pr is next at once.
+mkdir $HOME/.config/tkt
 cp $WORK/nobot.toml $HOME/.config/tkt/config.toml
 exec tkt ls --no-fetch
 stdout '^ACM-12 .*tkt run ACM-12 review$'
 
--- fast.toml --
-[review]
-bot_wait = "1s"
+-- phase-old --
+head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+phase=waiting_review
+since=2020-01-01T00:00:00Z
 -- nobot.toml --
 [review]
 bot_wait = "0s"
