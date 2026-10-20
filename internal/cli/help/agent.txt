@@ -4,6 +4,24 @@ https://github.com/earendil-works/pi), with only tkt's own extension. Running
 tkt with no arguments opens it too, when you type it at a terminal in a herdr
 pane inside a repository with the lifecycle configuration.
 
+Say what you want in plain words: "start ACM-12", "run ACM-13 to ACM-15 in
+auto", "I approved the plan for ACM-12, continue", "ACM-12 is merged, remove
+it". Every step runs in the background and the prompt comes back at once, so
+you can start the next ticket while the first one plans. The chat speaks up
+only when a ticket needs you: a plan to approve, a question from its agent, a
+pull request ready for human verification, or a tkt auto loop that stopped.
+Each of those also shows a herdr notification. Everything else only moves the
+board above the prompt.
+
+The same actions work without the model as slash commands: /start, /approve,
+/next, /auto, /send, /show, /peek (the agent's live screen), /check (the human
+verification checklist), /done, /inbox (what needs you, with fixed answers),
+/board (every ticket in columns) and /stats. A tool that changes a ticket your
+message did not name asks first, and removing a ticket always asks.
+
+Tickets in auto run in tkt auto loops that outlive the chat, so they keep
+moving, and notify you, after you close it.
+
 The chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:
 not your extensions, skills, prompt templates or themes, and not the project's
 AGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in

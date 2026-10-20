@@ -78,3 +78,14 @@ After a change to how tkt starts pi, or after `just bump-pi`, build with `just b
 1. Run `XDG_DATA_HOME=$(mktemp -d) ./tkt agent --dry-run --json`. It unpacks pi under that directory and prints the command line.
 2. Run that pi with `--version`, then with the same flags and `--help`: pi must accept every flag.
 3. Run `./tkt agent` in a herdr pane. The chat opens without a startup banner, with the built-in theme, and `/tkt-version` prints the tkt version. `/login` stores its credentials under `~/.config/tkt/pi`, not `~/.pi/agent`.
+
+After a change to the extension in `internal/pi/ext`, run `just install`, then `tkt agent` in a herdr pane inside a configured scratch repository:
+
+1. Say "start ACM-1", then right away "run ACM-2 to ACM-3 in auto". Each reply comes back in seconds while the tickets launch in their own tabs, and the batch asks once for both ids.
+2. Keep typing while they launch: nothing takes the focus, and the board shows them as starting, then planning.
+3. Only ACM-1's plan raises a line in the chat and a herdr notification. The auto tickets move on the board without a word.
+4. `/inbox` offers fixed answers for the plan; approve it from there.
+5. `/peek` an agent that asks a question, then answer it in its tab.
+6. At ready_for_human, `/check` offers verify first, then the checklist. Mark a step failed and start a fix session, then mark them all passed.
+7. Merge, then say "ACM-1 is merged, remove it". The chat confirms first, then reports the time from start to merge, and `/stats` lists it.
+8. Quit the chat while an auto ticket works and open `tkt agent` again: the ticket kept moving, and the board shows where it is.

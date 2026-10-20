@@ -47,6 +47,7 @@ ci:
     for t in {{ targets }}; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -o /dev/null . || exit 1; done
     go run ./internal/pi/fetch {{ targets }}
     for t in {{ targets }}; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -tags bundled_pi -trimpath -o /dev/null . || exit 1; done
+    node --test internal/pi/ext/test/
     @# Bytes, not characters: in the C locale git grep cannot read \x{2014}, and an error must not pass as no match.
     @LC_ALL=C git grep --untracked -nP '\xE2\x80[\x93\x94]' -- ':!.claude'; test $? -eq 1 || { echo "rewrite the lines above without dashes"; exit 1; }
 

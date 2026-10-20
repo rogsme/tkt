@@ -61,6 +61,16 @@ jobs:
             CGO_ENABLED=0 GOOS=${target%/*} GOARCH=${target#*/} go build -tags bundled_pi -trimpath -o /dev/null .
           done
 
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test the pi extension
+        # Node strips the TypeScript types itself; the tested files import
+        # nothing from pi.
+        run: node --test internal/pi/ext/test/
+
       - name: No en or em dashes
         run: |
           # Bytes, not characters: in the C locale git grep cannot read
