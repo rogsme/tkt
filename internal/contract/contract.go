@@ -78,3 +78,8 @@ var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`
 // Skills names the lifecycle skills tkt's built-in stage lines, and the line
 // tkt approve sends, ask for.
 var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr"}
+
+// Unattended is the word start-ticket's "Unattended runs" section looks for
+// in its request: the run skips the browser presentation, and every open
+// question goes through the harness's question tool.
+const Unattended = "unattended"

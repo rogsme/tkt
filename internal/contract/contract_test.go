@@ -78,6 +78,19 @@ func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	}
 }
 
+func TestUnattendedLineSaysTheWordStartTicketReads(t *testing.T) {
+	section := read(t, "start-ticket-unattended.md")
+	if !strings.Contains(section, "An "+contract.Unattended+" run is one whose request says so.") {
+		t.Errorf("start-ticket's section no longer keys on %q:\n%s", contract.Unattended, section)
+	}
+	if !strings.Contains(section, "question tool") {
+		t.Errorf("start-ticket's section no longer asks through the question tool:\n%s", section)
+	}
+	if !strings.Contains(config.UnattendedLine, "This run is "+contract.Unattended) {
+		t.Errorf("config.UnattendedLine %q does not say the run is %s", config.UnattendedLine, contract.Unattended)
+	}
+}
+
 func TestStageLinesNameRegisteredSkills(t *testing.T) {
 	registry := read(t, "status-lines.md")
 	for _, skill := range contract.Skills {

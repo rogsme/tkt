@@ -9,7 +9,7 @@ exec tkt auto ACM-12 --approve-plan --poll 1s --json
 envelope '.result | [.stop, .phase, .rounds]' '["ready_for_human","ready_for_human",0]'
 envelope '[.result.steps[] | .action + ":" + (.stage // "")]' '["start:","approve:","run:review"]'
 exec cat $FAKE_DIR/prompts
-stdout -count=1 'Use the start-ticket skill to start ticket ACM-12.'
+stdout -count=1 'Use the start-ticket skill to start ticket ACM-12. This run is unattended: '
 stdout -count=1 'The plan is approved. Use the work-ticket skill to execute it.'
 stdout -count=1 'Use the review-pr skill to review the current PR.'
 state $FAKE_WT_ROOT/ACM-12 auto ''
@@ -22,6 +22,15 @@ houserules
 # Once there, a single step has nothing left to do.
 exec tkt auto ACM-12 --once --json
 envelope '.result | [.stop, .did]' '["ready_for_human",null]'
+
+# Only a loop that approves the plan itself starts an unattended run, in
+# which start-ticket asks its questions with the question tool and skips
+# the browser presentation.
+exec tkt auto ACM-13 --once --dry-run
+stderr 'herdr agent prompt .*start\\ ticket\\ ACM-13\. --wait'
+! stderr unattended
+exec tkt auto ACM-14 --approve-plan --once --dry-run
+stderr 'herdr agent prompt .*start\\ ticket\\ ACM-14\.\\ This\\ run\\ is\\ unattended:\\ '
 
 -- config.toml --
 [review]

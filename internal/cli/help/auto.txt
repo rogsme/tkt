@@ -1,7 +1,10 @@
 tkt auto drives one ticket through the lifecycle until it needs a person. It
 reads the same facts as tkt ls, then:
 
-  - starts the ticket when it has no worktree yet;
+  - starts the ticket when it has no worktree yet; with --approve-plan its
+    start line says the run is unattended, so start-ticket skips the
+    browser plan presentation and asks every open question with the
+    harness's question tool, which stops the loop for you;
   - waits while the agent works;
   - approves the plan when start-ticket ends with AWAITING_APPROVAL, but only
     with --approve-plan; without it the loop stops there for you;

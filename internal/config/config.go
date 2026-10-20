@@ -97,6 +97,11 @@ const (
 // stage: tkt run starts a fresh session, and the plan lives in this one.
 const ApproveLine = "The plan is approved. Use the work-ticket skill to execute it."
 
+// UnattendedLine follows the start line when tkt auto approves the plan
+// itself. start-ticket then skips the browser presentation and asks every
+// open question with the harness's question tool, which stops the loop.
+const UnattendedLine = "This run is unattended: no person watches this session until it asks a question."
+
 // BuiltinStages are the stage lines tkt run sends; {id} becomes the ticket.
 var BuiltinStages = map[string]string{
 	"start":   "Use the start-ticket skill to start ticket {id}.",

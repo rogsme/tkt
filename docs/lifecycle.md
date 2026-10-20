@@ -215,7 +215,7 @@ Run it from another tab. It confirms through `gh` that the pull request merged, 
 
 | The ticket | tkt auto |
 |---|---|
-| Has no worktree yet | Runs `tkt start`. |
+| Has no worktree yet | Runs `tkt start`. With `--approve-plan`, the start line says the run is unattended: start-ticket skips the browser plan presentation and asks every open question with the harness's question tool, so no decision hides in a plan nobody reads. |
 | The agent works | Waits for it. |
 | `Status: AWAITING_APPROVAL` | Runs `tkt approve` with `--approve-plan`; without it, stops for you. |
 | Checks pending | Waits for CI. |

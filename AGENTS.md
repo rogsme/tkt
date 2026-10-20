@@ -36,8 +36,9 @@ tkt reads no skill files at run time. It depends on these lines from gitlab.com/
 
 - the configuration markers and the `## Forge` and `- Ticket ids:` lines that `/setup-rogs` writes;
 - the status lines in that repository's CLAUDE.md registry;
-- review-pr's `Verdict:` and `Reviewed head:` lines;
-- the skill names in the built-in stage lines.
+- review-pr's `Verdict:` and `Reviewed head:` lines, and the numbered steps under `## Human verification` in its ready summary;
+- the skill names in the built-in stage lines and in the line `tkt approve` sends;
+- start-ticket's `## Unattended runs` section, which keys on the word "unattended" in the line `tkt auto --approve-plan` adds to the start line.
 
 `internal/contract` pins them, and `internal/contract/testdata/SOURCES.md` records where each fixture comes from. When the skills change one of them, update the fixture and the code in one commit that cites the skills commit. `contract.Version` changes only when the contract's version does.
 

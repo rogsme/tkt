@@ -25,6 +25,9 @@ type StartOpts struct {
 	Focus   bool
 	Force   bool
 	Dry     bool
+	// Unattended adds config.UnattendedLine to the prompt, for a tkt auto
+	// that approves the plan itself.
+	Unattended bool
 }
 
 // StartResult is what tkt start did.
@@ -114,6 +117,13 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		again, stage, busy = "tkt start --scratch "+id, "", "close it"
 	} else if !o.Prompt.Set {
 		text, _ = c.Cfg.StageLine("start", id)
+	}
+	if o.Unattended && !scratch {
+		sep := " "
+		if strings.Contains(text, "\n") {
+			sep = "\n\n"
+		}
+		text = strings.TrimRight(text, "\n") + sep + config.UnattendedLine
 	}
 	if err := c.needHerdr(); err != nil {
 		return nil, err

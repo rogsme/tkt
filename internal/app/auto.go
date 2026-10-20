@@ -493,7 +493,7 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 	var actions []Action
 	switch a.Kind {
 	case actStart:
-		res, err := c.App.Start(ctx, StartOpts{ID: w.id, Dry: c.Dry})
+		res, err := c.App.Start(ctx, StartOpts{ID: w.id, Dry: c.Dry, Unattended: w.mode == autoPlan})
 		if err != nil {
 			return err
 		}
