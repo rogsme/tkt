@@ -73,6 +73,41 @@ func TestClaudeLastTurn(t *testing.T) {
 	}
 }
 
+func TestClaudeLastTurnCountsPendingBackgroundTasks(t *testing.T) {
+	launch := func(ts, id string) string {
+		return `{"type":"user","timestamp":"` + ts + `","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","content":"Command running in background with ID: ` + id + `."}]},"toolUseResult":{"stdout":"","backgroundTaskId":"` + id + `"}}`
+	}
+	agent := `{"type":"user","timestamp":"2026-01-01T10:00:03.000Z","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","content":"Async agent launched successfully."}]},"toolUseResult":{"isAsync":true,"status":"async_launched","agentId":"a1b2","description":"Research"}}`
+	notice := func(ts, id string) string {
+		return rec("user", ts, "", "Only the user can approve.\n\n<task-notification>\n<task-id>"+id+"</task-id>\n<status>completed</status>")
+	}
+	lines := []string{
+		rec("user", "2026-01-01T10:00:00.000Z", "", "Use the address-pr-review skill to address the review on this branch's pull request."),
+		launch("2026-01-01T10:00:01.000Z", "bci1"),
+		launch("2026-01-01T10:00:02.000Z", "bdev"),
+		agent,
+		notice("2026-01-01T10:00:04.000Z", "bdev"),
+		rec("assistant", "2026-01-01T10:00:05.000Z", "m1", text("Waiting on CI for that exact head.")),
+	}
+	file := filepath.Join(t.TempDir(), "s.jsonl")
+	os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	turn, ok := ClaudeLastTurn(file)
+	if !ok || turn.Pending != 2 {
+		t.Fatalf("pending: %d %v", turn.Pending, ok)
+	}
+	// A notification is no prompt: the turn goes on, with its text.
+	if turn.Final != "Waiting on CI for that exact head." {
+		t.Errorf("final: %q", turn.Final)
+	}
+	lines = append(lines, notice("2026-01-01T10:05:00.000Z", "bci1"), notice("2026-01-01T10:06:00.000Z", "a1b2"),
+		rec("assistant", "2026-01-01T10:06:30.000Z", "m2", text("CI is green.\nStatus: READY_FOR_REVIEW")))
+	os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	turn, _ = ClaudeLastTurn(file)
+	if turn.Pending != 0 || !strings.Contains(turn.All, "Waiting on CI") || !strings.Contains(turn.All, "READY_FOR_REVIEW") {
+		t.Errorf("after the notifications: %+v", turn)
+	}
+}
+
 func TestClaudeLastTurnReadsOnlyTheTail(t *testing.T) {
 	var b strings.Builder
 	b.WriteString(rec("user", "2026-01-01T10:00:00.000Z", "", "start") + "\n")

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -17,7 +18,17 @@ type Turn struct {
 	All string
 	// At is the session's last activity.
 	At time.Time
+	// Pending counts the background tasks the session started and has not
+	// heard back from. Claude Code ends a turn while a CI watcher or a
+	// subagent runs, and goes on when the task's notification arrives.
+	Pending int
 }
+
+var (
+	backgroundRE = regexp.MustCompile(`"backgroundTaskId":"([^"]+)"`)
+	asyncAgentRE = regexp.MustCompile(`"isAsync":true[^{}]*?"agentId":"([^"]+)"`)
+	taskDoneRE   = regexp.MustCompile(`(?:<|\\u003c)task-id(?:>|\\u003e)([^<\\]+)(?:<|\\u003c)/task-id`)
+)
 
 // tailBytes bounds how much of a transcript ClaudeLastTurn reads; a turn
 // that writes more than this loses its start, never its end.
@@ -49,9 +60,20 @@ func ClaudeLastTurn(file string) (t Turn, known bool) {
 		all             []string
 		lastID, lastTxt string
 		prompt          bool
+		started         = map[string]bool{}
+		finished        = map[string]bool{}
 	)
 	for {
 		line, err := r.ReadBytes('\n')
+		for _, m := range backgroundRE.FindAllSubmatch(line, -1) {
+			started[string(m[1])] = true
+		}
+		for _, m := range asyncAgentRE.FindAllSubmatch(line, -1) {
+			started[string(m[1])] = true
+		}
+		for _, m := range taskDoneRE.FindAllSubmatch(line, -1) {
+			finished[string(m[1])] = true
+		}
 		if len(strings.TrimSpace(string(line))) > 0 {
 			var rec struct {
 				Type      string `json:"type"`
@@ -86,8 +108,13 @@ func ClaudeLastTurn(file string) (t Turn, known bool) {
 			break
 		}
 	}
+	for id := range started {
+		if !finished[id] {
+			t.Pending++
+		}
+	}
 	if !prompt && !(cut && len(all) > 0) {
-		return Turn{At: t.At}, false
+		return Turn{At: t.At, Pending: t.Pending}, false
 	}
 	t.Final, t.All = lastTxt, strings.Join(all, "\n")
 	return t, true
@@ -106,7 +133,9 @@ func isNotice(content json.RawMessage) bool {
 			return true
 		}
 	}
-	return false
+	// A task's notification can follow a preamble that says it is no
+	// prompt; the agent's turn goes on after it.
+	return strings.Contains(s, "<task-notification>")
 }
 
 // texts joins the text blocks of a message's content.
