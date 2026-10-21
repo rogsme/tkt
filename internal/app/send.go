@@ -22,7 +22,11 @@ type SendOpts struct {
 	Pane   string
 	// Wait queues the text: when the agent works, waits on a background
 	// task or asks a question, tkt send waits for it to stop first.
-	Wait  bool
+	Wait bool
+	// Steer types the text in while the agent works: Claude Code and
+	// OpenCode read it at their next step. With Wait, only a question in
+	// the agent's own dialog holds the text back.
+	Steer bool
 	Force bool
 	Dry   bool
 }
@@ -37,12 +41,15 @@ type ApproveOpts struct {
 
 // SendResult is what tkt send or tkt approve typed into a session.
 type SendResult struct {
-	Ticket  string   `json:"ticket"`
-	Pane    string   `json:"pane"`
-	Agent   string   `json:"agent"`
-	Harness string   `json:"harness"`
-	Session string   `json:"session"`
-	Resent  bool     `json:"resent"`
+	Ticket  string `json:"ticket"`
+	Pane    string `json:"pane"`
+	Agent   string `json:"agent"`
+	Harness string `json:"harness"`
+	Session string `json:"session"`
+	Resent  bool   `json:"resent"`
+	// Steered says the agent was working, so it reads the text at its next
+	// step rather than as a new turn.
+	Steered bool     `json:"steered"`
 	DryRun  bool     `json:"dry_run"`
 	Actions []Action `json:"actions"`
 	// approve marks a result of tkt approve, for its text.
@@ -50,11 +57,14 @@ type SendResult struct {
 }
 
 func (r *SendResult) Text(w io.Writer) {
-	if r.approve {
+	switch {
+	case r.approve:
 		fmt.Fprintf(w, "%s  plan approved  pane %s; work-ticket runs in the same session\n", r.Ticket, r.Pane)
-		return
+	case r.Steered:
+		fmt.Fprintf(w, "%s  sent while the agent works  pane %s  agent %s\n", r.Ticket, r.Pane, r.Agent)
+	default:
+		fmt.Fprintf(w, "%s  sent  pane %s  agent %s\n", r.Ticket, r.Pane, r.Agent)
 	}
-	fmt.Fprintf(w, "%s  sent  pane %s  agent %s\n", r.Ticket, r.Pane, r.Agent)
 }
 
 // Send types text into the ticket's running session, which keeps its whole
@@ -78,21 +88,24 @@ func (a *App) Send(ctx context.Context, o SendOpts) (*SendResult, error) {
 		return nil, err
 	}
 	if o.Wait && !c.Dry {
-		if target, err = c.waitToSend(id, path, o.Pane, ts, target); err != nil {
+		if target, err = c.waitToSend(id, path, o.Pane, ts, target, o.Steer); err != nil {
 			return nil, err
 		}
 	}
-	return c.sendTo(id, path, ts, target, text)
+	return c.sendTo(id, path, ts, target, text, o.Steer)
 }
 
 // waitToSend waits until the ticket's agent is free to read typed text: not
 // working, not waiting on its own background task, and not asking a
-// question in a dialog. It holds no lock while it waits, so tkt auto and
-// the other commands go on.
-func (c *Ctx) waitToSend(id, path, pane string, ts *ticketState, target herdr.Agent) (herdr.Agent, error) {
+// question in a dialog. With steer, only the dialog counts. It holds no
+// lock while it waits, so tkt auto and the other commands go on.
+func (c *Ctx) waitToSend(id, path, pane string, ts *ticketState, target herdr.Agent, steer bool) (herdr.Agent, error) {
 	told := false
 	for {
 		free := target.Status == herdr.Idle || target.Status == herdr.Done
+		if steer && (free || target.Status == herdr.Working) {
+			return target, nil
+		}
 		if free {
 			turn, _ := c.lastTurn(c.Ctx, &target, ts.st, path)
 			if turn.Pending == 0 || agent.LastStatus(turn.All) != "" || c.Now().Sub(turn.At) >= backgroundGrace {
@@ -157,7 +170,7 @@ func (c *Ctx) approve(id, path string, ts *ticketState, pane string) (*SendResul
 				WithHint("read the agent's last message with tkt show %s", id).With("last_status", last)
 		}
 	}
-	res, err := c.sendTo(id, path, ts, target, config.ApproveLine)
+	res, err := c.sendTo(id, path, ts, target, config.ApproveLine, false)
 	if err != nil {
 		return nil, err
 	}
@@ -197,15 +210,18 @@ func (a *App) beginTicket(ctx context.Context, raw string, dry, force bool) (*Ct
 	return c, id, path, ts, nil
 }
 
-// sendTo types text into a ticket's agent, which must be idle or done: a
-// working agent is busy, and a blocked one waits for an answer in its own
-// dialog, which typed text would not reach.
-func (c *Ctx) sendTo(id, path string, ts *ticketState, target herdr.Agent, text string) (*SendResult, error) {
+// sendTo types text into a ticket's agent, which must be idle or done, or,
+// with steer, working: the harness then reads it at its next step. A
+// blocked agent waits for an answer in its own dialog, which typed text
+// would not reach.
+func (c *Ctx) sendTo(id, path string, ts *ticketState, target herdr.Agent, text string, steer bool) (*SendResult, error) {
 	switch target.Status {
 	case herdr.Idle, herdr.Done:
 	case herdr.Working:
-		return nil, apperr.New(apperr.AgentBusy, "the agent in pane %s is working; wait for it first", target.PaneID).
-			WithHint("tkt wait %s", id).With("pane", target.PaneID).With("status", target.Status)
+		if !steer {
+			return nil, apperr.New(apperr.AgentBusy, "the agent in pane %s is working; pass --steer to type the text in now, or wait for it first", target.PaneID).
+				WithHint("tkt wait %s", id).With("pane", target.PaneID).With("status", target.Status)
+		}
 	case herdr.Blocked:
 		return nil, apperr.New(apperr.AgentBusy, "the agent in pane %s waits for an answer in its own dialog; answer it in its tab", target.PaneID).
 			WithHint("answer the agent in pane %s", target.PaneID).With("pane", target.PaneID).With("status", target.Status)
@@ -222,13 +238,17 @@ func (c *Ctx) sendTo(id, path string, ts *ticketState, target herdr.Agent, text 
 	if s := target.SessionID(); s != "" && h == config.Claude {
 		sid = s
 	}
-	if h == config.OpenCode && sid != "" && c.OC.SessionActive(c.Ctx, sid) {
-		return nil, apperr.New(apperr.AgentBusy, "OpenCode still works on session %s", sid).WithHint("tkt wait %s", id)
+	working := target.Status == herdr.Working
+	if !working && h == config.OpenCode && sid != "" && c.OC.SessionActive(c.Ctx, sid) {
+		if !steer {
+			return nil, apperr.New(apperr.AgentBusy, "OpenCode still works on session %s; pass --steer to type the text in now", sid).WithHint("tkt wait %s", id)
+		}
+		working = true
 	}
 	if err := c.lockTicket(id); err != nil {
 		return nil, err
 	}
-	res := &SendResult{Ticket: id, Pane: target.PaneID, Agent: target.NameOr(""), Harness: h, Session: sid, DryRun: c.Dry}
+	res := &SendResult{Ticket: id, Pane: target.PaneID, Agent: target.NameOr(""), Harness: h, Session: sid, Steered: working, DryRun: c.Dry}
 	out, resent, err := c.Agent.Deliver(c.Ctx, target.PaneID, text, h, sid, path)
 	res.Resent = resent
 	switch out {

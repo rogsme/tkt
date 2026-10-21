@@ -228,6 +228,7 @@
         "pane": "string",
         "resent": "boolean",
         "session": "string",
+        "steered": "boolean",
         "ticket": "string"
       }
     },
@@ -235,8 +236,8 @@
       "path": "send",
       "use": "send ID [TEXT]",
       "short": "Type text into the ticket's running session, which keeps its conversation",
-      "long": "tkt send types text into the ticket's running session and waits until the\nagent takes it. The session keeps its whole conversation, so use it to ask for\nchanges to a plan, or to answer a question the agent asked in its last\nmessage.\n\nIt refuses while the agent works (tkt wait blocks until it is done) and while\nit waits in its own dialog, such as a question with options: typed text does\nnot reach that dialog, so answer it in the ticket's tab. tkt show ID --screen\nprints what the dialog asks.\n\n--wait queues the text instead: tkt send waits until the agent stops working,\nstops waiting on its own background task, and has no question open, then\ntypes the text in. It holds no lock while it waits, so tkt auto and the other\ncommands go on.\n\nTo start a stage in a fresh session instead, use tkt run. To approve a plan,\nuse tkt approve.",
-      "example": "  tkt send ACM-12 \"Keep the old endpoint and drop step 4 of the plan.\"\n  tkt send ACM-12 --prompt-file answer.md",
+      "long": "tkt send types text into the ticket's running session and waits until the\nagent takes it. The session keeps its whole conversation, so use it to ask for\nchanges to a plan, or to answer a question the agent asked in its last\nmessage.\n\nIt refuses while the agent works (tkt wait blocks until it is done) and while\nit waits in its own dialog, such as a question with options: typed text does\nnot reach that dialog, so answer it in the ticket's tab. tkt show ID --screen\nprints what the dialog asks.\n\n--steer types the text in while the agent works, to steer it mid-task.\nClaude Code and OpenCode hold the text and read it at their next step; the\nresult says steered. A question in the agent's dialog still refuses it.\n\n--wait queues the text instead: tkt send waits until the agent stops working,\nstops waiting on its own background task, and has no question open, then\ntypes the text in. With --steer, it waits only for the question to close. It\nholds no lock while it waits, so tkt auto and the other commands go on.\n\nTo start a stage in a fresh session instead, use tkt run. To approve a plan,\nuse tkt approve.",
+      "example": "  tkt send ACM-12 \"Keep the old endpoint and drop step 4 of the plan.\"\n  tkt send ACM-12 --steer \"Stop: the endpoint stays. Drop step 4.\"\n  tkt send ACM-12 --prompt-file answer.md",
       "group": "lifecycle",
       "args": [
         {
@@ -282,6 +283,12 @@
           "usage": "send the text in the file PATH instead of TEXT"
         },
         {
+          "name": "steer",
+          "type": "bool",
+          "default": "false",
+          "usage": "type the text in while the agent works; with --wait, wait only for a question in its dialog"
+        },
+        {
           "name": "wait",
           "type": "bool",
           "default": "false",
@@ -301,6 +308,7 @@
         "pane": "string",
         "resent": "boolean",
         "session": "string",
+        "steered": "boolean",
         "ticket": "string"
       }
     },

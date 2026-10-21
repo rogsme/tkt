@@ -87,7 +87,7 @@ After a change to the extension in `internal/pi/ext`, run `just install`, then `
 3. Only ACM-1's plan shows on the board as needing you, with a herdr notification; nothing new appears in the chat. The auto tickets move on the board without a word.
 4. `/inbox` offers fixed answers for the plan; approve it from there, and the item leaves the board.
 5. When an auto ticket's agent asks a question, the board shows it as paused. `/peek` it, then answer in its tab: the ticket goes on by itself, and the item leaves the board.
-6. While an agent waits on its own CI watcher, the board shows it as waiting, not as needing you. Tell a working agent something: the chat says the text is queued, and it goes in when the agent stops.
+6. While an agent waits on its own CI watcher, the board shows it as waiting, not as needing you. Tell a working agent something: the chat says it went in while the agent works, and the agent's tab shows it taken at its next step. Ask to hold a message until the agent stops: the chat says it is queued, and it goes in when the agent stops.
 7. When the review bot clears the head, the ticket is ready: `/check` offers verify first, then the checklist, with the steps from the pull request's body. Mark a step failed and start a fix session, then mark them all passed.
 8. Leave an uncommitted file in a merged ticket's worktree, then say "ACM-1 is merged, remove it". The chat confirms first, then says the worktree has uncommitted changes. Clean it up and ask again: it reports the time from start to merge, and `/stats` lists it.
 9. Quit the chat while an auto ticket works and open `tkt agent` again: the ticket kept moving, and the board shows where it is.

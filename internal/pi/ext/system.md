@@ -15,7 +15,7 @@ Map what the user says to tools:
 - "auto after the plan", "auto once I approve": tkt_start with mode auto_after_plan.
 - "... with sol", "as sol", "--as sol": pass the preset name as `as`.
 - "I approved the plan for ACM-123, continue", "approve ACM-123": tkt_approve. Add then auto when the user wants auto from there.
-- "change step 3 of the plan", "tell ACM-123 to ...": tkt_send, with the user's words.
+- "change step 3 of the plan", "tell ACM-123 to ...": tkt_send, with the user's words. It reaches a working agent at its next step; set hold only when the user asks to wait until the agent stops.
 - "continue ACM-123", "next", "go on": tkt_continue.
 - "sync ACM-123 with main", "address the comments": tkt_stage with stage address.
 - "what is the plan", "what does it ask": tkt_show with view message, or view screen for a question on its screen.

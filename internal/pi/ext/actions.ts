@@ -42,17 +42,27 @@ export async function approve(hub: Hub, id: string, then: "manual" | "auto"): Pr
 	return `Approved ${id}'s plan; work-ticket builds it in the same session.`;
 }
 
-/** send types text into the ticket's session. An agent that is free takes
- * it now; a busy one gets it when it stops, so the text waits in a queue. */
-export async function send(hub: Hub, id: string, text: string): Promise<string> {
+/** send types text into the ticket's session. A free agent takes it as a
+ * new turn, and a working one reads it at its next step. An agent that asks
+ * a question in its own dialog gets it once the question is answered, so
+ * the text waits in a queue; with hold, it waits until the agent stops. */
+export async function send(hub: Hub, id: string, text: string, hold = false): Promise<string> {
 	const r = hub.row(id);
 	const busy = r?.agent && (r.agent.status === "working" || r.agent.status === "blocked" || (r.agent.background ?? 0) > 0);
-	if (busy) {
+	if (hold && busy) {
 		hub.add({ ticket: id, label: "send queued", args: ["send", id, "--wait", "--prompt", text] });
 		return `Queued, not sent yet: ${id}'s agent is busy, and the text goes in when it stops. The board shows if that fails.`;
 	}
-	const env = await hub.run({ ticket: id, label: "send", args: ["send", id, "--prompt", text], quiet: true });
+	const queue = () => {
+		hub.add({ ticket: id, label: "send queued", args: ["send", id, "--steer", "--wait", "--prompt", text] });
+		return `Queued, not sent yet: ${id}'s agent asks a question in its tab, and the text goes in once it is answered. The board shows if that fails.`;
+	};
+	if (r?.agent?.status === "blocked") return queue();
+	const env = await hub.run({ ticket: id, label: "send", args: ["send", id, "--steer", "--prompt", text], quiet: true });
+	// The board can be a poll behind an agent that just opened a question.
+	if (!env.ok && env.error?.code === "agent_busy" && env.error.details?.status === "blocked") return queue();
 	if (!env.ok) return failure(id, env);
+	if ((env.result as { steered?: boolean } | undefined)?.steered) return `Sent to ${id}'s session while its agent works; it reads the text at its next step.`;
 	return `Sent to ${id}'s session.`;
 }
 

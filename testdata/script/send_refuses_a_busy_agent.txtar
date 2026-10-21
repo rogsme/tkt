@@ -19,10 +19,33 @@ rc 4
 envelope '.error.code' agent_busy
 envelope '.error.details.status' blocked
 
+! exec tkt send ACM-12 --steer 'hello' --json
+rc 4
+envelope '.error.details.status' blocked
+
 jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
 ! exec tkt send ACM-12 'hello' --json
 rc 4
 envelope '.error.hint' 'tkt wait ACM-12'
+envelope '.error.message' 'the agent in pane w1:p10 is working; pass --steer to type the text in now, or wait for it first'
+
+# --steer types the text into the working agent, which reads it at its next
+# step.
+exec tkt send ACM-12 --steer 'Stop: the endpoint stays.' --json
+envelope '.result | [.steered, .pane]' '[true,"w1:p10"]'
+grep '^Stop: the endpoint stays.$' $FAKE_DIR/prompts
+exec tkt send ACM-12 --steer 'And drop step 4.'
+stdout '^ACM-12  sent while the agent works  pane w1:p10  agent acm-12$'
+
+# OpenCode can still work on its session while herdr calls it idle.
+exec tkt start ACM-13 --as opencode --prompt-file $WORK/answer.md
+jqedit $FAKE_DIR/herdr.json '(.agents[] | select(.pane_id == "w1:p11")).agent_status = "idle"'
+env 'FAKE_OC_ACTIVE={"data":{"ses_fake1":{}}}'
+! exec tkt send ACM-13 'hello' --json
+envelope '.error.code' agent_busy
+exec tkt send ACM-13 --steer 'hello' --json
+envelope '.result.steered' true
+env FAKE_OC_ACTIVE=
 
 ! exec tkt send ACM-12
 rc 2

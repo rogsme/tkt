@@ -12,5 +12,15 @@ logged herdr agent wait
 grep '^Merge main before you push again.$' $FAKE_DIR/prompts
 stdout '^ACM-12  sent  pane w1:p10  agent acm-12$'
 
+# With --steer, only a question in the agent's dialog holds the text back:
+# a working agent gets it right away.
+env FAKE_HERDR_TURNS=
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+resetlog
+exec tkt send ACM-12 --steer --wait 'Skip the docs.' --json
+envelope '.result.steered' true
+! logged herdr agent wait
+grep '^Skip the docs.$' $FAKE_DIR/prompts
+
 -- turns.json --
 [{"screen": "Pushed the fix."}]

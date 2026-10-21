@@ -121,13 +121,17 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_send",
 		label: "tkt send",
-		description: "Type text into a ticket's running session, only when the user asks you to tell the ticket's agent something, such as a change to the plan. A busy agent gets it when it stops: the result then says queued, not sent. The user sees the text and confirms first.",
-		parameters: Type.Object({ ticket, text: Type.String({ description: "The text, in the user's words" }) }),
+		description: "Type text into a ticket's running session, only when the user asks you to tell the ticket's agent something, such as a change to the plan. A working agent reads it at its next step. One that asks a question in its tab gets it once the question is answered: the result then says queued, not sent. The user sees the text and confirms first.",
+		parameters: Type.Object({
+			ticket,
+			text: Type.String({ description: "The text, in the user's words" }),
+			hold: Type.Optional(Type.Boolean({ description: "True only when the user asks to hold the text until the agent stops working" })),
+		}),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
 			if (!ctx.hasUI || !(await ctx.ui.confirm(`Send this to ${t}?`, p.text))) return text("The user did not confirm; nothing was sent.");
-			return text(await act.send(hub, t, p.text));
+			return text(await act.send(hub, t, p.text, p.hold));
 		},
 	});
 

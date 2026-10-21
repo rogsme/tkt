@@ -205,6 +205,7 @@ func sendCmd(g *globals) *cobra.Command {
 		Short: "Type text into the ticket's running session, which keeps its conversation",
 		Long:  helpText("send"),
 		Example: `  tkt send ACM-12 "Keep the old endpoint and drop step 4 of the plan."
+  tkt send ACM-12 --steer "Stop: the endpoint stays. Drop step 4."
   tkt send ACM-12 --prompt-file answer.md`,
 		ValidArgsFunction: g.completeTickets(false),
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -232,6 +233,7 @@ func sendCmd(g *globals) *cobra.Command {
 	}
 	pf.add(cmd, "TEXT")
 	cmd.Flags().BoolVar(&o.Wait, "wait", false, "when the agent is busy, wait for it to stop, then send")
+	cmd.Flags().BoolVar(&o.Steer, "steer", false, "type the text in while the agent works; with --wait, wait only for a question in its dialog")
 	cmd.Flags().StringVar(&o.Pane, "pane", "", "send to the agent in PANE when several run in the worktree")
 	cmd.RegisterFlagCompletionFunc("pane", g.completePanes)
 	cmd.Flags().BoolVar(&o.Force, "force", false, "override the safety refusals")
