@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ago, expandIds, keyFromTracker, keyOf, mentions, normalizeId, rowsOf } from "../model.ts";
+import { ago, expandIds, keyFromTracker, keyOf, mentions, normalizeId, rowsOf, stampText } from "../model.ts";
 import { row } from "./fixtures.ts";
 
 test("normalizeId", () => {
@@ -48,4 +48,12 @@ test("keyFromTracker reads the key the way tkt does", () => {
 	assert.equal(keyFromTracker("# Issue tracker\n\n- Ticket ids: `ACM-<number>`, matched by `^ACM-[1-9][0-9]*$`.\n"), "ACM");
 	assert.equal(keyFromTracker("- Ticket ids: `^[0-9]+$`\n"), "");
 	assert.equal(keyFromTracker("no line here"), "");
+});
+
+test("stampText gives the time of day, and the date on another day", () => {
+	const at = new Date(2026, 9, 21, 10, 50, 23).getTime();
+	const now = new Date(2026, 9, 21, 18, 0, 0).getTime();
+	assert.equal(stampText({ at }, now), "10:50:23");
+	assert.equal(stampText({ at: at + 6000, took: 6000 }, now), "10:50:29  6s");
+	assert.equal(stampText({ at, took: 125_000 }, now + 86_400_000), "Oct 21 10:50:23  2m");
 });

@@ -1,16 +1,19 @@
 // tkt's extension for pi. tkt agent loads it, and only it, with -e; TKT_BIN
 // names the tkt that started pi. The extension gives the model tools that
 // run tkt and nothing else, slash commands for the same, a board pinned to
-// the top of the chat, a dark background under a dark theme, and the
-// watchers that tell you when a ticket needs you.
+// the top of the chat, the times of prompts and answers, a dark background
+// under a dark theme, and the watchers that tell you when a ticket needs
+// you.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { backgroundAnsi, isViewportTUI, parseColor } from "@earendil-works/pi-tui";
 import { restoreMarks } from "./actions.ts";
 import { registerCommands } from "./commands.ts";
 import { Hub } from "./hub.ts";
+import type { Stamp } from "./model.ts";
 import { painter } from "./paint.ts";
 import { registerTools } from "./tools.ts";
+import { stamp } from "./ui.ts";
 
 /** page is the chat's background under a dark theme: the page tkt-dark
  * gives an exported chat. */
@@ -25,6 +28,23 @@ export default function (pi: ExtensionAPI) {
 	pi.on("input", (event) => {
 		if (event.source !== "extension") hub.lastInput = event.text;
 		return { action: "continue" };
+	});
+
+	// Each prompt shows when it reached the model, and each run's answer when
+	// it was done and how long it took. The times are session entries, so
+	// the model never reads them and a resumed chat keeps them. A prompt typed
+	// while the model works gets its time where it joins the run.
+	let runStart = Date.now();
+	pi.registerEntryRenderer<Stamp>("tkt-stamp", (entry, _options, theme) => stamp(theme, entry.data));
+	pi.on("message_start", (event) => {
+		if (event.message.role === "user") pi.appendEntry<Stamp>("tkt-stamp", { at: Date.now() });
+	});
+	pi.on("agent_start", () => {
+		runStart = Date.now();
+	});
+	pi.on("agent_end", () => {
+		const at = Date.now();
+		pi.appendEntry<Stamp>("tkt-stamp", { at, took: at - runStart });
 	});
 
 	// What needs you goes to the model with your message, as it stands now.

@@ -1,12 +1,12 @@
 // The extension's views: a question with fixed answers, the board pinned
-// to the top, and the overlays: /board, the /peek screen and the
-// verification checklist. The question view follows pi's
+// to the top, the times in the chat, and the overlays: /board, the /peek
+// screen and the verification checklist. The question view follows pi's
 // examples/extensions/question.ts (MIT, Mario Zechner).
 
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { type Component, Editor, type EditorTheme, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { type Component, Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { type BoardState, boardColumns, boardLines, grid, order, title } from "./board.ts";
-import type { Row } from "./model.ts";
+import { type Row, type Stamp, stampText } from "./model.ts";
 import { cycle, type Mark } from "./report.ts";
 
 export interface Option {
@@ -282,4 +282,9 @@ export function paint(theme: Theme, tone: string, text: string): string {
 			return theme.fg("success", text);
 	}
 	return text;
+}
+
+/** stamp draws a time in the chat, dim, in line with the messages. */
+export function stamp(theme: Theme, s: Stamp | undefined): Component | undefined {
+	return s ? new Text(theme.fg("dim", stampText(s, Date.now())), 1, 0) : undefined;
 }

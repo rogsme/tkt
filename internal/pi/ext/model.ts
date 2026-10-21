@@ -61,6 +61,22 @@ export function ago(ms: number): string {
 	return `${Math.floor(s / 86400)}d`;
 }
 
+/** Stamp is a time in the chat: when a prompt reached the model, or, with
+ * took, when the answer was done and how long the run took. */
+export interface Stamp {
+	at: number;
+	took?: number;
+}
+
+/** stampText renders a stamp in local time, with the date when it falls on
+ * another day than now, as in a chat resumed later. */
+export function stampText(s: Stamp, now: number): string {
+	const d = new Date(s.at);
+	let at = [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
+	if (d.toDateString() !== new Date(now).toDateString()) at = `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${at}`;
+	return s.took === undefined ? at : `${at}  ${ago(s.took)}`;
+}
+
 /** since returns how long ago an RFC 3339 time was, or "" when unknown. */
 export function since(at: string, now: number): string {
 	const t = Date.parse(at);
