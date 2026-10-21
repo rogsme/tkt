@@ -18,15 +18,21 @@ import (
 
 // resultTypes names each command's result, for tkt schema.
 var resultTypes = map[string]any{
-	"start":  app.StartResult{},
-	"run":    app.RunResult{},
-	"resume": app.ResumeResult{},
-	"done":   app.DoneResult{},
-	"ls":     app.LsResult{},
-	"wait":   app.WaitResult{},
-	"doctor": app.DoctorResult{},
-	"update": app.UpdateResult{},
-	"schema": Schema{},
+	"agent":   app.FrontResult{},
+	"start":   app.StartResult{},
+	"approve": app.SendResult{},
+	"send":    app.SendResult{},
+	"auto":    app.AutoResult{},
+	"show":    app.ShowResult{},
+	"history": app.HistoryResult{},
+	"run":     app.RunResult{},
+	"resume":  app.ResumeResult{},
+	"done":    app.DoneResult{},
+	"ls":      app.LsResult{},
+	"wait":    app.WaitResult{},
+	"doctor":  app.DoctorResult{},
+	"update":  app.UpdateResult{},
+	"schema":  Schema{},
 }
 
 // Schema describes tkt to a program: every command with its arguments,
@@ -100,13 +106,15 @@ func writeJSON(w io.Writer, v any) error {
 var environment = []SchemaVariable{
 	{"TKT_FORMAT", "json makes every command print the JSON envelope; text, or unset, prints text"},
 	{"XDG_CONFIG_HOME", "tkt reads $XDG_CONFIG_HOME/tkt/config.toml (default ~/.config/tkt/config.toml)"},
-	{"XDG_STATE_HOME", "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log (default ~/.local/state/tkt/tkt.log)"},
-	{"HERDR_ENV", "herdr sets it to 1 inside its panes; start, run, resume, done and wait need it"},
+	{"XDG_STATE_HOME", "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it (default ~/.local/state/tkt)"},
+	{"XDG_DATA_HOME", "tkt unpacks its bundled pi and its extension under $XDG_DATA_HOME/tkt (default ~/.local/share/tkt)"},
+	{"HERDR_ENV", "herdr sets it to 1 inside its panes; agent, start, approve, send, auto, run, resume, done, show and wait need it, and tkt alone opens the agent only there"},
 	{"HERDR_WORKSPACE_ID", "the herdr workspace where tkt opens tabs"},
 	{"HERDR_TAB_ID", "the tab tkt runs in; tkt done refuses to close it"},
 	{"HERDR_PANE_ID", "the pane tkt runs in; tkt never starts an agent in it"},
 	{"TKT_RELEASES", "where tkt update downloads releases from (default https://git.rogs.me/rogs/tkt/releases/download); install.sh reads it too"},
 	{"TKT_RELEASES_API", "the Gitea API that tkt update asks for the latest release (default https://git.rogs.me/api/v1/repos/rogs/tkt)"},
+	{"TKT_PI", "the pi binary tkt agent runs instead of the one bundled with tkt"},
 	{"CLAUDE_CONFIG_DIR", "where Claude Code keeps its sessions (default ~/.claude)"},
 	{"NO_COLOR", "turns off color in help and errors"},
 }

@@ -41,6 +41,8 @@ type App struct {
 	Sleep func(time.Duration)
 	// Version is the running tkt's version, such as v0.2.0, or dev.
 	Version string
+	// StdoutTTY is set when stdout is a terminal, which tkt agent needs.
+	StdoutTTY bool
 }
 
 // ConfigDir is tkt's own configuration directory.
@@ -49,6 +51,14 @@ func (a *App) ConfigDir() string {
 		return filepath.Join(d, "tkt")
 	}
 	return filepath.Join(a.Getenv("HOME"), ".config", "tkt")
+}
+
+// DataDir is where tkt unpacks its bundled pi and extension.
+func (a *App) DataDir() string {
+	if d := a.Getenv("XDG_DATA_HOME"); d != "" {
+		return filepath.Join(d, "tkt")
+	}
+	return filepath.Join(a.Getenv("HOME"), ".local", "share", "tkt")
 }
 
 // Action is one change a dry run would make.
@@ -184,13 +194,21 @@ func (c *Ctx) readState(worktree string) (*ticketState, error) {
 }
 
 // save records key=value pairs, and writes them unless this is a dry run.
+// It writes only these keys, so what another tkt wrote since ts was read
+// stays, and ts then holds the file as written.
 func (c *Ctx) save(ts *ticketState, kv ...string) {
 	ts.st.Set(kv...)
 	if c.Dry || ts.path == "" {
 		return
 	}
-	if err := ts.st.Save(ts.path, c.Now()); err != nil {
+	st, err := state.Update(ts.path, c.Now(), kv...)
+	if err != nil {
 		c.UI.Warn("cannot write %s: %v", ts.path, err)
+		return
+	}
+	// Callers hold ts.st itself, so it is updated in place.
+	for k, v := range st {
+		ts.st[k] = v
 	}
 }
 

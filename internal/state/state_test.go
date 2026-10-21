@@ -1,8 +1,10 @@
 package state
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -26,5 +28,43 @@ func TestRoundTrip(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(filepath.Dir(path)); len(entries) != 1 {
 		t.Errorf("left temporary files: %v", entries)
+	}
+}
+
+func TestUpdateKeepsKeysOthersWrote(t *testing.T) {
+	path := Path(t.TempDir())
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if _, err := Update(path, now, "stage", "start", "auto", "plan"); err != nil {
+		t.Fatal(err)
+	}
+	// tkt run read the state before tkt auto cleared its mark, then sets
+	// only its own keys.
+	if _, err := Update(path, now, "auto", ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Update(path, now, "stage", "address")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["stage"] != "address" || got["auto"] != "" {
+		t.Errorf("update returned %v", got)
+	}
+	if back := Read(path); back["stage"] != "address" || back["auto"] != "" || back["updated"] == "" {
+		t.Errorf("file holds %v", back)
+	}
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Go(func() {
+			if _, err := Update(path, now, fmt.Sprintf("k%d", i), "v"); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	back := Read(path)
+	for i := range 20 {
+		if back[fmt.Sprintf("k%d", i)] != "v" {
+			t.Errorf("k%d lost in concurrent updates: %v", i, back)
+		}
 	}
 }

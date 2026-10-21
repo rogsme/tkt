@@ -5,17 +5,19 @@ tkt ls shows where every ticket stands and suggests the next step.
    with its start-ticket block on the clipboard, or tkt start ACM-12 to send
    only the start stage line. The agent investigates and ends with
    Status: AWAITING_APPROVAL.
-2. Read the plan in the tab, then approve it there or ask for changes. The
-   same session goes on to implement it with work-ticket, so answer in the
-   tab: tkt run would discard the plan.
+2. Read the plan with tkt show ACM-12, then approve it with tkt approve
+   ACM-12, or ask for changes with tkt send ACM-12 "what to change". Both
+   type into the planning session, which goes on to implement the plan with
+   work-ticket; tkt run would start a fresh session and discard the plan.
 3. When the agent ends with Status: READY_FOR_REVIEW, run tkt run ACM-12
    review. The reviewer must not be the session that wrote the change, and
    tkt run always starts a fresh one.
-4. Act on the verdict the review posts. On CHANGES_REQUESTED, run tkt run
-   ACM-12 address. On Status: BLOCKED_FOR_SYNC, run tkt run ACM-12 sync. Both
-   end with Status: READY_FOR_REVIEW, so go back to step 3. On
-   READY_FOR_HUMAN, go on.
-5. Do the human verification steps in the review summary. tkt run ACM-12
+4. Act on the verdict the review posts. On CHANGES_REQUESTED or
+   Status: BLOCKED_FOR_SYNC, run tkt run ACM-12 address, which merges the
+   base first and then answers the review. It ends with
+   Status: READY_FOR_REVIEW, so go back to step 3. On READY_FOR_HUMAN, or the
+   review bot's CLEAR, go on.
+5. Do the human verification steps (tkt show ACM-12 --steps). tkt run ACM-12
    verify has an agent run them in a browser and report each one, but you
    decide whether each step passed.
 6. In the tab, tell the agent to merge and which steps passed, such as "Merge
@@ -27,3 +29,9 @@ tkt ls shows where every ticket stands and suggests the next step.
 
 When the checks fail at the pull request's head and no review is waiting to be
 addressed, run tkt run ACM-12 ci.
+
+tkt auto ACM-12 takes steps 3 and 4 for you, and step 2 too with
+--approve-plan: it waits for CI and the review bot, runs address and ci in
+fresh sessions, pauses when the ticket needs you, and stops when the head is
+reviewed clean. Steps 5 to 7 stay yours. tkt agent does the same from a chat,
+for many tickets at once.

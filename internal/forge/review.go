@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,33 +22,48 @@ type Verdict struct {
 // LatestVerdict returns the newest review that carries a verdict, from
 // review-pr or from the forge's automated reviewer, or nil.
 func LatestVerdict(p PR) *Verdict {
-	var vs []Verdict
-	for _, r := range p.Reviews {
-		oid := ""
-		if r.Commit != nil {
-			oid = r.Commit.Oid
-		}
-		var v Verdict
-		switch {
-		case contract.AutomatedReviewRE.MatchString(r.Body):
-			v.Value = contract.AutomatedReviewRE.FindStringSubmatch(r.Body)[1]
-			v.Head = firstGroup(contract.AutomatedHeadRE, r.Body, oid)
-		case contract.VerdictRE.MatchString(r.Body):
-			v.Value = contract.VerdictRE.FindStringSubmatch(r.Body)[1]
-			v.Head = firstGroup(contract.ReviewedHeadRE, r.Body, oid)
-		default:
-			continue
-		}
-		v.SubmittedAt = r.SubmittedAt
-		vs = append(vs, v)
-	}
+	vs := Verdicts(p)
 	if len(vs) == 0 {
 		return nil
 	}
-	sort.SliceStable(vs, func(i, j int) bool { return vs[i].SubmittedAt < vs[j].SubmittedAt })
 	v := vs[len(vs)-1]
 	v.AtHead = v.Head != "" && strings.HasPrefix(p.HeadRefOid, v.Head)
 	return &v
+}
+
+// Verdicts returns every review's verdict, oldest first, with the review it
+// came from. A review without a verdict is left out.
+func Verdicts(p PR) []Verdict {
+	var vs []Verdict
+	for _, r := range p.Reviews {
+		if v, ok := ReviewVerdict(r); ok {
+			vs = append(vs, v)
+		}
+	}
+	sort.SliceStable(vs, func(i, j int) bool { return vs[i].SubmittedAt < vs[j].SubmittedAt })
+	return vs
+}
+
+// ReviewVerdict reads the verdict of one review, from review-pr or from the
+// forge's automated reviewer. The head defaults to the commit the review
+// was submitted on.
+func ReviewVerdict(r Review) (Verdict, bool) {
+	oid := ""
+	if r.Commit != nil {
+		oid = r.Commit.Oid
+	}
+	v := Verdict{SubmittedAt: r.SubmittedAt}
+	switch {
+	case contract.AutomatedReviewRE.MatchString(r.Body):
+		v.Value = contract.AutomatedReviewRE.FindStringSubmatch(r.Body)[1]
+		v.Head = firstGroup(contract.AutomatedHeadRE, r.Body, oid)
+	case contract.VerdictRE.MatchString(r.Body):
+		v.Value = contract.VerdictRE.FindStringSubmatch(r.Body)[1]
+		v.Head = firstGroup(contract.ReviewedHeadRE, r.Body, oid)
+	default:
+		return Verdict{}, false
+	}
+	return v, true
 }
 
 func firstGroup(re interface{ FindStringSubmatch(string) []string }, s, def string) string {
@@ -121,4 +137,102 @@ func Summarize(p PR) Checks {
 		c.State = "ok"
 	}
 	return c
+}
+
+// Step is one numbered step of a human verification procedure.
+type Step struct {
+	N    int    `json:"n"`
+	Text string `json:"text"`
+}
+
+// Procedure is the Human verification section of review-pr's ready summary:
+// the whole section as written, and its numbered steps.
+type Procedure struct {
+	Head        string `json:"head"`
+	SubmittedAt string `json:"submitted_at"`
+	Section     string `json:"section"`
+	Steps       []Step `json:"steps"`
+}
+
+// HumanVerification returns the procedure in the newest review that says
+// READY_FOR_HUMAN about the pull request's current head, or nil.
+func HumanVerification(p PR) *Procedure {
+	var best *Procedure
+	for _, r := range p.Reviews {
+		m := contract.VerdictRE.FindStringSubmatch(r.Body)
+		if m == nil || m[1] != contract.VerdictReadyForHuman {
+			continue
+		}
+		oid := ""
+		if r.Commit != nil {
+			oid = r.Commit.Oid
+		}
+		head := firstGroup(contract.ReviewedHeadRE, r.Body, oid)
+		if head == "" || !strings.HasPrefix(p.HeadRefOid, head) {
+			continue
+		}
+		section, steps, ok := ParseProcedure(r.Body)
+		if !ok || best != nil && best.SubmittedAt > r.SubmittedAt {
+			continue
+		}
+		best = &Procedure{Head: head, SubmittedAt: r.SubmittedAt, Section: section, Steps: steps}
+	}
+	return best
+}
+
+// BodyVerification reads the Human verification section that work-ticket
+// writes into the pull request body. It stands in for review-pr's procedure
+// when the review bot cleared the head and no review-pr review exists.
+func BodyVerification(p PR) *Procedure {
+	section, steps, ok := ParseProcedure(p.Body)
+	if !ok {
+		return nil
+	}
+	return &Procedure{Head: p.HeadRefOid, Section: section, Steps: steps}
+}
+
+var stepRE = regexp.MustCompile(`^ {0,3}(\d+)[.)][ \t]+(.*)$`)
+
+// ParseProcedure reads the Human verification section of a review body: the
+// text up to the next level-two heading, and its numbered steps. A step's
+// indented or wrapped lines belong to it; a blank line followed by text that
+// is neither indented nor numbered, such as a cleanup paragraph, ends it.
+func ParseProcedure(body string) (section string, steps []Step, ok bool) {
+	loc := contract.HumanVerificationRE.FindStringIndex(body)
+	if loc == nil {
+		return "", nil, false
+	}
+	rest := body[loc[1]:]
+	var lines []string
+	for _, l := range strings.Split(rest, "\n") {
+		if strings.HasPrefix(l, "## ") {
+			break
+		}
+		lines = append(lines, strings.TrimRight(l, " \t\r"))
+	}
+	section = strings.TrimSpace(strings.Join(lines, "\n"))
+	blank := false
+	for _, l := range lines {
+		if m := stepRE.FindStringSubmatch(l); m != nil {
+			n, _ := strconv.Atoi(m[1])
+			steps = append(steps, Step{N: n, Text: strings.TrimSpace(m[2])})
+			blank = false
+			continue
+		}
+		if strings.TrimSpace(l) == "" {
+			blank = true
+			continue
+		}
+		indented := strings.HasPrefix(l, "  ") || strings.HasPrefix(l, "\t")
+		if len(steps) > 0 && (indented || !blank) && !strings.HasPrefix(l, "#") {
+			s := &steps[len(steps)-1]
+			s.Text += "\n" + strings.TrimSpace(l)
+			blank = false
+			continue
+		}
+		if len(steps) > 0 {
+			break
+		}
+	}
+	return section, steps, len(steps) > 0
 }

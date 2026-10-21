@@ -28,6 +28,31 @@ ones or adds your own; {id} becomes the ticket id:
   address = "Use the address-pr-review skill to address the review on this branch's pull request."
   lint = "Run the linter on {id} and fix what it reports."
 
+Three more tables tune tkt auto, the review step and the marks tkt ls sets.
+These are the defaults:
+
+  [auto]
+  max_rounds = 5        # address and ci runs since the plan's approval
+  poll = "30s"          # how often a loop reads the forge while it waits
+  max_parallel = 3      # tkt auto agents at work at once in a repository;
+                        # 0 for no cap
+
+  [review]
+  bot_wait = "15m"      # how long a new head waits for the review bot before
+                        # tkt auto pauses for you; "0s" when no bot reviews,
+                        # so review-pr reviews instead
+
+  [board]
+  stale_after = "2h"    # mark an agent idle this long with no status; "0s" for never
+
+An [agent] table sets up tkt agent's chat. model is a pi model pattern, such as
+provider/id; leave it out for pi's default. extensions lists more pi extension
+files to load, as absolute paths or paths that start with ~/:
+
+  [agent]
+  model = "acme/large"
+  extensions = ["~/.pi/agent/extensions/acme-provider.ts"]
+
 An unknown key is an error, so a misspelling never passes silently. tkt doctor
 checks the file.
 

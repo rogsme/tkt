@@ -19,6 +19,10 @@ type Cmd struct {
 	// Quiet leaves the command out of the log: for polls that repeat many
 	// times a second.
 	Quiet bool
+	// StdoutFile captures stdout through a temporary file instead of a
+	// pipe, for a command that exits before a pipe drains: opencode api
+	// cuts its output at 256 KiB on a pipe.
+	StdoutFile bool
 }
 
 // Result is what a command did. Code is -1 when it could not start or ran
@@ -48,6 +52,13 @@ func (r Result) ErrText() string {
 // Runner runs commands.
 type Runner interface {
 	Run(ctx context.Context, c Cmd) Result
+}
+
+// Replacer replaces tkt's process with a command, for the one command that
+// hands the terminal over for good. Replace returns only when it fails. It
+// is not part of Runner, so a test's Runner need not provide it.
+type Replacer interface {
+	Replace(ctx context.Context, c Cmd, env []string) error
 }
 
 // Func adapts a function to a Runner, for tests.

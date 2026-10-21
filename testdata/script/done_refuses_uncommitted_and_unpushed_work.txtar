@@ -20,6 +20,12 @@ stderr 'uncommitted changes'
 stderr 'neither the merged head nor in origin/main'
 ! logcontains 'herdr tab close'
 
+# The reasons are in the error itself, for a program that reads --json and
+# never sees the lines above.
+! exec tkt done ACM-12 --json
+envelope '.error.code' tickets_kept
+envelope '.error.message | test("^kept ACM-12: .*uncommitted changes")' true
+
 -- draft.txt --
 draft
 

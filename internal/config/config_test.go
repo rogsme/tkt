@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
 )
@@ -228,5 +229,35 @@ func TestTabLabel(t *testing.T) {
 	}
 	if got := c.TabLabel("ACM-1", "fast"); got != "ACM-1 (fast)" {
 		t.Errorf("other preset: %q", got)
+	}
+}
+
+func TestAutoReviewAndBoardSettings(t *testing.T) {
+	c, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Auto != (Auto{MaxRounds: 5, Poll: 30 * time.Second, MaxParallel: 3}) || c.Review.BotWait != 15*time.Minute || c.Board.StaleAfter != 2*time.Hour {
+		t.Errorf("defaults: %+v %+v %+v", c.Auto, c.Review, c.Board)
+	}
+	c, err = Load(dirWith(t, map[string]string{FileName: "[auto]\nmax_rounds = 0\npoll = \"1m\"\nmax_parallel = 0\n\n[review]\nbot_wait = \"0s\"\n\n[board]\nstale_after = \"30m\"\n"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Auto != (Auto{MaxRounds: 0, Poll: time.Minute, MaxParallel: 0}) || c.Review.BotWait != 0 || c.Board.StaleAfter != 30*time.Minute {
+		t.Errorf("set: %+v %+v %+v", c.Auto, c.Review, c.Board)
+	}
+	for _, bad := range []string{
+		"[auto]\nmax_rounds = -1\n",
+		"[auto]\npoll = \"0s\"\n",
+		"[auto]\npoll = \"soon\"\n",
+		"[auto]\nmax_parallel = -2\n",
+		"[review]\nbot_wait = \"-5m\"\n",
+		"[review]\nbot_wait = 15\n",
+		"[board]\nstale = \"2h\"\n",
+	} {
+		if _, err := Load(dirWith(t, map[string]string{FileName: bad})); code(err) != apperr.ConfigInvalid {
+			t.Errorf("%q: %v", bad, err)
+		}
 	}
 }

@@ -61,7 +61,7 @@ var doctorGroups = []struct {
 	title string
 	ids   []string
 }{
-	{"Tools", []string{"git", "wt", "herdr", "gh"}},
+	{"Tools", []string{"git", "wt", "herdr", "gh", "pi"}},
 	{"Harnesses", nil},
 	{"Project", []string{"repository", "lifecycle", "worktrunk_hooks"}},
 	{"Environment", []string{"config", "herdr_env", "log"}},
@@ -280,11 +280,12 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 	})
 	add(func() Check { return a.toolCheck(ctx, "wt", "wt", minWT, true) })
 	add(func() Check { return a.toolCheck(ctx, "herdr", "herdr", minHerdr, true) })
+	add(func() Check { return a.piCheck(ctx) })
 	add(func() Check {
 		if a.Getenv("HERDR_ENV") == "1" && a.Getenv("HERDR_WORKSPACE_ID") != "" {
 			return Check{ID: "herdr_env", Status: CheckOK, Message: "inside herdr workspace " + a.Getenv("HERDR_WORKSPACE_ID")}
 		}
-		return Check{ID: "herdr_env", Status: CheckWarn, Message: "not inside a herdr pane; start, run, resume, done and wait need one",
+		return Check{ID: "herdr_env", Status: CheckWarn, Message: "not inside a herdr pane; start, approve, send, auto, run, resume, done, show and wait need one",
 			Hint: "open a herdr pane and run tkt there"}
 	})
 	add(func() Check {

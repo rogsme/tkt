@@ -19,11 +19,11 @@ env FAKE_GH_PRS=$WORK/prs.json
 env 'FAKE_HERDR_SCREEN=Plan ready. Status: AWAITING_APPROVAL'
 exec tkt ls --no-fetch
 stdout '^TICKET'
-stdout '^ACM-1 .*CLEAR.*tkt run ACM-1 verify'
+stdout '^ACM-1 +ready_for_human .*CLEAR.*tkt run ACM-1 verify'
 stdout '^ACM-1 .*ok 1'
 stdout '^ACM-2 .*CHANGES_REQUESTED.*tkt run ACM-2 address'
 stdout '^ACM-3 .*#3 merged.*tkt done ACM-3'
-stdout '^ACM-4 .*AWAITING_APPROVAL.*approve the plan in its tab'
+stdout '^ACM-4 +awaiting_approval .*read the plan with tkt show ACM-4, then tkt approve ACM-4'
 ! stdout main
 
 # A failed pull request query shows ? and exits 1.

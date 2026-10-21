@@ -40,8 +40,13 @@ func ParseMarker(line string) (version int, id string, ok bool) {
 // The status lines tkt branches on. The CLAUDE.md "Status lines" registry in
 // the skills repository lists every line a lifecycle skill emits.
 const (
-	StatusAwaitingApproval = "AWAITING_APPROVAL"
-	StatusBlocked          = "BLOCKED"
+	StatusAwaitingApproval     = "AWAITING_APPROVAL"
+	StatusBlocked              = "BLOCKED"
+	StatusSetupRequired        = "SETUP_REQUIRED"
+	StatusReadyForReview       = "READY_FOR_REVIEW"
+	StatusBlockedForSync       = "BLOCKED_FOR_SYNC"
+	StatusHumanQAFailed        = "HUMAN_QA_FAILED"
+	StatusAwaitingPostApproval = "AWAITING_POST_APPROVAL"
 )
 
 // StatusLineRE finds a status line on an agent's screen.
@@ -66,5 +71,15 @@ const (
 	VerdictReadyForHuman    = "READY_FOR_HUMAN"
 )
 
-// Skills names the lifecycle skills tkt's built-in stage lines ask for.
-var Skills = []string{"start-ticket", "address-pr-review", "review-pr"}
+// HumanVerificationRE finds the section that follows review-pr's
+// READY_FOR_HUMAN summary and holds the numbered procedure a person runs.
+var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`)
+
+// Skills names the lifecycle skills tkt's built-in stage lines, and the line
+// tkt approve sends, ask for.
+var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr"}
+
+// Unattended is the word start-ticket's "Unattended runs" section looks for
+// in its request: the run skips the browser presentation, and every open
+// question goes through the harness's question tool.
+const Unattended = "unattended"

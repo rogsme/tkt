@@ -8,6 +8,9 @@ exec tkt wait 12 --timeout 5s
 stdout '^ACM-12  idle  pane w1:p10  last status AWAITING_APPROVAL$'
 logged herdr agent wait w1:p10 --until idle --until blocked --until done --timeout 5000
 
+exec tkt wait ACM-12 --notify
+logged herdr notification show 'ACM-12: finished' --body 'Status: AWAITING_APPROVAL' --sound done
+
 exec tkt wait ACM-12 --until working,blocked --json
 envelope '.result | [.ticket, .pane, .agent, .status]' '["ACM-12","w1:p10","acm-12","idle"]'
 logged herdr agent wait w1:p10 --until working --until blocked

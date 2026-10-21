@@ -77,9 +77,16 @@ func (o Ops) ShowScreen(ctx context.Context, pane string) []string {
 	return lines
 }
 
-// LastStatus returns the last "Status: X" on the agent's screen, or "".
-func (o Ops) LastStatus(ctx context.Context, pane string) string {
-	return LastStatus(o.H.Read(ctx, pane, 40))
+// LastTurn reads a session's last turn from its own record: the Claude Code
+// transcript, or the OpenCode API. ok is false when that record is unknown.
+func (o Ops) LastTurn(ctx context.Context, h, sid, path string) (harness.Turn, bool) {
+	if sid == "" {
+		return harness.Turn{}, false
+	}
+	if h == config.Claude {
+		return harness.ClaudeLastTurn(harness.ClaudeProjectDir(o.Getenv, path) + "/" + sid + ".jsonl")
+	}
+	return o.OC.LastTurn(ctx, sid)
 }
 
 // LastStatus returns the value of the last status line in text, or "".

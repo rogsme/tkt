@@ -32,6 +32,65 @@
   ],
   "commands": [
     {
+      "path": "agent",
+      "use": "agent [-- PI_FLAGS...]",
+      "short": "Open the tkt agent, a chat that drives your tickets",
+      "long": "tkt agent opens a chat in this pane about the repository's tickets. It runs\npi, a coding agent that release builds of tkt carry inside them (MIT licensed,\nhttps://github.com/earendil-works/pi), with only tkt's own extension. Running\ntkt with no arguments opens it too, when you type it at a terminal in a herdr\npane inside a repository with the lifecycle configuration.\n\nSay what you want in plain words: \"start ACM-12\", \"run ACM-13 to ACM-15 in\nauto with sol\", \"I approved the plan for ACM-12, continue\", \"ACM-12 is merged,\nremove it\". Starting tickets and stages runs in the background and the prompt\ncomes back at once, so you can start the next ticket while the first one\nplans. A board pinned to the top of the chat shows every ticket, and on top\nwhat needs you: a plan to approve, a question from its agent, a pull request\nready for human verification, or a tkt auto loop that paused for you. The chat\nscrolls below the board, so it covers nothing. An item leaves the board as\nsoon as its ticket moves on, and the chat stays free of them. Each new one\nalso shows a herdr notification. /board hide and /board show put the board\naway and back.\n\nAsk how a ticket went, merged ones too: \"how did ACM-12 go?\", \"what failed\nin ACM-12 and ACM-13?\". The chat reads tkt history: each step with its time,\nand the pull request's commits and reviews with the review bot's findings.\n\nThe same actions work without the model as slash commands: /start (add \"as\nPRESET\" for a preset), /approve, /next, /auto, /send, /show, /peek (the\nagent's live screen), /check (the human verification checklist), /done,\n/inbox (what needs you, with fixed answers), /board (every ticket in columns),\n/history and /stats. A tool that changes a ticket your message did not name\nasks first, and removing a ticket always asks. Text for a busy agent waits in\na queue and goes in when the agent stops.\n\nTickets in auto run in tkt auto loops that outlive the chat, so they keep\nmoving, and notify you, after you close it. A loop that pauses for you goes on\nby itself once you act, such as answering the agent in its tab.\n\nThe chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:\nnot your extensions, skills, prompt templates or themes, and not the project's\nAGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in\n${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with\n/login inside the chat.\n\nThe chat brings two themes of its own, tkt-dark and tkt-light, and picks the\none that suits the terminal's background. Overlays such as /board and /peek\ndraw on a panel of their own, so they read well on a transparent terminal. A\ntheme you pick in /settings wins from then on.\n\npi runs in the repository's root, where it keeps the sessions, so --continue\npicks up the last chat about this repository from any of its worktrees. When\nyou quit, the chat prints the command that resumes it: tkt agent --session\nID. Flags after -- go to pi as they are, such as tkt agent -- --thinking high;\npi --help lists them.\n\nIn config.toml, an [agent] table picks the model and loads more pi extensions,\nsuch as one that adds a model provider (tkt help config). --model overrides the\nmodel for one run. Without [agent] model, pi starts on its own default: in\n/model, press Ctrl+S on a model to make it the default for new chats.\n\ntkt unpacks the bundled pi the first time, under\n${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary\ninstead; tkt doctor shows which pi tkt agent runs.\n\ntkt agent replaces itself with pi, so it needs a terminal and prints no result.\n--dry-run prints how it would start pi, and with --json the exact command line\nand environment.",
+      "example": "  tkt agent\n  tkt agent --continue\n  tkt agent --session 01a15a4d\n  tkt agent --model acme/large\n  tkt agent -- --thinking high\n  tkt agent --dry-run --json",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "PI_FLAGS",
+          "required": true,
+          "variadic": true
+        }
+      ],
+      "flags": [
+        {
+          "name": "continue",
+          "shorthand": "c",
+          "type": "bool",
+          "default": "false",
+          "usage": "continue the last chat in this repository"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print how tkt would start pi instead of starting it"
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "default": "",
+          "usage": "use pi model PATTERN instead of the [agent] model, such as acme/large"
+        },
+        {
+          "name": "session",
+          "type": "string",
+          "default": "",
+          "usage": "resume the chat with session ID, or a unique part of it, as the line pi prints on exit names it"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "agent_dir": "string",
+        "argv": "array of string",
+        "dir": "string",
+        "dry_run": "boolean",
+        "env": "object",
+        "ext_dir": "string",
+        "pi": "string",
+        "source": "string",
+        "version": "string"
+      }
+    },
+    {
       "path": "start",
       "use": "start [ID | --scratch NAME]",
       "short": "Create the worktree and tab, start an agent and send it the prompt",
@@ -123,10 +182,245 @@
       }
     },
     {
+      "path": "approve",
+      "use": "approve ID",
+      "short": "Approve the plan in the ticket's own session, so work-ticket begins",
+      "long": "tkt approve tells the ticket's planning session that you approve its plan. The\nsame session then goes on with work-ticket, so the plan it wrote stays in its\ncontext. tkt run would start a fresh session and lose it.\n\nRead the plan first with tkt show ID. tkt approve refuses unless the agent is\nidle and its last status line since your last message is\nStatus: AWAITING_APPROVAL; --force sends the approval anyway. To ask for\nchanges instead, use tkt send ID \"what to change\".\n\ntkt approve resets the round count that tkt auto caps.",
+      "example": "  tkt show ACM-12\n  tkt approve ACM-12\n  tkt approve ACM-12 --dry-run",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "force",
+          "type": "bool",
+          "default": "false",
+          "usage": "send the approval even when the last status is not AWAITING_APPROVAL"
+        },
+        {
+          "name": "pane",
+          "type": "string",
+          "default": "",
+          "usage": "approve the plan of the agent in PANE when several run in the worktree"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "agent": "string",
+        "dry_run": "boolean",
+        "harness": "string",
+        "pane": "string",
+        "resent": "boolean",
+        "session": "string",
+        "steered": "boolean",
+        "ticket": "string"
+      }
+    },
+    {
+      "path": "send",
+      "use": "send ID [TEXT]",
+      "short": "Type text into the ticket's running session, which keeps its conversation",
+      "long": "tkt send types text into the ticket's running session and waits until the\nagent takes it. The session keeps its whole conversation, so use it to ask for\nchanges to a plan, or to answer a question the agent asked in its last\nmessage.\n\nIt refuses while the agent works (tkt wait blocks until it is done) and while\nit waits in its own dialog, such as a question with options: typed text does\nnot reach that dialog, so answer it in the ticket's tab. tkt show ID --screen\nprints what the dialog asks.\n\n--steer types the text in while the agent works, to steer it mid-task.\nClaude Code and OpenCode hold the text and read it at their next step; the\nresult says steered. A question in the agent's dialog still refuses it.\n\n--wait queues the text instead: tkt send waits until the agent stops working,\nstops waiting on its own background task, and has no question open, then\ntypes the text in. With --steer, it waits only for the question to close. It\nholds no lock while it waits, so tkt auto and the other commands go on.\n\nTo start a stage in a fresh session instead, use tkt run. To approve a plan,\nuse tkt approve.",
+      "example": "  tkt send ACM-12 \"Keep the old endpoint and drop step 4 of the plan.\"\n  tkt send ACM-12 --steer \"Stop: the endpoint stays. Drop step 4.\"\n  tkt send ACM-12 --prompt-file answer.md",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        },
+        {
+          "name": "TEXT",
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "force",
+          "type": "bool",
+          "default": "false",
+          "usage": "override the safety refusals"
+        },
+        {
+          "name": "pane",
+          "type": "string",
+          "default": "",
+          "usage": "send to the agent in PANE when several run in the worktree"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "default": "",
+          "usage": "send TEXT instead of TEXT; - reads it from stdin"
+        },
+        {
+          "name": "prompt-file",
+          "type": "string",
+          "default": "",
+          "usage": "send the text in the file PATH instead of TEXT"
+        },
+        {
+          "name": "steer",
+          "type": "bool",
+          "default": "false",
+          "usage": "type the text in while the agent works; with --wait, wait only for a question in its dialog"
+        },
+        {
+          "name": "wait",
+          "type": "bool",
+          "default": "false",
+          "usage": "when the agent is busy, wait for it to stop, then send"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "agent": "string",
+        "dry_run": "boolean",
+        "harness": "string",
+        "pane": "string",
+        "resent": "boolean",
+        "session": "string",
+        "steered": "boolean",
+        "ticket": "string"
+      }
+    },
+    {
+      "path": "auto",
+      "use": "auto ID",
+      "short": "Drive the ticket until it needs you: approve, review, fix, until READY_FOR_HUMAN",
+      "long": "tkt auto drives one ticket through the lifecycle and pauses where a person\ndecides. It reads the same facts as tkt ls, then:\n\n  - starts the ticket when it has no worktree yet, on --as PRESET when given;\n    with --approve-plan its start line says the run is unattended, so\n    start-ticket skips the browser plan presentation and asks every open\n    question with the harness's question tool;\n  - waits while the agent works, or waits on its own background task such\n    as a CI watcher;\n  - approves the plan when start-ticket ends with AWAITING_APPROVAL, but only\n    with --approve-plan; without it the loop pauses there for you;\n  - waits for CI, then for the review bot in CI to review the new head;\n  - runs address on findings, a moved base or a conflict (address-pr-review\n    merges the base first on every run), and ci when checks fail, each in a\n    fresh session;\n  - ends with success when the head is reviewed clean: the bot's CLEAR, or\n    review-pr's READY_FOR_HUMAN. review-pr runs only in a repository with no\n    review bot, [review] bot_wait = \"0s\".\n\nIt never merges, never runs verify, and never removes a worktree.\n\nWhere a person decides, the loop pauses instead of ending: when the agent\nasks a question or ends with Status: BLOCKED (needs_you), when the plan waits\nand --approve-plan is off (plan_awaits_approval), when no agent runs\n(agent_missing), when the bot has not reviewed a head after [review] bot_wait\n(bot_silent), after [auto] max_rounds fix runs since the plan's approval\n(round_limit), and when a step would repeat on the same head with nothing\nchanged (no_progress). It records the pause, which tkt ls shows as\nauto.paused, notifies once with --notify, and goes on by itself when the\nticket moves, such as after you answer the agent in its tab or approve the\nplan.\n\nA loop ends only when the ticket is ready for you, merged or closed, or with\ntkt auto --stop, which it notices at its next look. Ctrl-C ends it with exit 5\nand leaves the ticket marked for auto, so tkt ls shows auto.wanted. While a\nloop drives the ticket, its tab reads ACM-12 (auto).\n\nAt most [auto] max_parallel tkt auto agents work at once in a repository. A\nloop holds a slot while its agent works and gives it up while it waits for CI,\nthe bot or you. A ticket waiting for a slot shows as queued in tkt ls, even\nbefore it has a worktree.\n\n--once takes at most one step and exits 0, saying what it did, what it waits\nfor, or why it would stop or pause. With --dry-run it prints the step instead.\n--notify shows a herdr notification when the loop pauses for you or ends.",
+      "example": "  tkt auto ACM-12 --approve-plan --notify\n  tkt approve ACM-12 && tkt auto ACM-12\n  tkt auto ACM-12 --once\n  tkt auto ACM-12 --once --dry-run\n  tkt auto ACM-12 --stop",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "approve-plan",
+          "type": "bool",
+          "default": "false",
+          "usage": "approve the plan in your place when start-ticket ends with AWAITING_APPROVAL"
+        },
+        {
+          "name": "as",
+          "type": "string",
+          "default": "",
+          "usage": "start the ticket's agents on PRESET"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "with --once, print the step instead of taking it"
+        },
+        {
+          "name": "max-rounds",
+          "type": "int",
+          "default": "-1",
+          "usage": "pause for you after N address and ci runs since the plan's approval (default [auto] max_rounds)"
+        },
+        {
+          "name": "notify",
+          "type": "bool",
+          "default": "false",
+          "usage": "show a herdr notification when the loop needs you or stops"
+        },
+        {
+          "name": "once",
+          "type": "bool",
+          "default": "false",
+          "usage": "take at most one step, then exit 0 with what it did or why not"
+        },
+        {
+          "name": "poll",
+          "type": "duration",
+          "default": "0s",
+          "usage": "read the forge every DURATION while waiting for CI or a review (default [auto] poll)"
+        },
+        {
+          "name": "stop",
+          "type": "bool",
+          "default": "false",
+          "usage": "stop the loop that drives the ticket, at its next look"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "did": {
+          "fields": {
+            "action": "string",
+            "at": "string",
+            "head": "string",
+            "reason": "string",
+            "stage": "string"
+          },
+          "nullable": true
+        },
+        "dry_run": "boolean",
+        "next": {
+          "argv": "array of string",
+          "kind": "string",
+          "reason": "string",
+          "text": "string"
+        },
+        "phase": "string",
+        "rounds": "integer",
+        "steps": [
+          {
+            "action": "string",
+            "at": "string",
+            "head": "string",
+            "reason": "string",
+            "stage": "string"
+          }
+        ],
+        "stop": "string",
+        "ticket": "string",
+        "wait": "string"
+      }
+    },
+    {
       "path": "run",
       "use": "run ID [STAGE]",
       "short": "Replace the ticket's idle agent with a fresh session and send a stage line",
-      "long": "tkt run closes the ticket's idle agent and starts a fresh session in the same\npane, on the ticket's preset, then sends the stage's line. The new agent\nremembers nothing of the old conversation and does not need to: every stage\nreads what it needs from the branch, the pull request and the tracker. Use it\nto begin the next stage with a clean context.\n\nStages:\n  review   review-pr reviews the pull request at its head and posts a verdict.\n           Run it when the agent ends with Status: READY_FOR_REVIEW.\n  address  address-pr-review fixes the valid findings, answers the rest and\n           pushes. Run it when the review asks for changes, you left comments,\n           or the merge stopped with Status: HUMAN_QA_FAILED.\n  sync     address-pr-review merges the base into the branch. Run it on\n           Status: BLOCKED_FOR_SYNC, or when the pull request conflicts.\n  ci       finds why the checks fail at the head, fixes it and pushes once.\n  verify   runs the pull request's human verification steps in a browser and\n           reports each one. It changes no code and posts nothing.\n  start    runs start-ticket again and returns a new plan.\n\nconfig.toml can change these lines or add stages (tkt help config).\n\ntkt run refuses while the agent works or waits for your answer (tkt wait\nblocks until it is done). It also refuses while the ticket is still in\nplanning, because that agent may hold a plan waiting for your approval;\napprove it in the tab instead. --force replaces it anyway, and also replaces\nan agent in a state tkt does not recognize.",
+      "long": "tkt run closes the ticket's idle agent and starts a fresh session in the same\npane, on the ticket's preset, then sends the stage's line. The new agent\nremembers nothing of the old conversation and does not need to: every stage\nreads what it needs from the branch, the pull request and the tracker. Use it\nto begin the next stage with a clean context.\n\nStages:\n  review   review-pr reviews the pull request at its head and posts a verdict.\n           Run it when the agent ends with Status: READY_FOR_REVIEW.\n  address  address-pr-review merges the base into the branch when it moved,\n           then fixes the valid findings, answers the rest and pushes. Run it\n           when the review asks for changes, you left comments, the merge\n           stopped with Status: HUMAN_QA_FAILED or BLOCKED_FOR_SYNC, or the\n           pull request conflicts.\n  sync     the same line as address, under its old name.\n  ci       finds why the checks fail at the head, fixes it and pushes once.\n  verify   runs the pull request's human verification steps in a browser and\n           reports each one. It changes no code and posts nothing.\n  start    runs start-ticket again and returns a new plan.\n\nconfig.toml can change these lines or add stages (tkt help config).\n\ntkt run refuses while the agent works or waits for your answer (tkt wait\nblocks until it is done). It also refuses while the ticket is still in\nplanning, because that agent may hold a plan waiting for your approval;\napprove it with tkt approve instead. --force replaces it anyway, and also replaces\nan agent in a state tkt does not recognize.",
       "example": "  tkt run ACM-12 review\n  tkt run ACM-12 review --as big\n  tkt run ACM-12 address\n  tkt run ACM-12 --prompt \"Check the flaky login test again.\"",
       "group": "lifecycle",
       "args": [
@@ -262,7 +556,7 @@
       "path": "done",
       "use": "done [ID...]",
       "short": "Close a merged ticket's tabs and remove its worktree",
-      "long": "tkt done closes the ticket's tabs and removes its worktree once its pull\nrequest is merged. worktrunk deletes the branch when it is merged into the\nbase; after a squash merge the branch stays.\n\nIt keeps the worktree, and says why, when:\n  - the pull request is still open, or no merged pull request has the branch;\n  - the worktree has uncommitted changes;\n  - the branch tip is neither the merged head nor in the base;\n  - an agent in the worktree works or waits for an answer;\n  - tkt runs inside the worktree or in the ticket's own tab;\n  - a pane outside the ticket's tabs, or the OpenCode service, works in it.\n\n--all checks every ticket worktree and asks before removing them; pass --yes\nwhen stdin is not a terminal. It reads pull requests through gh, so it\nsupports GitHub forges only.",
+      "long": "tkt done closes the ticket's tabs and removes its worktree once its pull\nrequest is merged. worktrunk deletes the branch when it is merged into the\nbase; after a squash merge the branch stays.\n\nIt keeps the worktree, and says why, when:\n  - the pull request is still open, or no merged pull request has the branch;\n  - the worktree has uncommitted changes;\n  - the branch tip is neither the merged head nor in the base;\n  - an agent in the worktree works or waits for an answer;\n  - tkt runs inside the worktree or in the ticket's own tab;\n  - a pane outside the ticket's tabs, or the OpenCode service, works in it.\n\n--all checks every ticket worktree and asks before removing them; pass --yes\nwhen stdin is not a terminal. It reads pull requests through gh, so it\nsupports GitHub forges only.\n\nIt records the merge in the history, so tkt stats can say how long the ticket\ntook from tkt start to the merge.",
       "example": "  tkt done ACM-12\n  tkt done ACM-12 --dry-run\n  tkt done --all --yes",
       "group": "lifecycle",
       "args": [
@@ -304,9 +598,12 @@
           {
             "branch_deleted": "boolean",
             "closed_tabs": "array of string",
+            "elapsed_s": "integer",
+            "merged": "string",
             "outcome": "string",
             "path": "string",
             "reasons": "array of string",
+            "started": "string",
             "ticket": "string"
           }
         ]
@@ -316,7 +613,7 @@
       "path": "ls",
       "use": "ls [ID...]",
       "short": "List ticket worktrees with their state and the next step",
-      "long": "tkt ls lists every ticket worktree, or the tickets given, with its tab, agent\nstate, the last Status: line on the agent's screen, pull request, checks,\nreview verdict at the head, commits behind the base, and the next step.\n\nThe next step is the first of these rules that matches:\n  1. The pull request is merged: tkt done ID.\n  2. The agent works: wait (tkt wait ID); or it waits for an answer: answer it.\n  3. No pull request yet: tkt resume ID when no agent runs; otherwise approve\n     the plan, read the agent's reason, or check the agent in its tab.\n  4. The checks are pending: wait for CI.\n  5. The review says the base moved, or the pull request conflicts: tkt run ID sync.\n  6. The review at the head has findings: tkt run ID address.\n  7. The checks fail: tkt run ID ci.\n  8. The review at the head is clear: tkt run ID verify.\n  9. Anything else: wait for review, or tkt run ID review when no automated\n     reviewer runs on the forge.\n\nA verdict on an older head does not count, so after every push the next step\nwaits for a new review. With --json each row's next step is an object whose\nargv, when set, is the command to run. tkt ls reads pull requests through gh,\nso outside GitHub forges those columns show ?.",
+      "long": "tkt ls lists every ticket worktree, or the tickets given, with its phase and\nhow long it has been there (TIME), its agent, pull request, checks, review\nverdict, what tkt auto does with it, and the next step. On a terminal the\nphase is colored by who acts next: yellow for you, green when it is ready for\nyou to verify, cyan while an agent works.\n\nThe agent column says working, idle, blocked (it asks a question), or waiting\nwhen it is idle but waits on a background task of its own, such as a CI\nwatcher, and goes on by itself. tkt reads the agent's last Status: line and\nits background tasks from the session's own record, the Claude Code\ntranscript or the OpenCode API; when tkt cannot read that, from the agent's\nrecent output.\n\nThe next step is the first of these rules that matches:\n  1. The pull request is merged: tkt done ID.\n  2. The agent works, or waits on its background task: wait; or it waits for\n     an answer: answer it.\n  3. No pull request yet: tkt resume ID when no agent runs; otherwise read the\n     plan and approve it (tkt show ID, tkt approve ID), read the agent's\n     reason, or check the agent in its tab.\n  4. The agent ended with Status: BLOCKED or SETUP_REQUIRED, or a review\n     draft waits for your approval: do it in the tab.\n  5. The checks are pending: wait for CI.\n  6. The review says the base moved, the pull request conflicts, or the agent\n     said BLOCKED_FOR_SYNC with the branch behind the base: tkt run ID\n     address, which merges the base first.\n  7. The merge stopped with HUMAN_QA_FAILED, or the review at the head has\n     findings: tkt run ID address.\n  8. The checks fail: tkt run ID ci.\n  9. The review at the head is clear, from the bot or from review-pr: tkt run\n     ID verify, or the steps yourself.\n 10. No review at the head yet: without a bot ([review] bot_wait = \"0s\"),\n     tkt run ID review. With one, wait bot_wait for it, counted from when tkt\n     first saw the head waiting; after that, check the bot's CI job.\n\nA verdict on an older head does not count, so after every push the next step\nwaits for a new review. With --json each row's next step is an object whose\nargv, when set, is the command to run, and whose reason names the rule:\nmerged, closed, agent_working, agent_waiting, agent_blocked, no_agent,\nplan_awaits_approval, status_blocked, check_agent, review_awaits_approval,\nci_pending, base_moved, qa_failed, findings, checks_fail, bot_clear,\nreview_clear, awaiting_bot, bot_silent, needs_review, or awaiting_slot for a\nticket whose tkt auto loop waits for a slot before the ticket has a worktree.\n\nThe phase names where a ticket stands: queued, starting, planning,\nawaiting_approval, building, ci, waiting_review, reviewing, needs_fix, fixing,\nverifying, working, needs_you, ready_for_human, merged, closed or no_agent.\ntkt ls records a phase when it sees it change, in the worktree and in the\nhistory tkt stats reads, so the time in a phase is as exact as how often\nsomething runs tkt ls or tkt auto. An agent that sits idle with no status line\nlonger than [board] stale_after is marked stale.\n\nThe AUTO column says on while a tkt auto loop drives the ticket, paused while\nit waits for you (auto.paused and auto.why in --json say why), queued while it\nwaits for a slot, and stalled when the ticket is marked for auto but no loop\nruns.\n\ntkt ls reads pull requests through gh, so outside GitHub forges those columns\nshow ? and nothing is recorded.",
       "example": "  tkt ls\n  tkt ls ACM-12 --json\n  tkt ls --json | jq -r '.result.rows[] | select(.next.kind == \"command\") | .next.text'",
       "group": "inspect",
       "args": [
@@ -339,10 +636,24 @@
           {
             "agent": {
               "fields": {
+                "background": "integer",
                 "harness": "string",
                 "name": "string",
                 "pane_id": "string",
                 "status": "string"
+              },
+              "nullable": true
+            },
+            "auto": {
+              "fields": {
+                "approve_plan": "boolean",
+                "paused": "string",
+                "rounds": "integer",
+                "running": "boolean",
+                "stop": "string",
+                "waiting": "string",
+                "wanted": "boolean",
+                "why": "string"
               },
               "nullable": true
             },
@@ -356,13 +667,18 @@
               },
               "nullable": true
             },
+            "idle_since": "string",
             "last_status": "string",
+            "launch": "string",
             "next": {
               "argv": "array of string",
               "kind": "string",
+              "reason": "string",
               "text": "string"
             },
             "path": "string",
+            "phase": "string",
+            "phase_since": "string",
             "pr": {
               "fields": {
                 "head": "string",
@@ -381,6 +697,9 @@
               },
               "nullable": true
             },
+            "stage": "string",
+            "stale": "boolean",
+            "started": "string",
             "tabs": [
               {
                 "label": "string",
@@ -388,7 +707,8 @@
                 "workspace_id": "string"
               }
             ],
-            "ticket": "string"
+            "ticket": "string",
+            "updated": "string"
           }
         ],
         "sources": {
@@ -399,10 +719,66 @@
       }
     },
     {
+      "path": "show",
+      "use": "show ID",
+      "short": "Print the agent's last message, its live screen, or the verification steps",
+      "long": "tkt show prints the agent's last message: after start-ticket, the plan; after\ntkt run ID verify, its report. It reads the message from the session's own\nrecord, the Claude Code transcript or the OpenCode API, so nothing scrolls\naway. When tkt cannot read that record, it prints the agent's recent output.\n\n--screen prints the agent's live screen instead, such as a question it asks\nin a dialog.\n\n--steps prints the human verification procedure from the review that says\nREADY_FOR_HUMAN at the pull request's head, and with --json its numbered\nsteps. When the review bot cleared the head instead, it reads the Human\nverification section of the pull request's body, which work-ticket writes;\nsource says which. It reads pull requests through gh, so it supports GitHub\nforges only, and it exits 4 with no_verification_steps when neither has\nsteps.",
+      "example": "  tkt show ACM-12\n  tkt show ACM-12 --screen\n  tkt show ACM-12 --steps --json",
+      "group": "inspect",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "pane",
+          "type": "string",
+          "default": "",
+          "usage": "show the agent in PANE when several run in the worktree"
+        },
+        {
+          "name": "screen",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the agent's live screen instead, such as a question it asks"
+        },
+        {
+          "name": "steps",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the human verification steps of the review at the pull request's head"
+        }
+      ],
+      "result": {
+        "agent_status": "string",
+        "at": "string",
+        "harness": "string",
+        "last_status": "string",
+        "message": "string",
+        "pane": "string",
+        "pr": "integer",
+        "procedure": "string",
+        "screen": "string",
+        "session": "string",
+        "source": "string",
+        "steps": [
+          {
+            "n": "integer",
+            "text": "string"
+          }
+        ],
+        "ticket": "string",
+        "view": "string"
+      }
+    },
+    {
       "path": "wait",
       "use": "wait ID",
       "short": "Block until the ticket's agent needs you or has finished",
-      "long": "tkt wait blocks until the ticket's agent is idle, blocked or done, that is,\nuntil it has finished or needs you, then prints its state and the last\nStatus: line on its screen. --until picks other states.\n\nA program that drives tkt waits with it instead of polling tkt ls. With\n--timeout, a wait that runs out ends with exit 4 and the code wait_timeout.",
+      "long": "tkt wait blocks until the ticket's agent is idle, blocked or done, that is,\nuntil it has finished or needs you, then prints its state and the last\nStatus: line it wrote since your last message. --until picks other states.\n\nA program that drives tkt waits with it instead of polling tkt ls. With\n--timeout, a wait that runs out ends with exit 4 and the code wait_timeout.\n--notify shows a herdr notification when the wait ends.",
       "example": "  tkt wait ACM-12\n  tkt wait ACM-12 --timeout 30m --json\n  tkt wait ACM-12 --until blocked",
       "group": "inspect",
       "args": [
@@ -413,6 +789,12 @@
         }
       ],
       "flags": [
+        {
+          "name": "notify",
+          "type": "bool",
+          "default": "false",
+          "usage": "show a herdr notification when the wait ends"
+        },
         {
           "name": "pane",
           "type": "string",
@@ -439,6 +821,122 @@
         "status": "string",
         "ticket": "string",
         "waited_ms": "integer"
+      }
+    },
+    {
+      "path": "stats",
+      "use": "stats [ID...]",
+      "short": "Show how long tickets took from start to merge, and how long they waited for you",
+      "long": "tkt stats reads the history tkt keeps in ${XDG_STATE_HOME:-~/.local/state}/tkt/history.jsonl\nand shows, for this repository's tickets, how long each took from tkt start to\nthe merge, how much of that it waited for you (a plan to approve, a question,\nthe human verification), and how many address and ci rounds it needed.\nTickets still in progress show their time so far. The summary gives the\nmedian and the 90th percentile of the merged ones.\n\ntkt records the start and the merge exactly: the start when tkt start first\nstarts the ticket, the merge from the forge when tkt done removes it. Time in\neach phase is as exact as the commands that watch it: tkt ls, tkt auto and the\ntkt agent's board record a phase when they see it change.\n\nThe history outlives worktrees and only grows. Tickets started before tkt\nkept a history have no recorded start and are left out.",
+      "example": "  tkt stats\n  tkt stats --since 720h\n  tkt stats ACM-12 --json",
+      "group": "inspect",
+      "args": [
+        {
+          "name": "ID",
+          "required": false,
+          "variadic": true
+        }
+      ],
+      "flags": [
+        {
+          "name": "all-repos",
+          "type": "bool",
+          "default": "false",
+          "usage": "include the tickets of every repository in the history"
+        },
+        {
+          "name": "since",
+          "type": "duration",
+          "default": "0s",
+          "usage": "only tickets started within DURATION, such as 720h for 30 days"
+        }
+      ],
+      "result": null
+    },
+    {
+      "path": "history",
+      "use": "history ID...",
+      "short": "Show what happened to tickets: their events, commits and reviews",
+      "long": "tkt history shows what happened to each ticket you name, oldest first: every\nevent in the history tkt keeps in ${XDG_STATE_HOME:-~/.local/state}/tkt/history.jsonl\n(the start, each phase, the plan's approval, each stage run, what tkt auto did\nand why it stopped, the merge), and the timeline tkt stats counts from them.\n\nOn a GitHub forge, it also reads each pull request of the ticket's branch\nthrough gh: its title, size, commits and reviews. A review's verdict and the\nhead it names come from review-pr's Verdict: line or the review bot's\nsummary, and the body holds its findings. Reviews with only line comments\nand no body are left out. When gh fails, tkt warns, prints the history\nalone, and forge says failed.\n\nA ticket keeps its history after tkt done removes its worktree, so this\nworks for merged tickets too. tkt history is read only. The tkt agent reads it\nto answer how a ticket went.",
+      "example": "  tkt history ACM-12\n  tkt history ACM-12 ACM-13 --json",
+      "group": "inspect",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": true
+        }
+      ],
+      "flags": [],
+      "result": {
+        "forge": "string",
+        "repo": "string",
+        "tickets": [
+          {
+            "events": [
+              {
+                "action": "string",
+                "at": "string",
+                "event": "string",
+                "from": "string",
+                "phase": "string",
+                "pr": "integer",
+                "stage": "string",
+                "stop": "string"
+              }
+            ],
+            "pull_requests": [
+              {
+                "additions": "integer",
+                "changed_files": "integer",
+                "commits": [
+                  {
+                    "at": "string",
+                    "oid": "string",
+                    "subject": "string"
+                  }
+                ],
+                "deletions": "integer",
+                "merged": "string",
+                "number": "integer",
+                "opened": "string",
+                "reviews": [
+                  {
+                    "at": "string",
+                    "author": "string",
+                    "body": "string",
+                    "head": "string",
+                    "verdict": "string"
+                  }
+                ],
+                "state": "string",
+                "title": "string",
+                "url": "string"
+              }
+            ],
+            "ticket": "string",
+            "timeline": {
+              "fields": {
+                "approved": "string",
+                "auto": "boolean",
+                "done": "string",
+                "in_progress": "boolean",
+                "merged": "string",
+                "phases_s": "object",
+                "pr": "integer",
+                "pr_opened": "string",
+                "ready_for_human": "string",
+                "repo": "string",
+                "rounds": "integer",
+                "started": "string",
+                "ticket": "string",
+                "total_s": "integer",
+                "waiting_on_you_s": "integer"
+              },
+              "nullable": true
+            }
+          }
+        ]
       }
     },
     {
@@ -876,6 +1374,16 @@
       "summary": "tkt cannot replace its own binary"
     },
     {
+      "code": "pi_missing",
+      "exit": 3,
+      "summary": "tkt agent has no pi to run: this tkt has no bundled pi and TKT_PI names none"
+    },
+    {
+      "code": "terminal_required",
+      "exit": 3,
+      "summary": "the command is interactive and needs a terminal on stdin and stdout"
+    },
+    {
       "code": "ticket_locked",
       "exit": 4,
       "summary": "another tkt command is working on the ticket"
@@ -976,6 +1484,26 @@
       "summary": "this tkt is a development build; tkt update replaces it only with --force"
     },
     {
+      "code": "no_plan_to_approve",
+      "exit": 4,
+      "summary": "the agent's last status is not AWAITING_APPROVAL, so there is no plan to approve"
+    },
+    {
+      "code": "no_verification_steps",
+      "exit": 4,
+      "summary": "no review says READY_FOR_HUMAN at the pull request's head with Human verification steps"
+    },
+    {
+      "code": "auto_running",
+      "exit": 4,
+      "summary": "a tkt auto loop already drives the ticket"
+    },
+    {
+      "code": "auto_stopped",
+      "exit": 4,
+      "summary": "tkt auto stopped because the ticket needs a person; details.stop says why"
+    },
+    {
       "code": "wt_failed",
       "exit": 1,
       "summary": "worktrunk failed or printed output tkt cannot read"
@@ -1046,6 +1574,11 @@
       "summary": "an unexpected failure inside tkt"
     },
     {
+      "code": "pi_unpack_failed",
+      "exit": 1,
+      "summary": "tkt cannot unpack its bundled pi, or write the extension or settings it starts pi with"
+    },
+    {
       "code": "agent_not_ready",
       "exit": 5,
       "summary": "the agent stopped at a startup dialog; answer it in its pane"
@@ -1077,11 +1610,15 @@
     },
     {
       "name": "XDG_STATE_HOME",
-      "description": "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log (default ~/.local/state/tkt/tkt.log)"
+      "description": "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it (default ~/.local/state/tkt)"
+    },
+    {
+      "name": "XDG_DATA_HOME",
+      "description": "tkt unpacks its bundled pi and its extension under $XDG_DATA_HOME/tkt (default ~/.local/share/tkt)"
     },
     {
       "name": "HERDR_ENV",
-      "description": "herdr sets it to 1 inside its panes; start, run, resume, done and wait need it"
+      "description": "herdr sets it to 1 inside its panes; agent, start, approve, send, auto, run, resume, done, show and wait need it, and tkt alone opens the agent only there"
     },
     {
       "name": "HERDR_WORKSPACE_ID",
@@ -1102,6 +1639,10 @@
     {
       "name": "TKT_RELEASES_API",
       "description": "the Gitea API that tkt update asks for the latest release (default https://git.rogs.me/api/v1/repos/rogs/tkt)"
+    },
+    {
+      "name": "TKT_PI",
+      "description": "the pi binary tkt agent runs instead of the one bundled with tkt"
     },
     {
       "name": "CLAUDE_CONFIG_DIR",

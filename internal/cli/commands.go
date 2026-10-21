@@ -168,6 +168,117 @@ func runCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func approveCmd(g *globals) *cobra.Command {
+	var o app.ApproveOpts
+	cmd := &cobra.Command{
+		Use:   "approve ID",
+		Short: "Approve the plan in the ticket's own session, so work-ticket begins",
+		Long:  helpText("approve"),
+		Example: `  tkt show ACM-12
+  tkt approve ACM-12
+  tkt approve ACM-12 --dry-run`,
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt approve ID")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Approve(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.Pane, "pane", "", "approve the plan of the agent in PANE when several run in the worktree")
+	cmd.RegisterFlagCompletionFunc("pane", g.completePanes)
+	cmd.Flags().BoolVar(&o.Force, "force", false, "send the approval even when the last status is not AWAITING_APPROVAL")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
+	return cmd
+}
+
+func sendCmd(g *globals) *cobra.Command {
+	var o app.SendOpts
+	var pf promptFlags
+	cmd := &cobra.Command{
+		Use:   "send ID [TEXT]",
+		Short: "Type text into the ticket's running session, which keeps its conversation",
+		Long:  helpText("send"),
+		Example: `  tkt send ACM-12 "Keep the old endpoint and drop step 4 of the plan."
+  tkt send ACM-12 --steer "Stop: the endpoint stays. Drop step 4."
+  tkt send ACM-12 --prompt-file answer.md`,
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case len(args) == 0:
+				return usage("usage: tkt send ID TEXT")
+			case len(args) > 2:
+				return usage("send takes a ticket id and one TEXT; quote the text")
+			case len(args) == 2 && pf.set(cmd):
+				return usage("give TEXT, --prompt or --prompt-file, not several")
+			case len(args) == 1 && !pf.set(cmd):
+				return usage("usage: tkt send ID TEXT (or --prompt TEXT, or --prompt-file PATH)")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			o.Prompt = pf.source(cmd)
+			if len(args) == 2 {
+				o.Prompt = prompt.Source{Text: args[1], Set: true}
+			}
+			res, err := g.app().Send(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	pf.add(cmd, "TEXT")
+	cmd.Flags().BoolVar(&o.Wait, "wait", false, "when the agent is busy, wait for it to stop, then send")
+	cmd.Flags().BoolVar(&o.Steer, "steer", false, "type the text in while the agent works; with --wait, wait only for a question in its dialog")
+	cmd.Flags().StringVar(&o.Pane, "pane", "", "send to the agent in PANE when several run in the worktree")
+	cmd.RegisterFlagCompletionFunc("pane", g.completePanes)
+	cmd.Flags().BoolVar(&o.Force, "force", false, "override the safety refusals")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
+	return cmd
+}
+
+func autoCmd(g *globals) *cobra.Command {
+	var o app.AutoOpts
+	cmd := &cobra.Command{
+		Use:   "auto ID",
+		Short: "Drive the ticket until it needs you: approve, review, fix, until READY_FOR_HUMAN",
+		Long:  helpText("auto"),
+		Example: `  tkt auto ACM-12 --approve-plan --notify
+  tkt approve ACM-12 && tkt auto ACM-12
+  tkt auto ACM-12 --once
+  tkt auto ACM-12 --once --dry-run
+  tkt auto ACM-12 --stop`,
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt auto ID")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Auto(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.ApprovePlan, "approve-plan", false, "approve the plan in your place when start-ticket ends with AWAITING_APPROVAL")
+	cmd.Flags().StringVar(&o.As, "as", "", "start the ticket's agents on PRESET")
+	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
+	cmd.Flags().IntVar(&o.MaxRounds, "max-rounds", -1, "pause for you after N address and ci runs since the plan's approval (default [auto] max_rounds)")
+	cmd.Flags().DurationVar(&o.Poll, "poll", 0, "read the forge every DURATION while waiting for CI or a review (default [auto] poll)")
+	cmd.Flags().BoolVar(&o.Notify, "notify", false, "show a herdr notification when the loop needs you or stops")
+	cmd.Flags().BoolVar(&o.Once, "once", false, "take at most one step, then exit 0 with what it did or why not")
+	cmd.Flags().BoolVar(&o.Stop, "stop", false, "stop the loop that drives the ticket, at its next look")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "with --once, print the step instead of taking it")
+	cmd.MarkFlagsMutuallyExclusive("stop", "once")
+	cmd.MarkFlagsMutuallyExclusive("stop", "approve-plan")
+	return cmd
+}
+
 func resumeCmd(g *globals) *cobra.Command {
 	var o app.ResumeOpts
 	cmd := &cobra.Command{
@@ -282,9 +393,87 @@ func waitCmd(g *globals) *cobra.Command {
 	cmd.Flags().StringSliceVar(&o.Until, "until", nil, "stop at STATE: idle, working, blocked or done; repeat it or separate with commas (default idle, blocked, done)")
 	cmd.Flags().DurationVar(&o.Timeout, "timeout", 0, "give up after DURATION, such as 30m (default: wait without limit)")
 	cmd.Flags().StringVar(&o.Pane, "pane", "", "wait for the agent in PANE when several run in the worktree")
+	cmd.Flags().BoolVar(&o.Notify, "notify", false, "show a herdr notification when the wait ends")
 	cmd.RegisterFlagCompletionFunc("pane", g.completePanes)
 	cmd.RegisterFlagCompletionFunc("until", fixed(app.WaitStates...))
 	return cmd
+}
+
+func showCmd(g *globals) *cobra.Command {
+	var o app.ShowOpts
+	cmd := &cobra.Command{
+		Use:   "show ID",
+		Short: "Print the agent's last message, its live screen, or the verification steps",
+		Long:  helpText("show"),
+		Example: `  tkt show ACM-12
+  tkt show ACM-12 --screen
+  tkt show ACM-12 --steps --json`,
+		SuggestFor:        []string{"plan", "peek", "cat"},
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt show ID")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Show(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.Screen, "screen", false, "print the agent's live screen instead, such as a question it asks")
+	cmd.Flags().BoolVar(&o.Steps, "steps", false, "print the human verification steps of the review at the pull request's head")
+	cmd.MarkFlagsMutuallyExclusive("screen", "steps")
+	cmd.Flags().StringVar(&o.Pane, "pane", "", "show the agent in PANE when several run in the worktree")
+	cmd.RegisterFlagCompletionFunc("pane", g.completePanes)
+	return cmd
+}
+
+func statsCmd(g *globals) *cobra.Command {
+	var o app.StatsOpts
+	cmd := &cobra.Command{
+		Use:   "stats [ID...]",
+		Short: "Show how long tickets took from start to merge, and how long they waited for you",
+		Long:  helpText("stats"),
+		Example: `  tkt stats
+  tkt stats --since 720h
+  tkt stats ACM-12 --json`,
+		SuggestFor:        []string{"metrics"},
+		ValidArgsFunction: g.completeTickets(true),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.IDs = args
+			res, err := g.app().Stats(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().DurationVar(&o.Since, "since", 0, "only tickets started within DURATION, such as 720h for 30 days")
+	cmd.Flags().BoolVar(&o.AllRepos, "all-repos", false, "include the tickets of every repository in the history")
+	return cmd
+}
+
+func historyCmd(g *globals) *cobra.Command {
+	var o app.HistoryOpts
+	return &cobra.Command{
+		Use:   "history ID...",
+		Short: "Show what happened to tickets: their events, commits and reviews",
+		Long:  helpText("history"),
+		Example: `  tkt history ACM-12
+  tkt history ACM-12 ACM-13 --json`,
+		SuggestFor:        []string{"log", "timeline", "recap"},
+		ValidArgsFunction: g.completeTickets(true),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return usage("usage: tkt history ID...")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.IDs = args
+			res, err := g.app().History(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
 }
 
 func doctorCmd(g *globals) *cobra.Command {
@@ -327,5 +516,41 @@ func updateCmd(g *globals) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&o.Check, "check", false, "report whether a release would replace tkt, and change nothing")
 	cmd.Flags().BoolVar(&o.Force, "force", false, "replace a development build, or reinstall the same version")
+	return cmd
+}
+
+func agentCmd(g *globals) *cobra.Command {
+	var o app.FrontOpts
+	cmd := &cobra.Command{
+		Use:   "agent [-- PI_FLAGS...]",
+		Short: "Open the tkt agent, a chat that drives your tickets",
+		Long:  helpText("agent"),
+		Example: `  tkt agent
+  tkt agent --continue
+  tkt agent --session 01a15a4d
+  tkt agent --model acme/large
+  tkt agent -- --thinking high
+  tkt agent --dry-run --json`,
+		SuggestFor: []string{"chat", "pi"},
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 && cmd.ArgsLenAtDash() != 0 {
+				return usage("tkt agent takes no arguments; put pi's own flags after --, such as tkt agent -- --thinking high")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if g.json && !o.Dry {
+				return usage("tkt agent is a chat, so it prints no JSON; add --dry-run to see what it would run")
+			}
+			o.PiArgs = args
+			res, err := g.app().Front(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.Model, "model", "", "use pi model PATTERN instead of the [agent] model, such as acme/large")
+	cmd.Flags().BoolVarP(&o.Continue, "continue", "c", false, "continue the last chat in this repository")
+	cmd.Flags().StringVar(&o.Session, "session", "", "resume the chat with session ID, or a unique part of it, as the line pi prints on exit names it")
+	cmd.MarkFlagsMutuallyExclusive("continue", "session")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print how tkt would start pi instead of starting it")
 	return cmd
 }

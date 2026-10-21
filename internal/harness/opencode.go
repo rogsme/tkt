@@ -40,7 +40,7 @@ func OpenCodeModel(spec string) (*Model, error) {
 }
 
 func (o OpenCode) api(ctx context.Context, timeout time.Duration, args ...string) (runner.Result, bool) {
-	r := o.R.Run(ctx, runner.Cmd{Argv: append([]string{"opencode", "api"}, args...), Timeout: timeout})
+	r := o.R.Run(ctx, runner.Cmd{Argv: append([]string{"opencode", "api"}, args...), Timeout: timeout, StdoutFile: true})
 	return r, r.OK()
 }
 
@@ -175,6 +175,16 @@ func (o OpenCode) UserTurns(ctx context.Context, sid string) (int, bool) {
 		}
 	}
 	return n, true
+}
+
+// LastTurn reads a session's last turn through the API. Unlike call, it
+// never starts the service: a status read must not change anything.
+func (o OpenCode) LastTurn(ctx context.Context, sid string) (Turn, bool) {
+	r, ok := o.api(ctx, 30*time.Second, "GET", "/api/session/"+sid+"/message?limit=50")
+	if !ok {
+		return Turn{}, false
+	}
+	return lastTurnFromMessages(r.Stdout)
 }
 
 // uriEscape escapes everything but RFC 3986 unreserved characters, like jq's

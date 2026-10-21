@@ -13,3 +13,6 @@ It keeps the worktree, and says why, when:
 --all checks every ticket worktree and asks before removing them; pass --yes
 when stdin is not a terminal. It reads pull requests through gh, so it
 supports GitHub forges only.
+
+It records the merge in the history, so tkt stats can say how long the ticket
+took from tkt start to the merge.

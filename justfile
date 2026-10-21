@@ -11,19 +11,28 @@ releases := "https://git.rogs.me/rogs/tkt/releases/download"
 default:
     @just --list --unsorted
 
-# Build ./tkt from the working tree.
-build:
-    go build -ldflags '{{ ldflags }}' -o tkt .
+# Build ./tkt from the working tree, with pi inside.
+build: fetch-pi
+    go build -tags bundled_pi -ldflags '{{ ldflags }}' -o tkt .
 
 # Run tkt from the working tree on this terminal, such as: just run doctor
 [positional-arguments]
-run *args:
-    go run -ldflags '{{ ldflags }}' . "$@"
+run *args: fetch-pi
+    go run -tags bundled_pi -ldflags '{{ ldflags }}' . "$@"
 
 # Install the working tree's tkt where install.sh puts it.
-install dir=env("TKT_INSTALL_DIR", home_directory() / ".local/bin"):
-    go build -trimpath -ldflags '{{ ldflags }}' -o '{{ dir }}/tkt' .
+install dir=env("TKT_INSTALL_DIR", home_directory() / ".local/bin"): fetch-pi
+    go build -tags bundled_pi -trimpath -ldflags '{{ ldflags }}' -o '{{ dir }}/tkt' .
     '{{ dir }}/tkt' --version
+
+# Download pi for this system, or for SYSTEMS such as linux/arm64, and check it against pi.lock.
+fetch-pi *systems:
+    go run ./internal/pi/fetch {{ systems }}
+
+# Pin pi VERSION in internal/pi/pi.lock, then download and check its tarballs.
+bump-pi version:
+    go run ./internal/pi/fetch -bump '{{ version }}'
+    go run ./internal/pi/fetch {{ targets }}
 
 # Run the tests with the race detector.
 test *args:
@@ -36,7 +45,11 @@ ci:
     go test -race ./...
     uv run --quiet --with shellcheck-py shellcheck install.sh
     for t in {{ targets }}; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -o /dev/null . || exit 1; done
-    @! grep -rnP '[\x{2013}\x{2014}]' --exclude-dir=.git . || { echo "rewrite the lines above without dashes"; exit 1; }
+    go run ./internal/pi/fetch {{ targets }}
+    for t in {{ targets }}; do CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -tags bundled_pi -trimpath -o /dev/null . || exit 1; done
+    node --test 'internal/pi/ext/test/*.test.ts'
+    @# Bytes, not characters: in the C locale git grep cannot read \x{2014}, and an error must not pass as no match.
+    @LC_ALL=C git grep --untracked -nP '\xE2\x80[\x93\x94]' -- ':!.claude'; test $? -eq 1 || { echo "rewrite the lines above without dashes"; exit 1; }
 
 # Check, push master and the tag VERSION together, then wait for the release.
 release version: (_can-release version) ci

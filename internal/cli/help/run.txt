@@ -7,11 +7,12 @@ to begin the next stage with a clean context.
 Stages:
   review   review-pr reviews the pull request at its head and posts a verdict.
            Run it when the agent ends with Status: READY_FOR_REVIEW.
-  address  address-pr-review fixes the valid findings, answers the rest and
-           pushes. Run it when the review asks for changes, you left comments,
-           or the merge stopped with Status: HUMAN_QA_FAILED.
-  sync     address-pr-review merges the base into the branch. Run it on
-           Status: BLOCKED_FOR_SYNC, or when the pull request conflicts.
+  address  address-pr-review merges the base into the branch when it moved,
+           then fixes the valid findings, answers the rest and pushes. Run it
+           when the review asks for changes, you left comments, the merge
+           stopped with Status: HUMAN_QA_FAILED or BLOCKED_FOR_SYNC, or the
+           pull request conflicts.
+  sync     the same line as address, under its old name.
   ci       finds why the checks fail at the head, fixes it and pushes once.
   verify   runs the pull request's human verification steps in a browser and
            reports each one. It changes no code and posts nothing.
@@ -22,5 +23,5 @@ config.toml can change these lines or add stages (tkt help config).
 tkt run refuses while the agent works or waits for your answer (tkt wait
 blocks until it is done). It also refuses while the ticket is still in
 planning, because that agent may hold a plan waiting for your approval;
-approve it in the tab instead. --force replaces it anyway, and also replaces
+approve it with tkt approve instead. --force replaces it anyway, and also replaces
 an agent in a state tkt does not recognize.

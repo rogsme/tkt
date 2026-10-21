@@ -1,0 +1,791 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/herdr"
+	"gitlab.com/rogs/tkt/internal/history"
+	"gitlab.com/rogs/tkt/internal/lock"
+)
+
+// AutoOpts are tkt auto's arguments. MaxRounds below 0 and Poll of 0 take
+// the settings' values.
+type AutoOpts struct {
+	ID          string
+	ApprovePlan bool
+	// As is the preset for the agents the loop starts.
+	As        string
+	MaxRounds int
+	Poll      time.Duration
+	Notify    bool
+	Once      bool
+	Stop      bool
+	Dry       bool
+}
+
+// AutoStep is one thing tkt auto did: started the ticket, approved its
+// plan, or ran a stage.
+type AutoStep struct {
+	At     string `json:"at"`
+	Action string `json:"action"`
+	Stage  string `json:"stage,omitempty"`
+	Reason string `json:"reason"`
+	Head   string `json:"head,omitempty"`
+}
+
+// AutoResult is how tkt auto ended. Stop says why a loop stopped, or why
+// --once took no step, such as a pause for a person; Did is the step --once
+// took, and Wait what it waits for instead.
+type AutoResult struct {
+	Ticket  string     `json:"ticket"`
+	Stop    string     `json:"stop"`
+	Did     *AutoStep  `json:"did"`
+	Wait    string     `json:"wait"`
+	Next    Next       `json:"next"`
+	Phase   string     `json:"phase"`
+	Rounds  int        `json:"rounds"`
+	Steps   []AutoStep `json:"steps"`
+	DryRun  bool       `json:"dry_run"`
+	Actions []Action   `json:"actions"`
+}
+
+func (r *AutoResult) Text(w io.Writer) {
+	switch {
+	case r.Did != nil:
+		fmt.Fprintf(w, "%s  %s\n", r.Ticket, stepText(*r.Did))
+	case r.Wait != "":
+		fmt.Fprintf(w, "%s  waiting: %s\n", r.Ticket, r.Next.Text)
+	default:
+		fmt.Fprintf(w, "%s  %s  rounds %d  %s\n", r.Ticket, r.Stop, r.Rounds, stopHint(r.Stop, r.Ticket))
+	}
+}
+
+func stepText(s AutoStep) string {
+	switch s.Action {
+	case actStart:
+		return "started"
+	case actApprove:
+		return "approved the plan"
+	}
+	return "ran " + s.Stage
+}
+
+// The ways tkt auto stops, and the reasons it pauses for a person. A loop
+// ends only at ready_for_human, merged, closed or stopped. For the others it
+// notifies once, waits, and goes on when the ticket moves, such as after you
+// answer the agent's question in its tab.
+const (
+	StopReadyForHuman = "ready_for_human"
+	StopMerged        = "merged"
+	StopClosed        = "closed"
+	StopStopped       = "stopped"
+	StopNeedsYou      = "needs_you"
+	StopPlan          = "plan_awaits_approval"
+	StopAgentMissing  = "agent_missing"
+	StopBotSilent     = "bot_silent"
+	StopRoundLimit    = "round_limit"
+	StopNoProgress    = "no_progress"
+	StopUnknown       = "unknown"
+)
+
+// stopHint says what a person does after a stop.
+func stopHint(stop, id string) string {
+	switch stop {
+	case StopReadyForHuman:
+		return "run the human verification steps (tkt show " + id + " --steps), merge, then tkt done " + id
+	case StopMerged:
+		return "tkt done " + id
+	case StopClosed:
+		return "the pull request was closed without merging"
+	case StopStopped:
+		return "tkt auto " + id + " starts it again"
+	case StopNeedsYou:
+		return "answer the agent in its tab (tkt show " + id + " --screen), then tkt auto " + id
+	case StopPlan:
+		return "read the plan with tkt show " + id + ", then tkt approve " + id + " and tkt auto " + id
+	case StopAgentMissing:
+		return "tkt resume " + id + ", then tkt auto " + id
+	case StopBotSilent:
+		return "check the review bot's CI job, or run tkt run " + id + " review"
+	case StopRoundLimit:
+		return "read the review, then tkt run " + id + " address, or raise [auto] max_rounds"
+	case StopNoProgress:
+		return "the last step changed nothing; check the ticket's tab, then tkt auto " + id
+	}
+	return "check the agent in its tab, then tkt auto " + id
+}
+
+// pauseText says why a loop waits for you, from its pause and the rule
+// that matched.
+func pauseText(stop, reason string) string {
+	switch {
+	case reason == ReasonAgentBlocked:
+		return "the agent asks a question; answer it in its tab"
+	case reason == ReasonStatusBlocked:
+		return "the agent stopped with Status: BLOCKED; read its reason in its tab"
+	case reason == ReasonReviewAwaitsApproval:
+		return "review-pr waits for you to post or drop its draft"
+	case stop == StopPlan:
+		return "the plan is ready; read it, then tkt approve"
+	case stop == StopAgentMissing:
+		return "no agent runs in the worktree; tkt resume brings it back"
+	case stop == StopBotSilent:
+		return "the review bot has not reviewed this head; check its CI job"
+	case stop == StopRoundLimit:
+		return "it reached [auto] max_rounds fix runs since the plan; read the review"
+	case stop == StopNoProgress:
+		return "the last step changed nothing; check the ticket's tab"
+	case reason == ReasonCheckAgent:
+		return "the agent stopped without a status line; check its tab"
+	}
+	return "the agent needs you; check its tab"
+}
+
+// The actions autoStep picks.
+const (
+	actWait    = "wait_agent"
+	actPoll    = "poll"
+	actStart   = "start"
+	actApprove = "approve"
+	actRun     = "run"
+	actStop    = "stop"
+	actPause   = "pause"
+)
+
+// AutoPolicy is what one tkt auto run may do.
+type AutoPolicy struct {
+	ApprovePlan bool
+	MaxRounds   int
+}
+
+// autoMemory is what tkt auto keeps between steps: the fix runs since the
+// plan's approval, and the last action with the head it acted on.
+type autoMemory struct {
+	Rounds int
+	Last   string
+}
+
+type autoAct struct {
+	Kind, Stage, Stop string
+}
+
+func (a autoAct) key(head string) string {
+	return a.Kind + ":" + a.Stage + "@" + head
+}
+
+// autoStep decides tkt auto's next action from the rule tkt ls applies. It
+// differs from tkt ls on purpose: it never runs done, resume or verify; the
+// review bot's CLEAR ends the loop like review-pr's READY_FOR_HUMAN, since
+// the bot in CI is the reviewer; review-pr runs only where the repository
+// has no bot ([review] bot_wait = "0s"); and where a person decides, it
+// pauses.
+func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
+	stop := func(why string) autoAct { return autoAct{Kind: actStop, Stop: why} }
+	pause := func(why string) autoAct { return autoAct{Kind: actPause, Stop: why} }
+	act := func(kind, stage string) autoAct {
+		a := autoAct{Kind: kind, Stage: stage}
+		if a.key(f.Head) == m.Last {
+			return pause(StopNoProgress)
+		}
+		return a
+	}
+	fix := func(stage string) autoAct {
+		if m.Rounds >= p.MaxRounds {
+			return pause(StopRoundLimit)
+		}
+		return act(actRun, stage)
+	}
+	switch {
+	case f.Agent != herdr.Working && (f.Launch == "not_ready" || f.Launch == "prompt_uncertain"):
+		return pause(StopNeedsYou)
+	case f.Agent != herdr.Working && (f.Launch == "tab" || f.Launch == "launching"):
+		return autoAct{Kind: actPoll}
+	case f.Agent != "" && f.Agent != herdr.Idle && f.Agent != herdr.Done && f.Agent != herdr.Working && f.Agent != herdr.Blocked:
+		return pause(StopUnknown)
+	}
+	switch n.Reason {
+	case ReasonMerged:
+		return stop(StopMerged)
+	case ReasonClosed:
+		return stop(StopClosed)
+	case ReasonAgentWorking:
+		return autoAct{Kind: actWait}
+	case ReasonAgentWaiting, ReasonCIPending, ReasonAwaitingBot:
+		return autoAct{Kind: actPoll}
+	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval:
+		return pause(StopNeedsYou)
+	case ReasonNoAgent:
+		return pause(StopAgentMissing)
+	case ReasonPlanAwaitsApproval:
+		if p.ApprovePlan {
+			return act(actApprove, "")
+		}
+		return pause(StopPlan)
+	case ReasonBotSilent:
+		return pause(StopBotSilent)
+	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings:
+		return fix("address")
+	case ReasonChecksFail:
+		return fix("ci")
+	case ReasonNeedsReview:
+		return act(actRun, "review")
+	case ReasonReviewClear, ReasonBotClear:
+		return stop(StopReadyForHuman)
+	}
+	return pause(StopUnknown)
+}
+
+// autoView is one look at the ticket for tkt auto.
+type autoView struct {
+	Facts   Facts
+	Next    Next
+	Phase   string
+	Pane    string
+	Started bool
+	// Wanted is false once tkt auto --stop cleared the ticket's auto key.
+	Wanted bool
+}
+
+// autoWorld is what the loop needs from outside, so tests can script it.
+type autoWorld interface {
+	look(ctx context.Context, fetch bool) (autoView, error)
+	waitAgent(ctx context.Context, pane string) error
+	sleep(ctx context.Context, d time.Duration) error
+	act(ctx context.Context, a autoAct) error
+	remember(m autoMemory, kv ...string)
+	stopped(stop string, v autoView)
+	// paused records that the loop waits for a person, and notifies once.
+	paused(why string, v autoView)
+	resumed()
+	// holdSlot takes one of [auto] max_parallel slots before the loop sets
+	// an agent to work, and says whether it had to wait for one; dropSlot
+	// frees it once the agent stops working.
+	holdSlot(ctx context.Context) (waited bool, err error)
+	dropSlot()
+	now() time.Time
+}
+
+// errForge marks a failed forge read, which the loop retries.
+type errForge struct{ error }
+
+func (e errForge) Unwrap() error { return e.error }
+
+// maxForgeFailures is how many forge reads in a row may fail before the loop
+// gives up.
+const maxForgeFailures = 5
+
+// autoLoop drives the ticket until it stops, or takes one step with once.
+func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem autoMemory, poll time.Duration, once, dry bool) (*AutoResult, error) {
+	res := &AutoResult{Ticket: id, Steps: []AutoStep{}, DryRun: dry}
+	fails := 0
+	pausedOn := ""
+	defer w.dropSlot()
+	for {
+		v, err := w.look(ctx, false)
+		var fe errForge
+		if errors.As(err, &fe) && !once && fails+1 < maxForgeFailures {
+			fails++
+			if err := w.sleep(ctx, poll); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		fails = 0
+		res.Next, res.Phase, res.Rounds = v.Next, v.Phase, mem.Rounds
+		if !v.Wanted && !once {
+			res.Stop = StopStopped
+			w.stopped(res.Stop, v)
+			return res, nil
+		}
+		a := autoAct{Kind: actStart}
+		if v.Started {
+			a = autoStep(v.Next, v.Facts, p, mem)
+		}
+		// A slot counts agents at work: the loop keeps it while its agent
+		// works or starts, and gives it up while it waits for CI, the bot
+		// or a person.
+		busy := a.Kind == actWait || a.Kind == actPoll && (v.Next.Reason == ReasonAgentWaiting || v.Phase == PhaseStarting)
+		if !busy && a.Kind != actStart && a.Kind != actApprove && a.Kind != actRun {
+			w.dropSlot()
+		}
+		if a.Kind != actPause && pausedOn != "" {
+			w.resumed()
+			pausedOn = ""
+		}
+		switch a.Kind {
+		case actStop:
+			res.Stop = a.Stop
+			if !once {
+				w.stopped(res.Stop, v)
+			}
+			return res, nil
+		case actPause:
+			if once {
+				res.Stop = a.Stop
+				return res, nil
+			}
+			if key := a.Stop + "|" + v.Next.Reason + "|" + v.Facts.Head + "|" + v.Facts.LastStatus; key != pausedOn {
+				w.paused(a.Stop, v)
+				pausedOn = key
+			}
+			if err := w.sleep(ctx, poll); err != nil {
+				return nil, err
+			}
+			continue
+		case actWait, actPoll:
+			if once {
+				res.Wait = v.Next.Reason
+				return res, nil
+			}
+			if a.Kind == actWait {
+				err = w.waitAgent(ctx, v.Pane)
+			} else {
+				err = w.sleep(ctx, poll)
+			}
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		// GitHub lags behind a push, and herdr does not track turns: let
+		// both settle, look again, and act only on the same decision.
+		if a.Kind != actStart && !dry {
+			if err := w.sleep(ctx, min(5*time.Second, poll)); err != nil {
+				return nil, err
+			}
+			again, err := w.look(ctx, true)
+			if err != nil {
+				return nil, err
+			}
+			if autoStep(again.Next, again.Facts, p, mem) != a {
+				continue
+			}
+			v = again
+		}
+		if !once && !dry {
+			waited, err := w.holdSlot(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if waited {
+				continue
+			}
+		}
+		mem.Last = a.key(v.Facts.Head)
+		if a.Kind == actRun && a.Stage != "review" {
+			mem.Rounds++
+		}
+		w.remember(mem)
+		step := AutoStep{At: w.now().UTC().Format(history.TimeFormat), Action: a.Kind, Stage: a.Stage, Reason: v.Next.Reason, Head: v.Facts.Head}
+		if err := w.act(ctx, a); err != nil {
+			return nil, err
+		}
+		res.Steps = append(res.Steps, step)
+		res.Rounds = mem.Rounds
+		if once {
+			res.Did = &step
+			return res, nil
+		}
+	}
+}
+
+// Auto drives a ticket through the lifecycle until it needs a person: it
+// starts the ticket when it has no worktree, approves the plan with
+// --approve-plan, waits for CI and the review bot, and runs review, address,
+// sync and ci in fresh sessions. It never merges.
+func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
+	if o.Dry && !o.Once {
+		return nil, apperr.New(apperr.Usage, "--dry-run needs --once: a dry run takes one step").WithHint("tkt auto %s --once --dry-run", o.ID)
+	}
+	c, err := a.begin(ctx, o.Dry, false)
+	if err != nil {
+		return nil, err
+	}
+	defer c.release()
+	id, err := c.LC.NormalizeID(o.ID)
+	if err != nil {
+		return nil, err
+	}
+	c.ticket(id)
+	if err := c.LC.RequireGitHub("auto"); err != nil {
+		return nil, err
+	}
+	if err := c.needTools("gh"); err != nil {
+		return nil, err
+	}
+	if err := c.needHerdr(); err != nil {
+		return nil, err
+	}
+	if o.As != "" {
+		if _, err := c.Cfg.Preset(o.As); err != nil {
+			return nil, err
+		}
+	}
+	path := ""
+	if es, err := c.WT.List(c.Ctx); err != nil {
+		return nil, err
+	} else if e, ok := es.Find(id); ok {
+		path = e.Path
+	}
+	var ts *ticketState
+	if path != "" {
+		if ts, err = c.readState(path); err != nil {
+			return nil, err
+		}
+	}
+	if o.Stop {
+		res := &AutoResult{Ticket: id, Stop: StopStopped, Steps: []AutoStep{}}
+		if ts != nil {
+			c.save(ts, "auto", "", "auto_stop", StopStopped, "auto_wait", "", "auto_pause", "")
+		}
+		return res, nil
+	}
+	f, err := lock.Wait(c.Ctx, c.Repo.Common, id+".auto", 2*time.Second)
+	switch {
+	case errors.Is(err, lock.ErrHeld):
+		return nil, apperr.New(apperr.AutoRunning, "a tkt auto loop already drives %s", id).
+			WithHint("tkt auto %s --stop stops it", id)
+	case err != nil:
+		return nil, err
+	}
+	c.locks = append(c.locks, f)
+	p := AutoPolicy{ApprovePlan: o.ApprovePlan, MaxRounds: c.Cfg.Auto.MaxRounds}
+	if o.MaxRounds >= 0 {
+		p.MaxRounds = o.MaxRounds
+	}
+	poll := c.Cfg.Auto.Poll
+	if o.Poll > 0 {
+		poll = o.Poll
+	}
+	mode := autoOn
+	if o.ApprovePlan {
+		mode = autoPlan
+	}
+	w := &ctxWorld{c: c, id: id, path: path, mode: mode, as: o.As, notify: o.Notify, once: o.Once}
+	defer w.unqueue()
+	var mem autoMemory
+	if ts != nil {
+		mem = autoMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["auto_last"]}
+		if !o.Once {
+			c.save(ts, "auto", mode, "auto_stop", "", "auto_pause", "")
+			w.labelTab(true)
+		}
+	}
+	res, err := autoLoop(c.Ctx, w, id, p, mem, poll, o.Once, c.Dry)
+	if err != nil {
+		if c.Ctx.Err() != nil {
+			return nil, c.Ctx.Err()
+		}
+		return nil, err
+	}
+	res.Actions = append(append([]Action{}, c.Plan...), w.actions...)
+	switch res.Stop {
+	case "", StopReadyForHuman, StopMerged, StopStopped:
+		return res, nil
+	}
+	if o.Once {
+		return res, nil
+	}
+	return res, apperr.New(apperr.AutoStopped, "tkt auto stopped %s: %s", id, res.Stop).
+		WithHint("%s", stopHint(res.Stop, id)).
+		With("stop", res.Stop).With("next", res.Next).With("phase", res.Phase).With("rounds", res.Rounds).With("steps", res.Steps)
+}
+
+// ctxWorld is the real world tkt auto runs in.
+type ctxWorld struct {
+	c       *Ctx
+	id      string
+	path    string
+	mode    string
+	as      string
+	notify  bool
+	once    bool
+	actions []Action
+	slot    *os.File
+	queued  string
+}
+
+func (w *ctxWorld) now() time.Time { return w.c.Now() }
+
+func (w *ctxWorld) look(ctx context.Context, fetch bool) (autoView, error) {
+	c := w.c
+	if w.path == "" {
+		es, err := c.WT.List(c.Ctx)
+		if err != nil {
+			return autoView{}, err
+		}
+		e, ok := es.Find(w.id)
+		if !ok {
+			return autoView{Wanted: true}, nil
+		}
+		w.path = e.Path
+	}
+	l, err := c.look(lookOpts{ids: []string{w.id}, fetch: fetch})
+	if err != nil {
+		return autoView{}, err
+	}
+	if l.forgeErr != nil {
+		return autoView{}, errForge{l.forgeErr}
+	}
+	row, f := c.row(ctx, l, ticketWorktree{ID: w.id, Path: w.path})
+	v := autoView{Facts: f, Next: row.Next, Phase: row.Phase, Started: true, Wanted: true}
+	if row.Agent != nil {
+		v.Pane = row.Agent.PaneID
+	}
+	if ts, err := c.readState(w.path); err == nil && !w.once {
+		v.Wanted = ts.st["auto"] != ""
+	}
+	return v, nil
+}
+
+// waitSlice bounds one herdr wait, so the loop also notices a pull request
+// merged or an agent replaced while the agent works.
+const waitSlice = 10 * time.Minute
+
+func (w *ctxWorld) waitAgent(ctx context.Context, pane string) error {
+	_, err := w.c.H.Wait(ctx, pane, []string{herdr.Idle, herdr.Blocked, herdr.Done}, waitSlice.Milliseconds())
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	switch herdr.CodeOf(err) {
+	case "", "timeout", "agent_not_found":
+		return nil
+	}
+	return herdrErr(err)
+}
+
+func (w *ctxWorld) sleep(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
+	c := w.c
+	var actions []Action
+	switch a.Kind {
+	case actStart:
+		res, err := c.App.Start(ctx, StartOpts{ID: w.id, As: w.as, Dry: c.Dry, Unattended: w.mode == autoPlan})
+		if err != nil {
+			return err
+		}
+		actions = res.Actions
+		if !c.Dry {
+			w.path = res.Worktree
+			w.unqueue()
+			if ts, err := c.readState(w.path); err == nil && !w.once {
+				c.save(ts, "auto", w.mode, "auto_stop", "", "auto_pause", "")
+			}
+		}
+	case actApprove:
+		res, err := c.App.Approve(ctx, ApproveOpts{ID: w.id, Dry: c.Dry})
+		if err != nil {
+			return err
+		}
+		actions = res.Actions
+	case actRun:
+		res, err := c.App.Run(ctx, RunOpts{ID: w.id, Stage: a.Stage, As: w.as, Dry: c.Dry})
+		if err != nil {
+			return err
+		}
+		actions = res.Actions
+	}
+	w.actions = append(w.actions, actions...)
+	c.record(history.Event{Ticket: w.id, Event: history.Auto, Action: a.Kind, Stage: a.Stage})
+	if !w.once {
+		w.labelTab(true)
+	}
+	return nil
+}
+
+func (w *ctxWorld) remember(m autoMemory, kv ...string) {
+	if w.path == "" {
+		return
+	}
+	if ts, err := w.c.readState(w.path); err == nil {
+		w.c.save(ts, append([]string{"rounds", strconv.Itoa(m.Rounds), "auto_last", m.Last}, kv...)...)
+	}
+}
+
+// stopped records why the loop stopped and clears the ticket's auto key, so
+// nothing restarts it before a person looks. An interrupted loop never gets
+// here and leaves the key for the next one.
+func (w *ctxWorld) stopped(stop string, v autoView) {
+	c := w.c
+	if w.path != "" {
+		if ts, err := c.readState(w.path); err == nil {
+			c.save(ts, "auto", "", "auto_stop", stop, "auto_wait", "", "auto_pause", "")
+		}
+	}
+	w.labelTab(false)
+	c.record(history.Event{Ticket: w.id, Event: history.Auto, Stop: stop})
+	if w.notify {
+		c.notify(w.id, autoNotice(stop, w.id))
+	}
+}
+
+// paused records that the loop waits for a person, and why, so tkt ls and
+// the board show it, and notifies once.
+func (w *ctxWorld) paused(why string, v autoView) {
+	c := w.c
+	w.remember(w.memoryNow(), "auto_pause", why, "auto_why", v.Next.Reason)
+	c.record(history.Event{Ticket: w.id, Event: history.Auto, Action: actPause, Stop: why})
+	if w.notify {
+		c.notify(w.id, notice{"needs you", pauseText(why, v.Next.Reason), "request"})
+	}
+}
+
+func (w *ctxWorld) resumed() {
+	w.remember(w.memoryNow(), "auto_pause", "", "auto_why", "")
+}
+
+// autoTabLabel marks a tab label for a ticket in auto: ACM-12 (auto), or
+// ACM-12 (fast, auto) for a preset's label.
+func autoTabLabel(label string) string {
+	if strings.HasSuffix(label, ")") {
+		return strings.TrimSuffix(label, ")") + ", auto)"
+	}
+	return label + " (auto)"
+}
+
+// labelTab marks the ticket's tab while tkt auto drives it, and takes the
+// mark off when the loop ends. A failed rename only costs the mark.
+func (w *ctxWorld) labelTab(on bool) {
+	c := w.c
+	if w.path == "" || c.Dry || w.once {
+		return
+	}
+	ts, err := c.readState(w.path)
+	if err != nil || ts.st["tab"] == "" {
+		return
+	}
+	preset := c.Cfg.Default().Name
+	if c.Cfg.Has(ts.st["preset"]) {
+		preset = ts.st["preset"]
+	}
+	want := c.Cfg.TabLabel(w.id, preset)
+	if on {
+		want = autoTabLabel(want)
+	}
+	tabs, err := c.H.Tabs(c.Ctx)
+	if err != nil {
+		return
+	}
+	for _, t := range tabs {
+		if t.TabID == ts.st["tab"] && t.Label != want {
+			if err := c.H.TabRename(c.Ctx, t.TabID, want); err != nil {
+				c.UI.Warn("cannot rename tab %s: %v", t.TabID, err)
+			}
+		}
+	}
+}
+
+func autoNotice(stop, id string) notice {
+	switch stop {
+	case StopReadyForHuman:
+		return notice{"ready for you", "the review says READY_FOR_HUMAN; run the human verification steps", "done"}
+	case StopMerged, StopStopped:
+		return notice{stop, stopHint(stop, id), "done"}
+	}
+	return notice{"needs you", stop + ": " + stopHint(stop, id), "request"}
+}
+
+// holdSlot waits for one of [auto] max_parallel slots, so only that many
+// tkt auto agents work at once in a repository. A ticket with no worktree
+// yet leaves a mark in queued/, so tkt ls can show it while it waits.
+func (w *ctxWorld) holdSlot(ctx context.Context) (bool, error) {
+	c := w.c
+	n := c.Cfg.Auto.MaxParallel
+	if w.slot != nil || n <= 0 || c.Dry || w.once {
+		return false, nil
+	}
+	waiting := false
+	for {
+		for k := range n {
+			f, err := lock.Try(c.Repo.Common, "slot-"+strconv.Itoa(k))
+			if err == nil {
+				w.slot = f
+				if waiting {
+					w.remember(w.memoryNow(), "auto_wait", "")
+					w.unqueue()
+				}
+				return waiting, nil
+			}
+			if !errors.Is(err, lock.ErrHeld) {
+				return false, apperr.New(apperr.Internal, "cannot take an auto slot: %v", err)
+			}
+		}
+		if !waiting {
+			waiting = true
+			c.UI.Info("%d tkt auto agents already work; %s waits for one to stop ([auto] max_parallel)", n, w.id)
+			w.remember(w.memoryNow(), "auto_wait", "slot")
+			w.queue()
+		}
+		if err := w.sleep(ctx, 2*time.Second); err != nil {
+			return false, err
+		}
+	}
+}
+
+func (w *ctxWorld) dropSlot() {
+	if w.slot != nil {
+		w.slot.Close()
+		w.slot = nil
+	}
+}
+
+// queuedDir holds a file per ticket whose loop waits for a slot before the
+// ticket has a worktree.
+func queuedDir(common string) string { return filepath.Join(common, "tkt", "queued") }
+
+func (w *ctxWorld) queue() {
+	if w.path != "" {
+		return
+	}
+	dir := queuedDir(w.c.Repo.Common)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	p := filepath.Join(dir, w.id)
+	body := "mode=" + w.mode + "\nsince=" + w.c.Now().UTC().Format(history.TimeFormat) + "\n"
+	if os.WriteFile(p, []byte(body), 0o644) == nil {
+		w.queued = p
+	}
+}
+
+func (w *ctxWorld) unqueue() {
+	if w.queued != "" {
+		os.Remove(w.queued)
+		w.queued = ""
+	}
+}
+
+// memoryNow reads the memory back from the state file, so a write of other
+// keys keeps it.
+func (w *ctxWorld) memoryNow() autoMemory {
+	if w.path == "" {
+		return autoMemory{}
+	}
+	ts, err := w.c.readState(w.path)
+	if err != nil {
+		return autoMemory{}
+	}
+	return autoMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["auto_last"]}
+}

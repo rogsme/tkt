@@ -157,6 +157,14 @@ func Herdr() {
 		herdrOK(obj{"type": "ok"})
 	case "tab focus":
 		herdrOK(obj{"type": "ok"})
+	case "tab rename":
+		for _, t := range s.Tabs {
+			if str(t, "tab_id") == args[0] {
+				t["label"] = strings.Join(args[1:], " ")
+			}
+		}
+		s.save()
+		herdrOK(obj{"type": "ok"})
 	case "pane list":
 		var panes []obj
 		for _, p := range s.Panes {
@@ -222,10 +230,20 @@ func Herdr() {
 		if a == nil {
 			herdrFail("agent_not_found")
 		}
+		if os.Getenv("FAKE_HERDR_TURNS") != "" && str(a, "agent_status") == "working" {
+			nextTurn(a)
+			s.save()
+		}
 		herdrOK(obj{"agent": a})
 	case "agent read":
+		if b, err := os.ReadFile(filepath.Join(os.Getenv("FAKE_DIR"), "screen")); err == nil {
+			os.Stdout.Write(b)
+			os.Exit(0)
+		}
 		fmt.Println(os.Getenv("FAKE_HERDR_SCREEN"))
 		os.Exit(0)
+	case "notification show":
+		herdrOK(obj{"type": "ok"})
 	case "agent send-keys":
 		if slices.Contains(args[1:], "ctrl+c") && os.Getenv("FAKE_HERDR_CTRLC_IGNORED") != "1" {
 			s.removeAgent(args[0])
@@ -318,5 +336,46 @@ func herdrPrompt(s *herdrState, args []string) {
 		working[k] = v
 	}
 	working["agent_status"] = "working"
+	if os.Getenv("FAKE_HERDR_TURNS") != "" {
+		a["agent_status"] = "working"
+		s.save()
+	}
 	herdrOK(obj{"agent": working})
+}
+
+// turn is what a working agent ends its turn with, in turns mode: its status
+// (idle by default), its screen, and the pull requests gh then lists.
+type turn struct {
+	Status string `json:"status"`
+	Screen string `json:"screen"`
+	PRs    string `json:"prs"`
+}
+
+// nextTurn ends the agent's turn with the next entry of the JSON list in the
+// file $FAKE_HERDR_TURNS names; when the list runs out, the agent goes idle.
+// In turns mode a prompt sets the agent working, so tkt auto can be driven
+// through a whole ticket.
+func nextTurn(a obj) {
+	dir := os.Getenv("FAKE_DIR")
+	var turns []turn
+	if b, err := os.ReadFile(os.Getenv("FAKE_HERDR_TURNS")); err == nil {
+		json.Unmarshal(b, &turns)
+	}
+	n := counter(filepath.Join(dir, "turns.count"))
+	t := turn{Status: "idle"}
+	if n < len(turns) {
+		t = turns[n]
+	}
+	a["agent_status"] = t.Status
+	if t.Status == "" {
+		a["agent_status"] = "idle"
+	}
+	if t.Screen != "" {
+		os.WriteFile(filepath.Join(dir, "screen"), []byte(t.Screen+"\n"), 0o644)
+	}
+	if t.PRs != "" {
+		if b, err := os.ReadFile(t.PRs); err == nil {
+			os.WriteFile(filepath.Join(dir, "prs.json"), b, 0o644)
+		}
+	}
 }

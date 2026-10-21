@@ -26,7 +26,7 @@ envelope '[.result.actions[].argv[0:3] | join(" ")]' '["wt -C '$REPO'","herdr ta
 exec tkt ls --no-fetch --json
 envelope '.result.sources' '{"fetch":"skipped","forge":"ok","herdr":"ok"}'
 envelope '.result.rows[0] | [.ticket, .agent.status, .pr, .behind]' '["ACM-12","idle",null,0]'
-envelope '.result.rows[0].next' '{"argv":null,"kind":"human","text":"check the agent in its tab"}'
+envelope '.result.rows[0].next' '{"argv":null,"kind":"human","reason":"check_agent","text":"check the agent in its tab"}'
 jqedit $FAKE_DIR/herdr.json '.agents = []'
 exec tkt ls --no-fetch --json
-envelope '.result.rows[0].next' '{"argv":["tkt","resume","ACM-12"],"kind":"command","text":"tkt resume ACM-12"}'
+envelope '.result.rows[0].next' '{"argv":["tkt","resume","ACM-12"],"kind":"command","reason":"no_agent","text":"tkt resume ACM-12"}'

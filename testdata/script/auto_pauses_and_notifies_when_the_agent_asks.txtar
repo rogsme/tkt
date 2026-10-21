@@ -1,0 +1,46 @@
+# tkt auto pauses where a person decides: it notifies once, marks the ticket
+# paused with the reason, and goes on by itself when the ticket moves. A loop
+# ends only when the ticket is ready for you, merged or closed, or with
+# --stop. While it drives the ticket, the tab says so.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "blocked"'
+exec tkt auto ACM-12 --notify --poll 1s --json &
+waitstate $FAKE_WT_ROOT/ACM-12 auto_pause needs_you
+state $FAKE_WT_ROOT/ACM-12 auto_why agent_blocked
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .auto.running, .auto.paused, .auto.why]' '["needs_you",true,"needs_you","agent_blocked"]'
+logged herdr notification show 'ACM-12: needs you'
+grep '"event":"auto","action":"pause","stop":"needs_you"' $HOME/.local/state/tkt/history.jsonl
+jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label | startswith("ACM-12")) | .label]' '["ACM-12 (auto)"]'
+
+# You answered in the tab, and then the pull request merged: the loop takes
+# the mark off the tab and ends.
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+cp $WORK/merged.json $FAKE_DIR/prs.json
+wait
+stdout '"stop": *"merged"'
+state $FAKE_WT_ROOT/ACM-12 auto_stop merged
+state $FAKE_WT_ROOT/ACM-12 auto_pause ''
+jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label | startswith("ACM-12")) | .label]' '["ACM-12"]'
+
+# One step at a time, a plan without --approve-plan is a pause too, and
+# nothing is sent.
+rm $FAKE_DIR/prs.json
+env 'FAKE_HERDR_SCREEN=Status: AWAITING_APPROVAL'
+resetlog
+exec tkt auto ACM-12 --once --json
+envelope '.result.stop' plan_awaits_approval
+! logged herdr agent prompt
+! exec tkt auto ACM-12 --dry-run
+rc 2
+
+# --stop clears the ticket's auto mark.
+exec tkt auto ACM-12 --stop --json
+envelope '.result.stop' stopped
+state $FAKE_WT_ROOT/ACM-12 auto_stop stopped
+
+-- merged.json --
+[{"number": 4, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "createdAt": "2026-01-01T00:00:00Z", "mergedAt": "2026-01-02T00:00:00Z"}]

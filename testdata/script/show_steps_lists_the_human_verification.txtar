@@ -1,0 +1,22 @@
+# tkt show --steps lists the human verification procedure of the review that
+# says READY_FOR_HUMAN at the pull request's head.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env FAKE_GH_PRS=$WORK/prs.json
+exec tkt show ACM-12 --steps --json
+envelope '.result | [.view, .pr, (.steps | length), .steps[0].n, .steps[1].text]' '["steps",4,2,1,"Sign out, then press Back.\nExpected: the login page shows."]'
+exec tkt show ACM-12 --steps
+stdout '^1\. Open http://localhost:3000/login and sign in with a wrong password\.$'
+stdout '^Cleanup: none\.$'
+
+# A review of an older head has no steps to run.
+jqedit $WORK/prs.json '.[0].headRefOid = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"'
+! exec tkt show ACM-12 --steps --json
+rc 4
+envelope '.error.code' no_verification_steps
+
+-- prs.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [],
+  "reviews": [{"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open http://localhost:3000/login and sign in with a wrong password.\n   Expected: the form shows an error.\n2. Sign out, then press Back.\n   Expected: the login page shows.\n\nCleanup: none.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]

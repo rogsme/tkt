@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
 )
@@ -43,16 +44,74 @@ type Config struct {
 	OwnStages []string
 	// IgnoredLegacy lists old-format files that config.toml overrides.
 	IgnoredLegacy []string
+	Auto          Auto
+	Review        Review
+	Board         Board
+	Agent         Agent
 }
+
+// Agent holds the [agent] settings for tkt agent.
+type Agent struct {
+	// Model is a pi model pattern; empty keeps pi's default.
+	Model string
+	// Extensions are more pi extension files to load, as absolute paths.
+	Extensions []string
+}
+
+// Auto holds tkt auto's settings.
+type Auto struct {
+	// MaxRounds caps the address, sync and ci runs since the plan's approval.
+	MaxRounds int
+	// Poll is how often a loop reads the forge while it waits for CI or a
+	// review.
+	Poll time.Duration
+	// MaxParallel caps the auto loops that run at once in a repository; 0
+	// means no cap.
+	MaxParallel int
+}
+
+// Review holds how tkt treats reviews.
+type Review struct {
+	// BotWait is how long a new head waits for the forge's automated
+	// reviewer before review-pr runs instead; 0 means there is no bot.
+	BotWait time.Duration
+}
+
+// Board holds what tkt ls marks for people.
+type Board struct {
+	// StaleAfter marks an agent that sat idle with no status line this long;
+	// 0 turns the mark off.
+	StaleAfter time.Duration
+}
+
+// The defaults for the settings above.
+const (
+	DefaultMaxRounds   = 5
+	DefaultPoll        = 30 * time.Second
+	DefaultMaxParallel = 3
+	DefaultBotWait     = 15 * time.Minute
+	DefaultStaleAfter  = 2 * time.Hour
+)
+
+// ApproveLine is what tkt approve sends to the planning session. It is not a
+// stage: tkt run starts a fresh session, and the plan lives in this one.
+const ApproveLine = "The plan is approved. Use the work-ticket skill to execute it."
+
+// UnattendedLine follows the start line when tkt auto approves the plan
+// itself. start-ticket then skips the browser presentation and asks every
+// open question with the harness's question tool, which stops the loop.
+const UnattendedLine = "This run is unattended: no person watches this session until it asks a question."
 
 // BuiltinStages are the stage lines tkt run sends; {id} becomes the ticket.
 var BuiltinStages = map[string]string{
 	"start":   "Use the start-ticket skill to start ticket {id}.",
 	"address": "Use the address-pr-review skill to address the review on this branch's pull request.",
-	"sync":    "Use the address-pr-review skill to sync the PR with the base.",
-	"verify":  "Run every step of the Human verification section of this branch's pull request with the playwright-cli skill. Report each step as passed or failed with what you saw. Change no code and post nothing.",
-	"ci":      "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
-	"review":  "Use the review-pr skill to review the current PR.",
+	// sync is address under its old name: address-pr-review syncs with the
+	// base first on every run (rogs-skills 26cfa58).
+	"sync":   "Use the address-pr-review skill to address the review on this branch's pull request.",
+	"verify": "Run every step of the Human verification section of this branch's pull request with the playwright-cli skill. Report each step as passed or failed with what you saw. Change no code and post nothing.",
+	"ci":     "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
+	"review": "Use the review-pr skill to review the current PR.",
 }
 
 // BuiltinPresets apply when the settings define none.
@@ -64,7 +123,10 @@ func BuiltinPresets() []Preset {
 }
 
 func builtin() Config {
-	c := Config{Source: "built-in presets", Presets: BuiltinPresets(), Stages: map[string]string{}}
+	c := Config{Source: "built-in presets", Presets: BuiltinPresets(), Stages: map[string]string{},
+		Auto:   Auto{MaxRounds: DefaultMaxRounds, Poll: DefaultPoll, MaxParallel: DefaultMaxParallel},
+		Review: Review{BotWait: DefaultBotWait},
+		Board:  Board{StaleAfter: DefaultStaleAfter}}
 	for k, v := range BuiltinStages {
 		c.Stages[k] = v
 	}

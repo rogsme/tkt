@@ -1,0 +1,57 @@
+# tkt history shows a ticket's events from the history, the timeline tkt
+# stats counts, and its pull request's commits and reviews, after tkt done
+# removed its worktree.
+mkdir $HOME/.local/state/tkt
+cp $WORK/history.jsonl $HOME/.local/state/tkt/history.jsonl
+env FAKE_GH_PRS=$WORK/prs.json
+
+exec tkt history acm-12 --json
+envelope '.result | [.repo, .forge, (.tickets | length)]' '["github.com/acme/app","ok",1]'
+envelope '.result.tickets[0] | [.ticket, .timeline.rounds, .timeline.in_progress, (.events | length)]' '["ACM-12",1,false,6]'
+envelope '.result.tickets[0].events[2]' '{"at":"2099-01-01T02:00:00Z","event":"approved"}'
+envelope '.result.tickets[0].events[3]' '{"action":"run","at":"2099-01-01T03:00:00Z","event":"auto","stage":"address"}'
+envelope '.result.tickets[0].pull_requests[0] | [.number, .state, .title, .changed_files, (.commits | length)]' '[7,"MERGED","ACM-12: Let members export reports",3,2]'
+envelope '.result.tickets[0].pull_requests[0].commits[0]' '{"at":"2099-01-01T02:30:00Z","oid":"aaaaaaa","subject":"feat(reports): export a report as CSV"}'
+envelope '.result.tickets[0].pull_requests[0].reviews | map([.author, .verdict, .head])' '[["claude","FINDINGS","aaaaaaa"],["claude","CLEAR","bbbbbbb"]]'
+envelope '.result.tickets[0].pull_requests[0].reviews[0].body | test("1. \\*\\*BUG\\*\\* reports.go:12")' true
+
+exec tkt history ACM-12
+stdout '^ACM-12  [0-9]+h start to merge, [0-9]+[mh] waiting on you, 1 round, auto$'
+stdout '^  .*  plan approved$'
+stdout '^  .*  auto run address$'
+stdout '^  pull request #7 MERGED  \+40 -2 in 3 files  ACM-12: Let members export reports$'
+stdout '^    .*  review FINDINGS at aaaaaaa by claude$'
+stdout '^    .*  commit bbbbbbb  fix\(reports\): quote fields with commas$'
+
+# A ticket tkt never saw has no history and no pull request; that is no error.
+exec tkt history ACM-99
+stdout '^ACM-99: no history and no pull request$'
+
+# When gh fails, tkt still prints the history and says the forge failed.
+env FAKE_GH_FAIL=1
+exec tkt history ACM-12 --json
+envelope '.result | [.forge, (.tickets[0].events | length), (.tickets[0].pull_requests | length)]' '["failed",6,0]'
+stderr 'cannot read ACM-12.s pull requests'
+
+! exec tkt history
+rc 2
+
+-- history.jsonl --
+{"v":1,"at":"2099-01-01T00:00:00Z","repo":"github.com/acme/app","ticket":"ACM-12","event":"started"}
+{"v":1,"at":"2099-01-01T00:00:05Z","repo":"github.com/acme/app","ticket":"ACM-12","event":"phase","phase":"awaiting_approval","from":"planning"}
+{"v":1,"at":"2099-01-01T02:00:00Z","repo":"github.com/acme/app","ticket":"ACM-12","event":"approved"}
+{"v":1,"at":"2099-01-01T03:00:00Z","repo":"github.com/acme/app","ticket":"ACM-12","event":"auto","stage":"address","action":"run"}
+{"v":1,"at":"2099-01-01T03:00:01Z","repo":"github.com/acme/app","ticket":"ACM-12","event":"stage","stage":"address"}
+{"v":1,"at":"2099-01-01T05:00:00Z","repo":"github.com/acme/app","ticket":"ACM-12","event":"merged","pr":7,"merged_at":"2099-01-01T05:00:00Z"}
+{"v":1,"at":"2099-01-01T01:00:00Z","repo":"github.com/acme/other","ticket":"ACM-12","event":"started"}
+-- prs.json --
+[{"number": 7, "state": "MERGED", "title": "ACM-12: Let members export reports", "url": "https://git.example.com/acme/app/pull/7",
+  "headRefName": "ACM-12", "headRefOid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "headRepository": {"nameWithOwner": "acme/app"},
+  "createdAt": "2099-01-01T02:40:00Z", "mergedAt": "2099-01-01T05:00:00Z", "additions": 40, "deletions": 2, "changedFiles": 3,
+  "commits": [
+    {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "messageHeadline": "feat(reports): export a report as CSV", "committedDate": "2099-01-01T02:30:00Z"},
+    {"oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "messageHeadline": "fix(reports): quote fields with commas", "committedDate": "2099-01-01T03:30:00Z"}],
+  "reviews": [
+    {"author": {"login": "claude"}, "body": "## Review brief\n\n**Automated review: FINDINGS** · head `aaaaaaa` · reviewed against ACM-12\n1. **BUG** reports.go:12: a field with a comma breaks the row.", "submittedAt": "2099-01-01T02:50:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+    {"author": {"login": "acme-dev"}, "body": "", "submittedAt": "2099-01-01T03:10:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+    {"author": {"login": "claude"}, "body": "**Automated review: CLEAR** · head `bbbbbbb` · reviewed against ACM-12", "submittedAt": "2099-01-01T03:40:00Z", "commit": {"oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}]}]

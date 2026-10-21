@@ -179,6 +179,12 @@ func (c Client) TabClose(ctx context.Context, tab string) error {
 	return err
 }
 
+// TabRename relabels a tab.
+func (c Client) TabRename(ctx context.Context, tab, label string) error {
+	_, err := c.call(ctx, false, "tab", "rename", tab, label)
+	return err
+}
+
 // TabFocus switches to a tab.
 func (c Client) TabFocus(ctx context.Context, tab string) error {
 	_, err := c.call(ctx, false, "tab", "focus", tab)
@@ -232,11 +238,44 @@ func (c Client) Wait(ctx context.Context, pane string, until []string, timeoutMs
 
 // Read returns the visible text of the agent's screen, its last lines.
 func (c Client) Read(ctx context.Context, pane string, lines int) string {
-	r := c.R.Run(ctx, runner.Cmd{Argv: []string{"herdr", "agent", "read", pane, "--source", "visible", "--lines", strconv.Itoa(lines)}})
+	return c.read(ctx, pane, "visible", lines)
+}
+
+// ReadRecent returns the agent's recent output, which reaches further back
+// than its screen.
+func (c Client) ReadRecent(ctx context.Context, pane string, lines int) string {
+	return c.read(ctx, pane, "recent", lines)
+}
+
+func (c Client) read(ctx context.Context, pane, source string, lines int) string {
+	r := c.R.Run(ctx, runner.Cmd{Argv: []string{"herdr", "agent", "read", pane, "--source", source, "--lines", strconv.Itoa(lines)}})
 	if !r.OK() {
 		return ""
 	}
 	return r.Out()
+}
+
+// NotifyArgv is the herdr command that shows a notification. sound is none,
+// done or request.
+func NotifyArgv(title, body, sound string) []string {
+	argv := []string{"herdr", "notification", "show", title}
+	if body != "" {
+		argv = append(argv, "--body", body)
+	}
+	if sound != "" {
+		argv = append(argv, "--sound", sound)
+	}
+	return argv
+}
+
+// Notify shows a notification. Only the exit status counts: a notification
+// has no result to read.
+func (c Client) Notify(ctx context.Context, title, body, sound string) error {
+	argv := NotifyArgv(title, body, sound)
+	if r := c.R.Run(ctx, runner.Cmd{Argv: argv}); !r.OK() {
+		return &Error{Argv: argv[1:], Code: ErrorCode(r.Stderr), Stderr: strings.TrimSpace(r.ErrText())}
+	}
+	return nil
 }
 
 // SendKeys presses keys in an agent's pane.

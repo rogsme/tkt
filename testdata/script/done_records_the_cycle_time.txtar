@@ -1,0 +1,35 @@
+# tkt done records the merge in the history, so tkt stats can say how long
+# the ticket took from tkt start to the merge.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $WT push -q origin ACM-12
+realgit -C $REPO merge -q --no-ff -m 'Merge ACM-12' ACM-12
+realgit -C $REPO push -q origin main
+gitvar H1 $WT HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+env FAKE_GH_PRS=$WORK/prs.json
+
+# Before the merge, the ticket is in progress.
+exec tkt stats --json
+envelope '.result.tickets[0] | [.ticket, .in_progress]' '["ACM-12",true]'
+envelope '.result.summary.merged' 0
+
+exec tkt done ACM-12 --json
+envelope '.result.tickets[0] | [.outcome, .merged, (.elapsed_s > 0)]' '["removed","2099-01-01T00:00:00Z",true]'
+grep '"event":"merged","pr":7,"merged_at":"2099-01-01T00:00:00Z","opened_at":"2098-12-31T00:00:00Z"' $HOME/.local/state/tkt/history.jsonl
+grep '"ticket":"ACM-12","event":"done"' $HOME/.local/state/tkt/history.jsonl
+
+exec tkt stats
+stdout '^ACM-12 .*[0-9]+d +'
+stdout '^1 merged: start to merge median [0-9]+d'
+exec tkt stats --json
+envelope '.result | [.repo, .tickets[0].pr, .tickets[0].in_progress, .summary.merged]' '["github.com/acme/app",7,false,1]'
+exec tkt stats ACM-99 --json
+envelope '.result.tickets' '[]'
+
+-- prs.json --
+[{"number": 7, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"},
+  "createdAt": "2098-12-31T00:00:00Z", "mergedAt": "2099-01-01T00:00:00Z"}]

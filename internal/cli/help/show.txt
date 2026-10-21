@@ -1,0 +1,15 @@
+tkt show prints the agent's last message: after start-ticket, the plan; after
+tkt run ID verify, its report. It reads the message from the session's own
+record, the Claude Code transcript or the OpenCode API, so nothing scrolls
+away. When tkt cannot read that record, it prints the agent's recent output.
+
+--screen prints the agent's live screen instead, such as a question it asks
+in a dialog.
+
+--steps prints the human verification procedure from the review that says
+READY_FOR_HUMAN at the pull request's head, and with --json its numbered
+steps. When the review bot cleared the head instead, it reads the Human
+verification section of the pull request's body, which work-ticket writes;
+source says which. It reads pull requests through gh, so it supports GitHub
+forges only, and it exits 4 with no_verification_steps when neither has
+steps.

@@ -1,4 +1,4 @@
-// Package fake holds the stand-ins for herdr, worktrunk, gh, OpenCode,
+// Package fake holds the stand-ins for herdr, worktrunk, gh, OpenCode, pi,
 // Claude Code and git that tkt's black-box tests put on PATH. Each one
 // appends its command line to $FAKE_LOG, so tests can assert what tkt ran.
 // Only the tests import it.
@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gitlab.com/rogs/tkt/internal/runner"
@@ -112,7 +113,12 @@ func GH() {
 			state = args[i+1]
 		}
 	}
-	b, err := os.ReadFile(os.Getenv("FAKE_GH_PRS"))
+	// Turns mode swaps the pull requests in $FAKE_DIR/prs.json as the agent
+	// works; otherwise $FAKE_GH_PRS names them.
+	b, err := os.ReadFile(filepath.Join(os.Getenv("FAKE_DIR"), "prs.json"))
+	if err != nil {
+		b, err = os.ReadFile(os.Getenv("FAKE_GH_PRS"))
+	}
 	if err != nil {
 		os.Exit(0)
 	}
@@ -164,6 +170,12 @@ func OpenCode() {
 		} else {
 			fmt.Println(`{"data":{}}`)
 		}
+	case args[1] == "GET" && strings.HasPrefix(args[2], "/api/session/") && strings.Contains(args[2], "/message"):
+		if b, err := os.ReadFile(os.Getenv("FAKE_OC_MESSAGES")); err == nil {
+			ocWrite(padMessages(b))
+		} else {
+			fmt.Println(`{"data":[]}`)
+		}
 	case args[1] == "GET" && strings.HasPrefix(args[2], "/api/session"):
 		if b, err := os.ReadFile(os.Getenv("FAKE_OC_SESSIONS")); err == nil {
 			os.Stdout.Write(b)
@@ -174,6 +186,30 @@ func OpenCode() {
 		die(2, "fake opencode: unsupported: %s %s", args[1], args[2])
 	}
 	os.Exit(0)
+}
+
+// ocWrite writes an API answer the way opencode api does: on a pipe it exits
+// before the pipe drains, so a reader gets the first 256 KiB only.
+func ocWrite(b []byte) {
+	if fi, err := os.Stdout.Stat(); err == nil && fi.Mode()&os.ModeNamedPipe != 0 && len(b) > 256<<10 {
+		b = b[:256<<10]
+	}
+	os.Stdout.Write(b)
+}
+
+// padMessages appends an old message of FAKE_OC_PAD bytes, such as a long
+// tool output, to a session's messages.
+func padMessages(b []byte) []byte {
+	n, _ := strconv.Atoi(os.Getenv("FAKE_OC_PAD"))
+	var v struct {
+		Data []any `json:"data"`
+	}
+	if n <= 0 || json.Unmarshal(b, &v) != nil {
+		return b
+	}
+	v.Data = append(v.Data, map[string]any{"id": "pad", "type": "assistant", "content": []any{map[string]any{"type": "text", "text": strings.Repeat("x", n)}}})
+	out, _ := json.Marshal(v)
+	return out
 }
 
 // counter increments the number kept in file and returns its old value.

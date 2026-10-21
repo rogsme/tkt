@@ -13,6 +13,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/forge"
 	"gitlab.com/rogs/tkt/internal/herdr"
+	"gitlab.com/rogs/tkt/internal/history"
 )
 
 // DoneOpts are tkt done's arguments.
@@ -32,6 +33,12 @@ type DoneTicket struct {
 	BranchDeleted bool     `json:"branch_deleted"`
 	ClosedTabs    []string `json:"closed_tabs"`
 	Reasons       []string `json:"reasons"`
+	// Started is when tkt first started the ticket and Merged when the
+	// forge merged it; Elapsed is the time between, in seconds, or 0 when
+	// either is unknown.
+	Started string `json:"started"`
+	Merged  string `json:"merged"`
+	Elapsed int64  `json:"elapsed_s"`
 }
 
 // DoneResult is what tkt done did.
@@ -51,6 +58,9 @@ func (r *DoneResult) Text(w io.Writer) {
 			fmt.Fprintf(w, "%s  removed %s and branch %s\n", t.Ticket, t.Path, t.Ticket)
 		} else {
 			fmt.Fprintf(w, "%s  removed %s; worktrunk kept branch %s (not integrated into %s)\n", t.Ticket, t.Path, t.Ticket, r.base)
+		}
+		if t.Elapsed > 0 {
+			fmt.Fprintf(w, "%s  %s from start to merge\n", t.Ticket, Ago(time.Duration(t.Elapsed)*time.Second))
 		}
 	}
 }
@@ -153,7 +163,7 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		if err := c.lockTicket(t.ID); err != nil {
 			return nil, err
 		}
-		reasons, closeTabs := c.doneCheck(gh, t.ID, t.Path, herdr.AgentsInPath(agents, t.Path), panes, tabs)
+		reasons, closeTabs, merged := c.doneCheck(gh, t.ID, t.Path, herdr.AgentsInPath(agents, t.Path), panes, tabs)
 		if len(reasons) > 0 {
 			a.UI.Info("%s kept:", t.ID)
 			for _, r := range reasons {
@@ -172,6 +182,16 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 			}
 			dt.ClosedTabs = append(dt.ClosedTabs, tab)
 		}
+		started := ""
+		if ts, err := c.readState(t.Path); err == nil {
+			started = ts.st["started"]
+		}
+		dt.Started, dt.Merged = started, merged.MergedAt
+		if s, err := time.Parse(time.RFC3339, started); err == nil {
+			if m, err := time.Parse(time.RFC3339, merged.MergedAt); err == nil {
+				dt.Elapsed = int64(m.Sub(s).Seconds())
+			}
+		}
 		argv := c.WT.RemoveArgv(t.ID)
 		if c.Dry {
 			c.Would(argv)
@@ -182,21 +202,37 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		if r := c.WT.Visible(c.Ctx, argv); !r.OK() {
 			return nil, apperr.New(apperr.WtRemoveFailed, "wt remove %s failed (see above)", t.ID)
 		}
+		c.record(history.Event{Ticket: t.ID, Event: history.Merged, PR: merged.Number, MergedAt: merged.MergedAt, OpenedAt: merged.CreatedAt})
+		c.record(history.Event{Ticket: t.ID, Event: history.Done})
 		dt.Outcome = "removed"
 		dt.BranchDeleted = !c.Git.HasRef(c.Ctx, c.Repo.Root, "refs/heads/"+t.ID)
 		res.Tickets = append(res.Tickets, dt)
 	}
 	res.Actions = c.Plan
 	if len(kept) > 0 && !o.All {
-		return res, apperr.New(apperr.TicketsKept, "kept %s; see the reasons above", strings.Join(kept, ", ")).
+		// The reasons go in the message itself: a program reading --json
+		// never sees the lines above.
+		var why []string
+		for _, dt := range res.Tickets {
+			if slices.Contains(kept, dt.Ticket) {
+				switch {
+				case len(dt.Reasons) > 0:
+					why = append(why, dt.Ticket+": "+strings.Join(dt.Reasons, "; "))
+				case dt.Outcome == "missing":
+					why = append(why, dt.Ticket+": no worktree")
+				}
+			}
+		}
+		return res, apperr.New(apperr.TicketsKept, "kept %s", strings.Join(why, "; ")).
 			WithHint("fix the reasons, then rerun tkt done").
 			With("tickets", res.Tickets)
 	}
 	return res, nil
 }
 
-// doneCheck lists why a ticket's worktree must stay, and the tabs to close.
-func (c *Ctx) doneCheck(gh forge.GH, id, path string, agents []herdr.Agent, panes []herdr.Pane, tabs []herdr.Tab) (reasons, closeTabs []string) {
+// doneCheck lists why a ticket's worktree must stay, the tabs to close, and
+// the merged pull request.
+func (c *Ctx) doneCheck(gh forge.GH, id, path string, agents []herdr.Agent, panes []herdr.Pane, tabs []herdr.Tab) (reasons, closeTabs []string, pr forge.PR) {
 	f := c.LC.Forge
 	oid := ""
 	prs, err := gh.ListHead(c.Ctx, id, false)
@@ -223,7 +259,7 @@ func (c *Ctx) doneCheck(gh forge.GH, id, path string, agents []herdr.Agent, pane
 			reasons = append(reasons, fmt.Sprintf("several merged pull requests have %s as their head branch", id))
 		}
 		if len(merged) > 0 {
-			oid = merged[0].HeadRefOid
+			oid, pr = merged[0].HeadRefOid, merged[0]
 		}
 	}
 	if !c.Git.Clean(c.Ctx, path) {
@@ -268,7 +304,7 @@ func (c *Ctx) doneCheck(gh forge.GH, id, path string, agents []herdr.Agent, pane
 	if openCodeServesFrom(path) {
 		reasons = append(reasons, "the OpenCode service runs from inside the worktree, and removing it would stop that service")
 	}
-	return reasons, closeTabs
+	return reasons, closeTabs, pr
 }
 
 func short(s string) string {

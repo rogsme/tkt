@@ -21,6 +21,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/cli"
 	"gitlab.com/rogs/tkt/internal/fake"
 	"gitlab.com/rogs/tkt/internal/harness"
+	"gitlab.com/rogs/tkt/internal/pi"
 	"gitlab.com/rogs/tkt/internal/state"
 )
 
@@ -36,6 +37,7 @@ func TestMain(m *testing.M) {
 		"opencode": fake.OpenCode,
 		"claude":   fake.Claude,
 		"git":      fake.Git,
+		"pi":       fake.Pi,
 	})
 }
 
@@ -68,6 +70,15 @@ func TestScripts(t *testing.T) {
 			return setupSandbox(env, realGit)
 		},
 		Cmds: commands,
+		// [bundled_pi] holds when the test binary carries pi, as a build
+		// with the bundled_pi tag does.
+		Condition: func(cond string) (bool, error) {
+			if cond == "bundled_pi" {
+				_, ok := pi.Bundled()
+				return ok, nil
+			}
+			return false, fmt.Errorf("unknown condition %q", cond)
+		},
 	})
 }
 
@@ -164,6 +175,7 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"jqeq":        cmdJQEq,
 	"state":       cmdState,
 	"statevar":    cmdStateVar,
+	"waitstate":   cmdWaitState,
 	"mkprompt":    cmdMkPrompt,
 	"realgit":     cmdRealGit,
 	"touchat":     cmdTouchAt,
@@ -311,6 +323,21 @@ func cmdState(ts *testscript.TestScript, neg bool, args []string) {
 	if (got == args[2]) == neg {
 		ts.Fatalf("state %s = %q, want %s%q", args[1], got, map[bool]string{true: "not ", false: ""}[neg], args[2])
 	}
+}
+
+// waitstate DIR KEY WANT: wait up to 30 seconds for the ticket state to
+// record KEY=WANT, for a tkt auto loop running in the background.
+func cmdWaitState(ts *testscript.TestScript, neg bool, args []string) {
+	if len(args) != 3 || neg {
+		ts.Fatalf("usage: waitstate DIR KEY WANT")
+	}
+	got := ""
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if got = readState(ts, args[0])[args[1]]; got == args[2] {
+			return
+		}
+	}
+	ts.Fatalf("state %s = %q after 30s, want %q", args[1], got, args[2])
 }
 
 // statevar DIR KEY VAR: set VAR to the state's KEY.
