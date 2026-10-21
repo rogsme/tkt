@@ -64,13 +64,25 @@ export function title(s: BoardState): string {
 	return `tkt  ${s.repo}  ${n} ticket${n === 1 ? "" : "s"}${k ? `  ${k} need${k === 1 ? "s" : ""} you` : ""}`;
 }
 
-/** boardLines renders the board's body for a width: one line per ticket,
- * the ones that need you first, then what each of those needs. */
+/** The board's columns and their widths. AGE is the time since tkt start,
+ * TIME the time in the phase, as in tkt ls; NOTES takes the rest. */
+const heads: [string, number][] = [
+	["TICKET", 9],
+	["AGE", 4],
+	["PHASE", 17],
+	["TIME", 4],
+	["AGENT", 8],
+	["PR", 6],
+];
+
+/** boardLines renders the board's body for a width: a header, one line per
+ * ticket, the ones that need you first, then what each of those needs. */
 export function boardLines(s: BoardState, width: number): Line[] {
 	const lines: Line[] = [];
 	const needs = new Set(s.items.map((a) => a.ticket));
 	const rows = [...s.rows].sort((a, b) => Number(needs.has(b.ticket)) - Number(needs.has(a.ticket)) || a.ticket.localeCompare(b.ticket, undefined, { numeric: true }));
 	if (rows.length === 0) lines.push({ text: fit('No tickets yet. Say "start ACM-123".', width), tone: "muted" });
+	else lines.push({ text: fit([...heads.map(([h, n]) => pad(h, n)), "NOTES"].join(" "), width), tone: "muted" });
 	for (const r of rows) {
 		let tone: Tone = "text";
 		if (needs.has(r.ticket)) tone = "warning";
@@ -95,7 +107,8 @@ export function phaseLabel(phase: string): string {
 
 function rowText(r: Row, s: BoardState): string {
 	const agent = !r.agent ? "-" : (r.agent.background ?? 0) > 0 ? "waiting" : r.agent.status;
-	const parts = [pad(r.ticket, 9), pad(phaseLabel(r.phase), 17), pad(since(r.phase_since, s.now) || "-", 4), pad(agent, 8), pad(r.pr ? `#${r.pr.number}` : "-", 6)];
+	const cells = [r.ticket, since(r.started, s.now) || "-", phaseLabel(r.phase), since(r.phase_since, s.now) || "-", agent, r.pr ? `#${r.pr.number}` : "-"];
+	const parts = cells.map((c, i) => pad(c, heads[i][1]));
 	const flags: string[] = [];
 	if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : "auto");
 	else if (r.auto?.wanted) flags.push("auto stalled");
