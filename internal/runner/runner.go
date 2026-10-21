@@ -19,6 +19,10 @@ type Cmd struct {
 	// Quiet leaves the command out of the log: for polls that repeat many
 	// times a second.
 	Quiet bool
+	// StdoutFile captures stdout through a temporary file instead of a
+	// pipe, for a command that exits before a pipe drains: opencode api
+	// cuts its output at 256 KiB on a pipe.
+	StdoutFile bool
 }
 
 // Result is what a command did. Code is -1 when it could not start or ran

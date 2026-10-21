@@ -35,6 +35,25 @@ exec tkt show ACM-13 --json
 envelope '.result | [.source, .harness, .session, .last_status, .message]' '["api","opencode","ses_fake1","READY_FOR_REVIEW","Pull request opened.\nStatus: READY_FOR_REVIEW"]'
 logged opencode api GET '/api/session/ses_fake1/message?limit=50'
 
+# A long session's messages pass the 256 KiB that opencode api writes to a
+# pipe; tkt reads them through a file, whole.
+env FAKE_OC_PAD=300000
+exec tkt show ACM-13 --json
+envelope '.result | [.source, .last_status]' '["api","READY_FOR_REVIEW"]'
+env FAKE_OC_PAD=
+
+# When the API gives nothing tkt can read, OpenCode's screen stands in as it
+# shows: reading its recent output would scroll its view.
+resetlog
+env FAKE_OC_MESSAGES=$WORK/broken.json
+env 'FAKE_HERDR_SCREEN=Status: READY_FOR_REVIEW'
+exec tkt show ACM-13 --json
+envelope '.result | [.source, .last_status]' '["screen","READY_FOR_REVIEW"]'
+logged --source visible --lines 200
+! logged --source recent
+
+-- broken.json --
+{"data":[
 -- p13.txt --
 Use the start-ticket skill for ACM-13.
 -- transcript.jsonl --

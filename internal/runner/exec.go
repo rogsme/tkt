@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"syscall"
 	"time"
@@ -34,6 +35,13 @@ func (e Exec) Run(ctx context.Context, c Cmd) Result {
 	cmd.WaitDelay = 2 * time.Second
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
+	if c.StdoutFile {
+		if f, err := os.CreateTemp("", "tkt-stdout-*"); err == nil {
+			defer os.Remove(f.Name())
+			defer f.Close()
+			cmd.Stdout = f
+		}
+	}
 	if c.Visible {
 		cmd.Stderr = e.Stderr
 		if e.StdinTTY {
@@ -43,6 +51,10 @@ func (e Exec) Run(ctx context.Context, c Cmd) Result {
 		cmd.Stderr = &stderr
 	}
 	err := cmd.Run()
+	if f, ok := cmd.Stdout.(*os.File); ok {
+		f.Seek(0, io.SeekStart)
+		stdout.ReadFrom(f)
+	}
 	res := Result{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), Dur: time.Since(start)}
 	var exitErr *exec.ExitError
 	switch {

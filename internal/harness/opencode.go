@@ -40,7 +40,7 @@ func OpenCodeModel(spec string) (*Model, error) {
 }
 
 func (o OpenCode) api(ctx context.Context, timeout time.Duration, args ...string) (runner.Result, bool) {
-	r := o.R.Run(ctx, runner.Cmd{Argv: append([]string{"opencode", "api"}, args...), Timeout: timeout})
+	r := o.R.Run(ctx, runner.Cmd{Argv: append([]string{"opencode", "api"}, args...), Timeout: timeout, StdoutFile: true})
 	return r, r.OK()
 }
 
