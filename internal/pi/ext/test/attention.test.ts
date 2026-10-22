@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { attentionOf, sound } from "../attention.ts";
+import { attentionOf, choicesOf, sound } from "../attention.ts";
 import { row } from "./fixtures.ts";
 
 const working = { pane_id: "p", name: "a", harness: "claude", status: "working" };
@@ -66,4 +66,44 @@ test("the key stays while the situation does, and changes with it", () => {
 	const r = row({ phase: "awaiting_approval", last_status: "AWAITING_APPROVAL" });
 	assert.equal(attentionOf(r, false)?.key, attentionOf({ ...r, phase_since: "2026-02-02T00:00:00Z" }, false)?.key);
 	assert.notEqual(attentionOf(r, false)?.key, attentionOf({ ...r, phase: "needs_you", last_status: "BLOCKED" }, false)?.key);
+});
+
+/** offered lists an item's answers as do, or do:stage for a run. */
+const offered = (r: Parameters<typeof attentionOf>[0]) => {
+	const a = attentionOf(r, false);
+	assert.ok(a, "no item");
+	return choicesOf(a).map((c) => (c.stage ? `${c.do}:${c.stage}` : c.do));
+};
+const fix = (reason: string, stage: string) => ({ kind: "command" as const, reason, argv: ["tkt", "run", "ACM-12", stage], text: `tkt run ACM-12 ${stage}` });
+
+test("a loop at its round limit offers one more fix run first", () => {
+	assert.deepEqual(offered(row({ phase: "needs_you", next: fix("findings", "address"), auto: auto({ paused: "round_limit", why: "findings" }) })), ["run:address", "peek", "show", "dismiss"]);
+	assert.equal(offered(row({ phase: "needs_you", next: fix("checks_fail", "ci"), auto: auto({ paused: "round_limit", why: "checks_fail" }) }))[0], "run:ci");
+	const a = attentionOf(row({ phase: "needs_you", next: fix("findings", "address"), auto: auto({ paused: "round_limit", why: "findings" }) }), false);
+	assert.equal(choicesOf(a!)[0].label, "Run address once more");
+});
+
+test("a loop with no progress offers the same step again, when it runs one", () => {
+	assert.equal(offered(row({ phase: "needs_you", next: fix("needs_review", "review"), auto: auto({ paused: "no_progress" }) }))[0], "run:review");
+	assert.deepEqual(offered(row({ phase: "needs_you", auto: auto({ paused: "no_progress" }) })), ["peek", "show", "dismiss"]);
+});
+
+test("each stop offers the answer that moves it on", () => {
+	const human = (reason: string) => ({ kind: "human" as const, reason, argv: null, text: "" });
+	assert.equal(offered(row({ phase: "needs_you", next: human("bot_silent") }))[0], "run:review");
+	assert.equal(offered(row({ phase: "needs_you", auto: auto({ paused: "bot_silent" }) }))[0], "run:review");
+	assert.equal(offered(row({ phase: "needs_you", last_status: "BLOCKED", next: human("status_blocked") }))[0], "reply");
+	assert.equal(offered(row({ phase: "needs_you", next: human("check_agent") }))[0], "reply");
+	assert.equal(offered(row({ phase: "needs_you", next: human("review_awaits_approval") }))[0], "reply");
+	assert.equal(offered(row({ phase: "needs_you", auto: auto({ paused: "needs_you", why: "status_blocked" }) }))[0], "reply");
+	// An agent that asks in its own dialog only queues what you send.
+	assert.ok(!offered(row({ phase: "needs_you", agent: { pane_id: "p", name: "a", harness: "claude", status: "blocked" }, next: human("agent_blocked") })).includes("reply"));
+	assert.equal(offered(row({ phase: "no_agent", agent: null, next: { kind: "command", reason: "no_agent", argv: ["tkt", "resume", "ACM-12"], text: "" } }))[0], "resume");
+	assert.equal(offered(row({ phase: "needs_you", auto: auto({ paused: "agent_missing" }) }))[0], "resume");
+});
+
+test("a manual step can go to tkt auto, and a stalled ticket can leave it", () => {
+	assert.deepEqual(offered(row({ phase: "needs_fix", next: fix("findings", "address") })), ["next", "show", "auto_on"]);
+	assert.deepEqual(offered(row({ phase: "building", auto: auto({ running: false }) })), ["auto_on", "auto_off", "dismiss"]);
+	assert.deepEqual(offered(row({ phase: "awaiting_approval", last_status: "AWAITING_APPROVAL" })), ["approve", "approve_auto", "show", "reply"]);
 });

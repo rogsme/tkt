@@ -1,7 +1,7 @@
 // Which tickets need you right now. tkt ls says where each ticket stands, and
-// this turns that into a short item for the board, or nothing. Items are
-// worked out again on every read, so an item goes away as soon as its ticket
-// moves on.
+// this turns that into a short item for the board, or nothing, with the
+// answers /inbox offers for it. Items are worked out again on every read, so
+// an item goes away as soon as its ticket moves on.
 
 import type { Row } from "./model.ts";
 
@@ -20,6 +20,69 @@ export interface Attention {
 	/** byAuto marks an item of a ticket that tkt auto drives; its loop
 	 * notifies by itself. */
 	byAuto: boolean;
+	/** offers are the answers the item's situation calls for, such as one
+	 * more fix run; /inbox puts them before its kind's usual answers. */
+	offers?: Choice[];
+}
+
+/** Choice is one answer /inbox offers for an item. do names the action, and
+ * stage is the stage a run starts. */
+export interface Choice {
+	label: string;
+	description?: string;
+	do: "approve" | "approve_auto" | "show" | "reply" | "peek" | "dismiss" | "check" | "next" | "done" | "auto_on" | "auto_off" | "run" | "resume";
+	stage?: string;
+}
+
+const look: Choice[] = [
+	{ label: "Peek at the agent's screen", do: "peek" },
+	{ label: "Show its last message", do: "show" },
+];
+const dismiss: Choice = { label: "Dismiss", do: "dismiss" };
+
+/** usual holds each kind's answers, whatever the situation. */
+const usual: Record<AttentionKind, Choice[]> = {
+	plan: [
+		{ label: "Approve", do: "approve" },
+		{ label: "Approve and go auto", description: "tkt auto then drives it until it is reviewed clean.", do: "approve_auto" },
+		{ label: "Show the plan", do: "show" },
+		{ label: "Ask for changes", do: "reply" },
+	],
+	question: [...look, dismiss],
+	check: [...look, dismiss],
+	blocked: [...look, dismiss],
+	paused: [...look, dismiss],
+	ready: [{ label: "Open the checklist", do: "check" }, dismiss],
+	next: [
+		{ label: "Continue", do: "next" },
+		{ label: "Show its last message", do: "show" },
+		{ label: "Hand it to tkt auto", description: "tkt auto takes this step and drives it until it is reviewed clean.", do: "auto_on" },
+	],
+	merged: [{ label: "Remove it (tkt done)", do: "done" }],
+	stalled: [
+		{ label: "Resume tkt auto", do: "auto_on" },
+		{ label: "Turn auto off", description: "Clears its auto mark, so you drive it yourself.", do: "auto_off" },
+		dismiss,
+	],
+	failed: [dismiss],
+};
+
+/** choicesOf lists the answers /inbox offers for an item: its situation's
+ * first, so Enter takes the step that moves the ticket on, then its kind's. */
+export function choicesOf(a: Attention): Choice[] {
+	return [...(a.offers ?? []), ...usual[a.kind]];
+}
+
+const reply: Choice = { label: "Reply to the agent", description: "Type what to tell it; it reads the text as a new prompt.", do: "reply" };
+const resume: Choice = { label: "Bring the agent back", description: "tkt resume relaunches its newest session.", do: "resume" };
+const review: Choice = { label: "Run review-pr instead", description: "review-pr reviews the head in a fresh session.", do: "run", stage: "review" };
+
+/** rerun offers the stage tkt ls's next step runs, or nothing when the step
+ * runs none. */
+function rerun(row: Row, label: (stage: string) => string, description: string): Choice[] {
+	const v = row.next?.argv;
+	const stage = v?.length === 4 && v[1] === "run" ? v[3] : "";
+	return stage ? [{ label: label(stage), description, do: "run", stage }] : [];
 }
 
 /** The next steps of a manual ticket that wait for your go. */
@@ -40,7 +103,7 @@ export function attentionOf(row: Row, inFlight: boolean): Attention | undefined 
 	const a = row.auto;
 	const reason = row.next?.reason ?? "";
 	const base = [id, row.phase, row.pr?.head ?? "", row.last_status, reason, a?.paused ?? "", a?.why ?? ""].join("|");
-	const item = (kind: AttentionKind, title: string, text: string, byAuto = false): Attention => ({ key: `${kind}|${base}`, ticket: id, kind, title, text, byAuto });
+	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: `${kind}|${base}`, ticket: id, kind, title, text, byAuto, offers });
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
 	if (a?.running) {
 		// A pause stays in the loop's state until its next look. Once the
@@ -57,7 +120,7 @@ export function attentionOf(row: Row, inFlight: boolean): Attention | undefined 
 		case "ready_for_human":
 			return item("ready", "ready to verify", readyText(row));
 		case "no_agent":
-			return item("check", "no agent", `${id}: no agent runs in its worktree. tkt resume ${id} brings it back.`);
+			return item("check", "no agent", `${id}: no agent runs in its worktree. tkt resume ${id} brings it back.`, false, [resume]);
 		case "needs_you":
 			return byReason(row, reason, item);
 	}
@@ -68,7 +131,7 @@ export function attentionOf(row: Row, inFlight: boolean): Attention | undefined 
 	return undefined;
 }
 
-type Make = (kind: AttentionKind, title: string, text: string, byAuto?: boolean) => Attention;
+type Make = (kind: AttentionKind, title: string, text: string, byAuto?: boolean, offers?: Choice[]) => Attention;
 
 /** paused words a tkt auto pause. The loop goes on by itself once the
  * ticket moves, so each line says what moves it. */
@@ -81,13 +144,20 @@ function paused(row: Row, item: Make): Attention {
 		case "plan_awaits_approval":
 			return item("plan", "plan ready", `${planText(id)} tkt auto goes on after it.`, true);
 		case "bot_silent":
-			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI; tkt auto goes on when it posts.`, true);
-		case "round_limit":
-			return item("paused", "max rounds reached", `${id}: tkt auto paused after [auto] max_rounds fix runs. Read the review, then say what to do.`, true);
-		case "no_progress":
-			return item("paused", "no progress", `${id}: the last step changed nothing on the same head. /show ${id} for what the agent said.`, true);
+			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI; tkt auto goes on when it posts.`, true, [review]);
+		case "round_limit": {
+			// tkt run leaves the loop's round count alone, so the loop takes
+			// the run's outcome and pauses here again if the ticket still
+			// needs a fix.
+			const more = rerun(row, (s) => `Run ${s} once more`, "One more fix run in a fresh session. tkt auto goes on after it, and pauses again if it still needs a fix.");
+			return item("paused", "max rounds reached", `${id}: tkt auto paused after [auto] max_rounds fix runs. Read the review, then say what to do.`, true, more);
+		}
+		case "no_progress": {
+			const again = rerun(row, (s) => `Run ${s} again`, "The same step in a fresh session. tkt auto goes on if it changes something.");
+			return item("paused", "no progress", `${id}: the last step changed nothing on the same head. /show ${id} for what the agent said.`, true, again);
+		}
 		case "agent_missing":
-			return item("paused", "no agent", `${id}: no agent runs in its worktree. tkt resume ${id} brings it back, and tkt auto goes on.`, true);
+			return item("paused", "no agent", `${id}: no agent runs in its worktree. tkt resume ${id} brings it back, and tkt auto goes on.`, true, [resume]);
 	}
 	return item("paused", "auto paused", `${id}: tkt auto paused (${a.paused}). /peek ${id} shows its screen.`, true);
 }
@@ -102,13 +172,13 @@ function byReason(row: Row, reason: string, item: Make, byAuto = false): Attenti
 		case "agent_blocked":
 			return item("question", "asks a question", `${id}: the agent asks a question. /peek ${id} shows it; answer in its tab.${after}`, byAuto);
 		case "status_blocked":
-			return item("blocked", "Status: BLOCKED", `${id}: the agent stopped with Status: ${row.last_status || "BLOCKED"}. /show ${id} for its reason.${after}`, byAuto);
+			return item("blocked", "Status: BLOCKED", `${id}: the agent stopped with Status: ${row.last_status || "BLOCKED"}. /show ${id} for its reason.${after}`, byAuto, [reply]);
 		case "review_awaits_approval":
-			return item("check", "review draft waits", `${id}: review-pr waits for you to post or drop its draft, in its tab.${after}`, byAuto);
+			return item("check", "review draft waits", `${id}: review-pr waits for you to post or drop its draft, in its tab.${after}`, byAuto, [reply]);
 		case "bot_silent":
-			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI.`, byAuto);
+			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI.`, byAuto, [review]);
 	}
-	return item("check", "stopped, no status", `${id}: the agent stopped without a status line. /show ${id} for what it said.${after}`, byAuto);
+	return item("check", "stopped, no status", `${id}: the agent stopped without a status line. /show ${id} for what it said.${after}`, byAuto, [reply]);
 }
 
 function planText(id: string): string {
