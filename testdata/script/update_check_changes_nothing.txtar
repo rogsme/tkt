@@ -11,7 +11,7 @@ cmp $WORK/bin/tkt $WORK/old
 ! logged new-tkt
 
 exec tkt update --check --json
-envelope '.result | [.available, .updated, .next]' '[true,false,"tkt update --force"]'
+envelope '.result | [.available, .dev, .updated, .next]' '[true,true,false,"tkt update --force"]'
 
 -- api/releases/latest --
 {"tag_name":"v9.9.9"}

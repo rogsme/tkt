@@ -1063,6 +1063,7 @@
       ],
       "result": {
         "available": "boolean",
+        "dev": "boolean",
         "from": "string",
         "next": "string",
         "path": "string",
