@@ -3,7 +3,7 @@
 // steps, such as typing into a session, wait for tkt and say what happened.
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { Attention } from "./attention.ts";
+import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
 import type { Envelope } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
@@ -69,6 +69,12 @@ export async function send(hub: Hub, id: string, text: string, hold = false): Pr
 export function stage(hub: Hub, id: string, name: string, as = ""): string {
 	hub.add({ ticket: id, label: name, args: ["run", id, name, ...(as ? ["--as", as] : [])] });
 	return `Queued: ${name} for ${id} in a fresh session${as ? ` on ${as}` : ""}. The board shows when it needs you.`;
+}
+
+/** resume relaunches the ticket's newest session when no agent runs for it. */
+export function resume(hub: Hub, id: string): string {
+	hub.add({ ticket: id, label: "resume", args: ["resume", id] });
+	return `Queued: tkt resume for ${id}, which relaunches its newest session. The board shows when it needs you.`;
 }
 
 export async function auto(hub: Hub, id: string, on: boolean, approvePlan: boolean, as = ""): Promise<string> {
@@ -241,67 +247,43 @@ export async function inbox(hub: Hub, ctx: ExtensionContext): Promise<string> {
  * item is done with nothing to say, or undefined to stop the walk. */
 async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<string | undefined> {
 	const id = a.ticket;
-	const later = { label: "Later" };
-	const pick = async (options: { label: string; description?: string }[]) => (await ask(ctx, a.text, [...options, later], false))?.answer;
-	let choice: string | undefined;
-	switch (a.kind) {
-		case "plan":
-			choice = await pick([{ label: "Approve" }, { label: "Approve and go auto", description: "tkt auto then drives it until it is reviewed clean." }, { label: "Show the plan" }, { label: "Ask for changes" }]);
-			if (choice === "Approve" || choice === "Approve and go auto") return approve(hub, id, choice === "Approve" ? "manual" : "auto");
-			if (choice === "Show the plan") {
-				hub.post(await show(hub, id, "message"));
-				return undefined;
-			}
-			if (choice === "Ask for changes" && ctx.hasUI) {
-				const text = await ctx.ui.editor(`What should change in ${id}'s plan?`, "");
-				if (!text?.trim()) return undefined;
-				return send(hub, id, text.trim());
-			}
-			return choice === "Later" ? "" : undefined;
-		case "question":
+	const choices = choicesOf(a);
+	const got = (await ask(ctx, a.text, [...choices, { label: "Later" }], false))?.answer;
+	if (got === "Later") return "";
+	const c = choices.find((x) => x.label === got);
+	switch (c?.do) {
+		case "approve":
+		case "approve_auto":
+			return approve(hub, id, c.do === "approve" ? "manual" : "auto");
+		case "show":
+			hub.post(await show(hub, id, "message"));
+			return undefined;
+		case "peek":
+			await watchPeek(hub, ctx, id);
+			return undefined;
+		case "reply": {
+			if (!ctx.hasUI) return undefined;
+			const text = await ctx.ui.editor(a.kind === "plan" ? `What should change in ${id}'s plan?` : `What do you tell ${id}'s agent?`, "");
+			if (!text?.trim()) return undefined;
+			return send(hub, id, text.trim());
+		}
+		case "dismiss":
+			hub.dismiss(a);
+			return "";
 		case "check":
-		case "blocked":
-		case "paused":
-			choice = await pick([{ label: "Peek at the agent's screen" }, { label: "Show its last message" }, { label: "Dismiss" }]);
-			if (choice?.startsWith("Peek")) await watchPeek(hub, ctx, id);
-			else if (choice?.startsWith("Show")) hub.post(await show(hub, id, "message"));
-			else if (choice === "Dismiss") {
-				hub.dismiss(a);
-				return "";
-			}
-			return choice === "Later" ? "" : undefined;
-		case "ready":
-			choice = await pick([{ label: "Open the checklist" }, { label: "Dismiss" }]);
-			if (choice === "Open the checklist") return check(hub, ctx, id);
-			if (choice === "Dismiss") {
-				hub.dismiss(a);
-				return "";
-			}
-			return choice === "Later" ? "" : undefined;
+			return check(hub, ctx, id);
 		case "next":
-			choice = await pick([{ label: "Continue" }, { label: "Show its last message" }]);
-			if (choice === "Continue") return next(hub, id);
-			if (choice?.startsWith("Show")) hub.post(await show(hub, id, "message"));
-			return choice === "Later" ? "" : undefined;
-		case "merged":
-			choice = await pick([{ label: "Remove it (tkt done)" }]);
-			if (choice?.startsWith("Remove")) return done(hub, id);
-			return choice === "Later" ? "" : undefined;
-		case "stalled":
-			choice = await pick([{ label: "Resume tkt auto" }, { label: "Dismiss" }]);
-			if (choice === "Resume tkt auto") return auto(hub, id, true, hub.row(id)?.auto?.approve_plan ?? false);
-			if (choice === "Dismiss") {
-				hub.dismiss(a);
-				return "";
-			}
-			return choice === "Later" ? "" : undefined;
-		case "failed":
-			choice = await pick([{ label: "Dismiss" }]);
-			if (choice === "Dismiss") {
-				hub.dismiss(a);
-				return "";
-			}
-			return choice === "Later" ? "" : undefined;
+			return next(hub, id);
+		case "done":
+			return done(hub, id);
+		case "auto_on":
+			return auto(hub, id, true, hub.row(id)?.auto?.approve_plan ?? false);
+		case "auto_off":
+			return auto(hub, id, false, false);
+		case "run":
+			return stage(hub, id, c.stage!);
+		case "resume":
+			return resume(hub, id);
 	}
 	return undefined;
 }
