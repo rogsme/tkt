@@ -169,7 +169,7 @@ Without the file, tkt runs Claude Code and OpenCode on their default models. The
 
 ### State and logs
 
-tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. `-v` prints the same lines as tkt goes.
+tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. Each ticket's tabs get `TMPDIR` set to a private directory under `/tmp`, which `tkt done` removes too. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. `-v` prints the same lines as tkt goes.
 
 What has to outlive a worktree goes to `~/.local/state/tkt/history.jsonl`, one JSON event per line: when tkt started a ticket, each phase it saw it enter, each stage, each `tkt auto` step, and the merge. `tkt stats` and `tkt history` read it.
 

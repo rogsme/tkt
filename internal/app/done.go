@@ -182,9 +182,9 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 			}
 			dt.ClosedTabs = append(dt.ClosedTabs, tab)
 		}
-		started := ""
+		started, tmp := "", ""
 		if ts, err := c.readState(t.Path); err == nil {
-			started = ts.st["started"]
+			started, tmp = ts.st["started"], ts.st["tmpdir"]
 		}
 		dt.Started, dt.Merged = started, merged.MergedAt
 		if s, err := time.Parse(time.RFC3339, started); err == nil {
@@ -195,6 +195,7 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		argv := c.WT.RemoveArgv(t.ID)
 		if c.Dry {
 			c.Would(argv)
+			c.removeTmp(t.ID, tmp)
 			dt.Outcome = "planned"
 			res.Tickets = append(res.Tickets, dt)
 			continue
@@ -202,6 +203,7 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		if r := c.WT.Visible(c.Ctx, argv); !r.OK() {
 			return nil, apperr.New(apperr.WtRemoveFailed, "wt remove %s failed (see above)", t.ID)
 		}
+		c.removeTmp(t.ID, tmp)
 		c.record(history.Event{Ticket: t.ID, Event: history.Merged, PR: merged.Number, MergedAt: merged.MergedAt, OpenedAt: merged.CreatedAt})
 		c.record(history.Event{Ticket: t.ID, Event: history.Done})
 		dt.Outcome = "removed"

@@ -111,7 +111,7 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 	if err := c.lockTicket(id); err != nil {
 		return nil, err
 	}
-	tab, pane, err := c.pickPane(id, path, o.Pane, st, preset)
+	tab, pane, err := c.pickPane(id, path, o.Pane, ts, preset)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,8 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 // pickPane finds the pane for a ticket's agent: --pane, the recorded pane,
 // the agent running in the worktree, then the ticket tab's first pane. It
 // opens a tab when there is none.
-func (c *Ctx) pickPane(id, path, want string, st map[string]string, preset config.Preset) (tab, pane string, err error) {
+func (c *Ctx) pickPane(id, path, want string, ts *ticketState, preset config.Preset) (tab, pane string, err error) {
+	st := ts.st
 	agents, err := c.H.Agents(c.Ctx)
 	if err != nil {
 		return "", "", herdrErr(err)
@@ -232,7 +233,7 @@ func (c *Ctx) pickPane(id, path, want string, st map[string]string, preset confi
 		}
 		return p.TabID, pane, nil
 	}
-	tab, pane, err = c.openTab(path, c.Cfg.TabLabel(id, preset.Name))
+	tab, pane, err = c.openTab(id, path, c.Cfg.TabLabel(id, preset.Name), ts)
 	if err != nil || c.Dry {
 		return tab, pane, err
 	}

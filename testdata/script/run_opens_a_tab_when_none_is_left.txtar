@@ -7,4 +7,4 @@ realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
 resetlog
 jqedit $FAKE_DIR/herdr.json '.agents = [] | .tabs |= map(select(.tab_id == "w1:t1")) | .panes |= map(select(.pane_id == "w1:p1"))'
 exec tkt run ACM-12 address
-logged herdr tab create --workspace w1 --cwd $WT --label ACM-12 --no-focus
+logged herdr tab create --workspace w1 --cwd $WT --label ACM-12

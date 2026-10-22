@@ -26,6 +26,7 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 - stdout carries only a command's result. Progress, warnings and dry-run lines go to stderr through `output.UI`. A child process's stdout is captured, never passed through.
 - In a dry run, a change goes through `Ctx.Would` with the exact argv a real run would execute. Use the `...Argv` builders so both paths share the command.
 - Worktrees are created and removed only through `wt`, with its hooks. Agents start only through `herdr agent start`, never by running `claude` directly.
+- A ticket's tabs open only through `openTab`, which sets `TMPDIR` to the ticket's private directory (`internal/app/tmp.go`), so two tickets' agents never share a temporary file. `tkt done` removes the directory.
 - One exception: `tkt agent` replaces tkt's own process with pi through `runner.Replacer`, which logs the command first. pi is the front end in the person's own pane, not a ticket's agent, so it does not go through `herdr agent start`.
 - Reach for the standard library first. A new dependency needs a reason in its commit message.
 - Match the surrounding code's naming and comment density. Comments say why, not what.

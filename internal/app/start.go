@@ -171,7 +171,11 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		return nil, apperr.New(apperr.AgentRunning, "an agent already runs in %s (pane %s); use tkt run or tkt resume", path, inPath[0].PaneID).
 			WithHint("tkt run %s STAGE, or tkt resume %s", id, id)
 	default:
-		if tab, pane, err = c.startTab(id, path, preset, busy); err != nil {
+		own := ts
+		if scratch {
+			own = nil
+		}
+		if tab, pane, err = c.startTab(id, path, preset, busy, own); err != nil {
 			return nil, err
 		}
 		c.save(ts, "ticket", id, "preset", preset.Name, "harness", h, "stage", stage, "tab", tab, "pane", pane, "agent", name, "status", "tab")
@@ -237,8 +241,9 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 }
 
 // startTab reuses the ticket's idle tab in this workspace, or opens one. busy
-// is the advice for a tab that is in use.
-func (c *Ctx) startTab(id, path string, preset config.Preset, busy string) (tab, pane string, err error) {
+// is the advice for a tab that is in use; ts is the ticket's state, or nil
+// for a scratch worktree.
+func (c *Ctx) startTab(id, path string, preset config.Preset, busy string, ts *ticketState) (tab, pane string, err error) {
 	tabs, err := c.H.Tabs(c.Ctx)
 	if err != nil {
 		return "", "", herdrErr(err)
@@ -273,17 +278,25 @@ func (c *Ctx) startTab(id, path string, preset config.Preset, busy string) (tab,
 		c.UI.Info("reusing tab %s", t.TabID)
 		return t.TabID, own[0].PaneID, nil
 	}
-	return c.openTab(path, c.Cfg.TabLabel(id, preset.Name))
+	return c.openTab(id, path, c.Cfg.TabLabel(id, preset.Name), ts)
 }
 
-// openTab opens a tab for the ticket, or reports it in a dry run.
-func (c *Ctx) openTab(path, label string) (tab, pane string, err error) {
+// openTab opens a tab for the ticket, or reports it in a dry run. The tab's
+// TMPDIR is the ticket's own directory; a scratch worktree, with no ts, gets
+// none.
+func (c *Ctx) openTab(id, path, label string, ts *ticketState) (tab, pane string, err error) {
 	ws := c.Getenv("HERDR_WORKSPACE_ID")
+	var env []string
+	if ts != nil {
+		if d := c.ticketTmp(id, ts); d != "" {
+			env = append(env, "TMPDIR="+d)
+		}
+	}
 	if c.Dry {
-		c.Would(herdr.TabCreateArgv(ws, path, label))
+		c.Would(herdr.TabCreateArgv(ws, path, label, env...))
 		return "<tab>", "<pane>", nil
 	}
-	tab, pane, err = c.H.TabCreate(c.Ctx, ws, path, label)
+	tab, pane, err = c.H.TabCreate(c.Ctx, ws, path, label, env...)
 	return tab, pane, herdrErr(err)
 }
 

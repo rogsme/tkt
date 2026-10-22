@@ -150,7 +150,7 @@ func (a *App) Resume(ctx context.Context, o ResumeOpts) (*ResumeResult, error) {
 	if err := c.lockTicket(id); err != nil {
 		return nil, err
 	}
-	tab, pane, err := c.pickPane(id, path, "", st, preset)
+	tab, pane, err := c.pickPane(id, path, "", ts, preset)
 	if err != nil {
 		return nil, err
 	}

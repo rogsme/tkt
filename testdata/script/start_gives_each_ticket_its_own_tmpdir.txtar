@@ -1,0 +1,38 @@
+# Each ticket's tabs get TMPDIR set to a private directory, so two tickets'
+# agents never write the same temporary file. tkt done removes it with the
+# worktree.
+exec tkt start ACM-12
+statevar $FAKE_WT_ROOT/ACM-12 tmpdir TMP
+exists $TMP
+exec echo $TMP
+stdout '/tkt-acme-app-ACM-12-[0-9]+$'
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label ACM-12 --env TMPDIR=$TMP --no-focus
+jqeq $FAKE_DIR/herdr.json '.panes[] | select(.pane_id == "w1:p10") | .env' '["TMPDIR='$TMP'"]'
+
+exec tkt start ACM-13
+statevar $FAKE_WT_ROOT/ACM-13 tmpdir TMP13
+exec echo $TMP13
+stdout '/tkt-acme-app-ACM-13-[0-9]+$'
+
+# A tab tkt opens again for the ticket gets the same directory.
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+jqedit $FAKE_DIR/herdr.json '.agents |= map(select(.pane_id != "w1:p10")) | .tabs |= map(select(.tab_id != "w1:t10")) | .panes |= map(select(.pane_id != "w1:p10"))'
+resetlog
+exec tkt run ACM-12 address
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label ACM-12 --env TMPDIR=$TMP --no-focus
+
+# tkt done removes the merged ticket's directory, and only that one.
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+realgit -C $REPO merge -q --no-ff -m 'Merge ACM-12' ACM-12
+realgit -C $REPO push -q origin main
+env FAKE_GH_PRS=$WORK/prs.json
+exec tkt done ACM-12 --dry-run
+stderr 'dry run: rm -rf '$TMP
+exists $TMP
+exec tkt done ACM-12
+! exists $TMP
+exists $TMP13
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

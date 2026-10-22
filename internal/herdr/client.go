@@ -156,12 +156,18 @@ func (c Client) AgentOnPane(ctx context.Context, pane string) (Agent, bool) {
 }
 
 // TabCreateArgv is the herdr command that opens a tab without focusing it.
-func TabCreateArgv(workspace, cwd, label string) []string {
-	return []string{"herdr", "tab", "create", "--workspace", workspace, "--cwd", cwd, "--label", label, "--no-focus"}
+// env holds KEY=VALUE pairs for the tab's shell, and so for the agent tkt
+// starts at its prompt.
+func TabCreateArgv(workspace, cwd, label string, env ...string) []string {
+	argv := []string{"herdr", "tab", "create", "--workspace", workspace, "--cwd", cwd, "--label", label}
+	for _, kv := range env {
+		argv = append(argv, "--env", kv)
+	}
+	return append(argv, "--no-focus")
 }
 
 // TabCreate opens a tab and returns it with its first pane.
-func (c Client) TabCreate(ctx context.Context, workspace, cwd, label string) (tab, pane string, err error) {
+func (c Client) TabCreate(ctx context.Context, workspace, cwd, label string, env ...string) (tab, pane string, err error) {
 	v, err := decode[struct {
 		Tab struct {
 			ID string `json:"tab_id"`
@@ -169,7 +175,7 @@ func (c Client) TabCreate(ctx context.Context, workspace, cwd, label string) (ta
 		Root struct {
 			ID string `json:"pane_id"`
 		} `json:"root_pane"`
-	}](c.call(ctx, false, TabCreateArgv(workspace, cwd, label)[1:]...))
+	}](c.call(ctx, false, TabCreateArgv(workspace, cwd, label, env...)[1:]...))
 	return v.Tab.ID, v.Root.ID, err
 }
 

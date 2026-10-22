@@ -19,7 +19,7 @@ The script starts in `$REPO`. Files in a script's archive land in `$WORK`, so a 
 
 The fakes in `internal/fake` stand in for the real tools on `PATH`:
 
-- `herdr` keeps workspaces, tabs, panes and agents in `$FAKE_DIR/herdr.json` and answers the commands tkt uses. Environment variables inject failures, such as `FAKE_HERDR_START_ERRORS=agent_pane_busy,...` or `FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled`. A `-` in such a list lets that call succeed. `agent read` prints `$FAKE_DIR/screen` when it exists, otherwise `FAKE_HERDR_SCREEN`.
+- `herdr` keeps workspaces, tabs, panes and agents in `$FAKE_DIR/herdr.json` and answers the commands tkt uses. A pane that `tab create` opens keeps its `--env` values as `env`. Environment variables inject failures, such as `FAKE_HERDR_START_ERRORS=agent_pane_busy,...` or `FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled`. A `-` in such a list lets that call succeed. `agent read` prints `$FAKE_DIR/screen` when it exists, otherwise `FAKE_HERDR_SCREEN`.
 - In turns mode, `FAKE_HERDR_TURNS` names a JSON list of agent turns, such as `[{"screen": "Status: AWAITING_APPROVAL"}, {"screen": "...", "prs": "/path/prs.json"}]`. A prompt sets the agent working, and each `agent wait` on a working agent ends its turn with the next entry: its `status` (idle by default), its screen, and a pull request file that `gh` lists from then on. The `auto_` scripts drive whole tickets this way.
 - `wt` creates and removes real git worktrees under `$FAKE_WT_ROOT` and prints worktrunk's JSON: schema 1, or schema 2 with `FAKE_WT_SCHEMA=2`.
 - `gh` answers `pr list` from `$FAKE_DIR/prs.json` when it exists, otherwise from the JSON file in `FAKE_GH_PRS`.
