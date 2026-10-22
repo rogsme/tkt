@@ -34,7 +34,10 @@ type UpdateResult struct {
 	// Available is true when To would replace From: it is newer, it was
 	// asked for by name, or From is a development build.
 	Available bool `json:"available"`
-	Updated   bool `json:"updated"`
+	// Dev is true when From has no release version, so only --force
+	// replaces it.
+	Dev     bool `json:"dev"`
+	Updated bool `json:"updated"`
 	// Next is the command that installs To, when it is available and was
 	// not installed.
 	Next string `json:"next,omitempty"`
@@ -79,6 +82,7 @@ func (a *App) Update(ctx context.Context, o UpdateOpts) (*UpdateResult, error) {
 	res.Path = path
 
 	cmp, known := release.Compare(res.To, res.From)
+	res.Dev = !known
 	switch {
 	case !known:
 		res.Available = true

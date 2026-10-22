@@ -120,6 +120,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
 | `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |
+| `/update` | Installs a newer tkt, then offers to quit. Reopen the chat with the `tkt agent --session ID` it prints to run the new tkt. The board names a newer release when the chat finds one. |
 
 Without an `[agent]` model, pi starts on its own default: in `/model`, press Ctrl+S on a model to make it the default for new chats. An `[agent]` table in `config.toml` picks the model and loads more pi extensions, such as one that adds a model provider:
 

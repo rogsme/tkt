@@ -61,16 +61,17 @@ func TestUpdateDecides(t *testing.T) {
 		available bool
 		updated   bool
 		next      string
+		dev       bool
 	}{
-		{"v0.3.0", UpdateOpts{}, "v0.3.0", false, false, ""},
-		{"v0.4.0-rc.1", UpdateOpts{}, "v0.3.0", false, false, ""},
-		{"v0.2.0", UpdateOpts{Check: true}, "v0.3.0", true, false, "tkt update"},
-		{"v0.2.0", UpdateOpts{}, "v0.3.0", true, true, ""},
-		{"v0.3.0", UpdateOpts{Version: "v0.4.0-rc.1", Check: true}, "v0.4.0-rc.1", true, false, "tkt update v0.4.0-rc.1"},
-		{"v0.4.0-rc.1", UpdateOpts{Version: "v0.3.0"}, "v0.3.0", true, true, ""},
-		{"v0.3.0", UpdateOpts{Force: true}, "v0.3.0", false, true, ""},
-		{"dev", UpdateOpts{Check: true}, "v0.3.0", true, false, "tkt update --force"},
-		{"dev", UpdateOpts{Force: true}, "v0.3.0", true, true, ""},
+		{"v0.3.0", UpdateOpts{}, "v0.3.0", false, false, "", false},
+		{"v0.4.0-rc.1", UpdateOpts{}, "v0.3.0", false, false, "", false},
+		{"v0.2.0", UpdateOpts{Check: true}, "v0.3.0", true, false, "tkt update", false},
+		{"v0.2.0", UpdateOpts{}, "v0.3.0", true, true, "", false},
+		{"v0.3.0", UpdateOpts{Version: "v0.4.0-rc.1", Check: true}, "v0.4.0-rc.1", true, false, "tkt update v0.4.0-rc.1", false},
+		{"v0.4.0-rc.1", UpdateOpts{Version: "v0.3.0"}, "v0.3.0", true, true, "", false},
+		{"v0.3.0", UpdateOpts{Force: true}, "v0.3.0", false, true, "", false},
+		{"dev", UpdateOpts{Check: true}, "v0.3.0", true, false, "tkt update --force", true},
+		{"dev", UpdateOpts{Force: true}, "v0.3.0", true, true, "", true},
 	}
 	for _, tc := range cases {
 		a, target, ran := updateApp(t, tc.version)
@@ -79,7 +80,7 @@ func TestUpdateDecides(t *testing.T) {
 			t.Errorf("%s %+v: %v", tc.version, tc.opts, err)
 			continue
 		}
-		if res.To != tc.to || res.Available != tc.available || res.Updated != tc.updated || res.Next != tc.next {
+		if res.To != tc.to || res.Available != tc.available || res.Updated != tc.updated || res.Next != tc.next || res.Dev != tc.dev {
 			t.Errorf("%s %+v: got %+v", tc.version, tc.opts, res)
 		}
 		b, _ := os.ReadFile(target)

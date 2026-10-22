@@ -182,4 +182,9 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		getArgumentCompletions: ids,
 		handler: async (args) => say(await act.stats(hub, expandIds(args, hub.key))),
 	});
+
+	pi.registerCommand("update", {
+		description: "Install the newest tkt, then quit so you reopen the chat on it",
+		handler: async (_args, ctx) => act.update(hub, ctx),
+	});
 }

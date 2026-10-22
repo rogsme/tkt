@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { attentionOf } from "../attention.ts";
-import { boardColumns, boardLines, columnOf, grid, order, statusText, title } from "../board.ts";
+import { boardColumns, boardLines, columnOf, footer, grid, order, statusText, title } from "../board.ts";
 import { row } from "./fixtures.ts";
 
 const now = Date.parse("2026-01-01T02:00:00Z");
@@ -70,4 +70,10 @@ test("the columns hold each phase once", () => {
 	assert.match(g[0], /^Needs you \(0\)/);
 	assert.ok(g.some((l) => l.includes(">ACM-10")));
 	assert.ok(g.every((l) => l.length <= 80));
+});
+
+test("the board's footer names a newer tkt first", () => {
+	const s = { rows: [], jobs: new Map<string, string>(), items: [], now, tick: 0, repo: "app" };
+	assert.equal(footer(s), "/board  /inbox  /board hide");
+	assert.equal(footer({ ...s, update: "v0.4.0" }), "/update to v0.4.0  /board  /inbox  /board hide");
 });

@@ -24,9 +24,14 @@ The same actions work without the model as slash commands: /start (add "as
 PRESET" for a preset), /approve, /next, /auto, /send, /show, /peek (the
 agent's live screen), /check (the human verification checklist), /done,
 /inbox (what needs you, with fixed answers), /board (every ticket in columns),
-/history and /stats. A tool that changes a ticket your message did not name
-asks first, and removing a ticket always asks. Text for a busy agent waits in
-a queue and goes in when the agent stops.
+/history, /stats and /update. A tool that changes a ticket your message did
+not name asks first, and removing a ticket always asks. Text for a busy agent
+waits in a queue and goes in when the agent stops.
+
+The chat checks for a newer tkt release when it opens and every six hours,
+and names it under the board. /update installs it with tkt update, then offers
+to quit: the chat runs the old tkt until you reopen it with the command it
+prints. A development build gets no notice, and /update does not replace it.
 
 Tickets in auto run in tkt auto loops that outlive the chat, so they keep
 moving, and notify you, after you close it. A loop that pauses for you goes on

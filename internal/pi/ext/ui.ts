@@ -5,7 +5,7 @@
 
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { type BoardState, boardColumns, boardLines, grid, order, title } from "./board.ts";
+import { type BoardState, boardColumns, boardLines, footer, grid, order, title } from "./board.ts";
 import { type Row, type Stamp, stampText } from "./model.ts";
 import { cycle, type Mark } from "./report.ts";
 
@@ -131,7 +131,7 @@ export function hud(theme: Theme, state: () => BoardState, rows: () => number): 
 			let lines = boardLines(s, Math.max(10, width - 4));
 			const max = Math.max(2, Math.floor(h * 0.4) - 2);
 			if (lines.length > max) lines = [...lines.slice(0, max - 1), { text: `${lines.length - max + 1} more lines: /board shows every ticket, /inbox what needs you`, tone: "muted" }];
-			return frame(theme, width, title(s), lines.map((l) => paint(theme, l.tone, l.text)), "/board  /inbox  /board hide");
+			return frame(theme, width, title(s), lines.map((l) => paint(theme, l.tone, l.text)), footer(s));
 		},
 		invalidate() {},
 	};
