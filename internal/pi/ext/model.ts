@@ -26,6 +26,8 @@ export interface Row {
 	pr: { number: number; state: string; mergeable?: string; head?: string } | null;
 	checks: { state: string; total: number; failing: string[]; pending: number } | null;
 	review: { verdict: string; head: string; at_head: boolean } | null;
+	/** behind counts the base's commits the branch lacks, or null. */
+	behind?: number | null;
 	next: Next;
 	stage: string;
 	launch: string;

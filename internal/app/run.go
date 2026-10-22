@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"gitlab.com/rogs/tkt/internal/agent"
@@ -67,8 +68,11 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 	}
 	c.ticket(id)
 	if !o.Prompt.Set {
-		if text, err = c.Cfg.StageLine(o.Stage, id); err != nil {
+		if text, err = c.stageLine(o.Stage, id); err != nil {
 			return nil, err
+		}
+		if o.Stage == "sync" && !slices.Contains(c.Cfg.OwnStages, "sync") {
+			a.UI.Warn("the sync stage is address under its old name, and the next release drops it; tkt sync %s merges the base without an agent when it can, and tkt run %s address answers the review", id, id)
 		}
 	}
 	if err := prompt.Guard(text, o.Force); err != nil {
@@ -171,6 +175,12 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 	c.record(history.Event{Ticket: id, Event: history.Stage, Stage: stage})
 	res.Actions = c.Plan
 	return res, nil
+}
+
+// stageLine fills a stage's line for a ticket, with the forge's remote and
+// base branch.
+func (c *Ctx) stageLine(stage, id string) (string, error) {
+	return c.Cfg.StageLine(stage, id, "remote", c.LC.Forge.Remote, "base", c.LC.Forge.Base)
 }
 
 // pickPane finds the pane for a ticket's agent: --pane, the recorded pane,

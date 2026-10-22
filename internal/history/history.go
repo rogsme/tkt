@@ -25,6 +25,8 @@ const (
 	Done     = "done"
 	// Hold is a ticket put on hold (Action on) or taken off it (off).
 	Hold = "hold"
+	// Sync is a base merge tkt made and pushed itself (Action merged).
+	Sync = "sync"
 )
 
 // Event is one line of the history.

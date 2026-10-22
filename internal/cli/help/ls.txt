@@ -22,8 +22,8 @@ The next step is the first of these rules that matches:
      draft waits for your approval: do it in the tab.
   5. The checks are pending: wait for CI.
   6. The review says the base moved, the pull request conflicts, or the agent
-     said BLOCKED_FOR_SYNC with the branch behind the base: tkt run ID
-     address, which merges the base first.
+     said BLOCKED_FOR_SYNC with the branch behind the base: tkt sync ID, which
+     merges a clean base itself and hands a conflict to a fresh session.
   7. The merge stopped with HUMAN_QA_FAILED, or the review at the head has
      findings: tkt run ID address.
   8. The checks fail: tkt run ID ci.

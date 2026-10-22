@@ -1,0 +1,51 @@
+# tkt sync merges a base that merges clean itself, with a merge commit and a
+# normal push, and starts no agent.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+cp $WORK/ticket.txt $WT/ticket.txt
+realgit -C $WT add ticket.txt
+realgit -C $WT commit -q -m 'ACM-12 work'
+realgit -C $WT push -q origin ACM-12
+gitvar OLD $WT HEAD
+cp $WORK/other.txt $REPO/other.txt
+realgit -C $REPO add other.txt
+realgit -C $REPO commit -q -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+gitvar BASE $REPO HEAD
+
+# A dry run says what it would run, and changes nothing.
+resetlog
+exec tkt sync ACM-12 --dry-run
+stderr 'dry run: git -C '$WT' merge --no-ff --no-edit -m '
+stderr 'dry run: git -C '$WT' push --quiet origin HEAD:refs/heads/ACM-12'
+gitvar SAME $WT HEAD
+exec echo $SAME
+stdout ^$OLD
+
+resetlog
+exec tkt sync ACM-12
+stdout 'ACM-12  merged origin/main \([0-9a-f]{7}\) and pushed [0-9a-f]{7}'
+logged git -C $REPO fetch --prune --quiet origin
+logged git -C $WT merge-tree --write-tree --name-only --no-messages $OLD $BASE
+logged git -C $WT push --quiet origin HEAD:refs/heads/ACM-12
+! logcontains 'herdr agent start'
+! logcontains 'herdr agent prompt'
+realgit -C $WT log -1 --format=%P%n%s
+stdout '^'$OLD' '$BASE'$'
+stdout '^Merge remote-tracking branch ''origin/main'' into ACM-12$'
+gitvar NEW $WT HEAD
+realgit -C $WORK/origin.git rev-parse ACM-12
+stdout ^$NEW
+grep '"ticket":"ACM-12","event":"sync","action":"merged"' $HOME/.local/state/tkt/history.jsonl
+exec tkt history ACM-12
+stdout 'merged the base, with no agent'
+
+# Once the branch holds the base, there is nothing to do.
+exec tkt sync ACM-12 --json
+envelope '.result | [.outcome, .new_head]' '["up_to_date",""]'
+houserules
+
+-- ticket.txt --
+ACM-12's change.
+-- other.txt --
+Another ticket's change.

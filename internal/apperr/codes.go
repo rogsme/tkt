@@ -87,6 +87,10 @@ const (
 	NoVerification      Code = "no_verification_steps"
 	AutoRunning         Code = "auto_running"
 	AutoStopped         Code = "auto_stopped"
+	WorktreeDirty       Code = "worktree_dirty"
+	BranchNotPushed     Code = "branch_not_pushed"
+	UnpushedCommits     Code = "unpushed_commits"
+	SyncConflict        Code = "sync_conflict"
 
 	WtFailed          Code = "wt_failed"
 	WtSwitchFailed    Code = "wt_switch_failed"
@@ -177,6 +181,10 @@ var Registry = []Info{
 	{NoVerification, ExitState, "no review says READY_FOR_HUMAN at the pull request's head with Human verification steps"},
 	{AutoRunning, ExitState, "a tkt auto loop already drives the ticket"},
 	{AutoStopped, ExitState, "tkt auto stopped because the ticket needs a person; details.stop says why"},
+	{WorktreeDirty, ExitState, "the ticket's worktree has uncommitted changes or a merge in progress"},
+	{BranchNotPushed, ExitState, "the ticket's branch is not on the remote yet"},
+	{UnpushedCommits, ExitState, "the ticket's branch has commits that are not on the remote"},
+	{SyncConflict, ExitState, "merging the base conflicts, and --no-agent kept tkt sync from starting a session to resolve it"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},

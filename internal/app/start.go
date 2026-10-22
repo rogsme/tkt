@@ -116,7 +116,7 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 	if scratch {
 		again, stage, busy = "tkt start --scratch "+id, "", "close it"
 	} else if !o.Prompt.Set {
-		text, _ = c.Cfg.StageLine("start", id)
+		text, _ = c.stageLine("start", id)
 	}
 	if o.Unattended && !scratch {
 		sep := " "

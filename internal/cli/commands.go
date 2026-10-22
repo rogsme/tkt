@@ -168,6 +168,36 @@ func runCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func syncCmd(g *globals) *cobra.Command {
+	var o app.SyncOpts
+	cmd := &cobra.Command{
+		Use:   "sync ID",
+		Short: "Merge the base into the ticket's branch: itself when clean, through a fresh session on a conflict",
+		Long:  helpText("sync"),
+		Example: `  tkt sync ACM-12
+  tkt sync ACM-12 --dry-run
+  tkt sync ACM-12 --no-agent --json`,
+		SuggestFor:        []string{"merge", "update", "rebase"},
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt sync ID")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Sync(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.As, "as", "", "run the session that resolves a conflict on PRESET instead of the ticket's")
+	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
+	cmd.Flags().BoolVar(&o.NoAgent, "no-agent", false, "stop at a conflict instead of starting a session to resolve it")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
+	return cmd
+}
+
 func approveCmd(g *globals) *cobra.Command {
 	var o app.ApproveOpts
 	cmd := &cobra.Command{

@@ -75,6 +75,8 @@ func stepText(s AutoStep) string {
 		return "started"
 	case actApprove:
 		return "approved the plan"
+	case actSync:
+		return "merged the base"
 	}
 	return "ran " + s.Stage
 }
@@ -164,6 +166,7 @@ const (
 	actStart   = "start"
 	actApprove = "approve"
 	actRun     = "run"
+	actSync    = "sync"
 	actStop    = "stop"
 	actPause   = "pause"
 )
@@ -241,7 +244,14 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 		return pause(StopPlan)
 	case ReasonBotSilent:
 		return pause(StopBotSilent)
-	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings:
+	case ReasonBaseMoved:
+		// A clean merge needs no agent: tkt sync makes it, and it spends no
+		// fix round. A conflict needs the session that resolves it.
+		if f.BaseMerge == "conflict" || f.BaseMerge == "" && f.Mergeable == "CONFLICTING" {
+			return fix("resolve")
+		}
+		return act(actSync, "")
+	case ReasonQAFailed, ReasonFindings:
 		return fix("address")
 	case ReasonChecksFail:
 		return fix("ci")
@@ -383,7 +393,7 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 			}
 			v = again
 		}
-		if !once && !dry {
+		if !once && !dry && a.Kind != actSync {
 			waited, err := w.holdSlot(ctx)
 			if err != nil {
 				return nil, err
@@ -412,8 +422,9 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 
 // Auto drives a ticket through the lifecycle until it needs a person: it
 // starts the ticket when it has no worktree, approves the plan with
-// --approve-plan, waits for CI and the review bot, and runs review, address,
-// sync and ci in fresh sessions. It never merges.
+// --approve-plan, waits for CI and the review bot, merges a moved base
+// itself when the merge is clean, and runs review, address, resolve and ci
+// in fresh sessions. It never merges the pull request.
 func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 	if o.Dry && !o.Once {
 		return nil, apperr.New(apperr.Usage, "--dry-run needs --once: a dry run takes one step").WithHint("tkt auto %s --once --dry-run", o.ID)
@@ -544,7 +555,7 @@ func (w *ctxWorld) look(ctx context.Context, fetch bool) (autoView, error) {
 		}
 		w.path = e.Path
 	}
-	l, err := c.look(lookOpts{ids: []string{w.id}, fetch: fetch})
+	l, err := c.look(lookOpts{ids: []string{w.id}, fetch: fetch, probe: true})
 	if err != nil {
 		return autoView{}, err
 	}
@@ -615,6 +626,14 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 	case actRun:
 		res, err := c.App.Run(ctx, RunOpts{ID: w.id, Stage: a.Stage, As: w.as, Dry: c.Dry})
 		if err != nil {
+			return err
+		}
+		actions = res.Actions
+	case actSync:
+		res, err := c.App.Sync(ctx, SyncOpts{ID: w.id, NoAgent: true, Dry: c.Dry})
+		// The base moved again since the look, and now conflicts: the next
+		// look sees the conflict and runs resolve.
+		if err != nil && apperr.As(err).Code != apperr.SyncConflict {
 			return err
 		}
 		actions = res.Actions

@@ -188,9 +188,10 @@ func wordWrap(s string, width int) []string {
 	return append(lines, line)
 }
 
-// Minimum versions tkt supports.
+// Minimum versions tkt supports. git 2.38 brought git merge-tree
+// --write-tree, which tkt sync merges the base with first.
 const (
-	minGit   = "2.31"
+	minGit   = "2.38"
 	minWT    = "0.68"
 	minHerdr = "0.9.3"
 )

@@ -1,0 +1,64 @@
+# tkt sync changes a branch only when it can do so safely.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'ACM-12 work'
+
+# A branch that was never pushed has no pull request to sync.
+! exec tkt sync ACM-12 --json
+rc 4
+envelope '.error.code' branch_not_pushed
+
+realgit -C $WT push -q origin ACM-12
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+
+# Uncommitted changes stay the agent's.
+cp $WORK/note.txt $WT/note.txt
+! exec tkt sync ACM-12 --json
+envelope '.error.code' worktree_dirty
+rm $WT/note.txt
+
+# So do commits the agent has not pushed yet.
+realgit -C $WT commit -q --allow-empty -m 'not pushed yet'
+! exec tkt sync ACM-12 --json
+envelope '.error.code' unpushed_commits
+realgit -C $WT reset -q --hard HEAD~1
+
+# A working agent may be about to commit.
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+! exec tkt sync ACM-12 --json
+envelope '.error.code' agent_busy
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+
+# When someone pushed to the branch, tkt sync fast-forwards to it first.
+realgit -C $REPO fetch -q origin
+realgit -C $REPO branch -q pushed origin/ACM-12
+realgit -C $REPO worktree add -q $WORK/elsewhere pushed
+realgit -C $WORK/elsewhere commit -q --allow-empty -m 'pushed from elsewhere'
+realgit -C $WORK/elsewhere push -q origin pushed:ACM-12
+gitvar PUSHED $WORK/elsewhere HEAD
+
+# A push that fails leaves the branch where it was.
+cp $WORK/pre-receive $WORK/origin.git/hooks/pre-receive
+chmod 755 $WORK/origin.git/hooks/pre-receive
+! exec tkt sync ACM-12
+rc 1
+stderr 'git push to origin failed: .*; tkt undid its merge'
+gitvar AFTER $WT HEAD
+exec echo $AFTER
+stdout ^$PUSHED
+realgit -C $WT status --porcelain
+! stdout .
+
+rm $WORK/origin.git/hooks/pre-receive
+exec tkt sync ACM-12
+stdout 'ACM-12  merged origin/main'
+realgit -C $WT log -1 --format=%P
+stdout '^'$PUSHED' '
+
+-- note.txt --
+work in progress
+-- pre-receive --
+#!/bin/sh
+echo "pushes are closed" >&2
+exit 1

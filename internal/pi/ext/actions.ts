@@ -71,6 +71,13 @@ export function stage(hub: Hub, id: string, name: string, as = ""): string {
 	return `Queued: ${name} for ${id} in a fresh session${as ? ` on ${as}` : ""}. The board shows when it needs you.`;
 }
 
+/** sync merges the base into the ticket's branch in the background: tkt
+ * itself when the merge is clean, a fresh session on a conflict. */
+export function sync(hub: Hub, id: string): string {
+	hub.add({ ticket: id, label: "sync", args: ["sync", id] });
+	return `Queued: tkt sync for ${id}. It merges the base itself when the merge is clean, and hands a conflict to a fresh session.`;
+}
+
 /** resume relaunches the ticket's newest session when no agent runs for it. */
 export function resume(hub: Hub, id: string): string {
 	hub.add({ ticket: id, label: "resume", args: ["resume", id] });
@@ -202,6 +209,17 @@ export function restoreMarks(entries: { type: string; customType?: string; data?
 /** check walks the human verification steps: verify first if you want,
  * then the checklist, then a fix session for a failed step. */
 export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promise<string> {
+	// Your steps should run on the code that will merge.
+	const behind = hub.row(id)?.behind ?? 0;
+	if (behind > 0) {
+		const n = `${behind} commit${behind === 1 ? "" : "s"}`;
+		const a = await ask(ctx, `${id} is ${n} behind its base. Sync it first?`, [
+			{ label: "Sync first", description: "tkt sync merges the base; the new head gets a review, then /check again." },
+			{ label: "Verify this head anyway" },
+		], false);
+		if (!a) return "Closed.";
+		if (a.answer.startsWith("Sync")) return `${sync(hub, id)} /check ${id} again once the new head is reviewed.`;
+	}
 	const first = await ask(ctx, `${id}: how do you want to verify?`, [
 		{ label: "Open the checklist", description: "Mark each human verification step as you run it." },
 		{ label: "Run tkt run verify first", description: "An agent runs the steps in a browser and reports; it changes nothing. /check again when it is done." },

@@ -27,6 +27,7 @@ var resultTypes = map[string]any{
 	"show":    app.ShowResult{},
 	"history": app.HistoryResult{},
 	"run":     app.RunResult{},
+	"sync":    app.SyncResult{},
 	"resume":  app.ResumeResult{},
 	"done":    app.DoneResult{},
 	"ls":      app.LsResult{},

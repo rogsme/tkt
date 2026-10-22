@@ -79,6 +79,11 @@ var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`
 // tkt approve sends, ask for.
 var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr"}
 
+// ResolveSkill is the engineering skill the resolve stage line asks for. It
+// resolves a merge that stopped on conflicts, keeps it a merge, and asks the
+// user about a hunk that decides product behavior.
+const ResolveSkill = "resolving-merge-conflicts"
+
 // Unattended is the word start-ticket's "Unattended runs" section looks for
 // in its request: the run skips the browser presentation, and every open
 // question goes through the harness's question tool.

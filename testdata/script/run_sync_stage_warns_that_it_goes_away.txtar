@@ -1,0 +1,17 @@
+# The sync stage is address under its old name. tkt run still sends it, and
+# warns that the next release drops it for tkt sync.
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+exec tkt run ACM-12 sync
+stderr 'the sync stage is address under its old name, and the next release drops it; tkt sync ACM-12 merges the base without an agent when it can'
+grep 'Use the address-pr-review skill to address the review' $FAKE_DIR/prompts
+
+# A sync stage of your own gets no warning.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt run ACM-12 sync
+! stderr 'old name'
+
+-- config.toml --
+[stages]
+sync = "Merge the base, then stop."

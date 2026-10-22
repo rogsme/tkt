@@ -1,0 +1,28 @@
+tkt sync brings the ticket's branch up to date with its base, without an
+agent whenever it can. It fetches, then merges the base in memory with git
+merge-tree, which touches neither the worktree nor the branch:
+
+  - When the merge is clean, tkt makes the merge commit itself and pushes it,
+    in seconds. CI and the review bot then run on the new head.
+  - When it conflicts, a fresh session runs the resolve stage: it merges the
+    base, resolves the conflicts with the resolving-merge-conflicts skill,
+    changes nothing else, and pushes once. Review findings stay for address.
+    --no-agent stops at the conflict instead, with exit 4.
+  - When the branch already contains the base, it does nothing.
+
+It never rebases and never force-pushes. A merge commit tkt made counts as
+clean for the review brief: its tree equals what git merge-tree gives for
+its two parents, which review-pr checks for itself.
+
+tkt sync refuses while an agent works in the worktree, while the worktree has
+uncommitted changes, before the branch is on the remote, and when the branch
+has commits the remote lacks, since it pushes only its own merge. When
+someone pushed to the branch since the worktree last moved, it fast-forwards
+first. When the push fails, it undoes its merge, so the branch stays as it
+was.
+
+Sync at the moments a ticket needs it: the pull request conflicts, a review
+cannot happen because the base moved (the bot's STALE_BASE, or review-pr's
+BLOCKED_FOR_SYNC), or a merge is due and finish-ticket stopped with
+BLOCKED_FOR_SYNC. tkt ls suggests it then, and tkt auto runs it. Syncing on
+every move of the base costs a CI run and a review per ticket for nothing.

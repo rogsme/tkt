@@ -89,7 +89,7 @@ function rerun(row: Row, label: (stage: string) => string, description: string):
 const nextSteps: Record<string, string> = {
 	needs_review: "the pull request waits for review-pr",
 	findings: "the review has findings to address",
-	base_moved: "the base moved; address merges it",
+	base_moved: "the base moved; tkt sync merges it",
 	checks_fail: "the checks fail",
 	qa_failed: "human verification failed",
 };

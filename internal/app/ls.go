@@ -89,7 +89,11 @@ type Row struct {
 	Checks     *forge.Checks  `json:"checks"`
 	Review     *forge.Verdict `json:"review"`
 	Behind     *int           `json:"behind"`
-	Next       Next           `json:"next"`
+	// BaseMerge says how merging the base into a pull request that is
+	// behind would go, clean or conflict, when tkt auto or tkt watch tried
+	// it with git merge-tree; tkt ls leaves it "".
+	BaseMerge string `json:"base_merge"`
+	Next      Next   `json:"next"`
 	// Stage is the stage tkt last gave the ticket's agent, and Launch how
 	// its launch went (the state file's status).
 	Stage  string   `json:"stage"`
@@ -416,6 +420,7 @@ type look struct {
 	gh        forge.GH
 	baseRef   string
 	hasBase   bool
+	probe     bool
 	// forgeErr is a failed pull request query. When the open pull requests
 	// failed, src.Forge is failed too; when only the full list failed, the
 	// open ones still count.
@@ -424,17 +429,20 @@ type look struct {
 
 // lookOpts says what to read. With one to three ids, pull requests are read
 // by head branch, which no list limit can cut off. tabs is off for callers
-// that never show them, which saves a herdr call per workspace.
+// that never show them, which saves a herdr call per workspace. probe tries
+// the base merge of each open pull request that is behind, for the callers
+// that act on it.
 type lookOpts struct {
 	ids   []string
 	fetch bool
 	tabs  bool
+	probe bool
 }
 
 // look reads herdr, the forge and, when asked, the remote, in parallel.
 func (c *Ctx) look(o lookOpts) (*look, error) {
 	f := c.LC.Forge
-	l := &look{src: Sources{Herdr: "unavailable", Forge: "unsupported", Fetch: "skipped"}}
+	l := &look{src: Sources{Herdr: "unavailable", Forge: "unsupported", Fetch: "skipped"}, probe: o.probe}
 	haveHerdr := c.Getenv("HERDR_ENV") == "1" && found("herdr")
 	l.gh = forge.GH{R: c.R, Repo: f.Host + "/" + f.Repo, Name: f.Repo}
 	haveGH := f.Kind == "GitHub" && found("gh") && f.Host != "" && f.Repo != ""
@@ -559,6 +567,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			row.Behind = &n
 		}
 	}
+	if l.probe && row.PR != nil && row.PR.State == "OPEN" && row.Behind != nil && *row.Behind > 0 {
+		row.BaseMerge = c.probeBaseMerge(rctx, t.Path, row.PR.Head, l.baseRef)
+	}
 	pf := state.Read(phasePath(ts))
 	f := factsFor(row)
 	f.BotWait = c.Cfg.Review.BotWait
@@ -584,6 +595,23 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		}
 	}
 	return row, f
+}
+
+// probeBaseMerge tries merging the base into the pull request's head, or
+// into the worktree's HEAD when the head is not here, without touching the
+// worktree. It returns clean, conflict, or "" when git cannot tell.
+func (c *Ctx) probeBaseMerge(ctx context.Context, path, head, base string) string {
+	if head == "" || c.Git.Rev(ctx, path, head+"^{commit}") == "" {
+		head = "HEAD"
+	}
+	m, err := c.Git.MergeTree(ctx, path, head, base)
+	switch {
+	case err != nil:
+		return ""
+	case m.Clean():
+		return "clean"
+	}
+	return "conflict"
 }
 
 // queuedTickets lists the tickets whose tkt auto loop waits for a slot

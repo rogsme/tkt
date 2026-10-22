@@ -158,6 +158,8 @@ func (e HistoryEvent) line() string {
 			return "taken off hold"
 		}
 		return "put on hold"
+	case history.Sync:
+		return "merged the base, with no agent"
 	}
 	return e.Event
 }

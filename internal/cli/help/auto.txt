@@ -10,9 +10,12 @@ decides. It reads the same facts as tkt ls, then:
   - approves the plan when start-ticket ends with AWAITING_APPROVAL, but only
     with --approve-plan; without it the loop pauses there for you;
   - waits for CI, then for the review bot in CI to review the new head;
-  - runs address on findings, a moved base or a conflict (address-pr-review
-    merges the base first on every run), and ci when checks fail, each in a
-    fresh session;
+  - merges a moved base itself when the merge is clean, as tkt sync does,
+    with no agent and no fix round; on a conflict it runs resolve, which only
+    merges and resolves (it runs git merge-tree on each look to tell the
+    two apart);
+  - runs address on findings, and ci when checks fail, each in a fresh
+    session;
   - ends with success when the head is reviewed clean: the bot's CLEAR, or
     review-pr's READY_FOR_HUMAN. review-pr runs only in a repository with no
     review bot, [review] bot_wait = "0s".
@@ -24,8 +27,9 @@ asks a question or ends with Status: BLOCKED (needs_you), when the plan waits
 and --approve-plan is off (plan_awaits_approval), when no agent runs
 (agent_missing), when the bot has not reviewed a head after [review] bot_wait
 (bot_silent), after [auto] max_rounds fix runs since the plan's approval
-(round_limit), and when a step would repeat on the same head with nothing
-changed (no_progress). It records the pause, which tkt ls shows as
+(round_limit), when a step would repeat on the same head with nothing
+changed (no_progress), and while the ticket is on hold (hold, with no
+notification). It records the pause, which tkt ls shows as
 auto.paused, notifies once with --notify, and goes on by itself when the
 ticket moves, such as after you answer the agent in its tab or approve the
 plan.

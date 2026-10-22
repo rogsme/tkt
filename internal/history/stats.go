@@ -137,7 +137,7 @@ func timeline(evs []Event, waiting []string, now time.Time) (Ticket, bool) {
 				t.Approved = e.At
 			}
 		case Stage:
-			if e.Stage == "address" || e.Stage == "sync" || e.Stage == "ci" {
+			if e.Stage == "address" || e.Stage == "sync" || e.Stage == "ci" || e.Stage == "resolve" {
 				t.Rounds++
 			}
 		case Auto:

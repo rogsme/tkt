@@ -45,9 +45,15 @@ func TestAutoStepTable(t *testing.T) {
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 1}, autoAct{Kind: actRun, Stage: "address"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, pause(StopRoundLimit)},
-		// address merges the base itself, so a moved base runs address.
-		{with(open, func(f *Facts) { f.Mergeable = "CONFLICTING" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "address"}},
-		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "address"}},
+		// A moved base that merges clean is tkt sync's, with no agent and
+		// no round, even past the round limit; a conflict needs resolve.
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actSync}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.BaseMerge = "STALE_BASE", true, "clean" }), AutoPolicy{MaxRounds: 1}, autoMemory{Rounds: 1}, autoAct{Kind: actSync}},
+		{with(open, func(f *Facts) { f.Mergeable, f.BaseMerge = "CONFLICTING", "clean" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actSync}},
+		{with(open, func(f *Facts) { f.Mergeable = "CONFLICTING" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "resolve"}},
+		{with(open, func(f *Facts) { f.BaseMerge = "conflict" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "resolve"}},
+		{with(open, func(f *Facts) { f.BaseMerge = "conflict" }), AutoPolicy{MaxRounds: 1}, autoMemory{Rounds: 1}, pause(StopRoundLimit)},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{Last: "sync:@h1"}, pause(StopNoProgress)},
 		{with(open, func(f *Facts) { f.Checks = "fail" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "ci"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "READY_FOR_HUMAN", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
 		{with(open, func(f *Facts) { f.LastStatus = "AWAITING_POST_APPROVAL" }), AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},

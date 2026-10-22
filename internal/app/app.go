@@ -111,11 +111,13 @@ func (a *App) begin(ctx context.Context, dry, force bool) (*Ctx, error) {
 	return c, nil
 }
 
-// release drops the locks the command took.
+// release drops the locks the command took. A command that hands a ticket
+// to another one, as tkt sync hands a conflict to tkt run, releases early.
 func (c *Ctx) release() {
 	for _, f := range c.locks {
 		f.Close()
 	}
+	c.locks = nil
 }
 
 // ticket marks the commands that follow as working on id, for the log.

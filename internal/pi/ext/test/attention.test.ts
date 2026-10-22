@@ -118,3 +118,10 @@ test("a ticket on hold shows what its agent needs, but no step to take", () => {
 	assert.equal(attentionOf(row({ ...fix, auto: auto({ paused: "hold" }) }), false), undefined);
 	assert.equal(attentionOf(row({ ...fix, auto: auto({ running: false }) }), false), undefined);
 });
+
+test("a moved base waits for tkt sync", () => {
+	const a = attentionOf(row({ phase: "needs_fix", next: { kind: "command", reason: "base_moved", argv: ["tkt", "sync", "ACM-12"], text: "tkt sync ACM-12" } }), false);
+	assert.equal(a?.kind, "next");
+	assert.equal(a?.title, "the base moved; tkt sync merges it");
+	assert.equal(a?.offers, undefined);
+});

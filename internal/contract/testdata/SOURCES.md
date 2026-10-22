@@ -10,10 +10,13 @@ Each fixture copies text that another project produces, so a change there shows 
 | `summary-ready-verification.txt` | gitlab.com/rogs/skills `skills/lifecycle/review-pr/references/summary.md`, the ready summary "followed by a `## Human verification` section holding the final numbered procedure", with a procedure written for Acme to the standard in `skills/lifecycle/setup-rogs/assets/workflow.md` `## Human verification` | `33d185b` |
 | `status-lines.md` | gitlab.com/rogs/skills `CLAUDE.md`, the "Status lines" registry | `26cfa58` |
 | `start-ticket-unattended.md` | gitlab.com/rogs/skills `skills/lifecycle/start-ticket/SKILL.md`, the `## Unattended runs` section | `619ef65` |
+| `resolving-merge-conflicts.md` | gitlab.com/rogs/skills `skills/engineering/resolving-merge-conflicts/SKILL.md`, whole | `b502691` |
 | `automated-review.txt` | the forge's automated reviewer, not a skill: its review summary line | none |
 
 `config.ApproveLine`, the line tkt approve sends, relies on work-ticket's trigger: the skill runs "when the user approves the plan and says ... execute the plan" (gitlab.com/rogs/skills `skills/lifecycle/work-ticket/SKILL.md`, `33d185b`).
 
 `config.UnattendedLine`, which `tkt auto --approve-plan` adds to the start line, relies on that `## Unattended runs` section: start-ticket reads the word "unattended" in its request, skips the browser presentation, and asks every open question through the harness's question tool (gitlab.com/rogs/skills, `619ef65`, merged in `b6f9d9c`).
 
-The built-in `sync` stage sends the same line as `address`: address-pr-review merges the base first on every run, so one line covers a moved base and review feedback (gitlab.com/rogs/skills `skills/lifecycle/address-pr-review/SKILL.md`, `26cfa58`).
+The built-in `sync` stage sends the same line as `address`: address-pr-review merges the base first on every run, so one line covers a moved base and review feedback (gitlab.com/rogs/skills `skills/lifecycle/address-pr-review/SKILL.md`, `26cfa58`). `tkt run` warns that it goes away in the next release, since `tkt sync` replaces it.
+
+The built-in `resolve` stage, which `tkt sync` starts when the base merge conflicts, names `resolving-merge-conflicts`. The line relies on what the fixture says: the skill takes over a merge another party started, keeps it a merge, asks about a hunk that decides product behavior, and concludes with `git commit --no-edit`.

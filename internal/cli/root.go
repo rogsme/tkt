@@ -144,7 +144,7 @@ a repository with the lifecycle configuration, tkt alone opens it too.`,
 	)
 	root.SetHelpCommandGroupID("setup")
 	root.SetCompletionCommandGroupID("setup")
-	for _, c := range []*cobra.Command{agentCmd(g), startCmd(g), approveCmd(g), sendCmd(g), autoCmd(g), holdCmd(g), runCmd(g), resumeCmd(g), doneCmd(g)} {
+	for _, c := range []*cobra.Command{agentCmd(g), startCmd(g), approveCmd(g), sendCmd(g), autoCmd(g), holdCmd(g), runCmd(g), syncCmd(g), resumeCmd(g), doneCmd(g)} {
 		c.GroupID = "lifecycle"
 		root.AddCommand(c)
 	}

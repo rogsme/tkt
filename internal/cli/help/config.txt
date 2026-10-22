@@ -22,7 +22,8 @@ A Claude Code model reads model#effort, such as "opus#high". An OpenCode model
 reads provider/model#variant.
 
 Stages are the lines tkt run sends. A [stages] table overrides the built-in
-ones or adds your own; {id} becomes the ticket id:
+ones or adds your own; {id} becomes the ticket id, and {remote} and {base} the
+remote and base branch the forge configuration names:
 
   [stages]
   address = "Use the address-pr-review skill to address the review on this branch's pull request."

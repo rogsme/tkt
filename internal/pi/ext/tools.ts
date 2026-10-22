@@ -138,7 +138,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_continue",
 		label: "tkt continue",
-		description: "Take a ticket's next step, as tkt auto would: start, approve when allowed, review, address, sync or ci. Use it when the user says continue, go on or next for a ticket.",
+		description: "Take a ticket's next step, as tkt auto would: start, approve when allowed, sync, review, address, resolve or ci. Use it when the user says continue, go on or next for a ticket.",
 		parameters: Type.Object({ ticket }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
@@ -151,13 +151,26 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_stage",
 		label: "tkt run",
-		description: "Queue a stage in a fresh session: review, address (which merges the base first, so it also syncs), ci, verify or start. Prefer tkt_continue, which picks the stage itself. Never run review where the repository has a review bot in CI unless the user asks for it.",
-		parameters: Type.Object({ ticket, stage: Type.String({ description: "review, address, ci, verify, start, or a stage from config.toml" }), as: preset }),
+		description: "Queue a stage in a fresh session: review, address (which merges the base first), resolve, ci, verify or start. Prefer tkt_continue, which picks the stage itself, and tkt_sync for a moved base. Never run review where the repository has a review bot in CI unless the user asks for it.",
+		parameters: Type.Object({ ticket, stage: Type.String({ description: "review, address, resolve, ci, verify, start, or a stage from config.toml" }), as: preset }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
 			if (!(await guard(hub, ctx, [t], `Run ${p.stage} for ${t}?`, "It replaces the ticket's idle agent with a fresh session."))) return text("The user did not confirm; nothing ran.");
 			return text(act.stage(hub, t, p.stage, p.as ?? ""));
+		},
+	});
+
+	pi.registerTool({
+		name: "tkt_sync",
+		label: "tkt sync",
+		description: "Queue tkt sync, which merges the base into a ticket's branch: tkt makes and pushes the merge itself when it is clean, and a fresh session resolves a conflict. Use it when the user asks to sync a ticket, or to bring it up to date with main.",
+		parameters: Type.Object({ ticket }),
+		executionMode: "sequential",
+		async execute(_id, p, _signal, _update, ctx) {
+			const t = id(p.ticket);
+			if (!(await guard(hub, ctx, [t], `Sync ${t} with its base?`, "tkt merges and pushes a clean merge itself; a conflict goes to a fresh session."))) return text("The user did not confirm; nothing ran.");
+			return text(act.sync(hub, t));
 		},
 	});
 
