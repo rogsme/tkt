@@ -96,7 +96,9 @@ const nextSteps: Record<string, string> = {
 
 /** attentionOf says whether a ticket needs you now. It says nothing while a
  * job for the ticket runs, and nothing while a tkt auto loop drives it,
- * unless the loop paused for you. */
+ * unless the loop paused for you. A ticket on hold still shows what its
+ * agent needs, such as a plan or a question, but no step to take: you put
+ * it there to wait. */
 export function attentionOf(row: Row, inFlight: boolean): Attention | undefined {
 	if (inFlight) return undefined;
 	const id = row.ticket;
@@ -105,7 +107,7 @@ export function attentionOf(row: Row, inFlight: boolean): Attention | undefined 
 	const base = [id, row.phase, row.pr?.head ?? "", row.last_status, reason, a?.paused ?? "", a?.why ?? ""].join("|");
 	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: `${kind}|${base}`, ticket: id, kind, title, text, byAuto, offers });
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
-	if (a?.running) {
+	if (a?.running && !row.hold) {
 		// A pause stays in the loop's state until its next look. Once the
 		// agent works again, you acted, such as approving the plan.
 		if (a.paused && row.agent?.status === "working") return undefined;
@@ -113,7 +115,7 @@ export function attentionOf(row: Row, inFlight: boolean): Attention | undefined 
 		if (row.phase === "ready_for_human") return item("ready", "ready to verify", readyText(row), true);
 		return undefined;
 	}
-	if (a?.wanted) return item("stalled", "auto stalled", `${id} is marked for auto, but no tkt auto loop drives it. /auto ${id} on resumes it.`);
+	if (a?.wanted && !row.hold) return item("stalled", "auto stalled", `${id} is marked for auto, but no tkt auto loop drives it. /auto ${id} on resumes it.`);
 	switch (row.phase) {
 		case "awaiting_approval":
 			return item("plan", "plan ready", planText(id));
@@ -125,7 +127,7 @@ export function attentionOf(row: Row, inFlight: boolean): Attention | undefined 
 			return byReason(row, reason, item);
 	}
 	const step = nextSteps[reason];
-	if (step && row.agent?.status !== "working") {
+	if (step && row.agent?.status !== "working" && !row.hold) {
 		return item("next", step, `${id}: ${step}. /next ${id}, or say "continue ${id}".`);
 	}
 	return undefined;

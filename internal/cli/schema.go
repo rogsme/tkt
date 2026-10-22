@@ -23,6 +23,7 @@ var resultTypes = map[string]any{
 	"approve": app.SendResult{},
 	"send":    app.SendResult{},
 	"auto":    app.AutoResult{},
+	"hold":    app.HoldResult{},
 	"show":    app.ShowResult{},
 	"history": app.HistoryResult{},
 	"run":     app.RunResult{},

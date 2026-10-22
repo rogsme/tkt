@@ -64,12 +64,15 @@ func human(reason, text string) Next {
 // Waited is how long the head has waited for a review; BotWait is how long to
 // give the automated reviewer, and 0 means the repository has none, so
 // review-pr reviews instead. Background says an idle agent waits on its
-// own background tasks, such as a CI watcher, and goes on by itself.
+// own background tasks, such as a CI watcher, and goes on by itself. Hold
+// says the ticket is on hold, which the next step ignores: it stops only
+// tkt auto.
 type Facts struct {
 	ID         string
 	PRState    string
 	Agent      string
 	Background bool
+	Hold       bool
 	LastStatus string
 	Checks     string
 	Verdict    string
@@ -214,7 +217,7 @@ func PhaseOf(f Facts, n Next) string {
 
 // factsFor gathers a row's facts.
 func factsFor(r Row) Facts {
-	f := Facts{ID: r.Ticket, LastStatus: r.LastStatus, Behind: -1, Stage: r.Stage, Launch: r.Launch}
+	f := Facts{ID: r.Ticket, LastStatus: r.LastStatus, Behind: -1, Stage: r.Stage, Launch: r.Launch, Hold: r.Hold}
 	if r.Agent != nil {
 		f.Agent, f.Background = r.Agent.Status, r.Agent.Background > 0
 	}

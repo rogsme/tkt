@@ -77,3 +77,11 @@ test("the board's footer names a newer tkt first", () => {
 	assert.equal(footer(s), "/board  /inbox  /board hide");
 	assert.equal(footer({ ...s, update: "v0.4.0" }), "/update to v0.4.0  /board  /inbox  /board hide");
 });
+
+test("the board marks a ticket on hold", () => {
+	const auto = { wanted: true, approve_plan: false, running: true, rounds: 0, stop: "", waiting: "", paused: "hold", why: "" };
+	const rows = [row({ ticket: "ACM-1", phase: "waiting_review", hold: true }), row({ ticket: "ACM-2", phase: "ci", hold: true, auto })];
+	const [, ...lines] = boardLines({ rows, jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
+	assert.match(lines[0].text, / hold$/);
+	assert.match(lines[1].text, / hold$/);
+});

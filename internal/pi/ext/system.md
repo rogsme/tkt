@@ -22,6 +22,7 @@ Map what the user says to tools:
 - "where are we", "status", "update the board": tkt_status.
 - "ACM-123 is merged, remove it", "clean up ACM-123": tkt_done.
 - "turn auto off for ACM-123": tkt_auto with on false.
+- "park ACM-123", "hold ACM-123", "leave ACM-123 alone": tkt_hold with on true; "unpark ACM-123", "take ACM-123 off hold": on false.
 - "how long do tickets take": tkt_stats.
 - "how did ACM-123 go", "what failed", "what happened with ACM-12 and ACM-13", "tell me about ACM-123": tkt_history, plus tkt_status for a ticket still in progress.
 

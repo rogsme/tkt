@@ -95,6 +95,8 @@ type Row struct {
 	Stage  string   `json:"stage"`
 	Launch string   `json:"launch"`
 	Auto   *RowAuto `json:"auto"`
+	// Hold says the ticket is on hold: tkt auto leaves it alone (tkt hold).
+	Hold bool `json:"hold"`
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
 	PhaseSince string `json:"phase_since"`
@@ -264,13 +266,16 @@ func (r *LsResult) cells(row Row, now time.Time) []string {
 	if t, err := time.Parse(time.RFC3339, row.PhaseSince); err == nil && !now.IsZero() {
 		age = Ago(now.Sub(t))
 	}
-	return []string{row.Ticket, phase, age, ag, pr, checks, review, autoCell(row.Auto), next}
+	return []string{row.Ticket, phase, age, ag, pr, checks, review, autoCell(row.Auto, row.Hold), next}
 }
 
 // autoCell says what tkt auto does with a ticket: drives it, waits for you
-// or for a slot, or nothing because its loop is gone.
-func autoCell(a *RowAuto) string {
+// or for a slot, nothing because its loop is gone, or nothing because the
+// ticket is on hold.
+func autoCell(a *RowAuto, hold bool) string {
 	switch {
+	case hold:
+		return "hold"
 	case a == nil:
 		return "-"
 	case a.Running && a.Waiting == "slot":
@@ -510,6 +515,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
+	row.Hold = st["hold"] != ""
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan, Rounds: atoi(st["rounds"]),
 		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"]}
 	if !row.Auto.Running {

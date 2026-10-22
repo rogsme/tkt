@@ -417,6 +417,48 @@
       }
     },
     {
+      "path": "hold",
+      "use": "hold ID",
+      "short": "Put a ticket on hold, so tkt auto leaves it alone",
+      "long": "tkt hold puts a ticket on hold: tkt auto leaves it alone until tkt hold ID\n--off. Use it for a ticket you parked, or one you want to drive by hand. The\ncommands you run yourself, such as tkt run, still work on it, and tkt ls still\nshows its next step.\n\nA tkt auto loop that drives the ticket pauses while it is on hold, without a\nnotification, and goes on when the hold lifts. tkt ls shows hold in the AUTO\ncolumn and hold: true in --json.\n\nThe mark lives in the ticket's state, so it goes away with the worktree. tkt\nhistory lists each time a ticket was put on hold and taken off it.",
+      "example": "  tkt hold ACM-9\n  tkt hold ACM-9 --off",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "off",
+          "type": "bool",
+          "default": "false",
+          "usage": "take the ticket off hold"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "changed": "boolean",
+        "dry_run": "boolean",
+        "hold": "boolean",
+        "since": "string",
+        "ticket": "string"
+      }
+    },
+    {
       "path": "run",
       "use": "run ID [STAGE]",
       "short": "Replace the ticket's idle agent with a fresh session and send a stage line",
@@ -613,7 +655,7 @@
       "path": "ls",
       "use": "ls [ID...]",
       "short": "List ticket worktrees with their state and the next step",
-      "long": "tkt ls lists every ticket worktree, or the tickets given, with its phase and\nhow long it has been there (TIME), its agent, pull request, checks, review\nverdict, what tkt auto does with it, and the next step. On a terminal the\nphase is colored by who acts next: yellow for you, green when it is ready for\nyou to verify, cyan while an agent works.\n\nThe agent column says working, idle, blocked (it asks a question), or waiting\nwhen it is idle but waits on a background task of its own, such as a CI\nwatcher, and goes on by itself. tkt reads the agent's last Status: line and\nits background tasks from the session's own record, the Claude Code\ntranscript or the OpenCode API; when tkt cannot read that, from the agent's\nrecent output.\n\nThe next step is the first of these rules that matches:\n  1. The pull request is merged: tkt done ID.\n  2. The agent works, or waits on its background task: wait; or it waits for\n     an answer: answer it.\n  3. No pull request yet: tkt resume ID when no agent runs; otherwise read the\n     plan and approve it (tkt show ID, tkt approve ID), read the agent's\n     reason, or check the agent in its tab.\n  4. The agent ended with Status: BLOCKED or SETUP_REQUIRED, or a review\n     draft waits for your approval: do it in the tab.\n  5. The checks are pending: wait for CI.\n  6. The review says the base moved, the pull request conflicts, or the agent\n     said BLOCKED_FOR_SYNC with the branch behind the base: tkt run ID\n     address, which merges the base first.\n  7. The merge stopped with HUMAN_QA_FAILED, or the review at the head has\n     findings: tkt run ID address.\n  8. The checks fail: tkt run ID ci.\n  9. The review at the head is clear, from the bot or from review-pr: tkt run\n     ID verify, or the steps yourself.\n 10. No review at the head yet: without a bot ([review] bot_wait = \"0s\"),\n     tkt run ID review. With one, wait bot_wait for it, counted from when tkt\n     first saw the head waiting; after that, check the bot's CI job.\n\nA verdict on an older head does not count, so after every push the next step\nwaits for a new review. With --json each row's next step is an object whose\nargv, when set, is the command to run, and whose reason names the rule:\nmerged, closed, agent_working, agent_waiting, agent_blocked, no_agent,\nplan_awaits_approval, status_blocked, check_agent, review_awaits_approval,\nci_pending, base_moved, qa_failed, findings, checks_fail, bot_clear,\nreview_clear, awaiting_bot, bot_silent, needs_review, or awaiting_slot for a\nticket whose tkt auto loop waits for a slot before the ticket has a worktree.\n\nThe phase names where a ticket stands: queued, starting, planning,\nawaiting_approval, building, ci, waiting_review, reviewing, needs_fix, fixing,\nverifying, working, needs_you, ready_for_human, merged, closed or no_agent.\ntkt ls records a phase when it sees it change, in the worktree and in the\nhistory tkt stats reads, so the time in a phase is as exact as how often\nsomething runs tkt ls or tkt auto. An agent that sits idle with no status line\nlonger than [board] stale_after is marked stale.\n\nThe AUTO column says on while a tkt auto loop drives the ticket, paused while\nit waits for you (auto.paused and auto.why in --json say why), queued while it\nwaits for a slot, and stalled when the ticket is marked for auto but no loop\nruns.\n\ntkt ls reads pull requests through gh, so outside GitHub forges those columns\nshow ? and nothing is recorded.",
+      "long": "tkt ls lists every ticket worktree, or the tickets given, with its phase and\nhow long it has been there (TIME), its agent, pull request, checks, review\nverdict, what tkt auto does with it, and the next step. On a terminal the\nphase is colored by who acts next: yellow for you, green when it is ready for\nyou to verify, cyan while an agent works.\n\nThe agent column says working, idle, blocked (it asks a question), or waiting\nwhen it is idle but waits on a background task of its own, such as a CI\nwatcher, and goes on by itself. tkt reads the agent's last Status: line and\nits background tasks from the session's own record, the Claude Code\ntranscript or the OpenCode API; when tkt cannot read that, from the agent's\nrecent output.\n\nThe next step is the first of these rules that matches:\n  1. The pull request is merged: tkt done ID.\n  2. The agent works, or waits on its background task: wait; or it waits for\n     an answer: answer it.\n  3. No pull request yet: tkt resume ID when no agent runs; otherwise read the\n     plan and approve it (tkt show ID, tkt approve ID), read the agent's\n     reason, or check the agent in its tab.\n  4. The agent ended with Status: BLOCKED or SETUP_REQUIRED, or a review\n     draft waits for your approval: do it in the tab.\n  5. The checks are pending: wait for CI.\n  6. The review says the base moved, the pull request conflicts, or the agent\n     said BLOCKED_FOR_SYNC with the branch behind the base: tkt run ID\n     address, which merges the base first.\n  7. The merge stopped with HUMAN_QA_FAILED, or the review at the head has\n     findings: tkt run ID address.\n  8. The checks fail: tkt run ID ci.\n  9. The review at the head is clear, from the bot or from review-pr: tkt run\n     ID verify, or the steps yourself.\n 10. No review at the head yet: without a bot ([review] bot_wait = \"0s\"),\n     tkt run ID review. With one, wait bot_wait for it, counted from when tkt\n     first saw the head waiting; after that, check the bot's CI job.\n\nA verdict on an older head does not count, so after every push the next step\nwaits for a new review. With --json each row's next step is an object whose\nargv, when set, is the command to run, and whose reason names the rule:\nmerged, closed, agent_working, agent_waiting, agent_blocked, no_agent,\nplan_awaits_approval, status_blocked, check_agent, review_awaits_approval,\nci_pending, base_moved, qa_failed, findings, checks_fail, bot_clear,\nreview_clear, awaiting_bot, bot_silent, needs_review, or awaiting_slot for a\nticket whose tkt auto loop waits for a slot before the ticket has a worktree.\n\nThe phase names where a ticket stands: queued, starting, planning,\nawaiting_approval, building, ci, waiting_review, reviewing, needs_fix, fixing,\nverifying, working, needs_you, ready_for_human, merged, closed or no_agent.\ntkt ls records a phase when it sees it change, in the worktree and in the\nhistory tkt stats reads, so the time in a phase is as exact as how often\nsomething runs tkt ls or tkt auto. An agent that sits idle with no status line\nlonger than [board] stale_after is marked stale.\n\nThe AUTO column says on while a tkt auto loop drives the ticket, paused while\nit waits for you (auto.paused and auto.why in --json say why), queued while it\nwaits for a slot, stalled when the ticket is marked for auto but no loop runs,\nand hold while the ticket is on hold (tkt hold).\n\ntkt ls reads pull requests through gh, so outside GitHub forges those columns\nshow ? and nothing is recorded.",
       "example": "  tkt ls\n  tkt ls ACM-12 --json\n  tkt ls --json | jq -r '.result.rows[] | select(.next.kind == \"command\") | .next.text'",
       "group": "inspect",
       "args": [
@@ -667,6 +709,7 @@
               },
               "nullable": true
             },
+            "hold": "boolean",
             "idle_since": "string",
             "last_status": "string",
             "launch": "string",

@@ -279,6 +279,33 @@ func autoCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func holdCmd(g *globals) *cobra.Command {
+	var o app.HoldOpts
+	cmd := &cobra.Command{
+		Use:   "hold ID",
+		Short: "Put a ticket on hold, so tkt auto leaves it alone",
+		Long:  helpText("hold"),
+		Example: `  tkt hold ACM-9
+  tkt hold ACM-9 --off`,
+		SuggestFor:        []string{"park", "pause"},
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt hold ID")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Hold(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.Off, "off", false, "take the ticket off hold")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
+	return cmd
+}
+
 func resumeCmd(g *globals) *cobra.Command {
 	var o app.ResumeOpts
 	cmd := &cobra.Command{

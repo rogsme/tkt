@@ -107,3 +107,14 @@ test("a manual step can go to tkt auto, and a stalled ticket can leave it", () =
 	assert.deepEqual(offered(row({ phase: "building", auto: auto({ running: false }) })), ["auto_on", "auto_off", "dismiss"]);
 	assert.deepEqual(offered(row({ phase: "awaiting_approval", last_status: "AWAITING_APPROVAL" })), ["approve", "approve_auto", "show", "reply"]);
 });
+
+test("a ticket on hold shows what its agent needs, but no step to take", () => {
+	const fix = { phase: "needs_fix", hold: true, next: { kind: "command" as const, reason: "findings", argv: ["tkt", "run", "ACM-12", "address"], text: "tkt run ACM-12 address" } };
+	assert.equal(attentionOf(row(fix), false), undefined);
+	// A loop paused on the hold steps aside, so the plan shows as a manual
+	// ticket's would.
+	const plan = row({ phase: "awaiting_approval", hold: true, auto: auto({ paused: "hold" }) });
+	assert.equal(attentionOf(plan, false)?.kind, "plan");
+	assert.equal(attentionOf(row({ ...fix, auto: auto({ paused: "hold" }) }), false), undefined);
+	assert.equal(attentionOf(row({ ...fix, auto: auto({ running: false }) }), false), undefined);
+});

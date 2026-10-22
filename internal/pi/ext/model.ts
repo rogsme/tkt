@@ -32,6 +32,8 @@ export interface Row {
 	/** paused says why a running tkt auto loop waits for you, and why names
 	 * the rule behind it; both are empty while the loop drives the ticket. */
 	auto: { wanted: boolean; approve_plan: boolean; running: boolean; rounds: number; stop: string; waiting: string; paused?: string; why?: string } | null;
+	/** hold says tkt auto leaves the ticket alone (tkt hold). */
+	hold?: boolean;
 	phase: string;
 	phase_since: string;
 	started: string;

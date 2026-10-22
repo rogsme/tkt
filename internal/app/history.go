@@ -153,6 +153,11 @@ func (e HistoryEvent) line() string {
 		return strings.Join(words, " ")
 	case history.Merged:
 		return "merged " + forge.Ref(e.PR)
+	case history.Hold:
+		if e.Action == "off" {
+			return "taken off hold"
+		}
+		return "put on hold"
 	}
 	return e.Event
 }

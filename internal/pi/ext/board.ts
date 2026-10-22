@@ -119,7 +119,8 @@ function rowText(r: Row, s: BoardState): string {
 	const cells = [r.ticket, since(r.started, s.now) || "-", phaseLabel(r.phase), since(r.phase_since, s.now) || "-", agent, r.pr ? `#${r.pr.number}` : "-"];
 	const parts = cells.map((c, i) => pad(c, heads[i][1]));
 	const flags: string[] = [];
-	if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : "auto");
+	if (r.hold) flags.push("hold");
+	else if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : "auto");
 	else if (r.auto?.wanted) flags.push("auto stalled");
 	const job = s.jobs.get(r.ticket);
 	if (job) flags.push(`${job} ${spinner[s.tick % spinner.length]}`);

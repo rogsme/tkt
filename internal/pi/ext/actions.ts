@@ -87,6 +87,14 @@ export async function auto(hub: Hub, id: string, on: boolean, approvePlan: boole
 	return `Stopped tkt auto for ${id}; its loop ends at its next look.`;
 }
 
+/** hold puts a ticket on hold, or takes it off, and waits for tkt's answer. */
+export async function hold(hub: Hub, id: string, on: boolean): Promise<string> {
+	const env = await hub.run({ ticket: id, label: on ? "hold" : "hold off", args: ["hold", id, ...(on ? [] : ["--off"])], quiet: true });
+	if (!env.ok) return failure(id, env);
+	if (!on) return `${id} is off hold; tkt auto can drive it again.`;
+	return `${id} is on hold: tkt auto leaves it alone, and the board shows no step to take for it. /hold ${id} off lifts it.`;
+}
+
 export async function done(hub: Hub, id: string): Promise<string> {
 	const env = await hub.run({ ticket: id, label: "done", args: ["done", id], quiet: true });
 	if (!env.ok) return failure(id, env);

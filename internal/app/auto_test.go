@@ -53,6 +53,9 @@ func TestAutoStepTable(t *testing.T) {
 		{with(open, func(f *Facts) { f.LastStatus = "AWAITING_POST_APPROVAL" }), AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		{with(open, func(f *Facts) { f.PRState = "MERGED" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopMerged}},
 		{with(open, func(f *Facts) { f.PRState = "CLOSED" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopClosed}},
+		// A ticket on hold pauses the loop, whatever its next step.
+		{with(open, func(f *Facts) { f.Hold, f.Checks = true, "fail" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, pause(StopHold)},
+		{Facts{ID: "ACM-1", Agent: "working", Stage: "work", Hold: true}, AutoPolicy{}, autoMemory{}, pause(StopHold)},
 		// address answered every finding without a new head: running it
 		// again on the same head would change nothing.
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 5}, autoMemory{Last: "run:address@h1"}, pause(StopNoProgress)},

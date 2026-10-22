@@ -55,7 +55,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 				const agent = r.agent ? `${(r.agent.background ?? 0) > 0 ? "idle, waiting on its own background task" : r.agent.status} in pane ${r.agent.pane_id}` : "none";
 				const item = hub.items.find((x) => x.ticket === r.ticket);
 				const lines = [
-					`${r.ticket}: ${phaseLabel(r.phase)}${r.phase_since ? ` since ${r.phase_since}` : ""}, stage ${r.stage || "-"}`,
+					`${r.ticket}: ${phaseLabel(r.phase)}${r.phase_since ? ` since ${r.phase_since}` : ""}, stage ${r.stage || "-"}${r.hold ? "; on hold, so tkt auto leaves it alone" : ""}`,
 					`agent: ${agent}; last status: ${r.last_status || "none"}`,
 					`pull request: ${r.pr ? `#${r.pr.number} ${r.pr.state}` : "none"}; checks: ${r.checks?.state ?? "-"}; review: ${r.review ? `${r.review.verdict}${r.review.at_head ? "" : " (old head)"}` : "-"}`,
 					`auto: ${auto}; rounds ${a?.rounds ?? 0}`,
@@ -171,6 +171,20 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 			const t = id(p.ticket);
 			if (!(await guard(hub, ctx, [t], p.on ? `Turn tkt auto on for ${t}?` : `Turn tkt auto off for ${t}?`, p.on ? "tkt auto drives the ticket in the background." : "Its loop ends at its next look."))) return text("The user did not confirm; nothing changed.");
 			return text(await act.auto(hub, t, p.on, p.approve_plan ?? false, p.as ?? ""));
+		},
+	});
+
+	pi.registerTool({
+		name: "tkt_hold",
+		label: "tkt hold",
+		description: "Put a ticket on hold, so tkt auto leaves it alone, or take it off hold with on false. Use it when the user parks a ticket, or wants to drive it by hand.",
+		parameters: Type.Object({ ticket, on: Type.Boolean() }),
+		executionMode: "sequential",
+		async execute(_id, p, _signal, _update, ctx) {
+			const t = id(p.ticket);
+			if (!(await guard(hub, ctx, [t], p.on ? `Put ${t} on hold?` : `Take ${t} off hold?`, p.on ? "tkt auto leaves it alone until you take it off hold." : "tkt auto can drive it again.")))
+				return text("The user did not confirm; nothing changed.");
+			return text(await act.hold(hub, t, p.on));
 		},
 	});
 

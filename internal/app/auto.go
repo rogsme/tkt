@@ -95,6 +95,9 @@ const (
 	StopRoundLimit    = "round_limit"
 	StopNoProgress    = "no_progress"
 	StopUnknown       = "unknown"
+	// StopHold pauses a loop while the ticket is on hold. You put it there,
+	// so the loop does not notify.
+	StopHold = "hold"
 )
 
 // stopHint says what a person does after a stop.
@@ -120,6 +123,8 @@ func stopHint(stop, id string) string {
 		return "read the review, then tkt run " + id + " address, or raise [auto] max_rounds"
 	case StopNoProgress:
 		return "the last step changed nothing; check the ticket's tab, then tkt auto " + id
+	case StopHold:
+		return "tkt hold " + id + " --off lets tkt auto drive it again"
 	}
 	return "check the agent in its tab, then tkt auto " + id
 }
@@ -144,6 +149,8 @@ func pauseText(stop, reason string) string {
 		return "it reached [auto] max_rounds fix runs since the plan; read the review"
 	case stop == StopNoProgress:
 		return "the last step changed nothing; check the ticket's tab"
+	case stop == StopHold:
+		return "the ticket is on hold; tkt hold --off lets the loop go on"
 	case reason == ReasonCheckAgent:
 		return "the agent stopped without a status line; check its tab"
 	}
@@ -186,8 +193,8 @@ func (a autoAct) key(head string) string {
 // differs from tkt ls on purpose: it never runs done, resume or verify; the
 // review bot's CLEAR ends the loop like review-pr's READY_FOR_HUMAN, since
 // the bot in CI is the reviewer; review-pr runs only where the repository
-// has no bot ([review] bot_wait = "0s"); and where a person decides, it
-// pauses.
+// has no bot ([review] bot_wait = "0s"); and where a person decides, or the
+// ticket is on hold, it pauses.
 func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 	stop := func(why string) autoAct { return autoAct{Kind: actStop, Stop: why} }
 	pause := func(why string) autoAct { return autoAct{Kind: actPause, Stop: why} }
@@ -205,6 +212,8 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 		return act(actRun, stage)
 	}
 	switch {
+	case f.Hold:
+		return pause(StopHold)
 	case f.Agent != herdr.Working && (f.Launch == "not_ready" || f.Launch == "prompt_uncertain"):
 		return pause(StopNeedsYou)
 	case f.Agent != herdr.Working && (f.Launch == "tab" || f.Launch == "launching"):
@@ -477,6 +486,9 @@ func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 	defer w.unqueue()
 	var mem autoMemory
 	if ts != nil {
+		if ts.st["hold"] != "" && !o.Once {
+			a.UI.Info("%s is on hold; the loop waits until tkt hold %s --off", id, id)
+		}
 		mem = autoMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["auto_last"]}
 		if !o.Once {
 			c.save(ts, "auto", mode, "auto_stop", "", "auto_pause", "")
@@ -647,7 +659,7 @@ func (w *ctxWorld) paused(why string, v autoView) {
 	c := w.c
 	w.remember(w.memoryNow(), "auto_pause", why, "auto_why", v.Next.Reason)
 	c.record(history.Event{Ticket: w.id, Event: history.Auto, Action: actPause, Stop: why})
-	if w.notify {
+	if w.notify && why != StopHold {
 		c.notify(w.id, notice{"needs you", pauseText(why, v.Next.Reason), "request"})
 	}
 }

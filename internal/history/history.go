@@ -23,6 +23,8 @@ const (
 	Auto     = "auto"
 	Merged   = "merged"
 	Done     = "done"
+	// Hold is a ticket put on hold (Action on) or taken off it (off).
+	Hold = "hold"
 )
 
 // Event is one line of the history.
