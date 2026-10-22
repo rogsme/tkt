@@ -118,7 +118,8 @@ sequenceDiagram
   participant agent as Agent
   you->>tkt: tkt start ACM-123
   tkt->>tkt: read docs/agents/*.md, check the id
-  tkt->>wt: wt switch --create ACM-123
+  tkt->>tkt: git fetch origin main
+  tkt->>wt: wt switch --create ACM-123 --base origin/main
   wt->>wt: create the worktree, run pre-start hooks
   tkt->>herdr: open a tab named ACM-123
   tkt->>herdr: herdr agent start, in build mode
@@ -128,6 +129,8 @@ sequenceDiagram
   tkt->>tkt: record preset, session, tab and pane
   tkt-->>you: worktree, tab, agent
 ```
+
+The new branch starts from the base on the remote: tkt fetches it first, so the plan starts from the code the base holds now, not from a local `main` that nobody pulled. When the fetch fails, it warns and starts from the local base.
 
 tkt keeps the ticket's preset, session, tab and pane in the worktree's git directory, so the record disappears with the worktree. The prompt's `Model:` line, when it has one, picks the first preset that serves that model.
 

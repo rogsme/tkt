@@ -42,11 +42,14 @@ func WT() {
 			printJSON(items)
 		}
 	case "switch":
-		create, branch := false, ""
+		create, branch, base := false, "", "main"
 		for i := 0; i < len(args); i++ {
 			switch a := args[i]; {
 			case a == "--create":
 				create = true
+			case a == "--base" && i+1 < len(args):
+				base = args[i+1]
+				i++
 			case a == "--format":
 				i++
 			case strings.HasPrefix(a, "--"):
@@ -61,7 +64,7 @@ func WT() {
 		}
 		var err error
 		if create {
-			_, err = realGit("-C", dir, "worktree", "add", "-q", "-b", branch, path, "main")
+			_, err = realGit("-C", dir, "worktree", "add", "-q", "-b", branch, path, base)
 		} else {
 			_, err = realGit("-C", dir, "worktree", "add", "-q", path, branch)
 		}

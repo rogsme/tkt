@@ -3,10 +3,13 @@ package app
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/gitx"
 	"gitlab.com/rogs/tkt/internal/lock"
+	"gitlab.com/rogs/tkt/internal/runner"
 )
 
 // resolveOrCreateWorktree returns the ticket's worktree, creating it through
@@ -19,7 +22,7 @@ func (c *Ctx) resolveOrCreateWorktree(id, again string) (path string, created bo
 		return "", false, err
 	}
 	remote, base, root := c.LC.Forge.Remote, c.LC.Forge.Base, c.Repo.Root
-	create := true
+	create, fresh := true, true
 	entry, ok := es.Find(id)
 	if ok {
 		path = entry.Path
@@ -35,7 +38,8 @@ func (c *Ctx) resolveOrCreateWorktree(id, again string) (path string, created bo
 		heads, reached := c.Git.LsRemoteHeads(c.Ctx, root, remote, id)
 		switch {
 		case !reached:
-			c.UI.Warn("cannot reach %s to look for an existing %s branch; creating it from %s", remote, id, base)
+			c.UI.Warn("cannot reach %s to look for an existing %s branch; creating it from the local %s", remote, id, base)
+			fresh = false
 		case heads != "":
 			c.UI.Info("branch %s exists on %s; checking it out", id, remote)
 			create = false
@@ -49,7 +53,11 @@ func (c *Ctx) resolveOrCreateWorktree(id, again string) (path string, created bo
 		if c.WT.HasPostStartHooks(c.Ctx) {
 			c.UI.Warn("worktrunk runs post-start hooks in the background, so the agent may start before they finish; move readiness work to pre-start")
 		}
-		argv := c.WT.SwitchArgv(id, create)
+		from := ""
+		if create && fresh {
+			from = c.freshBase()
+		}
+		argv := c.WT.SwitchArgv(id, create, from)
 		if c.Dry {
 			c.Would(argv)
 			return "<worktree of " + id + ">", true, nil
@@ -90,4 +98,28 @@ func (c *Ctx) resolveOrCreateWorktree(id, again string) (path string, created bo
 		return "", false, apperr.New(apperr.WorktreeBranchMismatch, "%s is not on branch %s", path, id)
 	}
 	return path, created, nil
+}
+
+// freshBase fetches the base branch and returns its remote-tracking ref for
+// a new branch to start from. worktrunk's default is the local base, which
+// lags behind the remote unless someone pulls it, so start-ticket would plan
+// against old code. When the fetch fails, it warns and returns "", and the
+// branch starts from the local base.
+func (c *Ctx) freshBase() string {
+	f := c.LC.Forge
+	ref := f.Remote + "/" + f.Base
+	argv := gitx.Argv(c.Repo.Root, "fetch", "--quiet", f.Remote, f.Base)
+	if c.Dry {
+		c.Would(argv)
+		return ref
+	}
+	if r := c.Git.Do(c.Ctx, time.Minute, argv); !r.OK() {
+		c.UI.Warn("cannot fetch %s from %s (%s); creating the branch from the local %s", f.Base, f.Remote, runner.Head(strings.TrimSpace(r.ErrText()), 200), f.Base)
+		return ""
+	}
+	if !c.Git.HasRef(c.Ctx, c.Repo.Root, "refs/remotes/"+ref) {
+		c.UI.Warn("the fetch left no %s; creating the branch from the local %s", ref, f.Base)
+		return ""
+	}
+	return ref
 }

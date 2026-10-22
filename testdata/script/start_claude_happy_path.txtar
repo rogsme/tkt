@@ -5,7 +5,8 @@ stdin $WORK/p.txt
 exec tkt start ACM-12 --prompt -
 rc 0
 exists $FAKE_WT_ROOT/ACM-12
-logged wt -C $REPO switch --create ACM-12 --no-cd --format json
+logged git -C $REPO fetch --quiet origin main
+logged wt -C $REPO switch --create ACM-12 --base origin/main --no-cd --format json
 logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label ACM-12 --no-focus
 logged herdr agent start acm-12 --kind claude --pane w1:p10 --timeout 90000 -- --dangerously-skip-permissions --session-id
 grep 'Work in the ACM-12 worktree.' $FAKE_DIR/prompts

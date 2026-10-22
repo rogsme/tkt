@@ -1,0 +1,22 @@
+# tkt start fetches the base and creates the branch from origin/main, not
+# from a local main that lags behind it.
+realgit -C $REPO commit -q --allow-empty -m 'merged on origin'
+realgit -C $REPO push -q origin main
+gitvar H1 $REPO HEAD
+realgit -C $REPO reset -q --hard HEAD~1
+realgit -C $REPO update-ref refs/remotes/origin/main HEAD
+exec tkt start ACM-12
+logged git -C $REPO fetch --quiet origin main
+logged wt -C $REPO switch --create ACM-12 --base origin/main --no-cd --format json
+realgit -C $FAKE_WT_ROOT/ACM-12 rev-parse HEAD
+stdout ^$H1
+
+# When the remote cannot be reached, the branch starts from the local main,
+# as before.
+realgit -C $REPO remote set-url origin $WORK/missing.git
+resetlog
+exec tkt start ACM-13
+stderr 'cannot reach origin to look for an existing ACM-13 branch; creating it from the local main'
+! logcontains 'fetch --quiet origin main'
+logged wt -C $REPO switch --create ACM-13 --no-cd --format json
+houserules

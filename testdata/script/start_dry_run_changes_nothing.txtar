@@ -2,7 +2,8 @@
 mkprompt $WORK/p.txt ACM-12
 stdin $WORK/p.txt
 exec tkt start ACM-12 --dry-run --prompt -
-stderr 'dry run: wt -C '$REPO' switch --create ACM-12'
+stderr 'dry run: git -C '$REPO' fetch --quiet origin main'
+stderr 'dry run: wt -C '$REPO' switch --create ACM-12 --base origin/main'
 stderr 'dry run: herdr agent prompt \\<pane\\> '
 ! exists $FAKE_WT_ROOT/ACM-12
 ! logcontains 'herdr tab create'

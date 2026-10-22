@@ -26,6 +26,18 @@ func (g Git) out(ctx context.Context, args ...string) (string, bool) {
 	return strings.TrimRight(r.Out(), "\n"), r.OK()
 }
 
+// Argv is the git command line that runs args in dir. Commands that change
+// a repository build it once, so a dry run reports the same line a real run
+// executes with Do.
+func Argv(dir string, args ...string) []string {
+	return append([]string{"git", "-C", dir}, args...)
+}
+
+// Do runs a command line that Argv built.
+func (g Git) Do(ctx context.Context, timeout time.Duration, argv []string) runner.Result {
+	return g.R.Run(ctx, runner.Cmd{Argv: argv, Timeout: timeout})
+}
+
 // Repo locates a repository: Root is the primary worktree and Common the
 // shared git directory.
 type Repo struct {
