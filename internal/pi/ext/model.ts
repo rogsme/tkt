@@ -52,6 +52,25 @@ export function rowsOf(env: Envelope<LsResult>): Row[] | undefined {
 	return Array.isArray(rows) ? (rows as Row[]) : undefined;
 }
 
+/** UpdateResult is what tkt update prints. dev says tkt is a development
+ * build, which only --force replaces. */
+export interface UpdateResult {
+	from: string;
+	to: string;
+	path: string;
+	available: boolean;
+	dev: boolean;
+	updated: boolean;
+	next?: string;
+}
+
+/** updateNotice returns the release /update would install, or undefined
+ * when there is none to suggest. A development build gets no suggestion:
+ * /update does not replace it. */
+export function updateNotice(r: UpdateResult): string | undefined {
+	return r.available && !r.dev && !r.updated ? r.to : undefined;
+}
+
 /** ago renders milliseconds for people: 45s, 12m, 3h, 2d. */
 export function ago(ms: number): string {
 	const s = Math.max(0, Math.floor(ms / 1000));

@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import type { Envelope } from "./model.ts";
+import type { Envelope, UpdateResult } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
@@ -286,4 +286,27 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 			return resume(hub, id);
 	}
 	return undefined;
+}
+
+/** update installs a newer tkt with tkt update, after you confirm. The
+ * chat keeps running the old tkt's extension and pi, so it offers to quit;
+ * pi then prints the command that reopens the chat on the new tkt. */
+export async function update(hub: Hub, ctx: ExtensionContext): Promise<void> {
+	const check = await hub.tkt<UpdateResult>(["update", "--check"]);
+	if (!check.ok || !check.result) return hub.post(`Cannot check for a newer tkt: ${reasonOf(check)}`);
+	const r = check.result;
+	if (r.dev) return hub.post(`This tkt is a development build (${r.from}), so /update does not replace it. Rebuild it, or run ${r.next || "tkt update --force"} in a shell.`);
+	if (!r.available) {
+		hub.newer = undefined;
+		hub.render();
+		return hub.post(`tkt ${r.from} is up to date.`);
+	}
+	if (!(await ctx.ui.confirm(`Update tkt from ${r.from} to ${r.to}?`, "This chat runs the old tkt until you reopen it. Tickets in tkt auto finish their loops on the old tkt."))) return;
+	ctx.ui.setStatus("tkt-update", `tkt: downloading ${r.to}`);
+	const env = await hub.tkt<UpdateResult>(["update", r.to]).finally(() => ctx.ui.setStatus("tkt-update", undefined));
+	if (!env.ok) return hub.post(`tkt update failed: ${reasonOf(env)}`);
+	hub.newer = undefined;
+	hub.render();
+	hub.post(`Updated tkt from ${r.from} to ${r.to}. This chat still runs ${r.from}: quit and reopen it to run ${r.to}.`);
+	if (await ctx.ui.confirm("Quit now?", "pi prints the command that reopens this chat: tkt agent --session ID.")) ctx.shutdown();
 }

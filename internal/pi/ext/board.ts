@@ -40,6 +40,8 @@ export interface BoardState {
 	now: number;
 	tick: number;
 	repo: string;
+	/** update is a newer tkt release that /update installs. */
+	update?: string;
 }
 
 /** The command that acts on an item, shown beside it on the board. */
@@ -55,6 +57,13 @@ const hints: Record<AttentionKind, (id: string) => string> = {
 	stalled: (id) => `/auto ${id} on`,
 	failed: () => "/inbox",
 };
+
+/** footer is the line under the board: the commands for it, and first,
+ * where a narrow terminal cuts the least, a newer tkt to install. */
+export function footer(s: BoardState): string {
+	const base = "/board  /inbox  /board hide";
+	return s.update ? `/update to ${s.update}  ${base}` : base;
+}
 
 /** title is the board's heading: the repository, the tickets, and how many
  * need you. */

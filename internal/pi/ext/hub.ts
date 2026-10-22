@@ -9,7 +9,7 @@ import { type Component, isViewportTUI, type TUI, VStack } from "@earendil-works
 import { type Attention, attentionOf, sound } from "./attention.ts";
 import type { BoardState } from "./board.ts";
 import { Jobs, type Job } from "./jobs.ts";
-import { keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf } from "./model.ts";
+import { keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf, type UpdateResult, updateNotice } from "./model.ts";
 import { hud } from "./ui.ts";
 
 /** pollMs is how often the board reads tkt ls while nothing else wakes it. */
@@ -20,6 +20,9 @@ const lsTimeoutMs = 60_000;
 
 /** failedForMs is how long a failed job stays on the board. */
 const failedForMs = 15 * 60_000;
+
+/** updateEveryMs is how often a chat left open asks for a newer tkt. */
+const updateEveryMs = 6 * 3_600_000;
 
 export class Hub {
 	readonly pi: ExtensionAPI;
@@ -34,6 +37,8 @@ export class Hub {
 	items: Attention[] = [];
 	/** lastInput is what you last typed, for the guards on tools. */
 	lastInput = "";
+	/** newer is a newer tkt release that /update installs. */
+	newer?: string;
 	ctx?: ExtensionContext;
 	render: () => void = () => {};
 	readonly jobs: Jobs;
@@ -92,7 +97,22 @@ export class Hub {
 				}
 			}, 250),
 		);
+		this.timers.push(setInterval(() => void this.checkUpdate(), updateEveryMs));
 		void this.refresh();
+		void this.checkUpdate();
+	}
+
+	/** checkUpdate asks tkt update for a newer release, puts it on the board,
+	 * and says so once per release. A check that fails, such as without a
+	 * network, shows nothing. It stays out of the jobs, so it never shows as
+	 * a ticket's work. */
+	async checkUpdate(): Promise<void> {
+		const env = await this.tkt<UpdateResult>(["update", "--check"]);
+		if (!env.ok || !env.result || this.stopped) return;
+		const tag = updateNotice(env.result);
+		if (tag && tag !== this.newer && this.ctx?.hasUI) this.ctx.ui.notify(`tkt ${tag} is available (this tkt is ${env.result.from}): /update installs it`, "info");
+		this.newer = tag;
+		this.render();
 	}
 
 	stop(): void {
@@ -158,7 +178,7 @@ export class Hub {
 
 	/** state is what the board draws. */
 	state(): BoardState {
-		return { rows: this.rows, jobs: this.labels, items: this.items, now: Date.now(), tick: this.tick, repo: this.repo };
+		return { rows: this.rows, jobs: this.labels, items: this.items, now: Date.now(), tick: this.tick, repo: this.repo, update: this.newer };
 	}
 
 	/** refresh reads tkt ls, works out what needs you, and keeps one watcher

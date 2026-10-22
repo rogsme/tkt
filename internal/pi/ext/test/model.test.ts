@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ago, expandIds, keyFromTracker, keyOf, mentions, normalizeId, rowsOf, stampText } from "../model.ts";
+import { ago, expandIds, keyFromTracker, keyOf, mentions, normalizeId, rowsOf, stampText, updateNotice } from "../model.ts";
 import { row } from "./fixtures.ts";
 
 test("normalizeId", () => {
@@ -56,4 +56,12 @@ test("stampText gives the time of day, and the date on another day", () => {
 	assert.equal(stampText({ at }, now), "10:50:23");
 	assert.equal(stampText({ at: at + 6000, took: 6000 }, now), "10:50:29  6s");
 	assert.equal(stampText({ at, took: 125_000 }, now + 86_400_000), "Oct 21 10:50:23  2m");
+});
+
+test("updateNotice suggests a newer release, and nothing to a development build", () => {
+	const r = { from: "v0.3.0", to: "v0.4.0", path: "/usr/local/bin/tkt", available: true, dev: false, updated: false, next: "tkt update" };
+	assert.equal(updateNotice(r), "v0.4.0");
+	assert.equal(updateNotice({ ...r, to: "v0.3.0", available: false, next: undefined }), undefined);
+	assert.equal(updateNotice({ ...r, from: "dev-1a2b3c", dev: true, next: "tkt update --force" }), undefined);
+	assert.equal(updateNotice({ ...r, updated: true, next: undefined }), undefined);
 });
