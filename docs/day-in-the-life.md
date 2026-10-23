@@ -106,7 +106,7 @@ ACM-121: the agent asks a question. /peek ACM-121 shows it; answer in its tab. t
   4. Later
 ```
 
-Peek opens the agent's live screen, read again every two seconds. ACM-121 adds a CSV export of orders, and its agent asks which column order to use: the orders table's, or the one finance's import sheet expects, with the date first. A question in the agent's dialog takes its answer in the agent's tab, so you press Esc, switch to the herdr tab `ACM-121 (auto)` and pick the date first. The agent works again, the tkt auto loop goes on by itself, and the item leaves the board.
+Peek opens the agent's live screen, read again every two seconds. ACM-121 adds a CSV export of orders, and its agent asks which column order to use: the orders table's, or the one finance's import sheet expects, with the date first. A question in the agent's dialog takes its answer in the agent's tab, so you press Esc, switch to the herdr tab `ACM-121 (claude, auto)` and pick the date first. The agent works again, the tkt auto loop goes on by itself, and the item leaves the board.
 
 Peeking ends the walk, so you take the rest one at a time. ACM-127 retries failed webhook deliveries, and you drive it by hand. The review bot found that its retry loop sleeps inside the request handler. You say:
 
@@ -152,11 +152,11 @@ The report also says what it left out and why: ACM-129 changes the same export c
 start ACM-131 in auto after the plan, and ACM-130 and ACM-133 the same on fast
 ```
 
-ACM-131 starts on `claude` and the other two on `fast`, each in its own tab, such as `ACM-130 (fast, auto)`.
+ACM-131 starts on `claude` and the other two on `fast`, each in its own tab, named after the ticket and its preset: `ACM-131 (claude, auto)`, `ACM-130 (fast, auto)`.
 
 Five tickets now run in tkt auto loops, but `[auto] max_parallel` caps the agents tkt auto and tkt watch put to work, not the loops. A loop takes a slot to start a ticket, approve a plan or run a stage, and gives it up while it waits for CI, the review bot or you. ACM-124's planning agent holds one slot and two of the picks take the others, so ACM-133 waits in the queued phase until a plan is ready. ACM-121's agent, which your answer set working, and ACM-127's address session hold no slot, since you started them.
 
-From a terminal, `tkt suggest 3` opens the same tab and returns at once. A narrower ask works the same way: "get me two tickets tagged bug" in the chat, or `tkt suggest two tickets tagged bug`, hands those words to suggest-tickets as its request.
+From a terminal, `tkt suggest 3` opens the same tab and returns at once. A narrower ask works the same way: "get me two tickets tagged bug" in the chat, `/suggest two tickets tagged bug`, or `tkt suggest two tickets tagged bug` hands those words to suggest-tickets as its request, which picks only tickets with that label. `/suggest` alone asks what to look for, and a number there is a count.
 
 ## 09:40 Read the plans
 
@@ -383,7 +383,7 @@ The chat answers from ACM-121's history: the bot's formula finding on three head
 
 ACM-133 stays on hold, its plan waiting, until the data team answers.
 
-Last, `/update` checks the new release, asks you to confirm, installs v0.6.1 with `tkt update`, and offers to quit, since the chat runs the old tkt until you reopen it. You quit, and the chat prints the command that resumes it, `tkt agent --session ID`. tkt watch stops when its binary changes, and its unit starts it again on the new one; ACM-125's tkt auto loop restarts on the new one at its next look. Nothing waited for the chat: ACM-125's tkt auto loop and tkt watch go on overnight and notify through herdr, and tomorrow `tkt agent --continue` picks up this conversation.
+Last, `/update` checks the new release, asks you to confirm, installs v0.6.1 with `tkt update`, and offers to quit, since the chat runs the old tkt until you reopen it. You quit, and the chat prints the command that resumes it, `tkt agent --session ID`. Nothing waited for the chat, and nothing else needs you: tkt watch stops when its binary changes, and its unit starts it again on the new one, and ACM-125's tkt auto loop restarts on the new tkt at its next look. Both go on overnight and notify through herdr. Tomorrow `tkt agent --continue` picks up this conversation, and `/version` there says the chat runs v0.6.1.
 
 ## What the board can ask of you
 

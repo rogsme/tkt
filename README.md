@@ -3,13 +3,15 @@
 `tkt` runs the mechanical steps around the [rogs-skills](https://gitlab.com/rogs/skills) ticket lifecycle from a [herdr](https://herdr.dev) pane. For each ticket it:
 
 - creates the ticket's worktree;
-- opens a tab named after the ticket;
+- opens a tab named after the ticket and its preset, such as `ACM-12 (claude)`;
 - starts Claude Code or OpenCode in that tab;
 - hands the agent its prompt.
 
 Each command is one step you take, and `tkt ls` suggests the next one. `tkt watch`, which tkt starts by itself, takes the upkeep steps for every ticket: it merges a moved base when a sync is due, fixes failing checks once per head, and removes a ticket once finish-ticket merged it. It also runs the chores you schedule, such as a weekly dependency upgrade, and holds its agents back, and `tkt auto`'s, while a service they depend on reports an incident. When you want, `tkt auto` takes all the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
 
 People and programs both drive tkt. Every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
+
+To see how it all fits in a working day, read [`docs/day-in-the-life.md`](docs/day-in-the-life.md): one Thursday with several tickets in flight, mostly in the tkt agent's chat, and when the terminal does better.
 
 ## Install
 
