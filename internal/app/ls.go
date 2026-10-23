@@ -101,6 +101,15 @@ type RowMerge struct {
 	Sent string `json:"sent"`
 }
 
+// RowDiff is the size of a branch's own change against its base, as its
+// pull request shows it: the files it changes, and the lines it adds and
+// removes.
+type RowDiff struct {
+	Files   int `json:"files"`
+	Added   int `json:"added"`
+	Removed int `json:"removed"`
+}
+
 // ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
 // for a free slot before it starts the ticket.
 const ReasonAwaitingSlot = "awaiting_slot"
@@ -110,9 +119,13 @@ const ReasonAwaitingSlot = "awaiting_slot"
 // Sources says which sources were read. Times are UTC, as
 // 2006-01-02T15:04:05Z.
 type Row struct {
-	Ticket     string         `json:"ticket"`
-	Chore      string         `json:"chore"`
+	Ticket string `json:"ticket"`
+	Chore  string `json:"chore"`
+	// Title is the open pull request's, without the ticket id it starts
+	// with, or "" before there is one.
+	Title      string         `json:"title"`
 	Path       string         `json:"path"`
+	Diff       *RowDiff       `json:"diff"`
 	Tabs       []herdr.Tab    `json:"tabs"`
 	Agent      *RowAgent      `json:"agent"`
 	LastStatus string         `json:"last_status"`
@@ -633,6 +646,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			row.PR = &RowPR{Number: p.Number, State: "OPEN", Mergeable: p.Mergeable, Head: p.HeadRefOid}
 			row.Checks, row.Review = &checks, verdict
 			row.reviewReady = forge.HumanVerification(p) != nil
+			row.Title = prTitle(p.Title, t.ID)
 		} else if p, ok := closedPR(l.gh.Mine(l.all, t.ID)); ok {
 			row.PR = &RowPR{Number: p.Number, State: p.State}
 		}
@@ -640,6 +654,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	if l.hasBase {
 		if n := c.Git.Count(rctx, t.Path, "HEAD.."+l.baseRef); n >= 0 {
 			row.Behind = &n
+		}
+		if d, ok := c.Git.DiffStat(rctx, t.Path, l.baseRef+"...HEAD"); ok {
+			row.Diff = &RowDiff{Files: d.Files, Added: d.Added, Removed: d.Removed}
 		}
 	}
 	if l.probe && row.PR != nil && row.PR.State == "OPEN" && row.Behind != nil && *row.Behind > 0 {
@@ -783,6 +800,19 @@ func (c *Ctx) queuedTickets() []Row {
 // backgroundGrace bounds how long an idle agent with unfinished background
 // tasks counts as busy. A dev server it left running never reports back.
 const backgroundGrace = time.Hour
+
+// prTitle is a pull request's title without the ticket id it starts with,
+// as in "ACM-12: Add the login page" or "[ACM-12] Add the login page", which
+// the board shows next to the id already.
+func prTitle(title, id string) string {
+	t := strings.TrimSpace(title)
+	for _, p := range []string{"[" + id + "]", "(" + id + ")", id} {
+		if rest, ok := strings.CutPrefix(t, p); ok && (rest == "" || strings.ContainsAny(rest[:1], " :-")) {
+			return strings.TrimLeft(rest, " :-")
+		}
+	}
+	return t
+}
 
 // closedPR picks a ticket's merged pull request, else its latest one.
 func closedPR(prs []forge.PR) (forge.PR, bool) {

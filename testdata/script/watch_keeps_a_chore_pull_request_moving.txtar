@@ -25,7 +25,8 @@ state $WT stage ci
 # Green, with no review yet: it waits for the bot, then is yours to merge.
 jqedit $FAKE_DIR/prs.json '.[0].statusCheckRollup[0].conclusion = "SUCCESS"'
 exec tkt ls --no-fetch --json
-envelope '.result.rows[0] | [.chore, .next.reason, .phase]' '["deps","awaiting_bot","waiting_review"]'
+envelope '.result.rows[0] | [.chore, .title, .next.reason, .phase]' '["deps","Upgrade the dependencies","awaiting_bot","waiting_review"]'
+envelope '.result.rows[0].diff' '{"added":0,"files":0,"removed":0}'
 
 # The bot clears it: the pull request waits for your merge, which no
 # skill makes for a pull request without a ticket.

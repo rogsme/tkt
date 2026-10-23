@@ -93,8 +93,9 @@ export function watchStage(r: Row): string {
 }
 
 /** The board's columns and their widths. AGE is the time since tkt start,
- * TIME the time in the phase, as in tkt ls; NOTES takes the rest. TICKET
- * widens for a chore's run, whose id is its branch. */
+ * TIME the time in the phase, as in tkt ls; DIFF what the branch changes
+ * against its base; NOTES takes the rest, with the pull request's title
+ * last. TICKET widens for a chore's run, whose id is its branch. */
 const heads: [string, number][] = [
 	["TICKET", 9],
 	["AGE", 4],
@@ -102,6 +103,7 @@ const heads: [string, number][] = [
 	["TIME", 4],
 	["AGENT", 8],
 	["PR", 6],
+	["DIFF", 11],
 ];
 
 function widths(rows: Row[]): number[] {
@@ -145,9 +147,18 @@ export function phaseLabel(phase: string, chore = ""): string {
 	return phase.replaceAll("_", " ");
 }
 
+/** diffText sizes what a branch changes, such as +293 -8, or "-" before it
+ * changes anything. */
+export function diffText(r: Row): string {
+	const d = r.diff;
+	if (!d || (d.added === 0 && d.removed === 0 && d.files === 0)) return "-";
+	const n = (v: number) => (v >= 10_000 ? `${Math.round(v / 1000)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
+	return `+${n(d.added)} -${n(d.removed)}`;
+}
+
 function rowText(r: Row, s: BoardState, w: number[]): string {
 	const agent = !r.agent ? "-" : (r.agent.background ?? 0) > 0 ? "waiting" : r.agent.status;
-	const cells = [r.ticket, since(r.started, s.now) || "-", phaseLabel(r.phase, r.chore), since(r.phase_since, s.now) || "-", agent, r.pr ? `#${r.pr.number}` : "-"];
+	const cells = [r.ticket, since(r.started, s.now) || "-", phaseLabel(r.phase, r.chore), since(r.phase_since, s.now) || "-", agent, r.pr ? `#${r.pr.number}` : "-", diffText(r)];
 	const parts = cells.map((c, i) => pad(c, w[i]));
 	const flags: string[] = [];
 	if (r.chore) flags.push("chore");
@@ -160,7 +171,7 @@ function rowText(r: Row, s: BoardState, w: number[]): string {
 	const job = s.jobs.get(r.ticket);
 	if (job) flags.push(`${job} ${spinner[s.tick % spinner.length]}`);
 	if (r.stale) flags.push("stale");
-	parts.push(flags.join(", "));
+	parts.push([flags.join(", "), r.title ?? ""].filter(Boolean).join("  "));
 	return parts.join(" ").trimEnd();
 }
 

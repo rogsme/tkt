@@ -21,7 +21,11 @@ export interface Row {
 	/** chore names the chore whose run this row is; the ticket is then the
 	 * run's branch. */
 	chore?: string;
+	/** title is the open pull request's, without the ticket id. */
+	title?: string;
 	path: string;
+	/** diff is what the branch changes against its base. */
+	diff?: { files: number; added: number; removed: number } | null;
 	/** background counts the tasks an idle agent waits on, such as a CI
 	 * watcher; it goes on by itself when they finish. */
 	agent: { pane_id: string; name: string; harness: string; status: string; background?: number } | null;
