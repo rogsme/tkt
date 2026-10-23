@@ -31,9 +31,10 @@ export interface Row {
 	next: Next;
 	stage: string;
 	launch: string;
-	/** paused says why a running tkt auto loop waits for you, and why names
-	 * the rule behind it; both are empty while the loop drives the ticket. */
-	auto: { wanted: boolean; approve_plan: boolean; running: boolean; rounds: number; stop: string; waiting: string; paused?: string; why?: string } | null;
+	/** paused says why a running tkt auto loop waits for you, why names
+	 * the rule behind it, and note what failed, such as a sync's error; all
+	 * are empty while the loop drives the ticket. */
+	auto: { wanted: boolean; approve_plan: boolean; running: boolean; rounds: number; stop: string; waiting: string; paused?: string; why?: string; note?: string } | null;
 	/** hold says tkt watch and tkt auto leave the ticket alone (tkt hold). */
 	hold?: boolean;
 	/** watch is what tkt watch did: last is its last step, such as
@@ -79,6 +80,20 @@ export interface UpdateResult {
  * /update does not replace it. */
 export function updateNotice(r: UpdateResult): string | undefined {
 	return r.available && !r.dev && !r.updated ? r.to : undefined;
+}
+
+/** stepText says what a step of tkt auto does, as tkt auto --once reports
+ * it; a sync step has no stage. */
+export function stepText(did: { action: string; stage?: string }): string {
+	switch (did.action) {
+		case "approve":
+			return "approving the plan";
+		case "start":
+			return "starting";
+		case "sync":
+			return "merging the base";
+	}
+	return `running ${did.stage ?? did.action}`;
 }
 
 /** ago renders milliseconds for people: 45s, 12m, 3h, 2d. */

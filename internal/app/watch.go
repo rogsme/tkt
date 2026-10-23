@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -44,9 +45,11 @@ type WatchResult struct {
 // run (with Stage), or "" when it left the ticket alone. Reason is the
 // ticket's next step that the action answers, or why the pass left it:
 // hold, auto (a tkt auto loop drives it), locked (another tkt command works
-// on it), forge_lag (the forge still shows an older head), slot (every
-// [auto] max_parallel slot is taken), round_limit or no_progress (it waits
-// for you), or its next step's reason.
+// on it), forge_lag (the forge still shows an older head), agent_settling
+// (its agent stopped minutes ago, and a person may still use the session),
+// slot (every [auto] max_parallel slot is taken), worktree_gone (its
+// directory or state is gone), round_limit or no_progress (it waits for
+// you), or its next step's reason.
 type WatchTicket struct {
 	Ticket string `json:"ticket"`
 	Action string `json:"action"`
@@ -91,9 +94,15 @@ const (
 	WatchAuto     = "auto"
 	WatchLocked   = "locked"
 	WatchForgeLag = "forge_lag"
+	WatchSettling = "agent_settling"
 	WatchSlot     = "slot"
 	WatchLaunch   = "launch"
+	WatchGone     = "worktree_gone"
 )
+
+// watchSettle is how long an agent sits idle before tkt watch replaces it
+// with a fresh session: a person may still be reading or typing there.
+const watchSettle = 5 * time.Minute
 
 // actDone is tkt watch's own action: it runs tkt done.
 const actDone = "done"
@@ -139,8 +148,11 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		return a
 	}
 	fix := func(stage string) watchAct {
-		if m.Rounds >= p.MaxRounds {
+		switch {
+		case m.Rounds >= p.MaxRounds:
 			return pause(StopRoundLimit)
+		case f.Agent != "" && f.Idle > 0 && f.Idle < watchSettle:
+			return leave(WatchSettling)
 		}
 		return act(actRun, stage)
 	}
@@ -151,6 +163,10 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		return leave(WatchAuto)
 	case f.Agent != herdr.Working && (f.Launch == "tab" || f.Launch == "launching" || f.Launch == "not_ready" || f.Launch == "prompt_uncertain"):
 		return leave(WatchLaunch)
+	case f.ForgeLag:
+		// What the forge says is about an older head, even that a step made
+		// no progress.
+		return leave(WatchForgeLag)
 	}
 	switch n.Reason {
 	case ReasonMerged:
@@ -224,6 +240,12 @@ func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
 	}
 	w := &watcher{c: c, slots: map[string]*os.File{}, started: c.Now().UTC().Format(history.TimeFormat)}
 	defer w.dropSlots(nil)
+	// The first SIGTERM or Ctrl-C lets the pass finish the step it took. A
+	// second one stops tkt at once, as it would without fang.
+	go func() {
+		<-ctx.Done()
+		signal.Reset(os.Interrupt, syscall.SIGTERM)
+	}()
 	if !c.Dry {
 		f, err := lock.Try(c.Repo.Common, watchLock)
 		if errors.Is(err, lock.ErrHeld) {
@@ -452,7 +474,16 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, error) {
 			break
 		}
 		seen[t.ID] = true
+		// wt still lists a worktree whose directory someone removed.
+		if _, err := os.Stat(t.Path); err != nil {
+			out = append(out, WatchTicket{Ticket: t.ID, Reason: WatchGone})
+			continue
+		}
 		row, f := c.row(ctx, l, t)
+		// A stop during the reads leaves facts that may be wrong.
+		if ctx.Err() != nil {
+			break
+		}
 		w.freeSlot(t.ID, row)
 		out = append(out, w.step(ctx, a, c, t, row, f))
 	}
@@ -463,21 +494,19 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, error) {
 // step decides and takes one ticket's step.
 func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, row Row, f Facts) WatchTicket {
 	res := WatchTicket{Ticket: t.ID}
+	// Without the state, watch knows neither a hold nor its own last step.
 	ts, err := c.stateAt(ctx, t.Path)
 	if err != nil {
-		ts = &ticketState{st: state.State{}}
+		res.Reason = WatchGone
+		return res
 	}
+	f.Hold = f.Hold || ts.st["hold"] != ""
 	mem := watchMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["watch_last"]}
 	p := WatchPolicy{MaxRounds: c.Cfg.Auto.MaxRounds, DoneAfterMerge: c.Cfg.Watch.DoneAfterMerge}
 	act := watchStep(row.Next, f, p, mem)
-	// Two facts the rule list cannot see. The forge still shows a head
-	// older than the branch's, as it does for a moment after a push, so
-	// all it says is about the old head, even that a step made no progress.
-	// Or another tkt command works on the ticket.
-	switch {
-	case !c.Dry && row.PR != nil && row.PR.State == "OPEN" && c.forgeLags(ctx, t.ID, row.PR.Head):
-		act = watchAct{Why: WatchForgeLag}
-	case act.Kind != "" && (c.ticketLocked(t.ID) || c.autoRunning(t.ID)):
+	// A fact the rule list cannot see: another tkt command works on the
+	// ticket.
+	if act.Kind != "" && (c.ticketLocked(t.ID) || c.autoRunning(t.ID)) {
 		act = watchAct{Why: WatchLocked}
 	}
 	res.Action, res.Stage, res.Reason = act.Kind, act.Stage, act.Why
@@ -499,6 +528,12 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		c.Would(watchArgv(act, t.ID))
 		return res
 	}
+	// A step that started finishes even when tkt watch is asked to stop; a
+	// stop before it starts leaves the ticket for the next watch.
+	if ctx.Err() != nil {
+		res.Action, res.Stage, res.Reason = "", "", act.Why
+		return res
+	}
 	// Remember the step before taking it, so one that fails is not taken
 	// again on the same head.
 	kv := []string{"watch_last", act.key(f.Head)}
@@ -508,14 +543,16 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	c.save(ts, kv...)
 	if err := w.do(ctx, a, act, t.ID); err != nil {
 		res.Error = apperr.As(err).Msg
-		what := act.Kind
-		if act.Stage != "" {
-			what += " " + act.Stage
+		// A sync that failed changed nothing, such as one while the network
+		// is down, so the next pass tries it again.
+		if act.Kind == actSync {
+			c.save(ts, "watch_last", mem.Last)
 		}
-		c.UI.Warn("%s: tkt watch could not %s: %s", t.ID, what, res.Error)
-		c.record(history.Event{Ticket: t.ID, Event: history.Watch, Action: act.Kind, Stage: act.Stage, Stop: "failed"})
-		c.notify(t.ID, notice{"tkt watch could not " + what, res.Error, "request"})
+		w.failed(c, ts, t.ID, act, f.Head, res.Error)
 		return res
+	}
+	if ts.st["watch_fail"] != "" {
+		c.save(ts, "watch_fail", "")
 	}
 	switch act.Kind {
 	case actRun:
@@ -559,15 +596,35 @@ func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string) error
 	return err
 }
 
+// failed reports a step that failed: once for each step, head and reason,
+// since a sync that keeps failing is tried again every pass.
+func (w *watcher) failed(c *Ctx, ts *ticketState, id string, act watchAct, head, msg string) {
+	key := act.key(head) + " " + msg
+	if ts.st["watch_fail"] == key {
+		return
+	}
+	c.save(ts, "watch_fail", key)
+	what := act.Kind
+	if act.Stage != "" {
+		what += " " + act.Stage
+	}
+	c.UI.Warn("%s: tkt watch could not %s: %s", id, what, msg)
+	c.record(history.Event{Ticket: id, Event: history.Watch, Action: act.Kind, Stage: act.Stage, Stop: "failed"})
+	c.notify(id, notice{"tkt watch could not " + what, msg, "request"})
+}
+
 // pause records that tkt watch leaves a ticket for you, and notifies once
-// for each reason and head.
+// for each reason and head. A pause right after a step that failed says
+// nothing new, since that failure was reported already.
 func (w *watcher) pause(c *Ctx, ts *ticketState, id, head, why, last string) {
 	if c.Dry || ts.path == "" || ts.st["watch_pause"] == why && ts.st["watch_head"] == head {
 		return
 	}
 	c.save(ts, "watch_pause", why, "watch_head", head)
 	c.record(history.Event{Ticket: id, Event: history.Watch, Action: actPause, Stop: why})
-	c.notify(id, notice{"needs you", watchPauseText(id, why, last), "request"})
+	if !strings.HasPrefix(ts.st["watch_fail"], last+" ") {
+		c.notify(id, notice{"needs you", watchPauseText(id, why, last), "request"})
+	}
 }
 
 // ticketLocked reports whether another tkt command holds the ticket.
@@ -578,14 +635,6 @@ func (c *Ctx) ticketLocked(id string) bool {
 	}
 	f.Close()
 	return false
-}
-
-// forgeLags reports whether the forge still shows an older head than the
-// branch has on the remote, as it does for a moment after a push. A step
-// taken then would act on facts about the old head.
-func (c *Ctx) forgeLags(ctx context.Context, id, head string) bool {
-	remote := c.Git.Rev(ctx, c.Repo.Root, "refs/remotes/"+c.LC.Forge.Remote+"/"+id+"^{commit}")
-	return remote != "" && head != "" && remote != head
 }
 
 // takeSlot takes one of the [auto] max_parallel slots tkt auto's agents use,
@@ -649,7 +698,8 @@ func (c *Ctx) stopWatch() (*WatchResult, error) {
 	}
 	for deadline := time.Now().Add(30 * time.Second); c.watchRunning(); c.Sleep(100 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			return nil, apperr.New(apperr.WatchRunning, "tkt watch (pid %d) did not stop within 30 seconds", pid).WithHint("kill %d", pid)
+			return nil, apperr.New(apperr.WatchRunning, "tkt watch (pid %d) did not stop within 30 seconds; it finishes the step it took first", pid).
+				WithHint("kill %d stops it at once", pid)
 		}
 	}
 	res.Stopped = true
@@ -658,12 +708,13 @@ func (c *Ctx) stopWatch() (*WatchResult, error) {
 
 // ensureWatch starts tkt watch for the repository when none runs, so its
 // tickets keep moving after this command ends. It runs only inside a herdr
-// pane, on a GitHub forge; [watch] autostart = false, or TKT_WATCH=off,
-// turns it off. The watch runs in a session of its own, so it outlives the
-// command and the pane, and writes its lines to watch.log in the
-// repository's tkt directory.
+// pane, where everything tkt watch needs is there; [watch] autostart =
+// false, or TKT_WATCH=off, turns it off. The watch runs in a session of its
+// own, so it outlives the command and the pane, and writes its lines to
+// watch.log in the repository's tkt directory.
 func (c *Ctx) ensureWatch() {
-	if c.Getenv("HERDR_ENV") != "1" || !c.Cfg.Watch.Autostart || c.Getenv("TKT_WATCH") == "off" || c.LC.Forge.Kind != "GitHub" || c.watchRunning() {
+	if c.Getenv("HERDR_ENV") != "1" || !c.Cfg.Watch.Autostart || c.Getenv("TKT_WATCH") == "off" ||
+		c.LC.RequireGitHub("watch") != nil || !found("gh") || !found("herdr") || c.watchRunning() {
 		return
 	}
 	sp, ok := c.R.(runner.Spawner)
@@ -678,6 +729,15 @@ func (c *Ctx) ensureWatch() {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return
 	}
+	// A watch that exits at once would start again with every command, such
+	// as the board's tkt ls every few seconds.
+	mark := filepath.Join(dir, "watch.started")
+	if fi, err := os.Stat(mark); err == nil && c.Now().Sub(fi.ModTime()) < time.Minute {
+		return
+	}
+	if os.WriteFile(mark, nil, 0o644) == nil {
+		os.Chtimes(mark, c.Now(), c.Now())
+	}
 	log := filepath.Join(dir, "watch.log")
 	if fi, err := os.Stat(log); err == nil && fi.Size() > 1<<20 {
 		os.Rename(log, log+".1")
@@ -690,14 +750,17 @@ func (c *Ctx) ensureWatch() {
 	c.UI.Info("started tkt watch for %s, which keeps its tickets moving (tkt help watch); it writes to %s", c.Repo.Root, log)
 }
 
-// watchEnv is the environment tkt watch starts with: this one, without the
-// pane and tab tkt runs in, which are not the watch's, and out of a ticket's
-// own TMPDIR, which tkt done removes.
+// watchEnv is the environment tkt watch starts with: this one, out of a
+// ticket's own TMPDIR, which tkt done removes, and without the pane, tab and
+// workspace tkt runs in. The pane and tab are not the watch's, and a
+// workspace id holds only until herdr restarts, so the watch finds the
+// workspace again at every pass, as it does outside a pane.
 func watchEnv(env []string) []string {
 	var out []string
 	for _, kv := range env {
 		switch {
-		case strings.HasPrefix(kv, "HERDR_PANE_ID="), strings.HasPrefix(kv, "HERDR_TAB_ID="):
+		case strings.HasPrefix(kv, "HERDR_ENV="), strings.HasPrefix(kv, "HERDR_WORKSPACE_ID="),
+			strings.HasPrefix(kv, "HERDR_PANE_ID="), strings.HasPrefix(kv, "HERDR_TAB_ID="):
 		case strings.HasPrefix(kv, "TMPDIR="):
 			out = append(out, "TMPDIR="+tmpRoot(strings.TrimPrefix(kv, "TMPDIR=")))
 		default:

@@ -69,7 +69,10 @@ func human(reason, text string) Next {
 // tkt watch and tkt auto. BaseMerge says how merging the base into the head would go,
 // clean or conflict, when tkt tried it with git merge-tree; "" when it did
 // not. AutoRunning says a tkt auto loop drives the ticket; WatchPause says
-// why tkt watch left it for you, round_limit or no_progress.
+// why tkt watch left it for you, round_limit or no_progress. ForgeLag says
+// the forge still shows an older head than the branch has, as right after
+// a push, and Idle how long the agent has sat idle; tkt auto and tkt watch
+// read both, from a look with probe.
 type Facts struct {
 	ID          string
 	PRState     string
@@ -78,6 +81,8 @@ type Facts struct {
 	Hold        bool
 	AutoRunning bool
 	WatchPause  string
+	ForgeLag    bool
+	Idle        time.Duration
 	LastStatus  string
 	Checks      string
 	Verdict     string
@@ -185,7 +190,7 @@ func PhaseOf(f Facts, n Next) string {
 	case f.Agent != herdr.Working && f.Agent != herdr.Blocked && f.AutoWait == "slot":
 		return PhaseQueued
 	case f.Agent != herdr.Working && !f.Background &&
-		(f.AutoPause == StopRoundLimit || f.AutoPause == StopNoProgress || f.AutoPause == StopUnknown || f.WatchPause != ""):
+		(f.AutoPause == StopRoundLimit || f.AutoPause == StopNoProgress || f.AutoPause == StopUnknown || f.AutoPause == StopSyncFailed || f.WatchPause != ""):
 		return PhaseNeedsYou
 	}
 	switch n.Reason {

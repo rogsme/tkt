@@ -28,8 +28,10 @@ and --approve-plan is off (plan_awaits_approval), when no agent runs
 (agent_missing), when the bot has not reviewed a head after [review] bot_wait
 (bot_silent), after [auto] max_rounds fix runs since the plan's approval
 (round_limit), when a step would repeat on the same head with nothing
-changed (no_progress), and while the ticket is on hold (hold, with no
-notification). It records the pause, which tkt ls shows as
+changed (no_progress), when tkt sync cannot merge the base for now, such as
+with uncommitted changes in the worktree (sync_failed: it tries again at each
+look, and tkt ls says why in auto.note), and while the ticket is on hold
+(hold, with no notification). It records the pause, which tkt ls shows as
 auto.paused, notifies once with --notify, and goes on by itself when the
 ticket moves, such as after you answer the agent in its tab or approve the
 plan.

@@ -59,7 +59,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 					`agent: ${agent}; last status: ${r.last_status || "none"}`,
 					`pull request: ${r.pr ? `#${r.pr.number} ${r.pr.state}` : "none"}; checks: ${r.checks?.state ?? "-"}; review: ${r.review ? `${r.review.verdict}${r.review.at_head ? "" : " (old head)"}` : "-"}`,
 					`auto: ${auto}; rounds ${a?.rounds ?? 0}`,
-					`tkt watch: ${hub.watching === false ? "not running" : r.watch?.paused ? `waits for the user (${r.watch.paused})` : r.hold ? "leaves it alone, on hold" : "keeps it moving"}`,
+					`tkt watch: ${hub.watching === "off" ? "not running" : hub.watching === "failing" ? "running, but its passes fail" : r.watch?.paused ? `waits for the user (${r.watch.paused})` : r.hold ? "leaves it alone, on hold" : "keeps it moving"}`,
 					`next: ${r.next.text} (${r.next.reason})`,
 					item ? `needs the user: ${item.text}` : "needs the user: nothing",
 				];

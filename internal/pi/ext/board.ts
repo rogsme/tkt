@@ -42,8 +42,9 @@ export interface BoardState {
 	repo: string;
 	/** update is a newer tkt release that /update installs. */
 	update?: string;
-	/** watch says whether tkt watch runs; undefined until tkt ls says. */
-	watch?: boolean;
+	/** watch says whether tkt watch runs, and whether its passes fail;
+	 * undefined until tkt ls says. */
+	watch?: "on" | "off" | "failing";
 }
 
 /** The command that acts on an item, shown beside it on the board. */
@@ -72,7 +73,7 @@ export function footer(s: BoardState): string {
 export function title(s: BoardState): string {
 	const n = s.rows.length;
 	const k = new Set(s.items.map((a) => a.ticket)).size;
-	const watch = s.watch === undefined ? "" : s.watch ? "  watch on" : "  watch off";
+	const watch = s.watch ? `  watch ${s.watch}` : "";
 	return `tkt  ${s.repo}  ${n} ticket${n === 1 ? "" : "s"}${k ? `  ${k} need${k === 1 ? "s" : ""} you` : ""}${watch}`;
 }
 

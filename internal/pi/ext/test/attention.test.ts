@@ -143,3 +143,10 @@ test("tkt watch takes the upkeep steps, and says when it waits for you", () => {
 	const sync = attentionOf(row({ phase: "needs_you", next: { kind: "command", reason: "base_moved", argv: ["tkt", "sync", "ACM-12"], text: "tkt sync ACM-12" }, watch: { last: "sync:@abc", paused: "no_progress" } }), false, true);
 	assert.match(sync?.text ?? "", /tkt watch tried to merge the base on this head/);
 });
+
+test("a tkt auto loop whose sync keeps failing says why", () => {
+	const a = attentionOf(row({ phase: "needs_you", auto: auto({ paused: "sync_failed", why: "base_moved", note: "ACM-12 has uncommitted changes" }) }), false);
+	assert.equal(a?.kind, "paused");
+	assert.equal(a?.title, "sync failed");
+	assert.match(a?.text ?? "", /cannot merge the base: ACM-12 has uncommitted changes\. tkt auto tries again/);
+});

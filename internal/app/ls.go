@@ -67,10 +67,12 @@ type RowAuto struct {
 	// Waiting is "slot" while the loop waits for a free slot.
 	Waiting string `json:"waiting"`
 	// Paused says why a running loop waits for you, such as needs_you, and
-	// Why names the rule behind it, such as agent_blocked. Both are empty
-	// while the loop drives the ticket.
+	// Why names the rule behind it, such as agent_blocked; Note adds what
+	// failed, such as a sync's error. All are empty while the loop drives
+	// the ticket.
 	Paused string `json:"paused"`
 	Why    string `json:"why"`
+	Note   string `json:"note"`
 }
 
 // RowWatch is what tkt watch did with a ticket. Last is its last step and
@@ -538,9 +540,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
 	row.Hold = st["hold"] != ""
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan, Rounds: atoi(st["rounds"]),
-		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"]}
+		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"], Note: st["auto_note"]}
 	if !row.Auto.Running {
-		row.Auto.Paused, row.Auto.Why = "", ""
+		row.Auto.Paused, row.Auto.Why, row.Auto.Note = "", "", ""
 	}
 	if l.src.Herdr == "ok" {
 		row.Tabs = herdr.TicketTabs(l.tabs, t.ID)
@@ -590,6 +592,12 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	pf := state.Read(phasePath(ts))
 	f := factsFor(row)
 	f.BotWait = c.Cfg.Review.BotWait
+	if l.probe && row.PR != nil && row.PR.State == "OPEN" && row.PR.Head != "" {
+		f.ForgeLag = c.forgeLags(rctx, t.ID, row.PR.Head)
+	}
+	if at, err := time.Parse(time.RFC3339, row.IdleSince); err == nil {
+		f.Idle = c.Now().Sub(at)
+	}
 	if pf["phase"] == PhaseWaitingReview && f.Head != "" && pf["head"] == f.Head {
 		if since, err := time.Parse(time.RFC3339, pf["since"]); err == nil {
 			f.Waited = c.Now().Sub(since)
@@ -629,6 +637,16 @@ func (c *Ctx) probeBaseMerge(ctx context.Context, path, head, base string) strin
 		return "clean"
 	}
 	return "conflict"
+}
+
+// forgeLags reports whether the forge still shows an older head than the
+// branch has on the remote, as it does for a moment after a push: the
+// branch's remote-tracking ref is a descendant of the head the forge names.
+// A remote-tracking ref older than the forge's head is tkt's own stale
+// fetch, so the forge's facts stand.
+func (c *Ctx) forgeLags(ctx context.Context, id, head string) bool {
+	remote := c.Git.Rev(ctx, c.Repo.Root, "refs/remotes/"+c.LC.Forge.Remote+"/"+id+"^{commit}")
+	return remote != "" && remote != head && c.Git.IsAncestor(ctx, c.Repo.Root, head, remote)
 }
 
 // queuedTickets lists the tickets whose tkt auto loop waits for a slot

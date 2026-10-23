@@ -39,8 +39,9 @@ export class Hub {
 	lastInput = "";
 	/** newer is a newer tkt release that /update installs. */
 	newer?: string;
-	/** watching says whether tkt watch runs, as tkt ls last said. */
-	watching?: boolean;
+	/** watching says whether tkt watch runs, and whether its passes fail,
+	 * as tkt ls last said. */
+	watching?: "on" | "off" | "failing";
 	ctx?: ExtensionContext;
 	render: () => void = () => {};
 	readonly jobs: Jobs;
@@ -207,7 +208,8 @@ export class Hub {
 		const rows = rowsOf(env);
 		if (!rows || this.stopped) return;
 		this.rows = rows;
-		if (env.ok && env.result?.watch) this.watching = env.result.watch.running;
+		const w = env.ok ? env.result?.watch : undefined;
+		if (w) this.watching = !w.running ? "off" : w.error ? "failing" : "on";
 		this.key = keyOf(rows.map((r) => r.ticket)) || this.key;
 		this.update();
 		this.watch(rows);
@@ -220,7 +222,8 @@ export class Hub {
 		this.failed = this.failed.filter((f) => now - f.at < failedForMs && !this.dismissed.has(f.item.key));
 		const items: Attention[] = [];
 		for (const row of this.rows) {
-			const a = attentionOf(row, this.jobs.inFlight(row.ticket), this.watching ?? false);
+			// A watch whose passes fail takes no step, so the steps wait for you.
+			const a = attentionOf(row, this.jobs.inFlight(row.ticket), this.watching === "on");
 			if (a && !this.dismissed.has(a.key)) items.push(a);
 		}
 		this.items = [...items, ...this.failed.map((f) => f.item)];

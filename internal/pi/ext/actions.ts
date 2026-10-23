@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import type { Envelope, UpdateResult } from "./model.ts";
+import { type Envelope, stepText, type UpdateResult } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
@@ -135,7 +135,7 @@ export async function next(hub: Hub, id: string): Promise<string> {
 	const r = dry.result as AutoOnce;
 	if (r.did) {
 		hub.add({ ticket: id, label: r.did.stage || r.did.action, args: ["auto", id, "--once"] });
-		return `Queued: ${id} ${r.did.action === "approve" ? "approving the plan" : r.did.action === "start" ? "starting" : `running ${r.did.stage}`}.`;
+		return `Queued: ${id} ${stepText(r.did)}.`;
 	}
 	if (r.wait === "awaiting_bot") return `${id} waits for the review bot in CI; ${hub.row(id)?.next.text ?? "tkt ls shows it"}.`;
 	if (r.wait) return `${id} has nothing to do yet: ${r.next.text}.`;

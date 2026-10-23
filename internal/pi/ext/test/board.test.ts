@@ -89,8 +89,9 @@ test("the board marks a ticket on hold", () => {
 test("the board says whether tkt watch runs, and what it runs", () => {
 	const s = { rows: [], jobs: new Map<string, string>(), items: [], now, tick: 0, repo: "app" };
 	assert.equal(title(s), "tkt  app  0 tickets");
-	assert.equal(title({ ...s, watch: true }), "tkt  app  0 tickets  watch on");
-	assert.equal(title({ ...s, watch: false }), "tkt  app  0 tickets  watch off");
+	assert.equal(title({ ...s, watch: "on" }), "tkt  app  0 tickets  watch on");
+	assert.equal(title({ ...s, watch: "off" }), "tkt  app  0 tickets  watch off");
+	assert.equal(title({ ...s, watch: "failing" }), "tkt  app  0 tickets  watch failing");
 	const working = { pane_id: "p", name: "a", harness: "claude", status: "working" };
 	const rows = [
 		row({ ticket: "ACM-1", phase: "fixing", stage: "ci", agent: working, watch: { last: "run:ci@abc", paused: "" } }),

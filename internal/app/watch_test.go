@@ -35,6 +35,14 @@ func TestWatchStepTable(t *testing.T) {
 		{failing, p, watchMemory{Last: "run:ci@h1", Rounds: 1}, pause(StopNoProgress)},
 		{with(failing, func(f *Facts) { f.Head = "h2" }), p, watchMemory{Last: "run:ci@h1", Rounds: 1}, watchAct{Kind: actRun, Stage: "ci", Why: ReasonChecksFail}},
 		{failing, p, watchMemory{Rounds: 2}, pause(StopRoundLimit)},
+		// An agent that stopped minutes ago may still have a person in its
+		// session; a sync, which needs no agent, goes ahead.
+		{with(failing, func(f *Facts) { f.Idle = time.Minute }), p, watchMemory{}, leave(WatchSettling)},
+		{with(failing, func(f *Facts) { f.Idle = time.Hour }), p, watchMemory{}, watchAct{Kind: actRun, Stage: "ci", Why: ReasonChecksFail}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.Idle = "STALE_BASE", true, time.Minute }), p, watchMemory{}, watchAct{Kind: actSync, Why: ReasonBaseMoved}},
+		// The forge still shows the head before watch's own sync: nothing
+		// it says counts yet, not even that the sync changed nothing.
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.ForgeLag = "STALE_BASE", true, true }), p, watchMemory{Last: "sync:@h1"}, leave(WatchForgeLag)},
 		// What watch leaves alone.
 		{with(failing, func(f *Facts) { f.Hold = true }), p, watchMemory{}, leave(WatchHold)},
 		{with(failing, func(f *Facts) { f.AutoRunning = true }), p, watchMemory{}, leave(WatchAuto)},
@@ -66,7 +74,7 @@ func TestWatchPausesNeedYou(t *testing.T) {
 
 func TestWatchEnvLeavesTheTicketBehind(t *testing.T) {
 	got := watchEnv([]string{"HOME=/home/dev", "HERDR_ENV=1", "HERDR_PANE_ID=w1:p12", "HERDR_TAB_ID=w1:t12", "HERDR_WORKSPACE_ID=w1", "TMPDIR=/tmp/tkt-acme-app-ACM-12-123"})
-	want := []string{"HOME=/home/dev", "HERDR_ENV=1", "HERDR_WORKSPACE_ID=w1", "TMPDIR=/tmp"}
+	want := []string{"HOME=/home/dev", "TMPDIR=/tmp"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("got %q, want %q", got, want)
 	}

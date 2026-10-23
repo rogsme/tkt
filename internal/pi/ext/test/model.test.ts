@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ago, expandIds, keyFromTracker, keyOf, mentions, normalizeId, rowsOf, stampText, updateNotice } from "../model.ts";
+import { ago, expandIds, keyFromTracker, keyOf, mentions, normalizeId, rowsOf, stampText, updateNotice, stepText } from "../model.ts";
 import { row } from "./fixtures.ts";
 
 test("normalizeId", () => {
@@ -64,4 +64,10 @@ test("updateNotice suggests a newer release, and nothing to a development build"
 	assert.equal(updateNotice({ ...r, to: "v0.3.0", available: false, next: undefined }), undefined);
 	assert.equal(updateNotice({ ...r, from: "dev-1a2b3c", dev: true, next: "tkt update --force" }), undefined);
 	assert.equal(updateNotice({ ...r, updated: true, next: undefined }), undefined);
+});
+
+test("stepText says what tkt auto's step does", () => {
+	assert.equal(stepText({ action: "sync" }), "merging the base");
+	assert.equal(stepText({ action: "run", stage: "ci" }), "running ci");
+	assert.equal(stepText({ action: "approve" }), "approving the plan");
 });

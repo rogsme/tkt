@@ -164,6 +164,8 @@ function paused(row: Row, item: Make): Attention {
 		}
 		case "agent_missing":
 			return item("paused", "no agent", `${id}: no agent runs in its worktree. tkt resume ${id} brings it back, and tkt auto goes on.`, true, [resume]);
+		case "sync_failed":
+			return item("paused", "sync failed", `${id}: tkt sync cannot merge the base${a.note ? `: ${a.note}` : ""}. tkt auto tries again at each look, and goes on once it can.`, true);
 	}
 	return item("paused", "auto paused", `${id}: tkt auto paused (${a.paused}). /peek ${id} shows its screen.`, true);
 }

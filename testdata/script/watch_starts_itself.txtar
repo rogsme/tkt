@@ -15,6 +15,12 @@ exec tkt ls --no-fetch
 exec tkt watch --stop
 stdout 'stopped tkt watch'
 
+# For a minute after a start, no command starts another, so a watch that
+# exits at once is not started again by every command.
+exec tkt ls --no-fetch
+! stderr 'started tkt watch'
+rm $REPO/.git/tkt/watch.started
+
 # A dry run starts nothing, and neither does TKT_WATCH=off or autostart off.
 exec tkt start ACM-1 --dry-run
 ! stderr 'started tkt watch'

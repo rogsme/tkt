@@ -1,0 +1,18 @@
+# wt still lists a worktree whose directory someone removed by hand. tkt
+# watch leaves it alone, instead of failing on it, and notifying, every pass.
+exec tkt start ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+env FAKE_GH_PRS=$WORK/prs.json
+rm $FAKE_WT_ROOT/ACM-1
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets' '[{"action":"","reason":"worktree_gone","ticket":"ACM-1"}]'
+! logged herdr notification show
+! logged herdr agent start
+
+-- prs.json --
+[{"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+  "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}], "reviews": []}]
