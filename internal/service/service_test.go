@@ -28,6 +28,9 @@ func TestUnitFilesCarryThePathAndTheBinaries(t *testing.T) {
 		"\nExecStart=/home/acme/.local/bin/tkt watch\n",
 		"\nRestart=always\n",
 		"\nRestartPreventExitStatus=3 4 200\n",
+		// A stop lets the step in progress finish, with its child commands.
+		"\nKillMode=mixed\n",
+		"\nTimeoutStopSec=300\n",
 	} {
 		if !strings.Contains(w, want) {
 			t.Errorf("tkt-watch@.service lacks %q:\n%s", want, w)

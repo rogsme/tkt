@@ -20,10 +20,12 @@ import (
 // ServiceResult is what tkt watch --install or --uninstall did. Unit is the
 // repository's tkt watch service: a systemd unit or a launchd label. Herdr
 // says how herdr's server runs: started (tkt started its service), service
-// (its service ran already) or running (it runs outside its service, which
-// takes over at the next boot or login). Linger says whether systemd starts
-// the services at boot (yes) or at login (no); launchd starts them at
-// login, and leaves it "".
+// (its service ran already), running (it runs outside its service, which
+// takes over at the next boot or login), or off (linger is off, so its unit
+// stays off: systemd would stop it, and every agent in it, with your last
+// session). Linger says whether systemd keeps the services past your last
+// session and starts them at boot (yes) or not (no); launchd starts them
+// at login, and leaves it "".
 type ServiceResult struct {
 	Manager string   `json:"manager"`
 	Unit    string   `json:"unit"`
@@ -52,12 +54,14 @@ func (s *ServiceResult) text(repo string, dry bool) string {
 		b.WriteString("started herdr's server as a service\n")
 	case "running":
 		b.WriteString("herdr runs outside its service, which takes over at the next start\n")
+	case "off":
+		b.WriteString("herdr's unit stays off while linger is off, so herdr runs as you start it\n")
 	}
 	switch s.Linger {
 	case "yes":
-		b.WriteString("both start at boot\n")
+		b.WriteString("the services start at boot, and outlive your sessions\n")
 	case "no":
-		b.WriteString("both start when you log in\n")
+		b.WriteString("tkt watch runs from login to logout\n")
 	}
 	return b.String()
 }
@@ -214,13 +218,26 @@ func (c *Ctx) installSystemd(s watchSvc, spec service.Spec, sr *ServiceResult, y
 	if err := c.writeServiceFile(s.files[1], service.WatchUnitFile(spec)); err != nil {
 		return err
 	}
-	for _, argv := range [][]string{service.SystemctlArgv("daemon-reload"), service.SystemctlArgv("enable", s.herdr)} {
-		if err := c.serviceRun(argv); err != nil {
+	if err := c.serviceRun(service.SystemctlArgv("daemon-reload")); err != nil {
+		return err
+	}
+	// Without linger, systemd stops a user's units when the last session
+	// ends, and herdr's would take every agent with it. herdr then stays as
+	// you run it, which outlives a logout.
+	on, err := c.linger(sr, yes)
+	if err != nil {
+		return err
+	}
+	if on {
+		if err := c.serviceRun(service.SystemctlArgv("enable", s.herdr)); err != nil {
 			return err
 		}
-	}
-	if err := c.startHerdr(s, sr, service.SystemctlArgv("start", s.herdr)); err != nil {
-		return err
+		if err := c.startHerdr(s, sr, service.SystemctlArgv("start", s.herdr)); err != nil {
+			return err
+		}
+	} else {
+		sr.Herdr = "off"
+		c.UI.Warn("linger is off, and systemd stops a user's units when the last session ends, so a herdr under it would take every agent with it; %s stays off, and herdr runs as you start it. loginctl enable-linger, then tkt watch --install, turns it on", s.herdr)
 	}
 	c.stopLoneWatch(s)
 	for _, argv := range [][]string{service.SystemctlArgv("enable", s.unit), service.SystemctlArgv("restart", s.unit)} {
@@ -228,7 +245,7 @@ func (c *Ctx) installSystemd(s watchSvc, spec service.Spec, sr *ServiceResult, y
 			return err
 		}
 	}
-	return c.linger(sr, yes)
+	return nil
 }
 
 func (c *Ctx) installLaunchd(s watchSvc, spec service.Spec, sr *ServiceResult) error {
@@ -241,7 +258,13 @@ func (c *Ctx) installLaunchd(s watchSvc, spec service.Spec, sr *ServiceResult) e
 	if err := c.writeServiceFile(s.files[1], service.WatchPlist(spec, s.unit, c.Repo.Root, watchLog)); err != nil {
 		return err
 	}
-	if err := c.startHerdr(s, sr, service.LaunchctlArgv("bootstrap", s.domain, s.files[0])); err != nil {
+	// launchd refuses to load an agent twice; one that is loaded but
+	// stopped, as after herdr server stop, starts with kickstart.
+	start := service.LaunchctlArgv("bootstrap", s.domain, s.files[0])
+	if c.loaded(c.Ctx, s, s.herdr) {
+		start = service.LaunchctlArgv("kickstart", s.domain+"/"+s.herdr)
+	}
+	if err := c.startHerdr(s, sr, start); err != nil {
 		return err
 	}
 	c.stopLoneWatch(s)
@@ -277,7 +300,7 @@ func (c *Ctx) herdrUp() bool {
 // stopLoneWatch stops a tkt watch that runs outside the service, such as
 // one a tkt command started, so the service's can take the lock.
 func (c *Ctx) stopLoneWatch(s watchSvc) {
-	if c.Dry || !c.watchRunning() || c.active(c.Ctx, s, s.unit) {
+	if !c.watchRunning() || c.active(c.Ctx, s, s.unit) {
 		return
 	}
 	if _, err := c.signalWatch(); err != nil {
@@ -285,42 +308,46 @@ func (c *Ctx) stopLoneWatch(s watchSvc) {
 	}
 }
 
-// linger asks systemd to start the user's services at boot rather than at
-// login, after asking. --yes skips the question; without a terminal and
-// without --yes, the services start at login.
-func (c *Ctx) linger(sr *ServiceResult, yes bool) error {
-	name := c.Getenv("USER")
-	if u, err := user.Current(); err == nil {
-		name = u.Username
-	}
-	r := c.R.Run(c.Ctx, runner.Cmd{Argv: []string{"loginctl", "show-user", name, "--property=Linger", "--value"}, Timeout: 10 * time.Second})
-	if strings.TrimSpace(r.Out()) == "yes" {
+// linger asks systemd to keep the user's units past their last session,
+// and to start them at boot, after asking. --yes skips the question;
+// without a terminal and without --yes, the answer is no. It reports
+// whether linger is on, or, in a dry run, would be.
+func (c *Ctx) linger(sr *ServiceResult, yes bool) (bool, error) {
+	if c.lingers(c.Ctx) {
 		sr.Linger = "yes"
-		return nil
+		return true, nil
 	}
 	sr.Linger = "no"
 	switch {
 	case yes:
-	case c.Dry:
-		return nil
-	case !c.StdinTTY:
-		c.UI.Info("the services start when you log in; loginctl enable-linger, or tkt watch --install --yes, starts them at boot")
-		return nil
+	case c.Dry || !c.StdinTTY:
+		return false, nil
 	default:
-		fmt.Fprint(c.UI.Err, "tkt: start herdr and tkt watch at boot, before you log in? This runs loginctl enable-linger. [y/N] ")
+		fmt.Fprint(c.UI.Err, "tkt: keep herdr and tkt watch running after you log out, and start them at boot? This runs loginctl enable-linger; without it, herdr stays out of systemd. [y/N] ")
 		var answer string
 		fmt.Fscanln(c.Stdin, &answer)
 		if !strings.HasPrefix(strings.ToLower(answer), "y") {
-			return nil
+			return false, nil
 		}
 	}
 	if err := c.serviceRun([]string{"loginctl", "enable-linger"}); err != nil {
-		return err
+		return false, err
 	}
 	if !c.Dry {
 		sr.Linger = "yes"
 	}
-	return nil
+	return true, nil
+}
+
+// lingers reports whether systemd keeps the user's units past their last
+// session.
+func (a *App) lingers(ctx context.Context) bool {
+	name := a.Getenv("USER")
+	if u, err := user.Current(); err == nil {
+		name = u.Username
+	}
+	r := a.R.Run(ctx, runner.Cmd{Argv: []string{"loginctl", "show-user", name, "--property=Linger", "--value"}, Timeout: 10 * time.Second})
+	return strings.TrimSpace(r.Out()) == "yes"
 }
 
 // uninstallWatch stops and disables the repository's tkt watch service.
@@ -444,18 +471,26 @@ func (a *App) serviceCheck(ctx context.Context, root string, harnesses []string)
 			missing = append(missing, t)
 		}
 	}
+	lingers := s.manager == service.Launchd || a.lingers(ctx)
+	herdrOn := a.enabled(ctx, s, s.herdr)
 	switch {
 	case !a.active(ctx, s, s.unit):
 		return Check{ID: id, Status: CheckWarn, Message: s.unit + " is installed but does not run", Hint: start}
 	case len(missing) > 0:
 		return Check{ID: id, Status: CheckWarn, Message: "the services' PATH finds no " + strings.Join(missing, ", "),
 			Hint: "run tkt watch --install again from a shell whose PATH finds them"}
-	case !a.enabled(ctx, s, s.herdr):
+	case herdrOn && !lingers:
+		return Check{ID: id, Status: CheckWarn, Message: s.herdr + " is on while linger is off, so it stops with your last session, and every agent with it",
+			Hint: "loginctl enable-linger"}
+	case !herdrOn && lingers:
 		return Check{ID: id, Status: CheckWarn, Message: s.unit + " runs, but herdr's server does not start with it",
 			Hint: "tkt watch --install"}
 	}
 	msg := s.unit + " runs tkt watch"
-	if !a.active(ctx, s, s.herdr) {
+	switch {
+	case !lingers:
+		msg += " from login to logout, and herdr runs as you start it, since linger is off"
+	case !a.active(ctx, s, s.herdr):
 		msg += "; herdr runs outside " + s.herdr + " until its next start"
 	}
 	return Check{ID: id, Status: CheckOK, Message: msg}

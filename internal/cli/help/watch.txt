@@ -49,10 +49,15 @@ since every step works in herdr. While herdr is down it waits.
 --install keeps it running while no terminal is open: it writes systemd user
 units, or launchd agents on macOS, for herdr's server and for this
 repository's tkt watch, with this shell's PATH, since the agents in herdr's
-panes inherit herdr's. It enables both, starts herdr's unless herdr already
-runs, and asks before loginctl enable-linger starts them at boot; --yes
-answers yes. tkt commands then start the unit rather than a watch of their
-own, and --stop stops the unit. --uninstall removes this repository's unit;
+panes inherit herdr's. It asks before loginctl enable-linger, which keeps
+the units running past your last session and starts them at boot; --yes
+answers yes, and without a terminal the answer is no. Without linger,
+systemd stops the units when your last session ends, so herdr's unit stays
+off, since it would take every agent with it, and tkt watch runs from login
+to logout. With linger, herdr's unit goes on, and starts unless herdr
+already runs. tkt commands then start the unit rather than a watch of their
+own, and --stop stops the unit, which signals tkt watch alone, so it
+finishes the step it took. --uninstall removes this repository's unit;
 herdr's stays. tkt doctor checks that they run and that their PATH finds the
 tools and harnesses.
 

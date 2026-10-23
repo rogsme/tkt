@@ -178,9 +178,11 @@ func Loginctl() {
 
 var labelRE = regexp.MustCompile(`<key>Label</key>\s*<string>([^<]+)</string>`)
 
-// Launchctl answers the launchctl commands tkt runs, keeping the loaded
-// agents in $FAKE_DIR/launchd.json: bootstrap loads the agent its plist
-// names, bootout unloads one, and print says whether one is loaded.
+// Launchctl answers the launchctl commands tkt runs, keeping the agents in
+// $FAKE_DIR/launchd.json: the loaded ones in enabled, the running ones in
+// active. bootstrap loads and starts the agent its plist names, and, like
+// launchd, refuses one that is loaded already; kickstart starts a loaded
+// one; bootout unloads one; print says whether one is loaded, and runs.
 func Launchctl() {
 	logCall("launchctl")
 	args := os.Args[1:]
@@ -193,24 +195,29 @@ func Launchctl() {
 	case "bootstrap":
 		b, err := os.ReadFile(args[2])
 		m := labelRE.FindSubmatch(b)
-		if err != nil || m == nil {
+		if err != nil || m == nil || slices.Contains(u.Enabled, string(m[1])) {
 			die(5, "Bootstrap failed: 5: Input/output error")
 		}
-		u.Active = add(u.Active, string(m[1]))
+		u.Enabled, u.Active = add(u.Enabled, string(m[1])), add(u.Active, string(m[1]))
 	case "bootout":
-		if !slices.Contains(u.Active, label(args[1])) {
+		if !slices.Contains(u.Enabled, label(args[1])) {
 			die(3, "Boot-out failed: 3: No such process")
 		}
-		u.Active = drop(u.Active, label(args[1]))
+		u.Enabled, u.Active = drop(u.Enabled, label(args[1])), drop(u.Active, label(args[1]))
 	case "kickstart":
-		if !slices.Contains(u.Active, label(args[len(args)-1])) {
+		if !slices.Contains(u.Enabled, label(args[len(args)-1])) {
 			die(113, "Could not find service %q in domain for user gui", label(args[len(args)-1]))
 		}
+		u.Active = add(u.Active, label(args[len(args)-1]))
 	case "print":
-		if !slices.Contains(u.Active, label(args[1])) {
+		if !slices.Contains(u.Enabled, label(args[1])) {
 			die(113, "Could not find service %q in domain for user gui", label(args[1]))
 		}
-		fmt.Printf("%s = {\n\tstate = running\n}\n", args[1])
+		state := "not running"
+		if slices.Contains(u.Active, label(args[1])) {
+			state = "running"
+		}
+		fmt.Printf("%s = {\n\tstate = %s\n}\n", args[1], state)
 		os.Exit(0)
 	default:
 		die(2, "fake launchctl: unsupported: %s", args[0])

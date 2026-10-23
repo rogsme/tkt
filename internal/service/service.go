@@ -79,7 +79,9 @@ func HerdrUnitFile(s Spec) string {
 // starts again whenever it exits, as tkt watch does on purpose when tkt
 // update replaces it, except on the statuses a restart cannot fix: 3 and 4
 // are tkt's own for a setting or a state, such as another watch that runs,
-// and 200 is systemd's when the repository's directory is gone.
+// and 200 is systemd's when the repository's directory is gone. A stop
+// signals tkt watch alone, which finishes the step it took, with the git,
+// gh and herdr commands it runs, within five minutes.
 func WatchUnitFile(s Spec) string {
 	return "# " + written + "\n" +
 		"# One instance per repository: tkt-watch@$(systemd-escape --path DIR).service.\n" +
@@ -94,6 +96,8 @@ func WatchUnitFile(s Spec) string {
 		"Restart=always\n" +
 		"RestartSec=10\n" +
 		"RestartPreventExitStatus=3 4 200\n" +
+		"KillMode=mixed\n" +
+		"TimeoutStopSec=300\n" +
 		"\n" +
 		"[Install]\n" +
 		"WantedBy=default.target\n"
@@ -164,10 +168,11 @@ func HerdrPlist(s Spec, log string) string {
 }
 
 // WatchPlist runs tkt watch in the repository at login and starts it again
-// whenever it exits, as it does when tkt update replaces it.
+// whenever it exits, as it does when tkt update replaces it. A stop gives it
+// five minutes to finish the step it took.
 func WatchPlist(s Spec, label, repo, log string) string {
 	return plist(label, []string{s.Tkt, "watch"}, repo, s.Path, log,
-		"\t<key>KeepAlive</key>\n\t<true/>\n\t<key>ThrottleInterval</key>\n\t<integer>30</integer>\n")
+		"\t<key>KeepAlive</key>\n\t<true/>\n\t<key>ThrottleInterval</key>\n\t<integer>30</integer>\n\t<key>ExitTimeOut</key>\n\t<integer>300</integer>\n")
 }
 
 func plist(label string, argv []string, dir, path, log, keep string) string {

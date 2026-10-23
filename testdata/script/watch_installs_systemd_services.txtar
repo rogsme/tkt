@@ -7,33 +7,32 @@ unitvar REPO_ESC $REPO
 exec tkt watch --install --dry-run
 stderr 'dry run: tee '$UNITS'/herdr.service'
 stderr 'dry run: tee '$UNITS'/tkt-watch@.service'
-stderr 'dry run: systemctl --user enable herdr.service'
+stderr 'dry run: systemctl --user daemon-reload'
 stderr 'dry run: systemctl --user restart tkt-watch@\S+-app\.service'
 ! exists $UNITS/herdr.service
 ! logged systemctl --user enable
 
-# herdr's server already runs, so its unit waits for the next start; a
-# second server would only fail. Without a terminal, the services start at
-# login.
+# Without linger, systemd stops a user's units when the last session ends,
+# and herdr's would take every agent with it, so herdr's unit stays off.
+# Without a terminal, the answer to the linger question is no.
 exec tkt watch --install --json
-envelope '.result.service | [.manager, .herdr, .linger, .removed]' '["systemd","running","no",false]'
+envelope '.result.service | [.manager, .herdr, .linger, .removed]' '["systemd","off","no",false]'
 envelope '.result.service.unit' 'tkt-watch@'$REPO_ESC'.service'
 grep '^Environment="PATH=' $UNITS/herdr.service
 grep '^ExecStart=.*/herdr server$' $UNITS/herdr.service
 grep '^ExecStart=.*/tkt watch$' $UNITS/tkt-watch@.service
 grep '^WorkingDirectory=%f$' $UNITS/tkt-watch@.service
-stderr 'herdr''s server already runs outside herdr.service'
-stderr 'the services start when you log in'
+grep '^KillMode=mixed$' $UNITS/tkt-watch@.service
+stderr 'linger is off, and systemd stops a user''s units when the last session ends'
 logged systemctl --user daemon-reload
-logged systemctl --user enable herdr.service
-! logged systemctl --user start herdr.service
-jqeq $FAKE_DIR/systemd.json '[.enabled[] | sub("@.*"; "@")]' '["herdr.service","tkt-watch@"]'
+! logged systemctl --user enable herdr.service
+jqeq $FAKE_DIR/systemd.json '[.enabled[] | sub("@.*"; "@")]' '["tkt-watch@"]'
 jqeq $FAKE_DIR/systemd.json '[.active[] | sub("@.*"; "@")]' '["tkt-watch@"]'
 
-# tkt doctor sees the service run, with a PATH that finds the tools.
+# tkt doctor sees the unit run, with a PATH that finds the tools.
 exec tkt doctor --json
 envelope '.result.checks[] | select(.id == "services") | .status' ok
-envelope '.result.checks[] | select(.id == "services") | .message' 'tkt-watch@'$REPO_ESC'.service runs tkt watch; herdr runs outside herdr.service until its next start'
+envelope '.result.checks[] | select(.id == "services") | .message' 'tkt-watch@'$REPO_ESC'.service runs tkt watch from login to logout, and herdr runs as you start it, since linger is off'
 
 # --stop stops the unit, which would start the watch again otherwise.
 exec tkt watch --stop
@@ -52,21 +51,39 @@ logged systemctl --user start --no-block tkt-watch@$REPO_ESC.service
 ! exists $REPO/.git/tkt/watch
 env TKT_WATCH=off
 
-# A watch that a tkt command started stops for the unit's, with herdr down
-# this time: tkt starts herdr's unit. --yes starts both at boot.
+# --yes turns linger on, and herdr's unit with it. herdr's server already
+# runs here, so its unit waits for the next start: a second server would
+# only fail.
+exec tkt watch --install --yes --json
+envelope '.result.service | [.herdr, .linger]' '["running","yes"]'
+logged loginctl enable-linger
+logged systemctl --user enable herdr.service
+! logged systemctl --user start herdr.service
+stderr 'herdr''s server already runs outside herdr.service'
+
+# A watch that a tkt command started stops for the unit's, and with herdr
+# down this time, tkt starts herdr's unit.
 rm $REPO/.git/tkt/watch.started
 exec tkt watch &
 waitfile $REPO/.git/tkt/watch
 jqedit $FAKE_DIR/systemd.json '.active = []'
 env FAKE_HERDR_DOWN=1
-exec tkt watch --install --yes --json
+exec tkt watch --install --dry-run
+stderr 'dry run: kill -TERM [0-9]+'
+exec tkt watch --install --json
 envelope '.result.service | [.herdr, .linger]' '["started","yes"]'
 wait
 logged systemctl --user start herdr.service
-logged loginctl enable-linger
 env FAKE_HERDR_DOWN=
 exec tkt ls --no-fetch --json
 envelope '.result.watch.running' false
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "services") | .message' 'tkt-watch@'$REPO_ESC'.service runs tkt watch'
+
+# herdr's unit with linger off would stop with the last session.
+exec sh -c 'echo no > "$FAKE_DIR/linger"'
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "services") | [.status, .hint]' '["warn","loginctl enable-linger"]'
 
 # --uninstall stops and disables the repository's unit; herdr's stays.
 exec tkt watch --uninstall

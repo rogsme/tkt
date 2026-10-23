@@ -26,7 +26,7 @@ The fakes in `internal/fake` stand in for the real tools on `PATH`:
 - `opencode` answers the session API calls, and a session's messages from the JSON file in `FAKE_OC_MESSAGES`; `FAKE_OC_PAD=N` adds an old message of N bytes. Like the real `opencode api`, it writes only the first 256 KiB of an answer to a pipe.
 - `claude` fails if anything calls it, because tkt starts agents through herdr only.
 - `git` logs each call, then runs the real git.
-- `systemctl` keeps the user units' states in `$FAKE_DIR/systemd.json` (enabled and active) and answers `--user` commands. Like systemd, it refuses to enable or start a unit whose file, or template's file, is not in `$XDG_CONFIG_HOME/systemd/user`. It runs nothing: a started unit only counts as active. `systemd-escape --path` names a path with systemd's rules, `loginctl` reads and writes `$FAKE_DIR/linger`, and `launchctl` keeps the loaded agents in `$FAKE_DIR/launchd.json`.
+- `systemctl` keeps the user units' states in `$FAKE_DIR/systemd.json` (enabled and active) and answers `--user` commands. Like systemd, it refuses to enable or start a unit whose file, or template's file, is not in `$XDG_CONFIG_HOME/systemd/user`. It runs nothing: a started unit only counts as active. `systemd-escape --path` names a path with systemd's rules, and `loginctl` reads and writes `$FAKE_DIR/linger`. `launchctl` keeps the loaded agents in `$FAKE_DIR/launchd.json` as `enabled`, and the running ones as `active`; like launchd, it refuses to bootstrap an agent that is loaded already.
 - `pi` answers `--version` with `1.3.0`. Any other call appends the variables tkt agent sets (`PI_CODING_AGENT_DIR`, `PI_SKIP_VERSION_CHECK`, `PI_TELEMETRY`, `TKT_BIN`) to `$FAKE_DIR/pi-env` and exits. The test binary has no bundled pi, so the `agent_` scripts set `TKT_PI=pi`; the condition `[bundled_pi]` holds when `go test -tags bundled_pi` built one in. A script has no terminal, so `tkt agent` never gets past its terminal check there: the scripts check its dry run, and unit tests in `internal/pi` and `internal/runner` cover the command line and the process replacement.
 
 The `update_` scripts point `TKT_RELEASES` and `TKT_RELEASES_API` at `file://` URLs under `$WORK`, and set `TKT_UPDATE_TARGET` to the file `tkt update` replaces. Only the tests set `TKT_UPDATE_TARGET`: without it, `tkt update` would replace the shared test binary.
@@ -97,11 +97,12 @@ After a change to `tkt hook tmp` or its plugin, with a preset that runs OpenCode
 
 After a change to `tkt watch --install` or the units, on a Linux machine with systemd, from a herdr pane in a scratch repository with the lifecycle configuration and a pull request for `ACM-1`:
 
-1. Run `tkt watch --install --dry-run`, then `tkt watch --install`. `systemctl --user status 'tkt-watch@*'` shows the unit running, and `tkt doctor` says so.
+1. Run `tkt watch --install --dry-run`, then `tkt watch --install`. `systemctl --user status 'tkt-watch@*'` shows the unit running, and `tkt doctor` says so. Without linger, it asks before `loginctl enable-linger`; answer no once, and `herdr.service` stays off.
 2. Run `herdr server stop`, then `systemctl --user start herdr.service`, from a terminal outside herdr. Attach a herdr client: the workspaces and tabs are back, and agents resumed. In a new pane, `echo $PATH` matches the shell you installed from.
 3. Merge a change into `main` and make the pull request's base merge due. Within a minute, with no terminal attached, the unit syncs it: `journalctl --user -u 'tkt-watch@*'` shows the sync.
 4. Reboot, or log out and in. Both units run again before you open a herdr client, and `tkt ls --json` shows `watch.running`.
-5. Run `tkt watch --uninstall`. The unit stops and stays stopped after a reboot; `herdr.service` still runs.
+5. Start a ci run, then `tkt watch --stop` while the agent launches: the launch finishes, the unit stops after it, and `tkt ls` shows the agent at work.
+6. Run `tkt watch --uninstall`. The unit stops and stays stopped after a reboot; `herdr.service` still runs.
 
 On a Mac, the same steps with `launchctl print gui/$(id -u)/tkt.herdr` for the status and `~/Library/Logs/herdr.log` and `tkt/watch.log` in the repository's git directory for the lines; the agents start at login, not at boot.
 
