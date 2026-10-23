@@ -54,7 +54,6 @@ const (
 	ConfigInvalid          Code = "config_invalid"
 	ConfigLegacy           Code = "config_legacy"
 	HerdrEnvMissing        Code = "herdr_env_missing"
-	HerdrWorkspaceMissing  Code = "herdr_workspace_missing"
 	WorktreeLayout         Code = "worktree_layout"
 	WorktreeBranchMismatch Code = "worktree_branch_mismatch"
 	NoPresetForHarness     Code = "no_preset_for_harness"
@@ -150,7 +149,6 @@ var Registry = []Info{
 	{ConfigInvalid, ExitEnvironment, "tkt's own configuration file is invalid"},
 	{ConfigLegacy, ExitEnvironment, "tkt's configuration is in the old presets and stages files"},
 	{HerdrEnvMissing, ExitEnvironment, "tkt does not run inside a herdr pane"},
-	{HerdrWorkspaceMissing, ExitEnvironment, "outside a herdr pane, tkt watch finds no herdr workspace with a pane in the repository"},
 	{WorktreeLayout, ExitEnvironment, "the worktree directory is not named after its branch"},
 	{WorktreeBranchMismatch, ExitEnvironment, "the worktree is not on the ticket's branch"},
 	{NoPresetForHarness, ExitEnvironment, "no preset uses the session's harness"},

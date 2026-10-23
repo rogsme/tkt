@@ -18,11 +18,27 @@ envelope '.result.tickets[0] | [.action, .stage]' '["run","ci"]'
 logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-1 --label ACM-1
 logged herdr agent start acm-1 --kind claude
 
-# With no pane in the repository, it has nowhere to open tabs.
-jqedit $FAKE_DIR/herdr.json '.panes = [] | .agents = []'
-! exec tkt watch --once --json
-rc 3
-envelope '.error.code' herdr_workspace_missing
+# With no pane in the repository, as after a reboot with nothing open, it
+# opens a workspace there for its step. A dry run says it would.
+jqedit $FAKE_DIR/herdr.json '.panes = [] | .agents = [] | .tabs = []'
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 more work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+gitvar H2 $FAKE_WT_ROOT/ACM-1 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H2'
+exec tkt watch --once --dry-run --json
+envelope '.result.actions[0].display' 'herdr workspace create --cwd '$REPO' --label app --no-focus'
+! logged herdr workspace create
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .stage]' '["run","ci"]'
+stderr 'no herdr workspace had a pane in '$REPO', so tkt watch opened workspace w[0-9]+ there'
+logged herdr workspace create --cwd $REPO --label app --no-focus
+jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label == "ACM-1") | .workspace_id] | length' 1
+jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label == "ACM-1") | .workspace_id][0] == ([.workspaces[] | select(.label == "app") | .workspace_id][0])' true
+
+# The next pass finds that workspace from its pane, and opens no other.
+resetlog
+exec tkt watch --once --json
+! logged herdr workspace create
 
 -- prs.json --
 [{"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",

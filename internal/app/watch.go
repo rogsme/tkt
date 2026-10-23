@@ -345,14 +345,15 @@ func (c *Ctx) watchStatus() WatchStatus {
 	return WatchStatus{Running: c.watchRunning(), LastPass: st["pass"], Error: st["error"]}
 }
 
-// watcher is one tkt watch run: the slots its agents hold, and what its
-// dry runs would do.
+// watcher is one tkt watch run: the slots its agents hold, what its dry runs
+// would do, and the herdr workspace its pass opens tabs in.
 type watcher struct {
 	c       *Ctx
 	slots   map[string]*os.File
 	started string
 	passes  int
 	plan    []Action
+	ws      string
 }
 
 func (w *watcher) writeStatus(err error) {
@@ -381,19 +382,21 @@ func (w *watcher) writeStatus(err error) {
 func (w *watcher) app() (*App, error) {
 	a := w.c.App
 	if a.Getenv("HERDR_ENV") == "1" && a.Getenv("HERDR_WORKSPACE_ID") != "" {
+		w.ws = a.Getenv("HERDR_WORKSPACE_ID")
 		return a, nil
 	}
 	ws, err := w.c.findWorkspace()
 	if err != nil {
 		return nil, err
 	}
+	w.ws = ws
 	cp := *a
 	cp.Getenv = func(k string) string {
 		switch k {
 		case "HERDR_ENV":
 			return "1"
 		case "HERDR_WORKSPACE_ID":
-			return ws
+			return w.ws
 		case "HERDR_PANE_ID", "HERDR_TAB_ID":
 			return ""
 		}
@@ -402,9 +405,33 @@ func (w *watcher) app() (*App, error) {
 	return &cp, nil
 }
 
+// openWorkspace opens a herdr workspace in the repository when none has a
+// pane there, before the pass takes a step: every step works in herdr, and
+// outside a pane, as after a reboot, nothing else gives tkt watch one. The
+// next pass finds it from its pane.
+func (w *watcher) openWorkspace(c *Ctx) error {
+	if w.ws != "" {
+		return nil
+	}
+	label := filepath.Base(c.Repo.Root)
+	if c.Dry {
+		c.Would(herdr.WorkspaceCreateArgv(c.Repo.Root, label))
+		w.ws = "<workspace>"
+		return nil
+	}
+	ws, err := c.H.WorkspaceCreate(c.Ctx, c.Repo.Root, label)
+	if err != nil {
+		return herdrErr(err)
+	}
+	c.UI.Info("no herdr workspace had a pane in %s, so tkt watch opened workspace %s there", c.Repo.Root, ws)
+	w.ws = ws
+	return nil
+}
+
 // findWorkspace finds the herdr workspace that holds the repository's
 // panes: the one with the most panes in its primary worktree or a ticket
-// worktree. herdr numbers workspaces per server, so nothing can store one.
+// worktree, or "" when none has one. herdr numbers workspaces per server, so
+// nothing can store one.
 func (c *Ctx) findWorkspace() (string, error) {
 	panes, err := c.H.Panes(c.Ctx)
 	if err != nil {
@@ -429,10 +456,6 @@ func (c *Ctx) findWorkspace() (string, error) {
 				break
 			}
 		}
-	}
-	if best == "" {
-		return "", apperr.New(apperr.HerdrWorkspaceMissing, "no herdr workspace has a pane in %s, so tkt watch has nowhere to open tabs", c.Repo.Root).
-			WithHint("open a herdr pane in %s", c.Repo.Root)
 	}
 	return best, nil
 }
@@ -525,6 +548,7 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		return res
 	}
 	if c.Dry {
+		w.openWorkspace(c)
 		c.Would(watchArgv(act, t.ID))
 		return res
 	}
@@ -532,6 +556,10 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	// stop before it starts leaves the ticket for the next watch.
 	if ctx.Err() != nil {
 		res.Action, res.Stage, res.Reason = "", "", act.Why
+		return res
+	}
+	if err := w.openWorkspace(c); err != nil {
+		res.Action, res.Stage, res.Error = "", "", apperr.As(err).Msg
 		return res
 	}
 	// Remember the step before taking it, so one that fails is not taken

@@ -149,6 +149,17 @@ func Herdr() {
 	switch group + " " + cmd {
 	case "workspace list":
 		herdrOK(obj{"type": "workspace_list", "workspaces": s.Workspaces})
+	case "workspace create":
+		f, _ := flagValues(args)
+		n := fmt.Sprint(s.Next)
+		s.Next++
+		ws, tab, pane := "w"+n, "w"+n+":t"+n, "w"+n+":p"+n
+		s.Workspaces = append(s.Workspaces, obj{"workspace_id": ws, "label": f["--label"]})
+		s.Tabs = append(s.Tabs, obj{"tab_id": tab, "workspace_id": ws, "label": "1"})
+		p := obj{"pane_id": pane, "tab_id": tab, "workspace_id": ws, "cwd": f["--cwd"], "foreground_cwd": f["--cwd"]}
+		s.Panes = append(s.Panes, p)
+		s.save()
+		herdrOK(obj{"type": "workspace_created", "workspace": obj{"workspace_id": ws, "label": f["--label"]}, "tab": obj{"tab_id": tab, "workspace_id": ws}, "root_pane": p})
 	case "tab list":
 		f, _ := flagValues(args)
 		herdrOK(obj{"tabs": filter(s.Tabs, func(t obj) bool { return str(t, "workspace_id") == f["--workspace"] })})
