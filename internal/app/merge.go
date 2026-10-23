@@ -218,13 +218,10 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	if f.Verdict == contract.VerdictClear {
 		c.UI.Warn("only the review bot cleared %s's head; finish-ticket asks for a review that says %s at the head, and stops with Status: %s without one", id, contract.VerdictReadyForHuman, contract.StatusBlocked)
 	}
-	// The steps are the procedure's at the head once a review cleared it,
-	// and before that, the one they ran on.
-	at := res.Head
-	if !cleared {
-		at = res.Verified
-	}
-	got, err := c.passedSteps(id, at, o.Passed)
+	// The line says the steps passed on the verified head, so they are the
+	// numbers of its procedure; after a sync, finish-ticket matches them
+	// with the new review's steps by what they do.
+	got, err := c.passedSteps(id, res.Verified, o.Passed)
 	if err != nil {
 		return nil, err
 	}

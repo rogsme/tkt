@@ -96,7 +96,7 @@ var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "revie
 // value in parentheses when model routing is on, or none.
 var SuggestedRE = regexp.MustCompile(`(?m)^Suggested: (.*)$`)
 
-var suggestionRE = regexp.MustCompile("^`?([A-Za-z0-9-]+)`?\\s*(?:\\(([^)]*)\\))?$")
+var suggestionRE = regexp.MustCompile("^`?([A-Za-z0-9-]+)`?\\s*(?:\\((.*)\\))?$")
 
 // Suggestion is a pick on suggest-tickets' Suggested: line: the ticket, and
 // the Model: value its Model routing names, or "" without model routing.
@@ -106,18 +106,39 @@ type Suggestion struct {
 }
 
 // Suggestions reads the picks from the last Suggested: line in text, in
-// order. id says which words are ticket ids, so none names nothing.
+// order. id says which words are ticket ids, so none names nothing. The
+// line splits at the commas outside parentheses, and a model counts by its
+// first word, the model id, so a condition after it costs no pick.
 func Suggestions(text string, id *regexp.Regexp) []Suggestion {
 	out := []Suggestion{}
 	m := SuggestedRE.FindAllStringSubmatch(text, -1)
 	if len(m) == 0 {
 		return out
 	}
-	for part := range strings.SplitSeq(m[len(m)-1][1], ",") {
-		p := suggestionRE.FindStringSubmatch(strings.TrimSpace(part))
-		if p != nil && id.MatchString(p[1]) {
-			out = append(out, Suggestion{Ticket: p[1], Model: strings.TrimSpace(p[2])})
+	line := m[len(m)-1][1]
+	var parts []string
+	depth, from := 0, 0
+	for i, r := range line {
+		switch {
+		case r == '(':
+			depth++
+		case r == ')' && depth > 0:
+			depth--
+		case r == ',' && depth == 0:
+			parts, from = append(parts, line[from:i]), i+1
 		}
+	}
+	for _, part := range append(parts, line[from:]) {
+		p := suggestionRE.FindStringSubmatch(strings.TrimSpace(part))
+		if p == nil || !id.MatchString(p[1]) {
+			continue
+		}
+		model := strings.FieldsFunc(p[2], func(r rune) bool { return r == ' ' || r == ',' || r == '`' })
+		s := Suggestion{Ticket: p[1]}
+		if len(model) > 0 {
+			s.Model = model[0]
+		}
+		out = append(out, s)
 	}
 	return out
 }

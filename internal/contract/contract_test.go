@@ -286,6 +286,11 @@ func TestSuggestedLineNamesThePicks(t *testing.T) {
 			t.Errorf("%s: %v, want %v", tc.line, got, tc.want)
 		}
 	}
+	// A model the line words with a condition still names its pick.
+	got := contract.Suggestions("Suggested: ACM-14 (acme-small-2, frontier if the schema changes), `ACM-21` (frontier), ACM-x", id)
+	if want := []contract.Suggestion{{"ACM-14", "acme-small-2"}, {"ACM-21", "frontier"}}; !slices.Equal(got, want) {
+		t.Errorf("a model with a condition: %v, want %v", got, want)
+	}
 	if !strings.Contains(config.SuggestLine(3), "the suggest-tickets skill") {
 		t.Errorf("the suggest line %q does not name the skill", config.SuggestLine(3))
 	}
