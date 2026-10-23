@@ -881,7 +881,7 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	case actRun:
 		c.UI.Info("%s: ran %s (%s)", t.ID, act.Stage, act.Why)
 		c.record(history.Event{Ticket: t.ID, Event: history.Watch, Action: actRun, Stage: act.Stage})
-		c.notify(t.ID, notice{"tkt watch runs " + act.Stage, watchRunText(act.Stage), "none"})
+		c.notify(t.ID, notice{"tkt watch runs " + act.Stage, watchRunText(act.Stage, f.MergeHead != "" && f.MergeHead != f.Head), "none"})
 	case actSync:
 		c.UI.Info("%s: synced with the base, with no agent", t.ID)
 	case actDone:
@@ -931,12 +931,17 @@ func voidText(why string) string {
 	return "the branch changed beyond a clean merge of the base after you verified it; check the new head once it is reviewed"
 }
 
-func watchRunText(stage string) string {
-	switch stage {
-	case "resolve":
+// watchRunText says why tkt watch runs a stage. It reviews only for a merge
+// order: a head a clean sync made, or, with synced false, one only the
+// review bot cleared.
+func watchRunText(stage string, synced bool) string {
+	switch {
+	case stage == "resolve":
 		return "the base merge conflicts; a fresh session resolves it"
-	case "review":
+	case stage == "review" && synced:
 		return "a clean sync moved the head you ordered merged; a fresh session reviews it, and your steps carry over"
+	case stage == "review":
+		return "only the review bot cleared the head you ordered merged, and finish-ticket merges on review-pr's verdict; a fresh session reviews it"
 	}
 	return "the checks fail at the head; a fresh session fixes them"
 }
