@@ -51,6 +51,11 @@ type fileTOML struct {
 		StaleAfter string `toml:"stale_after"`
 	} `toml:"board"`
 	Agent agentTOML `toml:"agent"`
+	Watch *struct {
+		Interval       string `toml:"interval"`
+		DoneAfterMerge *bool  `toml:"done_after_merge"`
+		Autostart      *bool  `toml:"autostart"`
+	} `toml:"watch"`
 }
 
 // Load reads the settings from dir, tkt's configuration directory. Without
@@ -132,7 +137,8 @@ func parseTOML(c *Config, path, src string) error {
 	return parseSettings(c, path, f)
 }
 
-// parseSettings reads the [auto], [review], [board] and [agent] tables.
+// parseSettings reads the [auto], [review], [board], [agent] and [watch]
+// tables.
 func parseSettings(c *Config, path string, f fileTOML) error {
 	bad := func(key, rule string) error {
 		return apperr.New(apperr.ConfigInvalid, "%s: %s %s", path, key, rule)
@@ -178,6 +184,17 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 	if b := f.Board; b != nil {
 		if err := duration("[board] stale_after", b.StaleAfter, &c.Board.StaleAfter, false); err != nil {
 			return err
+		}
+	}
+	if w := f.Watch; w != nil {
+		if err := duration("[watch] interval", w.Interval, &c.Watch.Interval, true); err != nil {
+			return err
+		}
+		if w.DoneAfterMerge != nil {
+			c.Watch.DoneAfterMerge = *w.DoneAfterMerge
+		}
+		if w.Autostart != nil {
+			c.Watch.Autostart = *w.Autostart
 		}
 	}
 	c.Agent.Model = f.Agent.Model

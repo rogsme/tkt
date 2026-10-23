@@ -73,6 +73,15 @@ type RowAuto struct {
 	Why    string `json:"why"`
 }
 
+// RowWatch is what tkt watch did with a ticket. Last is its last step and
+// the head it took it on, such as run:ci@HEAD. Paused says why it leaves the
+// ticket for you, round_limit or no_progress, while tkt watch runs and the
+// head is the one it paused on.
+type RowWatch struct {
+	Last   string `json:"last"`
+	Paused string `json:"paused"`
+}
+
 // ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
 // for a free slot before it starts the ticket.
 const ReasonAwaitingSlot = "awaiting_slot"
@@ -99,8 +108,10 @@ type Row struct {
 	Stage  string   `json:"stage"`
 	Launch string   `json:"launch"`
 	Auto   *RowAuto `json:"auto"`
-	// Hold says the ticket is on hold: tkt auto leaves it alone (tkt hold).
-	Hold bool `json:"hold"`
+	// Hold says the ticket is on hold: tkt watch and tkt auto leave it
+	// alone (tkt hold).
+	Hold  bool      `json:"hold"`
+	Watch *RowWatch `json:"watch"`
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
 	PhaseSince string `json:"phase_since"`
@@ -120,10 +131,12 @@ type Sources struct {
 	Fetch string `json:"fetch"`
 }
 
-// LsResult is tkt ls's table.
+// LsResult is tkt ls's table, and whether tkt watch keeps the tickets
+// moving.
 type LsResult struct {
-	Sources Sources `json:"sources"`
-	Rows    []Row   `json:"rows"`
+	Sources Sources     `json:"sources"`
+	Watch   WatchStatus `json:"watch"`
+	Rows    []Row       `json:"rows"`
 	now     time.Time
 }
 
@@ -354,7 +367,7 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	if lookErr != nil {
 		return nil, lookErr
 	}
-	res := &LsResult{Sources: l.src, Rows: []Row{}, now: a.Now()}
+	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, now: a.Now()}
 	if res.Sources.Fetch == "failed" {
 		a.UI.Warn("git fetch failed; showing the last fetched state")
 	}
@@ -569,6 +582,10 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	if l.probe && row.PR != nil && row.PR.State == "OPEN" && row.Behind != nil && *row.Behind > 0 {
 		row.BaseMerge = c.probeBaseMerge(rctx, t.Path, row.PR.Head, l.baseRef)
+	}
+	row.Watch = &RowWatch{Last: st["watch_last"]}
+	if p := st["watch_pause"]; p != "" && row.PR != nil && st["watch_head"] == row.PR.Head && c.watchRunning() {
+		row.Watch.Paused = p
 	}
 	pf := state.Read(phasePath(ts))
 	f := factsFor(row)

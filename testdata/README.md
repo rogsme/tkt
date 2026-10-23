@@ -32,6 +32,8 @@ The `update_` scripts point `TKT_RELEASES` and `TKT_RELEASES_API` at `file://` U
 
 Every fake appends its command line to `$FAKE_LOG`, each word quoted like bash `printf %q`.
 
+`TKT_WATCH=off` keeps every script's tkt commands from starting a `tkt watch` that would outlive the script; the `watch_` scripts turn it back on where they test that.
+
 The scripts use these commands beyond testscript's own:
 
 | Command | Checks or does |
@@ -41,9 +43,10 @@ The scripts use these commands beyond testscript's own:
 | `logcontains TEXT` | The log holds TEXT exactly. |
 | `resetlog` | Forgets the commands and prompts so far. |
 | `houserules` | No `wt` run used `--no-hooks`, `--clobber` or `--yes`; no git or herdr command changed worktrees; nothing ran `claude` directly. |
-| `jqedit FILE EXPR`, `jqeq FILE EXPR WANT` | Edits or checks a JSON file with a jq expression. Expressions can read `$REPO`, `$WORK`, `$WT`, `$FAKE_WT_ROOT`, `$FAKE_DIR`, `$HOME`, `$SID` and `$H1` to `$H3`. |
+| `jqedit FILE EXPR`, `jqeq FILE EXPR WANT` | Edits or checks a JSON file with a jq expression. Expressions can read `$REPO`, `$WORK`, `$WT`, `$FAKE_WT_ROOT`, `$FAKE_DIR`, `$HOME`, `$SID` and `$H1` to `$H5`. |
 | `state DIR KEY WANT`, `statevar DIR KEY VAR` | Checks or reads the ticket state of the worktree in DIR. |
 | `waitstate DIR KEY WANT` | Waits up to 30 seconds for the ticket state to record KEY=WANT, for a `tkt auto` loop started in the background with `exec ... &`. |
+| `waitfile FILE` | Waits up to 30 seconds for FILE to exist, such as the status file a `tkt watch` started in the background writes. |
 | `mkprompt FILE ID [LINE...]` | Writes a start-ticket prompt for ID. |
 | `realgit ARGS...` | Runs the real git without logging, for setup. |
 | `gitvar VAR DIR REV` | Sets VAR to a commit. |

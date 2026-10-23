@@ -17,8 +17,8 @@ export interface Attention {
 	title: string;
 	/** text is the full line, with the commands that act on it. */
 	text: string;
-	/** byAuto marks an item of a ticket that tkt auto drives; its loop
-	 * notifies by itself. */
+	/** byAuto marks an item of a ticket that tkt auto drives, or that tkt
+	 * watch paused on; both notify by themselves. */
 	byAuto: boolean;
 	/** offers are the answers the item's situation calls for, such as one
 	 * more fix run; /inbox puts them before its kind's usual answers. */
@@ -85,6 +85,9 @@ function rerun(row: Row, label: (stage: string) => string, description: string):
 	return stage ? [{ label: label(stage), description, do: "run", stage }] : [];
 }
 
+/** The next steps tkt watch takes by itself while it runs. */
+const watchTakes = new Set(["base_moved", "checks_fail"]);
+
 /** The next steps of a manual ticket that wait for your go. */
 const nextSteps: Record<string, string> = {
 	needs_review: "the pull request waits for review-pr",
@@ -99,7 +102,7 @@ const nextSteps: Record<string, string> = {
  * unless the loop paused for you. A ticket on hold still shows what its
  * agent needs, such as a plan or a question, but no step to take: you put
  * it there to wait. */
-export function attentionOf(row: Row, inFlight: boolean): Attention | undefined {
+export function attentionOf(row: Row, inFlight: boolean, watching = false): Attention | undefined {
 	if (inFlight) return undefined;
 	const id = row.ticket;
 	const a = row.auto;
@@ -116,6 +119,7 @@ export function attentionOf(row: Row, inFlight: boolean): Attention | undefined 
 		return undefined;
 	}
 	if (a?.wanted && !row.hold) return item("stalled", "auto stalled", `${id} is marked for auto, but no tkt auto loop drives it. /auto ${id} on resumes it.`);
+	if (row.watch?.paused) return watchPaused(row, item);
 	switch (row.phase) {
 		case "awaiting_approval":
 			return item("plan", "plan ready", planText(id));
@@ -127,7 +131,7 @@ export function attentionOf(row: Row, inFlight: boolean): Attention | undefined 
 			return byReason(row, reason, item);
 	}
 	const step = nextSteps[reason];
-	if (step && row.agent?.status !== "working" && !row.hold) {
+	if (step && row.agent?.status !== "working" && !row.hold && !(watching && watchTakes.has(reason))) {
 		return item("next", step, `${id}: ${step}. /next ${id}, or say "continue ${id}".`);
 	}
 	return undefined;
@@ -163,6 +167,24 @@ function paused(row: Row, item: Make): Attention {
 	}
 	return item("paused", "auto paused", `${id}: tkt auto paused (${a.paused}). /peek ${id} shows its screen.`, true);
 }
+
+/** watchPaused words a tkt watch pause. watch notified already, and goes on
+ * once the ticket moves, such as after a run you start here. */
+function watchPaused(row: Row, item: Make): Attention {
+	const id = row.ticket;
+	const w = row.watch!;
+	if (w.paused === "round_limit") {
+		const more = rerun(row, (s) => `Run ${s} once more`, "One more fix run in a fresh session.");
+		return item("paused", "max rounds reached", `${id}: tkt watch reached [auto] max_rounds fix runs since the plan's approval. Read the review, then say what to do.`, true, more);
+	}
+	const again = rerun(row, (s) => `Run ${s} again`, "The same step in a fresh session.");
+	const kind = w.last.slice(0, Math.max(0, w.last.indexOf("@")));
+	const step = kind.startsWith("run:") ? `ran ${kind.slice(4)}` : (watchSteps[kind] ?? "took a step");
+	return item("paused", "no progress", `${id}: tkt watch ${step} on this head, and nothing changed. /show ${id} for what the agent said.`, true, again);
+}
+
+/** watchSteps words the steps tkt watch takes with no agent. */
+const watchSteps: Record<string, string> = { "sync:": "tried to merge the base", "done:": "tried to remove it" };
 
 function byReason(row: Row, reason: string, item: Make, byAuto = false): Attention {
 	const id = row.ticket;

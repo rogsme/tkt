@@ -39,6 +39,8 @@ export class Hub {
 	lastInput = "";
 	/** newer is a newer tkt release that /update installs. */
 	newer?: string;
+	/** watching says whether tkt watch runs, as tkt ls last said. */
+	watching?: boolean;
 	ctx?: ExtensionContext;
 	render: () => void = () => {};
 	readonly jobs: Jobs;
@@ -178,7 +180,7 @@ export class Hub {
 
 	/** state is what the board draws. */
 	state(): BoardState {
-		return { rows: this.rows, jobs: this.labels, items: this.items, now: Date.now(), tick: this.tick, repo: this.repo, update: this.newer };
+		return { rows: this.rows, jobs: this.labels, items: this.items, now: Date.now(), tick: this.tick, repo: this.repo, update: this.newer, watch: this.watching };
 	}
 
 	/** refresh reads tkt ls, works out what needs you, and keeps one watcher
@@ -205,6 +207,7 @@ export class Hub {
 		const rows = rowsOf(env);
 		if (!rows || this.stopped) return;
 		this.rows = rows;
+		if (env.ok && env.result?.watch) this.watching = env.result.watch.running;
 		this.key = keyOf(rows.map((r) => r.ticket)) || this.key;
 		this.update();
 		this.watch(rows);
@@ -217,7 +220,7 @@ export class Hub {
 		this.failed = this.failed.filter((f) => now - f.at < failedForMs && !this.dismissed.has(f.item.key));
 		const items: Attention[] = [];
 		for (const row of this.rows) {
-			const a = attentionOf(row, this.jobs.inFlight(row.ticket));
+			const a = attentionOf(row, this.jobs.inFlight(row.ticket), this.watching ?? false);
 			if (a && !this.dismissed.has(a.key)) items.push(a);
 		}
 		this.items = [...items, ...this.failed.map((f) => f.item)];

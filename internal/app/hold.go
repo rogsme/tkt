@@ -29,15 +29,15 @@ type HoldResult struct {
 
 func (r *HoldResult) Text(w io.Writer) {
 	if r.Hold {
-		fmt.Fprintf(w, "%s  on hold: tkt auto leaves it alone until tkt hold %s --off\n", r.Ticket, r.Ticket)
+		fmt.Fprintf(w, "%s  on hold: tkt watch and tkt auto leave it alone until tkt hold %s --off\n", r.Ticket, r.Ticket)
 		return
 	}
 	fmt.Fprintf(w, "%s  not on hold\n", r.Ticket)
 }
 
-// Hold puts a ticket on hold, or takes it off with Off. tkt auto leaves a
-// ticket on hold alone, such as one you parked or want to drive by hand; the
-// commands you run yourself still work on it.
+// Hold puts a ticket on hold, or takes it off with Off. tkt watch and tkt
+// auto leave a ticket on hold alone, such as one you parked or want to drive
+// by hand; the commands you run yourself still work on it.
 func (a *App) Hold(ctx context.Context, o HoldOpts) (*HoldResult, error) {
 	c, err := a.begin(ctx, o.Dry, false)
 	if err != nil {

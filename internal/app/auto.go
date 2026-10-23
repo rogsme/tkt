@@ -126,7 +126,7 @@ func stopHint(stop, id string) string {
 	case StopNoProgress:
 		return "the last step changed nothing; check the ticket's tab, then tkt auto " + id
 	case StopHold:
-		return "tkt hold " + id + " --off lets tkt auto drive it again"
+		return "tkt hold " + id + " --off lets tkt auto and tkt watch drive it again"
 	}
 	return "check the agent in its tab, then tkt auto " + id
 }

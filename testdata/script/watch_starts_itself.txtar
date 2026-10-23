@@ -1,0 +1,36 @@
+# A tkt command in a herdr pane starts tkt watch when none runs for the
+# repository, in a session of its own, so it outlives the command.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+env TKT_WATCH=
+exec tkt ls --no-fetch
+stderr 'started tkt watch for '$REPO
+waitfile $REPO/.git/tkt/watch
+exists $REPO/.git/tkt/watch.log
+exec tkt ls --no-fetch --json
+envelope '.result.watch.running' true
+# One that runs is enough.
+exec tkt ls --no-fetch
+! stderr 'started tkt watch'
+exec tkt watch --stop
+stdout 'stopped tkt watch'
+
+# A dry run starts nothing, and neither does TKT_WATCH=off or autostart off.
+exec tkt start ACM-1 --dry-run
+! stderr 'started tkt watch'
+env TKT_WATCH=off
+exec tkt ls --no-fetch
+! stderr 'started tkt watch'
+env TKT_WATCH=
+cp $WORK/off.toml $HOME/.config/tkt/config.toml
+exec tkt ls --no-fetch
+! stderr 'started tkt watch'
+exec tkt ls --no-fetch --json
+envelope '.result.watch.running' false
+
+-- config.toml --
+[watch]
+interval = "2s"
+-- off.toml --
+[watch]
+autostart = false

@@ -29,14 +29,15 @@ remote and base branch the forge configuration names:
   address = "Use the address-pr-review skill to address the review on this branch's pull request."
   lint = "Run the linter on {id} and fix what it reports."
 
-Three more tables tune tkt auto, the review step and the marks tkt ls sets.
-These are the defaults:
+Four more tables tune tkt auto, the review step, the marks tkt ls sets and tkt
+watch. These are the defaults:
 
   [auto]
-  max_rounds = 5        # address and ci runs since the plan's approval
+  max_rounds = 5        # fix runs since the plan's approval, by tkt auto
+                        # and tkt watch together
   poll = "30s"          # how often a loop reads the forge while it waits
-  max_parallel = 3      # tkt auto agents at work at once in a repository;
-                        # 0 for no cap
+  max_parallel = 3      # tkt auto and tkt watch agents at work at once in a
+                        # repository; 0 for no cap
 
   [review]
   bot_wait = "15m"      # how long a new head waits for the review bot before
@@ -45,6 +46,12 @@ These are the defaults:
 
   [board]
   stale_after = "2h"    # mark an agent idle this long with no status; "0s" for never
+
+  [watch]
+  interval = "60s"      # how often tkt watch looks at every ticket
+  done_after_merge = true  # run tkt done once finish-ticket ends with
+                        # Status: DONE
+  autostart = true      # let tkt commands in a herdr pane start tkt watch
 
 An [agent] table sets up tkt agent's chat. model is a pi model pattern, such as
 provider/id; leave it out for pi's default. extensions lists more pi extension

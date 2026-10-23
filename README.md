@@ -7,7 +7,7 @@
 - starts Claude Code or OpenCode in that tab;
 - hands the agent its prompt.
 
-Each command is one step you take, and `tkt ls` suggests the next one. When you want, `tkt auto` takes the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, merges a moved base, and runs the review and the fixes. You still run the human verification steps and merge.
+Each command is one step you take, and `tkt ls` suggests the next one. `tkt watch`, which tkt starts by itself, takes the upkeep steps for every ticket: it merges a moved base when a sync is due, fixes failing checks once per head, and removes a ticket once finish-ticket merged it. When you want, `tkt auto` takes all the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
 
 People and programs both drive tkt. Every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
 
@@ -74,7 +74,8 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
 | `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan; `--steer` types it in while the agent works, and `--wait` queues it until the agent stops. |
 | `tkt auto ID` | Drives the ticket: approves the plan with `--approve-plan`, waits for CI and the review bot, runs the fixes, pauses when the ticket needs you, and stops when the head is reviewed clean. |
-| `tkt hold ID` | Puts the ticket on hold, so `tkt auto` leaves it alone; `--off` takes it off hold. |
+| `tkt hold ID` | Puts the ticket on hold, so `tkt watch` and `tkt auto` leave it alone; `--off` takes it off hold. |
+| `tkt watch` | Keeps every ticket moving: syncs a moved base, runs ci once per head when the checks fail, and removes a ticket after finish-ticket's `Status: DONE`. tkt commands start it by themselves. |
 | `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first), `resolve`, `ci`, `verify` or `start`. `sync`, the old name of `address`, still works and warns. |
 | `tkt sync ID` | Merges the base into the ticket's branch: itself, with no agent, when the merge is clean; through a fresh session that only resolves, on a conflict. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
@@ -118,7 +119,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |
 | `/auto ID on \| off \| full` | Turns `tkt auto` on or off for a ticket. |
 | `/sync ID` | Merges the base into a ticket's branch, as `tkt sync` does. `/check` offers it first when the ticket is behind its base. |
-| `/hold ID [off]` | Puts a ticket on hold, so `tkt auto` leaves it alone, or takes it off hold. |
+| `/hold ID [off]` | Puts a ticket on hold, so `tkt watch` and `tkt auto` leave it alone, or takes it off hold. |
 | `/send ID TEXT`, `/show ID`, `/peek ID` | Talks to the ticket's agent, prints its last message, or watches its live screen. |
 | `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. |
 | `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
@@ -157,7 +158,10 @@ lint = "Run the linter on {id} and fix what it reports."
 bot_wait = "15m"   # how long a new head waits for the review bot; "0s" without one, so review-pr reviews
 
 [auto]
-max_parallel = 3   # tkt auto agents at work at once in a repository
+max_parallel = 3   # tkt auto and tkt watch agents at work at once in a repository
+
+[watch]
+interval = "60s"   # how often tkt watch looks at every ticket
 ```
 
 Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. `tkt help config` has the details.
@@ -174,6 +178,8 @@ Without the file, tkt runs Claude Code and OpenCode on their default models. The
 ### State and logs
 
 tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. Each ticket's tabs get `TMPDIR` set to a private directory under `/tmp`, which `tkt done` removes too. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. `-v` prints the same lines as tkt goes.
+
+`tkt watch` writes its lines to `tkt/watch.log` in the repository's git directory, and how its last pass went to `tkt/watch` beside it.
 
 What has to outlive a worktree goes to `~/.local/state/tkt/history.jsonl`, one JSON event per line: when tkt started a ticket, each phase it saw it enter, each stage, each `tkt auto` step, and the merge. `tkt stats` and `tkt history` read it.
 

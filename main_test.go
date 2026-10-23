@@ -111,6 +111,9 @@ func setupSandbox(env *testscript.Env, realGit string) error {
 		"HERDR_TAB_ID":        "w1:t1",
 		"HERDR_PANE_ID":       "w1:p1",
 		"NO_COLOR":            "1",
+		// Every command in a herdr pane would start a tkt watch that
+		// outlives its script; the watch_ scripts turn it back on.
+		"TKT_WATCH": "off",
 		// Under -race every fake is a race-built copy of this test binary,
 		// which by default sleeps a second as it exits.
 		"GORACE": "atexit_sleep_ms=0",
@@ -176,6 +179,7 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"state":       cmdState,
 	"statevar":    cmdStateVar,
 	"waitstate":   cmdWaitState,
+	"waitfile":    cmdWaitFile,
 	"mkprompt":    cmdMkPrompt,
 	"realgit":     cmdRealGit,
 	"touchat":     cmdTouchAt,
@@ -243,7 +247,7 @@ func containsAny(s string, subs ...string) bool {
 }
 
 // jqVars are the variables a jq expression can read, as $NAME.
-var jqVars = []string{"REPO", "WORK", "WT", "FAKE_WT_ROOT", "FAKE_DIR", "HOME", "SID", "H1", "H2", "H3"}
+var jqVars = []string{"REPO", "WORK", "WT", "FAKE_WT_ROOT", "FAKE_DIR", "HOME", "SID", "H1", "H2", "H3", "H4", "H5"}
 
 func jqRun(ts *testscript.TestScript, file, expr string) []any {
 	q, err := gojq.Parse(expr)
@@ -338,6 +342,21 @@ func cmdWaitState(ts *testscript.TestScript, neg bool, args []string) {
 		}
 	}
 	ts.Fatalf("state %s = %q after 30s, want %q", args[1], got, args[2])
+}
+
+// waitfile FILE: wait up to 30 seconds for FILE to exist, for a tkt watch
+// started in the background.
+func cmdWaitFile(ts *testscript.TestScript, neg bool, args []string) {
+	if len(args) != 1 || neg {
+		ts.Fatalf("usage: waitfile FILE")
+	}
+	f := ts.MkAbs(args[0])
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if _, err := os.Stat(f); err == nil {
+			return
+		}
+	}
+	ts.Fatalf("%s did not appear in 30s", f)
 }
 
 // statevar DIR KEY VAR: set VAR to the state's KEY.

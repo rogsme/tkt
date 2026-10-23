@@ -160,6 +160,14 @@ func (e HistoryEvent) line() string {
 		return "put on hold"
 	case history.Sync:
 		return "merged the base, with no agent"
+	case history.Watch:
+		switch {
+		case e.Action == actPause:
+			return "tkt watch waits for you: " + e.Stop
+		case e.Stop == "failed":
+			return "tkt watch could not " + strings.TrimSpace(e.Action+" "+e.Stage)
+		}
+		return "tkt watch ran " + e.Stage
 	}
 	return e.Event
 }

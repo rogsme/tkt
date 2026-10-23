@@ -61,6 +61,13 @@ type Replacer interface {
 	Replace(ctx context.Context, c Cmd, env []string) error
 }
 
+// Spawner starts a command that outlives tkt: in a session of its own, with
+// no terminal, its output appended to a log file. Like Replacer, it is not
+// part of Runner, so a test's Runner need not provide it.
+type Spawner interface {
+	Spawn(ctx context.Context, c Cmd, env []string, dir, log string) error
+}
+
 // Func adapts a function to a Runner, for tests.
 type Func func(ctx context.Context, c Cmd) Result
 

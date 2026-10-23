@@ -43,6 +43,9 @@ type App struct {
 	Version string
 	// StdoutTTY is set when stdout is a terminal, which tkt agent needs.
 	StdoutTTY bool
+	// watching marks the App tkt watch runs its steps with, so they never
+	// start another tkt watch.
+	watching bool
 }
 
 // ConfigDir is tkt's own configuration directory.
@@ -86,7 +89,8 @@ type Ctx struct {
 }
 
 // begin checks the tools every repository command needs and loads the
-// repository, its lifecycle configuration and tkt's settings.
+// repository, its lifecycle configuration and tkt's settings. Unless this
+// is a dry run, it also starts tkt watch for the repository when none runs.
 func (a *App) begin(ctx context.Context, dry, force bool) (*Ctx, error) {
 	c := &Ctx{App: a, Ctx: ctx, Dry: dry, Force: force}
 	if err := c.needTools("git", "wt"); err != nil {
@@ -108,6 +112,9 @@ func (a *App) begin(ctx context.Context, dry, force bool) (*Ctx, error) {
 	c.H = herdr.Client{R: a.R}
 	c.OC = harness.OpenCode{R: a.R}
 	c.Agent = agent.Ops{H: c.H, OC: c.OC, UI: a.UI, Getenv: a.Getenv, Dry: dry, Would: c.Would, Sleep: a.Sleep}
+	if !dry && !a.watching {
+		c.ensureWatch()
+	}
 	return c, nil
 }
 

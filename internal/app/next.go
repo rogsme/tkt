@@ -66,29 +66,32 @@ func human(reason, text string) Next {
 // review-pr reviews instead. Background says an idle agent waits on its
 // own background tasks, such as a CI watcher, and goes on by itself. Hold
 // says the ticket is on hold, which the next step ignores: it stops only
-// tkt auto. BaseMerge says how merging the base into the head would go,
+// tkt watch and tkt auto. BaseMerge says how merging the base into the head would go,
 // clean or conflict, when tkt tried it with git merge-tree; "" when it did
-// not.
+// not. AutoRunning says a tkt auto loop drives the ticket; WatchPause says
+// why tkt watch left it for you, round_limit or no_progress.
 type Facts struct {
-	ID         string
-	PRState    string
-	Agent      string
-	Background bool
-	Hold       bool
-	LastStatus string
-	Checks     string
-	Verdict    string
-	AtHead     bool
-	Mergeable  string
-	BaseMerge  string
-	Head       string
-	Behind     int
-	Stage      string
-	Launch     string
-	AutoWait   string
-	AutoPause  string
-	BotWait    time.Duration
-	Waited     time.Duration
+	ID          string
+	PRState     string
+	Agent       string
+	Background  bool
+	Hold        bool
+	AutoRunning bool
+	WatchPause  string
+	LastStatus  string
+	Checks      string
+	Verdict     string
+	AtHead      bool
+	Mergeable   string
+	BaseMerge   string
+	Head        string
+	Behind      int
+	Stage       string
+	Launch      string
+	AutoWait    string
+	AutoPause   string
+	BotWait     time.Duration
+	Waited      time.Duration
 }
 
 // NextStep applies the rules in order and returns the first that matches.
@@ -182,7 +185,7 @@ func PhaseOf(f Facts, n Next) string {
 	case f.Agent != herdr.Working && f.Agent != herdr.Blocked && f.AutoWait == "slot":
 		return PhaseQueued
 	case f.Agent != herdr.Working && !f.Background &&
-		(f.AutoPause == StopRoundLimit || f.AutoPause == StopNoProgress || f.AutoPause == StopUnknown):
+		(f.AutoPause == StopRoundLimit || f.AutoPause == StopNoProgress || f.AutoPause == StopUnknown || f.WatchPause != ""):
 		return PhaseNeedsYou
 	}
 	switch n.Reason {
@@ -238,7 +241,10 @@ func factsFor(r Row) Facts {
 		f.Behind = *r.Behind
 	}
 	if r.Auto != nil {
-		f.AutoWait, f.AutoPause = r.Auto.Waiting, r.Auto.Paused
+		f.AutoWait, f.AutoPause, f.AutoRunning = r.Auto.Waiting, r.Auto.Paused, r.Auto.Running
+	}
+	if r.Watch != nil {
+		f.WatchPause = r.Watch.Paused
 	}
 	return f
 }

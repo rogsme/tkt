@@ -14,7 +14,7 @@ This page follows one ticket, `ACM-123`, from the tracker to a merged pull reque
 | Claude Code or OpenCode | The harness that runs a skill. tkt calls the pair of harness and model a preset. |
 | herdr | The terminal multiplexer. It holds one tab per ticket and knows whether each agent is working, blocked, idle or done. |
 | worktrunk (`wt`) | Creates and removes worktrees, and runs their hooks. |
-| tkt | Runs the mechanical steps between stages: worktrees, tabs, agent sessions, prompts, clean base merges and cleanup. `tkt auto` chains them for a ticket you hand over. |
+| tkt | Runs the mechanical steps between stages: worktrees, tabs, agent sessions, prompts, clean base merges and cleanup. `tkt watch` takes the upkeep steps for every ticket, and `tkt auto` chains all of them for a ticket you hand over. |
 | You | Approve the plan (or let `tkt auto --approve-plan` approve it), run the human verification steps, and merge. |
 
 ```mermaid
@@ -94,7 +94,7 @@ flowchart TD
   merge -->|Status: DONE| done
 ```
 
-Every arrow out of a stage is a status line or a verdict on the screen or the pull request. Every arrow into a stage is something you do: a tkt command or an answer in the tab. Nothing moves on its own unless you hand the ticket to `tkt auto`, which takes the same steps for you and pauses where a person decides (see [Letting tkt auto drive](#letting-tkt-auto-drive)). `tkt ls` reads the same facts and prints the next step for each ticket, and `tkt wait ACM-123` blocks until the agent finishes or needs you.
+Every arrow out of a stage is a status line or a verdict on the screen or the pull request. Every arrow into a stage is something you do: a tkt command or an answer in the tab. `tkt watch` takes the upkeep arrows for every ticket: it syncs a moved base, fixes failing checks once per head, and runs `tkt done` after the merge (see [tkt watch keeps the tickets moving](#tkt-watch-keeps-the-tickets-moving)). The other arrows move only when you take them, or when you hand the ticket to `tkt auto`, which takes the same steps for you and pauses where a person decides (see [Letting tkt auto drive](#letting-tkt-auto-drive)). `tkt ls` reads the same facts and prints the next step for each ticket, and `tkt wait ACM-123` blocks until the agent finishes or needs you.
 
 ## Step by step
 
@@ -236,6 +236,28 @@ Where a person decides, it pauses rather than ends: when the agent asks a questi
 
 `tkt agent` opens a chat that does all of this for many tickets at once: you say "start ACM-123 in auto", get the prompt back, and hear from it only when a ticket needs you.
 
+## tkt watch keeps the tickets moving
+
+`tkt watch` runs one per repository and keeps every ticket moving, not only the ones you hand to `tkt auto`. Every `[watch] interval` (60 seconds) it fetches once and reads every ticket with a fixed number of `gh` calls, however many there are. Then it takes at most one step per ticket:
+
+```mermaid
+flowchart TD
+  pass(["every 60s: one fetch, one read of every ticket"]) --> skip{"on hold, driven by tkt auto,<br/>locked, or agent working?"}
+  skip -->|yes| leave["leave it for now"]
+  skip -->|no| merged{"PR merged and finish-ticket<br/>said Status: DONE?"}
+  merged -->|yes| done["tkt done"]
+  merged -->|no| behind{"the base moved at a moment<br/>a sync is due?"}
+  behind -->|clean| sync["merge it, no agent"]
+  behind -->|conflict| resolve["resolve in a fresh session"]
+  behind -->|no| ci{"checks fail at the head?"}
+  ci -->|yes| fix["ci in a fresh session,<br/>once per head, up to max_rounds"]
+  ci -->|no| leave
+```
+
+Plans, reviews, findings, human verification and the merge stay with you, or with `tkt auto`. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
+
+You rarely start it yourself: every tkt command in a herdr pane starts one when none runs for the repository, in a session of its own, so it outlives the command and the pane. `[watch] autostart = false`, or `TKT_WATCH=off`, turns that off; `tkt watch --stop` stops it, after the step it is taking; `tkt watch --once --dry-run` says what one pass would do to each ticket. Outside a herdr pane, it finds the workspace whose panes work in the repository, and while herdr is down it waits. `tkt hold ACM-123` keeps it, and `tkt auto`, away from a ticket.
+
 ## Syncing with the base
 
 When another ticket merges, the base moves, and the branches still open fall behind it. `tkt sync ACM-123` brings one up to date:
@@ -291,7 +313,7 @@ stateDiagram-v2
 - Only `finish-ticket` merges, and only when you say so.
 - Every claim that CI passed, the change was reviewed, or the steps were verified names the exact head, and that head contains the current base.
 - Branches take the base by merging it. Nothing rebases or force-pushes a published branch, `tkt sync` included.
-- The skills never start one another. tkt suggests the next step in `tkt ls`; you run it, or `tkt auto` runs it for a ticket you hand over. `tkt auto` never merges.
+- The skills never start one another. tkt suggests the next step in `tkt ls`; you run it, `tkt watch` runs the upkeep steps, or `tkt auto` runs it for a ticket you hand over. Neither merges a pull request.
 
 ## When something stops
 

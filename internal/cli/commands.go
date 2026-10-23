@@ -309,11 +309,34 @@ func autoCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func watchCmd(g *globals) *cobra.Command {
+	var o app.WatchOpts
+	cmd := &cobra.Command{
+		Use:   "watch",
+		Short: "Keep the repository's tickets moving: sync moved bases, fix failing checks, remove finished tickets",
+		Long:  helpText("watch"),
+		Example: `  tkt watch
+  tkt watch --once --dry-run
+  tkt watch --stop`,
+		SuggestFor: []string{"daemon", "serve"},
+		Args:       cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().Watch(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.Once, "once", false, "take one pass over the tickets, then exit")
+	cmd.Flags().BoolVar(&o.Stop, "stop", false, "stop the tkt watch that runs for this repository")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "with --once, say what each ticket would get instead of doing it")
+	cmd.MarkFlagsMutuallyExclusive("once", "stop")
+	return cmd
+}
+
 func holdCmd(g *globals) *cobra.Command {
 	var o app.HoldOpts
 	cmd := &cobra.Command{
 		Use:   "hold ID",
-		Short: "Put a ticket on hold, so tkt auto leaves it alone",
+		Short: "Put a ticket on hold, so tkt watch and tkt auto leave it alone",
 		Long:  helpText("hold"),
 		Example: `  tkt hold ACM-9
   tkt hold ACM-9 --off`,

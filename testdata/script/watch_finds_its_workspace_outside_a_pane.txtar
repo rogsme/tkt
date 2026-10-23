@@ -1,0 +1,29 @@
+# Outside a herdr pane, as under a service, tkt watch finds the workspace
+# whose panes work in the repository, and opens its tabs there.
+exec tkt start ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+env FAKE_GH_PRS=$WORK/prs.json
+env HERDR_ENV=
+env HERDR_WORKSPACE_ID=
+env HERDR_TAB_ID=
+env HERDR_PANE_ID=
+
+# The ticket's tab is gone, so the ci run opens a new one in the workspace.
+jqedit $FAKE_DIR/herdr.json '.agents = [] | .tabs |= map(select(.tab_id == "w1:t1")) | .panes |= map(select(.pane_id == "w1:p1"))'
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .stage]' '["run","ci"]'
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-1 --label ACM-1
+logged herdr agent start acm-1 --kind claude
+
+# With no pane in the repository, it has nowhere to open tabs.
+jqedit $FAKE_DIR/herdr.json '.panes = [] | .agents = []'
+! exec tkt watch --once --json
+rc 3
+envelope '.error.code' herdr_workspace_missing
+
+-- prs.json --
+[{"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+  "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}], "reviews": []}]

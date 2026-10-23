@@ -48,6 +48,19 @@ type Config struct {
 	Review        Review
 	Board         Board
 	Agent         Agent
+	Watch         Watch
+}
+
+// Watch holds tkt watch's settings.
+type Watch struct {
+	// Interval is the time between two passes over the tickets.
+	Interval time.Duration
+	// DoneAfterMerge runs tkt done once finish-ticket ends with
+	// Status: DONE.
+	DoneAfterMerge bool
+	// Autostart lets every tkt command in a herdr pane start tkt watch for
+	// its repository when none runs.
+	Autostart bool
 }
 
 // Agent holds the [agent] settings for tkt agent.
@@ -91,6 +104,7 @@ const (
 	DefaultMaxParallel = 3
 	DefaultBotWait     = 15 * time.Minute
 	DefaultStaleAfter  = 2 * time.Hour
+	DefaultWatchEvery  = 60 * time.Second
 )
 
 // ApproveLine is what tkt approve sends to the planning session. It is not a
@@ -132,7 +146,8 @@ func builtin() Config {
 	c := Config{Source: "built-in presets", Presets: BuiltinPresets(), Stages: map[string]string{},
 		Auto:   Auto{MaxRounds: DefaultMaxRounds, Poll: DefaultPoll, MaxParallel: DefaultMaxParallel},
 		Review: Review{BotWait: DefaultBotWait},
-		Board:  Board{StaleAfter: DefaultStaleAfter}}
+		Board:  Board{StaleAfter: DefaultStaleAfter},
+		Watch:  Watch{Interval: DefaultWatchEvery, DoneAfterMerge: true, Autostart: true}}
 	for k, v := range BuiltinStages {
 		c.Stages[k] = v
 	}

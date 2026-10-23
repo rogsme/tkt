@@ -116,8 +116,10 @@ func newRoot(g *globals, envJSON bool) *cobra.Command {
 		Long: `tkt runs the mechanical steps around the rogs-skills ticket lifecycle: it creates
 the ticket's worktree, opens a herdr tab named after the ticket, starts Claude Code
 or OpenCode in it, and hands the agent its prompt. Each command is one step you
-take. tkt auto chains the steps for one ticket when you ask it to, and stops
-where a person decides: it never merges.
+take. tkt watch, which tkt starts by itself, takes the upkeep steps for every
+ticket: it syncs a moved base, fixes failing checks and removes finished
+tickets. tkt auto chains all the steps for one ticket when you ask it to, and
+stops where a person decides. Neither merges a pull request.
 
 Start with tkt help lifecycle. Programs that drive tkt want --json (tkt help
 json), tkt schema and tkt wait. tkt help exit-codes lists every error code, and
@@ -144,7 +146,7 @@ a repository with the lifecycle configuration, tkt alone opens it too.`,
 	)
 	root.SetHelpCommandGroupID("setup")
 	root.SetCompletionCommandGroupID("setup")
-	for _, c := range []*cobra.Command{agentCmd(g), startCmd(g), approveCmd(g), sendCmd(g), autoCmd(g), holdCmd(g), runCmd(g), syncCmd(g), resumeCmd(g), doneCmd(g)} {
+	for _, c := range []*cobra.Command{agentCmd(g), startCmd(g), approveCmd(g), sendCmd(g), autoCmd(g), watchCmd(g), holdCmd(g), runCmd(g), syncCmd(g), resumeCmd(g), doneCmd(g)} {
 		c.GroupID = "lifecycle"
 		root.AddCommand(c)
 	}

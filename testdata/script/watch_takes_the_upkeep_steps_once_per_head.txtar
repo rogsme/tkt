@@ -1,0 +1,59 @@
+# A pass of tkt watch runs ci on failing checks and merges a clean base with
+# no agent. On the same head, it never runs ci twice: the ticket waits for
+# you, with one notification.
+exec tkt start ACM-1
+exec tkt start ACM-2
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-2 commit -q --allow-empty -m 'ACM-2 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-2 push -q origin ACM-2
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+gitvar H2 $FAKE_WT_ROOT/ACM-2 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H2SHORT"; $H2[0:7]) | gsub("H1"; $H1) | gsub("H2"; $H2) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+
+resetlog
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1:run:checks_fail","ACM-2:sync:base_moved"]'
+stderr 'ACM-2: synced with the base, with no agent'
+logged git -C $REPO fetch --prune --quiet origin
+logged herdr agent start acm-1 --kind claude
+grep 'The checks on this branch''s pull request fail at its head.' $FAKE_DIR/prompts
+logged herdr notification show 'ACM-1: tkt watch runs ci'
+state $FAKE_WT_ROOT/ACM-1 rounds 1
+state $FAKE_WT_ROOT/ACM-1 watch_last run:ci@$H1
+state $FAKE_WT_ROOT/ACM-1 stage ci
+grep '"ticket":"ACM-1","event":"watch","stage":"ci","action":"run"' $HOME/.local/state/tkt/history.jsonl
+! logged herdr agent start acm-2
+gitvar M2 $FAKE_WT_ROOT/ACM-2 HEAD
+realgit -C $WORK/origin.git rev-parse ACM-2
+stdout ^$M2
+exists $REPO/.git/tkt/watch
+
+# The second pass finds the same failing head: ACM-1 waits for you. GitHub
+# still shows ACM-2's old head, so the pass leaves it until it catches up.
+resetlog
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::no_progress","ACM-2::forge_lag"]'
+! logged herdr agent start
+logged herdr notification show 'ACM-1: needs you' --body 'tkt watch ran ci on this head, and the checks still fail; read what the agent said in its tab'
+state $FAKE_WT_ROOT/ACM-1 watch_pause no_progress
+state $FAKE_WT_ROOT/ACM-1 rounds 1
+resetlog
+exec tkt watch --once
+! logged herdr notification show
+exec tkt history ACM-1
+stdout 'tkt watch ran ci'
+stdout 'tkt watch waits for you: no_progress'
+houserules
+
+-- prs.json --
+[
+  {"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}], "reviews": []},
+  {"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "H2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: STALE_BASE** · head `H2SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H2"}}]}
+]

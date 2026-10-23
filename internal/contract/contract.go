@@ -47,6 +47,9 @@ const (
 	StatusBlockedForSync       = "BLOCKED_FOR_SYNC"
 	StatusHumanQAFailed        = "HUMAN_QA_FAILED"
 	StatusAwaitingPostApproval = "AWAITING_POST_APPROVAL"
+	// StatusDone ends a finish-ticket run that merged the pull request,
+	// saw post-merge CI pass and moved the ticket to done.
+	StatusDone = "DONE"
 )
 
 // StatusLineRE finds a status line on an agent's screen.

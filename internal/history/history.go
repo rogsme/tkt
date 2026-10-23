@@ -27,6 +27,10 @@ const (
 	Hold = "hold"
 	// Sync is a base merge tkt made and pushed itself (Action merged).
 	Sync = "sync"
+	// Watch is a step tkt watch took (Action run, with Stage), a pause for
+	// a person (Action pause, with Stop), or a step that failed (Stop
+	// failed).
+	Watch = "watch"
 )
 
 // Event is one line of the history.

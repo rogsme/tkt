@@ -34,6 +34,12 @@ func (l *Log) RecordExec(ctx context.Context, c Cmd) {
 	l.write(fmt.Sprintf("%s rc=exec 0ms %s", TicketFrom(ctx), Display(c.Argv)))
 }
 
+// RecordSpawn writes the line for a command tkt starts in the background,
+// before it starts. rc=spawn stands for the status, which tkt never sees.
+func (l *Log) RecordSpawn(ctx context.Context, c Cmd) {
+	l.write(fmt.Sprintf("%s rc=spawn 0ms %s", TicketFrom(ctx), Display(c.Argv)))
+}
+
 func (l *Log) write(line string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -74,6 +80,18 @@ func (l Logged) Replace(ctx context.Context, c Cmd, env []string) error {
 		l.Log.RecordExec(ctx, c)
 	}
 	return r.Replace(ctx, c, env)
+}
+
+// Spawn logs c, then starts it in the background through Inner.
+func (l Logged) Spawn(ctx context.Context, c Cmd, env []string, dir, log string) error {
+	s, ok := l.Inner.(Spawner)
+	if !ok {
+		return fmt.Errorf("the runner cannot start %s in the background", c.Argv[0])
+	}
+	if l.Log != nil {
+		l.Log.RecordSpawn(ctx, c)
+	}
+	return s.Spawn(ctx, c, env, dir, log)
 }
 
 // Display renders argv for logs and dry runs: each argument shell-quoted,

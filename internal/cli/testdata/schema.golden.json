@@ -35,7 +35,7 @@
       "path": "agent",
       "use": "agent [-- PI_FLAGS...]",
       "short": "Open the tkt agent, a chat that drives your tickets",
-      "long": "tkt agent opens a chat in this pane about the repository's tickets. It runs\npi, a coding agent that release builds of tkt carry inside them (MIT licensed,\nhttps://github.com/earendil-works/pi), with only tkt's own extension. Running\ntkt with no arguments opens it too, when you type it at a terminal in a herdr\npane inside a repository with the lifecycle configuration.\n\nSay what you want in plain words: \"start ACM-12\", \"run ACM-13 to ACM-15 in\nauto with sol\", \"I approved the plan for ACM-12, continue\", \"ACM-12 is merged,\nremove it\". Starting tickets and stages runs in the background and the prompt\ncomes back at once, so you can start the next ticket while the first one\nplans. A board pinned to the top of the chat shows every ticket, and on top\nwhat needs you: a plan to approve, a question from its agent, a pull request\nready for human verification, or a tkt auto loop that paused for you. The chat\nscrolls below the board, so it covers nothing. An item leaves the board as\nsoon as its ticket moves on, and the chat stays free of them. Each new one\nalso shows a herdr notification. /board hide and /board show put the board\naway and back.\n\nAsk how a ticket went, merged ones too: \"how did ACM-12 go?\", \"what failed\nin ACM-12 and ACM-13?\". The chat reads tkt history: each step with its time,\nand the pull request's commits and reviews with the review bot's findings.\n\nThe same actions work without the model as slash commands: /start (add \"as\nPRESET\" for a preset), /approve, /next, /auto, /send, /show, /peek (the\nagent's live screen), /check (the human verification checklist), /done,\n/inbox (what needs you, with fixed answers), /board (every ticket in columns),\n/history, /stats and /update. A tool that changes a ticket your message did\nnot name asks first, and removing a ticket always asks. Text for a busy agent\nwaits in a queue and goes in when the agent stops.\n\nThe chat checks for a newer tkt release when it opens and every six hours,\nand names it under the board. /update installs it with tkt update, then offers\nto quit: the chat runs the old tkt until you reopen it with the command it\nprints. A development build gets no notice, and /update does not replace it.\n\nTickets in auto run in tkt auto loops that outlive the chat, so they keep\nmoving, and notify you, after you close it. A loop that pauses for you goes on\nby itself once you act, such as answering the agent in its tab.\n\nThe chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:\nnot your extensions, skills, prompt templates or themes, and not the project's\nAGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in\n${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with\n/login inside the chat.\n\nThe chat brings two themes of its own, tkt-dark and tkt-light, and picks the\none that suits the terminal's background. Overlays such as /board and /peek\ndraw on a panel of their own, so they read well on a transparent terminal. A\ntheme you pick in /settings wins from then on.\n\npi runs in the repository's root, where it keeps the sessions, so --continue\npicks up the last chat about this repository from any of its worktrees. When\nyou quit, the chat prints the command that resumes it: tkt agent --session\nID. Flags after -- go to pi as they are, such as tkt agent -- --thinking high;\npi --help lists them.\n\nIn config.toml, an [agent] table picks the model and loads more pi extensions,\nsuch as one that adds a model provider (tkt help config). --model overrides the\nmodel for one run. Without [agent] model, pi starts on its own default: in\n/model, press Ctrl+S on a model to make it the default for new chats.\n\ntkt unpacks the bundled pi the first time, under\n${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary\ninstead; tkt doctor shows which pi tkt agent runs.\n\ntkt agent replaces itself with pi, so it needs a terminal and prints no result.\n--dry-run prints how it would start pi, and with --json the exact command line\nand environment.",
+      "long": "tkt agent opens a chat in this pane about the repository's tickets. It runs\npi, a coding agent that release builds of tkt carry inside them (MIT licensed,\nhttps://github.com/earendil-works/pi), with only tkt's own extension. Running\ntkt with no arguments opens it too, when you type it at a terminal in a herdr\npane inside a repository with the lifecycle configuration.\n\nSay what you want in plain words: \"start ACM-12\", \"run ACM-13 to ACM-15 in\nauto with sol\", \"I approved the plan for ACM-12, continue\", \"ACM-12 is merged,\nremove it\". Starting tickets and stages runs in the background and the prompt\ncomes back at once, so you can start the next ticket while the first one\nplans. A board pinned to the top of the chat shows every ticket, and on top\nwhat needs you: a plan to approve, a question from its agent, a pull request\nready for human verification, or a tkt auto loop that paused for you. The chat\nscrolls below the board, so it covers nothing. An item leaves the board as\nsoon as its ticket moves on, and the chat stays free of them. Each new one\nalso shows a herdr notification. /board hide and /board show put the board\naway and back.\n\nAsk how a ticket went, merged ones too: \"how did ACM-12 go?\", \"what failed\nin ACM-12 and ACM-13?\". The chat reads tkt history: each step with its time,\nand the pull request's commits and reviews with the review bot's findings.\n\nThe same actions work without the model as slash commands: /start (add \"as\nPRESET\" for a preset), /approve, /next, /auto, /hold, /sync, /send, /show,\n/peek (the agent's live screen), /check (the human verification checklist,\nwhich offers to sync a ticket that is behind first), /done, /inbox (what needs\nyou, with fixed answers), /board (every ticket in columns), /history, /stats\nand /update. A tool that changes a ticket your message did\nnot name asks first, and removing a ticket always asks. Text for a busy agent\nwaits in a queue and goes in when the agent stops.\n\nThe chat checks for a newer tkt release when it opens and every six hours,\nand names it under the board. /update installs it with tkt update, then offers\nto quit: the chat runs the old tkt until you reopen it with the command it\nprints. A development build gets no notice, and /update does not replace it.\n\nTickets in auto run in tkt auto loops that outlive the chat, so they keep\nmoving, and notify you, after you close it. A loop that pauses for you goes on\nby itself once you act, such as answering the agent in its tab. tkt agent also\nstarts tkt watch for the repository when none runs, which takes the upkeep\nsteps for every ticket: it syncs a moved base, fixes failing checks once per\nhead, and removes a ticket once finish-ticket merged it. The board's heading\nsays watch on or watch off.\n\nThe chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:\nnot your extensions, skills, prompt templates or themes, and not the project's\nAGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in\n${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with\n/login inside the chat.\n\nThe chat brings two themes of its own, tkt-dark and tkt-light, and picks the\none that suits the terminal's background. Overlays such as /board and /peek\ndraw on a panel of their own, so they read well on a transparent terminal. A\ntheme you pick in /settings wins from then on.\n\npi runs in the repository's root, where it keeps the sessions, so --continue\npicks up the last chat about this repository from any of its worktrees. When\nyou quit, the chat prints the command that resumes it: tkt agent --session\nID. Flags after -- go to pi as they are, such as tkt agent -- --thinking high;\npi --help lists them.\n\nIn config.toml, an [agent] table picks the model and loads more pi extensions,\nsuch as one that adds a model provider (tkt help config). --model overrides the\nmodel for one run. Without [agent] model, pi starts on its own default: in\n/model, press Ctrl+S on a model to make it the default for new chats.\n\ntkt unpacks the bundled pi the first time, under\n${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary\ninstead; tkt doctor shows which pi tkt agent runs.\n\ntkt agent replaces itself with pi, so it needs a terminal and prints no result.\n--dry-run prints how it would start pi, and with --json the exact command line\nand environment.",
       "example": "  tkt agent\n  tkt agent --continue\n  tkt agent --session 01a15a4d\n  tkt agent --model acme/large\n  tkt agent -- --thinking high\n  tkt agent --dry-run --json",
       "group": "lifecycle",
       "args": [
@@ -417,10 +417,60 @@
       }
     },
     {
+      "path": "watch",
+      "use": "watch",
+      "short": "Keep the repository's tickets moving: sync moved bases, fix failing checks, remove finished tickets",
+      "long": "tkt watch keeps a repository's tickets moving, every ticket and not only the\nones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads\nevery ticket with a fixed number of gh calls, and takes at most one step per\nticket, from the same rules as tkt ls:\n\n  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,\n    unless [watch] done_after_merge = false;\n  - the base moved at a moment a sync is due (a conflict, the bot's\n    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base\n    itself, as tkt sync does, with no agent, and runs resolve on a conflict;\n  - the checks fail at the head: it runs ci in a fresh session, once per\n    head.\n\nEverything else waits for you or for tkt auto: plans, reviews, findings,\nhuman verification and the merge. It leaves alone a ticket on hold (tkt\nhold), one a tkt auto loop drives, one another tkt command works on, and one\nwhose agent works or asks a question. A step it would repeat on the same head,\nor a fix run past [auto] max_rounds, waits for you instead: tkt ls shows the\nticket as needs_you, with watch.paused saying why, and herdr notifies once.\n\nIts agent runs take the [auto] max_parallel slots tkt auto uses. It records\neach step in the history, and shows a herdr notification for each agent run,\nfailure and removal; a clean sync stays quiet.\n\nOne tkt watch runs per repository. Every tkt command in a herdr pane starts\nit when none runs, in a session of its own, so it outlives the command and the\npane; it writes its lines to watch.log in the repository's git directory,\nunder tkt/. [watch] autostart = false, or TKT_WATCH=off, turns that off. tkt\nls --json says whether it runs, in watch.running. tkt watch --stop stops it,\nafter the step it is taking. Outside a herdr pane it finds the workspace whose\npanes work in the repository, and while herdr is down it waits.\n\n--once takes one pass and exits; with --dry-run it says what each ticket would\nget, and changes nothing.",
+      "example": "  tkt watch\n  tkt watch --once --dry-run\n  tkt watch --stop",
+      "group": "lifecycle",
+      "args": [],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "with --once, say what each ticket would get instead of doing it"
+        },
+        {
+          "name": "once",
+          "type": "bool",
+          "default": "false",
+          "usage": "take one pass over the tickets, then exit"
+        },
+        {
+          "name": "stop",
+          "type": "bool",
+          "default": "false",
+          "usage": "stop the tkt watch that runs for this repository"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "dry_run": "boolean",
+        "passes": "integer",
+        "repo": "string",
+        "stopped": "boolean",
+        "tickets": [
+          {
+            "action": "string",
+            "error": "string",
+            "reason": "string",
+            "stage": "string",
+            "ticket": "string"
+          }
+        ]
+      }
+    },
+    {
       "path": "hold",
       "use": "hold ID",
-      "short": "Put a ticket on hold, so tkt auto leaves it alone",
-      "long": "tkt hold puts a ticket on hold: tkt auto leaves it alone until tkt hold ID\n--off. Use it for a ticket you parked, or one you want to drive by hand. The\ncommands you run yourself, such as tkt run, still work on it, and tkt ls still\nshows its next step.\n\nA tkt auto loop that drives the ticket pauses while it is on hold, without a\nnotification, and goes on when the hold lifts. tkt ls shows hold in the AUTO\ncolumn and hold: true in --json.\n\nThe mark lives in the ticket's state, so it goes away with the worktree. tkt\nhistory lists each time a ticket was put on hold and taken off it.",
+      "short": "Put a ticket on hold, so tkt watch and tkt auto leave it alone",
+      "long": "tkt hold puts a ticket on hold: tkt watch and tkt auto leave it alone until\ntkt hold ID --off. Use it for a ticket you parked, or one you want to drive by\nhand. The commands you run yourself, such as tkt run and tkt sync, still work\non it, and tkt ls still shows its next step.\n\nA tkt auto loop that drives the ticket pauses while it is on hold, without a\nnotification, and goes on when the hold lifts. tkt ls shows hold in the AUTO\ncolumn and hold: true in --json.\n\nThe mark lives in the ticket's state, so it goes away with the worktree. tkt\nhistory lists each time a ticket was put on hold and taken off it.",
       "example": "  tkt hold ACM-9\n  tkt hold ACM-9 --off",
       "group": "lifecycle",
       "args": [
@@ -824,13 +874,25 @@
               }
             ],
             "ticket": "string",
-            "updated": "string"
+            "updated": "string",
+            "watch": {
+              "fields": {
+                "last": "string",
+                "paused": "string"
+              },
+              "nullable": true
+            }
           }
         ],
         "sources": {
           "fetch": "string",
           "forge": "string",
           "herdr": "string"
+        },
+        "watch": {
+          "error": "string",
+          "last_pass": "string",
+          "running": "boolean"
         }
       }
     },
@@ -1461,6 +1523,11 @@
       "summary": "tkt does not run inside a herdr pane"
     },
     {
+      "code": "herdr_workspace_missing",
+      "exit": 3,
+      "summary": "outside a herdr pane, tkt watch finds no herdr workspace with a pane in the repository"
+    },
+    {
       "code": "worktree_layout",
       "exit": 3,
       "summary": "the worktree directory is not named after its branch"
@@ -1641,6 +1708,11 @@
       "summary": "merging the base conflicts, and --no-agent kept tkt sync from starting a session to resolve it"
     },
     {
+      "code": "watch_running",
+      "exit": 4,
+      "summary": "a tkt watch already runs for the repository, or did not stop when asked"
+    },
+    {
       "code": "wt_failed",
       "exit": 1,
       "summary": "worktrunk failed or printed output tkt cannot read"
@@ -1780,6 +1852,10 @@
     {
       "name": "TKT_PI",
       "description": "the pi binary tkt agent runs instead of the one bundled with tkt"
+    },
+    {
+      "name": "TKT_WATCH",
+      "description": "off keeps tkt commands from starting tkt watch, as [watch] autostart = false does"
     },
     {
       "name": "CLAUDE_CONFIG_DIR",

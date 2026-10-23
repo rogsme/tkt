@@ -24,6 +24,7 @@ var resultTypes = map[string]any{
 	"send":    app.SendResult{},
 	"auto":    app.AutoResult{},
 	"hold":    app.HoldResult{},
+	"watch":   app.WatchResult{},
 	"show":    app.ShowResult{},
 	"history": app.HistoryResult{},
 	"run":     app.RunResult{},
@@ -117,6 +118,7 @@ var environment = []SchemaVariable{
 	{"TKT_RELEASES", "where tkt update downloads releases from (default https://git.rogs.me/rogs/tkt/releases/download); install.sh reads it too"},
 	{"TKT_RELEASES_API", "the Gitea API that tkt update asks for the latest release (default https://git.rogs.me/api/v1/repos/rogs/tkt)"},
 	{"TKT_PI", "the pi binary tkt agent runs instead of the one bundled with tkt"},
+	{"TKT_WATCH", "off keeps tkt commands from starting tkt watch, as [watch] autostart = false does"},
 	{"CLAUDE_CONFIG_DIR", "where Claude Code keeps its sessions (default ~/.claude)"},
 	{"NO_COLOR", "turns off color in help and errors"},
 }

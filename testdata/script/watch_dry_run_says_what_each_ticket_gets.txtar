@@ -1,0 +1,65 @@
+# tkt watch --once --dry-run says what one pass would do to each ticket, and
+# changes nothing. It takes only the upkeep steps: ci for failing checks and
+# a sync for a base that moved at a moment that needs one.
+exec tkt start ACM-1
+exec tkt start ACM-2
+exec tkt start ACM-3
+exec tkt start ACM-4
+exec tkt start ACM-5
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-2 commit -q --allow-empty -m 'ACM-2 work'
+realgit -C $FAKE_WT_ROOT/ACM-3 commit -q --allow-empty -m 'ACM-3 work'
+realgit -C $FAKE_WT_ROOT/ACM-4 commit -q --allow-empty -m 'ACM-4 work'
+realgit -C $FAKE_WT_ROOT/ACM-5 commit -q --allow-empty -m 'ACM-5 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-2 push -q origin ACM-2
+realgit -C $FAKE_WT_ROOT/ACM-3 push -q origin ACM-3
+realgit -C $FAKE_WT_ROOT/ACM-4 push -q origin ACM-4
+realgit -C $FAKE_WT_ROOT/ACM-5 push -q origin ACM-5
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+gitvar H2 $FAKE_WT_ROOT/ACM-2 HEAD
+gitvar H3 $FAKE_WT_ROOT/ACM-3 HEAD
+gitvar H4 $FAKE_WT_ROOT/ACM-4 HEAD
+gitvar H5 $FAKE_WT_ROOT/ACM-5 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H2SHORT"; $H2[0:7]) | gsub("H5SHORT"; $H5[0:7]) | gsub("H1"; $H1) | gsub("H2"; $H2) | gsub("H3"; $H3) | gsub("H4"; $H4) | gsub("H5"; $H5) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+realgit -C $REPO fetch -q origin
+exec tkt hold ACM-3
+jqedit $FAKE_DIR/herdr.json '.agents |= map(if .name == "acm-4" then .agent_status = "working" else . end)'
+
+! exec tkt watch --dry-run
+rc 2
+stderr '--dry-run needs --once'
+
+resetlog
+exec tkt watch --once --dry-run --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + (.stage // "") + ":" + .reason]' '["ACM-1:run:ci:checks_fail","ACM-2:sync::base_moved","ACM-3:::hold","ACM-4:::agent_working","ACM-5:::bot_clear"]'
+envelope '[.result.actions[].display]' '["tkt run ACM-1 ci","tkt sync ACM-2 --no-agent"]'
+! logcontains 'herdr agent start'
+! logcontains ' push '
+! logcontains 'fetch --prune'
+
+exec tkt watch --once --dry-run
+stdout '^ACM-1 +run ci +checks_fail$'
+stdout '^ACM-2 +sync +base_moved$'
+stdout '^ACM-3 +- +hold$'
+stderr 'dry run: tkt run ACM-1 ci'
+houserules
+
+-- prs.json --
+[
+  {"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}], "reviews": []},
+  {"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "H2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: STALE_BASE** · head `H2SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H2"}}]},
+  {"number": 3, "state": "OPEN", "headRefName": "ACM-3", "headRefOid": "H3", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}], "reviews": []},
+  {"number": 4, "state": "OPEN", "headRefName": "ACM-4", "headRefOid": "H4", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}], "reviews": []},
+  {"number": 5, "state": "OPEN", "headRefName": "ACM-5", "headRefOid": "H5", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** · head `H5SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H5"}}]}
+]

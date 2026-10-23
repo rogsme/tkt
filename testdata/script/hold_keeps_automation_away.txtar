@@ -1,4 +1,5 @@
-# tkt hold marks a ticket so tkt auto leaves it alone; --off lifts the mark.
+# tkt hold marks a ticket so tkt auto and tkt watch leave it alone; --off
+# lifts the mark.
 exec tkt start ACM-9
 realgit -C $FAKE_WT_ROOT/ACM-9 commit -q --allow-empty -m 'work on ACM-9'
 env FAKE_GH_PRS=$WORK/prs.json
@@ -6,7 +7,7 @@ gitvar H1 $FAKE_WT_ROOT/ACM-9 HEAD
 jqedit $WORK/prs.json '.[0].headRefOid = $H1'
 
 exec tkt hold ACM-9
-stdout 'ACM-9  on hold: tkt auto leaves it alone until tkt hold ACM-9 --off'
+stdout 'ACM-9  on hold: tkt watch and tkt auto leave it alone until tkt hold ACM-9 --off'
 ! state $FAKE_WT_ROOT/ACM-9 hold ''
 grep '"ticket":"ACM-9","event":"hold","action":"on"' $HOME/.local/state/tkt/history.jsonl
 
@@ -20,7 +21,11 @@ envelope '.result.rows[0].hold' true
 exec tkt auto ACM-9 --once --json
 envelope '.result | [.stop, .did]' '["hold",null]'
 exec tkt auto ACM-9 --once
-stdout 'ACM-9  hold  rounds 0  tkt hold ACM-9 --off lets tkt auto drive it again'
+stdout 'ACM-9  hold  rounds 0  tkt hold ACM-9 --off lets tkt auto and tkt watch drive it again'
+
+# tkt watch leaves it alone too.
+exec tkt watch --once --dry-run --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","hold"]'
 
 # Holding it again changes nothing.
 exec tkt hold ACM-9 --json

@@ -81,7 +81,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerCommand("hold", {
-		description: "Put a ticket on hold, so tkt auto leaves it alone: /hold ACM-12 [off]",
+		description: "Put a ticket on hold, so tkt watch and tkt auto leave it alone: /hold ACM-12 [off]",
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const id = one(args, ctx, "/hold ACM-12 [off]");

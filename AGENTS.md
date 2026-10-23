@@ -15,7 +15,7 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 - `internal/contract` holds what tkt reads from the skills repository, with verbatim fixtures in `testdata/`.
 - The other `internal/` packages each wrap one outside system: `gitx`, `wt` (worktrunk), `herdr`, `harness` (Claude Code and OpenCode), `forge` (gh), and the agent flows in `agent`.
 - `internal/history` appends ticket events to `$XDG_STATE_HOME/tkt/history.jsonl`, the one file that outlives worktrees, and builds the timelines `tkt stats` shows. A failed history write is a warning, never a failure.
-- `internal/app/next.go` holds the one rule list: `NextStep` gives `tkt ls` its next step and a stable `reason`, and `PhaseOf` names the phase. `tkt auto` (`auto.go`) maps the same reasons to actions in `autoStep`; keep the two in step.
+- `internal/app/next.go` holds the one rule list: `NextStep` gives `tkt ls` its next step and a stable `reason`, and `PhaseOf` names the phase. `tkt auto` (`auto.go`) maps the same reasons to actions in `autoStep`, and `tkt watch` (`watch.go`) maps them to its upkeep steps in `watchStep`; keep the three in step.
 
 ## Rules
 
@@ -28,6 +28,7 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 - Worktrees are created and removed only through `wt`, with its hooks. Agents start only through `herdr agent start`, never by running `claude` directly.
 - A ticket's tabs open only through `openTab`, which sets `TMPDIR` to the ticket's private directory (`internal/app/tmp.go`), so two tickets' agents never share a temporary file. `tkt done` removes the directory.
 - One exception: `tkt agent` replaces tkt's own process with pi through `runner.Replacer`, which logs the command first. pi is the front end in the person's own pane, not a ticket's agent, so it does not go through `herdr agent start`.
+- Another: `tkt watch` runs for days. Every repository command in a herdr pane starts it when none runs (`ensureWatch`), through `runner.Spawner`, which logs the command first and starts it in a session of its own. It takes its steps by calling the other commands' `App` methods, and keeps no state of its own beyond the ticket's state file and `tkt/watch` in the common git directory. The scripts set `TKT_WATCH=off`, so a watch never outlives one.
 - Reach for the standard library first. A new dependency needs a reason in its commit message.
 - Match the surrounding code's naming and comment density. Comments say why, not what.
 

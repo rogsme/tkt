@@ -125,3 +125,21 @@ test("a moved base waits for tkt sync", () => {
 	assert.equal(a?.title, "the base moved; tkt sync merges it");
 	assert.equal(a?.offers, undefined);
 });
+
+test("tkt watch takes the upkeep steps, and says when it waits for you", () => {
+	const ci = { phase: "needs_fix", next: { kind: "command" as const, reason: "checks_fail", argv: ["tkt", "run", "ACM-12", "ci"], text: "tkt run ACM-12 ci" } };
+	assert.equal(attentionOf(row(ci), false, false)?.kind, "next");
+	assert.equal(attentionOf(row(ci), false, true), undefined);
+	const findings = { phase: "needs_fix", next: { kind: "command" as const, reason: "findings", argv: ["tkt", "run", "ACM-12", "address"], text: "tkt run ACM-12 address" } };
+	assert.equal(attentionOf(row(findings), false, true)?.kind, "next");
+	const stuck = attentionOf(row({ ...ci, phase: "needs_you", watch: { last: "run:ci@abc", paused: "no_progress" } }), false, true);
+	assert.equal(stuck?.kind, "paused");
+	assert.equal(stuck?.byAuto, true);
+	assert.match(stuck?.text ?? "", /tkt watch ran ci on this head, and nothing changed/);
+	assert.deepEqual(stuck?.offers?.map((o) => o.label), ["Run ci again"]);
+	const spent = attentionOf(row({ ...ci, phase: "needs_you", watch: { last: "run:ci@abc", paused: "round_limit" } }), false, true);
+	assert.match(spent?.text ?? "", /max_rounds/);
+	assert.deepEqual(spent?.offers?.map((o) => o.label), ["Run ci once more"]);
+	const sync = attentionOf(row({ phase: "needs_you", next: { kind: "command", reason: "base_moved", argv: ["tkt", "sync", "ACM-12"], text: "tkt sync ACM-12" }, watch: { last: "sync:@abc", paused: "no_progress" } }), false, true);
+	assert.match(sync?.text ?? "", /tkt watch tried to merge the base on this head/);
+});

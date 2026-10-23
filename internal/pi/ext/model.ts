@@ -34,8 +34,12 @@ export interface Row {
 	/** paused says why a running tkt auto loop waits for you, and why names
 	 * the rule behind it; both are empty while the loop drives the ticket. */
 	auto: { wanted: boolean; approve_plan: boolean; running: boolean; rounds: number; stop: string; waiting: string; paused?: string; why?: string } | null;
-	/** hold says tkt auto leaves the ticket alone (tkt hold). */
+	/** hold says tkt watch and tkt auto leave the ticket alone (tkt hold). */
 	hold?: boolean;
+	/** watch is what tkt watch did: last is its last step, such as
+	 * run:ci@HEAD; paused says why it waits for you, round_limit or
+	 * no_progress. */
+	watch?: { last: string; paused: string } | null;
 	phase: string;
 	phase_since: string;
 	started: string;
@@ -45,6 +49,8 @@ export interface Row {
 
 export interface LsResult {
 	sources: { herdr: string; forge: string; fetch: string };
+	/** watch says whether tkt watch keeps the repository's tickets moving. */
+	watch?: { running: boolean; last_pass: string; error: string };
 	rows: Row[];
 }
 

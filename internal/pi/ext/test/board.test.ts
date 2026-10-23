@@ -85,3 +85,18 @@ test("the board marks a ticket on hold", () => {
 	assert.match(lines[0].text, / hold$/);
 	assert.match(lines[1].text, / hold$/);
 });
+
+test("the board says whether tkt watch runs, and what it runs", () => {
+	const s = { rows: [], jobs: new Map<string, string>(), items: [], now, tick: 0, repo: "app" };
+	assert.equal(title(s), "tkt  app  0 tickets");
+	assert.equal(title({ ...s, watch: true }), "tkt  app  0 tickets  watch on");
+	assert.equal(title({ ...s, watch: false }), "tkt  app  0 tickets  watch off");
+	const working = { pane_id: "p", name: "a", harness: "claude", status: "working" };
+	const rows = [
+		row({ ticket: "ACM-1", phase: "fixing", stage: "ci", agent: working, watch: { last: "run:ci@abc", paused: "" } }),
+		row({ ticket: "ACM-2", phase: "fixing", stage: "address", agent: working, watch: { last: "run:ci@abc", paused: "" } }),
+	];
+	const [, one, two] = boardLines({ ...s, rows }, 200);
+	assert.match(one.text, / watch: ci$/);
+	assert.doesNotMatch(two.text, /watch/);
+});

@@ -1,0 +1,28 @@
+# One tkt watch runs per repository. tkt ls says whether it runs, and
+# tkt watch --stop stops it.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt ls --no-fetch --json
+envelope '.result.watch.running' false
+
+exec tkt watch &
+waitfile $REPO/.git/tkt/watch
+! exec tkt watch --once
+stderr 'tkt watch already runs for '$REPO
+stderr 'hint: tkt watch --stop stops it'
+exec tkt ls --no-fetch --json
+envelope '.result.watch.running' true
+# A dry run takes no lock, so it works beside a running watch.
+exec tkt watch --once --dry-run
+
+exec tkt watch --stop
+stdout 'stopped tkt watch for '$REPO
+wait
+exec tkt ls --no-fetch --json
+envelope '.result.watch.running' false
+exec tkt watch --stop
+stderr 'no tkt watch runs for '$REPO
+
+-- config.toml --
+[watch]
+interval = "1h"
