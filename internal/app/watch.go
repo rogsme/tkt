@@ -546,7 +546,9 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, error) {
 	}
 	out := []WatchTicket{}
 	seen := map[string]bool{}
-	w.turn = c.mergeInFlight(l.agents, "")
+	if w.turn, err = c.mergeInFlight(l.agents, ""); err != nil {
+		return nil, err
+	}
 	for _, t := range c.ticketWorktrees(es) {
 		if ctx.Err() != nil {
 			break
@@ -580,10 +582,12 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	}
 	f.Hold = f.Hold || ts.st["hold"] != ""
 	// The steps of a merge order ran on its head, and hold across clean
-	// merges of the base; a new head of any other kind drops the order.
-	if row.orderVoid && !f.ForgeLag && !c.Dry {
+	// merges of the base; a new head of any other kind drops the order, and
+	// so does a failed step. Only the order the look judged goes, and not
+	// while another command, such as a new tkt merge, works on the ticket.
+	if why := row.orderVoid; why != "" && ts.st["merge_head"] == row.orderHead && !f.ForgeLag && !c.Dry && !c.ticketLocked(t.ID) {
 		c.dropOrder(ts, t.ID, "dropped")
-		c.notify(t.ID, notice{"merge order dropped", "the branch changed beyond a clean merge of the base after you verified it; check the new head once it is reviewed", "request"})
+		c.notify(t.ID, notice{"merge order dropped", voidText(why), "request"})
 	}
 	mem := watchMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["watch_last"]}
 	p := WatchPolicy{MaxRounds: c.Cfg.Auto.MaxRounds, DoneAfterMerge: c.Cfg.Watch.DoneAfterMerge}
@@ -614,6 +618,9 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	if c.Dry {
 		w.openWorkspace(c)
 		c.Would(watchArgv(act, t.ID, row.Next))
+		if act.Kind == actMerge {
+			w.turn = t.ID
+		}
 		return res
 	}
 	// A step that started finishes even when tkt watch is asked to stop; a
@@ -635,9 +642,10 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	c.save(ts, kv...)
 	done, err := w.do(ctx, a, act, t.ID, ts)
 	if err != nil {
-		if errors.Is(err, errOrderWaits) {
+		var waits orderWaits
+		if errors.As(err, &waits) {
 			c.save(ts, "watch_last", mem.Last)
-			res.Action, res.Reason = "", ReasonCIPending
+			res.Action, res.Reason = "", waits.reason()
 			return res
 		}
 		res.Error = apperr.As(err).Msg
@@ -676,9 +684,36 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	return res
 }
 
-// errOrderWaits says a merge order is not due after all: the checks at its
-// head run again, or someone cancelled it meanwhile.
-var errOrderWaits = errors.New("the merge order waits")
+// orderWaits says a merge order is not due after all, and on what it waits,
+// as tkt merge's result does; "" means it was cancelled or replaced since
+// the look.
+type orderWaits string
+
+func (w orderWaits) Error() string { return "the merge order waits: " + string(w) }
+
+// reason is the watch reason for what an order waits on.
+func (w orderWaits) reason() string {
+	switch string(w) {
+	case WaitSync:
+		return ReasonBaseMoved
+	case WaitReview:
+		return ReasonNeedsReview
+	case WaitTurn:
+		return WatchTurn
+	}
+	return ReasonCIPending
+}
+
+// voidText says why a merge order dropped, for its notification.
+func voidText(why string) string {
+	switch why {
+	case voidQAFailed:
+		return "finish-ticket says a human verification step failed; check the head again once the failure is answered"
+	case voidSession:
+		return "another session took the ticket over after finish-ticket got the merge line; check the head again once it is reviewed"
+	}
+	return "the branch changed beyond a clean merge of the base after you verified it; check the new head once it is reviewed"
+}
 
 func watchRunText(stage string) string {
 	switch stage {
@@ -701,7 +736,7 @@ func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *t
 	case actMerge:
 		r, err := a.Merge(ctx, MergeOpts{ID: id, Passed: ts.st["merge_steps"], Head: ts.st["merge_head"], As: ts.st["merge_as"], order: true})
 		if err == nil && r.Action != MergeMerging {
-			return nil, errOrderWaits
+			return nil, orderWaits(r.Waits)
 		}
 		return nil, err
 	case actSync:

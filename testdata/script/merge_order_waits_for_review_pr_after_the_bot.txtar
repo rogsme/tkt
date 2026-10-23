@@ -1,0 +1,37 @@
+# finish-ticket merges on review-pr's READY_FOR_HUMAN alone. Where the review
+# bot cleared the head and review-pr has not reviewed it, a merge order waits
+# for that review, and tkt watch has review-pr write it.
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1SHORT"; $H1[0:7]) | gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+
+exec tkt merge ACM-12 --passed all --json
+envelope '.result | [.action, .waits]' '["ordered","review"]'
+exec tkt merge ACM-12 --passed all
+stdout 'ACM-12  merges #7 once review-pr cleared its head'
+exec tkt ls --json
+envelope '.result.rows[0].next | [.reason, .text]' '["needs_review","tkt run ACM-12 review"]'
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .stage, .reason]' '["run","review","needs_review"]'
+grep '^Use the review-pr skill to review the current PR.$' $FAKE_DIR/prompts
+
+# review-pr's READY_FOR_HUMAN, and the bot's later CLEAR on the same head:
+# the order is due.
+jqedit $WORK/prs.json '.[0].reviews = [.[0].reviews[0] | .body = "Reviewed head: " + $H1 + "\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n" | .submittedAt = "2026-01-03T00:00:00Z"] + .[0].reviews'
+jqedit $WORK/prs.json '.[0].reviews[1].submittedAt = "2026-01-04T00:00:00Z"'
+exec tkt ls --json
+envelope '.result.rows[0].next.reason' merge_due
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["merge","merge_due"]'
+grep '^Use the finish-ticket skill to merge the PR. Human verification step 1 passed on head '$H1'.$' $FAKE_DIR/prompts
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "body": "## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n",
+  "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** head `H1SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

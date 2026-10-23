@@ -8,7 +8,7 @@ How a ticket moves:
 4. Reviewed clean (the bot's CLEAR, or review-pr's READY_FOR_HUMAN): the user runs the human verification steps. /check walks them, and once every step passed it hands the merge to finish-ticket with tkt merge: now, or once the checks pass.
 5. Done: once finish-ticket ends with Status: DONE, tkt watch removes the merged ticket's tabs and worktree; tkt done does it by hand.
 
-tkt watch runs beside the chat and keeps every ticket moving, in auto or not: it syncs a moved base, runs ci once per head when the checks fail, carries out the merge order /check leaves while the checks run, and runs tkt done after finish-ticket ends with Status: DONE. It leaves alone tickets on hold, tickets in auto, and everything a person decides. When it waits for the user, the board says so. The board's heading says whether it runs.
+tkt watch runs beside the chat and keeps every ticket moving, in auto or not: it syncs a moved base, runs ci once per head when the checks fail, carries out the merge order /check leaves when finish-ticket cannot merge yet (after a clean sync, it has review-pr review the new head, and your steps carry over), and runs tkt done after finish-ticket ends with Status: DONE. It leaves alone tickets on hold, tickets in auto, and everything a person decides. When it waits for the user, the board says so. The board's heading says whether it runs.
 
 Map what the user says to tools:
 

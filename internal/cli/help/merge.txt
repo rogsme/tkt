@@ -14,18 +14,20 @@ merge refuses a list that leaves one out; to waive a step, tell the agent
 in the ticket's tab yourself. --head names the head the steps ran on. The
 steps hold across clean merges of the base, the ones tkt sync makes, so tkt
 merge refuses only a head that changed beyond them. Before any session
-starts, it also refuses a head no review cleared, a base whose merge
-conflicts (the steps never carry over a resolution: sync, then verify the
-new head) and failing checks. finish-ticket checks the rest itself, such as
-a review that says READY_FOR_HUMAN at the head: when only the review bot
-cleared it, tkt merge warns that finish-ticket stops with Status: BLOCKED
-without one.
+starts, it also refuses a base whose merge conflicts (the steps never carry
+over a resolution: sync, then verify the new head), a head no review
+cleared that no sync made, and failing checks at a head it would merge as
+it is.
+finish-ticket checks the rest itself.
 
 When finish-ticket could not merge yet, tkt merge leaves a merge order
 instead, on the --as preset if you named one, and tkt watch carries it out.
-A branch behind its base gets a clean sync first, then a review of the new
-head; the order waits for running checks, and for another ticket's merge,
-since one goes at a time. The line then names the head the steps passed on
+A branch behind its base gets a clean sync first. finish-ticket merges on
+review-pr's READY_FOR_HUMAN at the head, so a head a sync made, or one only
+the review bot cleared, waits for review-pr, which tkt watch runs. The order
+also waits for running checks, and for another ticket's merge, since one
+goes at a time: a turn lock covers the moment from tkt merge's check to its
+line. The line then names the head the steps passed on
 and the one to merge, and finish-ticket checks the merges between them
 itself. tkt ls shows the order in the merge field, and the tkt agent's
 board as merges when green.

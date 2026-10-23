@@ -26,12 +26,13 @@ exec tkt merge ACM-12 --passed 1 --dry-run --json
 envelope '.result | [.action, .steps]' '["merging",[1]]'
 jqedit $WORK/prs.json '.[0].reviews[0].body |= sub("1\\. Sign out"; "2. Sign out")'
 
-# Only the review bot cleared the head: finish-ticket asks for review-pr's
-# READY_FOR_HUMAN, so tkt merge warns before it goes on.
+# Only the review bot cleared the head: finish-ticket merges on review-pr's
+# READY_FOR_HUMAN alone, so tkt merge leaves an order that waits for it,
+# and tkt watch has review-pr write it.
 cp $WORK/prs.json $WORK/ready.json
 jqedit $WORK/prs.json '.[0].body = .[0].reviews[0].body | .[0].reviews = [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** · head `x` · reviewed against ACM-12", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": $H1}}]'
-exec tkt merge ACM-12 --passed all --dry-run
-stderr 'only the review bot cleared ACM-12''s head; finish-ticket asks for a review that says READY_FOR_HUMAN'
+exec tkt merge ACM-12 --passed all --dry-run --json
+envelope '.result | [.action, .waits]' '["ordered","review"]'
 cp $WORK/ready.json $WORK/prs.json
 
 # The steps ran on another head.

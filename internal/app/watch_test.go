@@ -63,9 +63,14 @@ func TestWatchStepTable(t *testing.T) {
 		// A merge order you left goes ahead without settling, once per head;
 		// on a branch behind its base, the sync comes first.
 		{with(open, func(f *Facts) {
-			f.Verdict, f.AtHead, f.MergeSteps, f.Idle = "READY_FOR_HUMAN", true, "1,2", time.Minute
+			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps, f.Idle = "READY_FOR_HUMAN", true, true, "1,2", time.Minute
 		}), p, watchMemory{}, watchAct{Kind: actMerge, Why: ReasonMergeDue}},
-		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.MergeSteps = "READY_FOR_HUMAN", true, "1,2" }), p, watchMemory{Last: "merge:@h1"}, pause(StopNoProgress)},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps = "READY_FOR_HUMAN", true, true, "1,2"
+		}), p, watchMemory{Last: "merge:@h1"}, pause(StopNoProgress)},
+		// A head only the bot cleared gets review-pr's review for the order,
+		// since finish-ticket merges on that alone.
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.MergeSteps = "CLEAR", true, "1,2" }), p, watchMemory{}, watchAct{Kind: actRun, Stage: "review", Why: ReasonNeedsReview}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.MergeSteps, f.Behind = "READY_FOR_HUMAN", true, "1,2", 2 }), p, watchMemory{}, watchAct{Kind: actSync, Why: ReasonBaseMoved}},
 		{with(open, func(f *Facts) {
 			f.Verdict, f.AtHead, f.MergeSteps, f.Checks = "READY_FOR_HUMAN", true, "1,2", "pending"

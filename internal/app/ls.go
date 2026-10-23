@@ -19,6 +19,7 @@ import (
 
 	"gitlab.com/rogs/tkt/internal/agent"
 	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/forge"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
@@ -133,9 +134,12 @@ type Row struct {
 	// Merge is the ticket's merge order when it holds at the pull request's
 	// head, or null.
 	Merge *RowMerge `json:"merge"`
-	// orderVoid says a new head voided the ticket's merge order: tkt watch
-	// drops it.
-	orderVoid bool
+	// orderVoid says why the ticket's merge order on orderHead no longer
+	// holds, so tkt watch drops it, or is ""; reviewReady says review-pr's
+	// READY_FOR_HUMAN summary is at the head, which finish-ticket merges on.
+	orderVoid   string
+	orderHead   string
+	reviewReady bool
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
 	PhaseSince string `json:"phase_since"`
@@ -613,6 +617,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			checks, verdict := forge.Summarize(p), forge.LatestVerdict(p)
 			row.PR = &RowPR{Number: p.Number, State: "OPEN", Mergeable: p.Mergeable, Head: p.HeadRefOid}
 			row.Checks, row.Review = &checks, verdict
+			row.reviewReady = forge.HumanVerification(p) != nil
 		} else if p, ok := closedPR(l.gh.Mine(l.all, t.ID)); ok {
 			row.PR = &RowPR{Number: p.Number, State: p.State}
 		}
@@ -630,7 +635,8 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	if l.hasBase {
 		base = l.baseRef
 	}
-	row.Merge, row.orderVoid = c.mergeOrder(rctx, t.Path, st, row.PR, base)
+	row.Merge, row.orderVoid = c.mergeOrder(rctx, t.Path, st, row.PR, base, row.LastStatus)
+	row.orderHead = st["merge_head"]
 	if p := st["watch_pause"]; p != "" && row.PR != nil && st["watch_head"] == row.PR.Head && c.watchRunning() {
 		row.Watch.Paused = p
 	}
@@ -667,20 +673,46 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	return row, f
 }
 
+// The reasons a merge order stops holding.
+const (
+	voidHead     = "head"
+	voidQAFailed = "qa_failed"
+	voidSession  = "session"
+)
+
 // mergeOrder reads the ticket's merge order, when it holds at the pull
 // request's head: the head its steps passed on, or one that clean merges of
-// the base reached from there. void says a head this worktree knows voided
-// it; a head it has not fetched yet, or a base it lacks, says nothing either
-// way.
-func (c *Ctx) mergeOrder(ctx context.Context, path string, st state.State, pr *RowPR, base string) (o *RowMerge, void bool) {
+// the base reached from there. void says why the order no longer holds: a
+// head this worktree knows came by more than clean merges, finish-ticket
+// said a step failed, or another kind of session took the ticket over after
+// the line went out. A head it has not fetched yet, a base it lacks, or git
+// failing says nothing either way. last is the agent's last status.
+func (c *Ctx) mergeOrder(ctx context.Context, path string, st state.State, pr *RowPR, base, last string) (o *RowMerge, void string) {
 	h := st["merge_head"]
 	if h == "" || pr == nil || pr.State != "OPEN" || pr.Head == "" {
-		return nil, false
+		return nil, ""
 	}
-	if pr.Head != h && (base == "" || !c.Git.CleanMerges(ctx, path, h, pr.Head, base)) {
-		return nil, base != "" && c.Git.Rev(ctx, path, pr.Head+"^{commit}") != ""
+	switch stage := st["stage"]; {
+	case stage == "merge" && last == contract.StatusHumanQAFailed:
+		return nil, voidQAFailed
+	case st["merge_sent"] != "" && stage != "merge" && stage != "review":
+		return nil, voidSession
 	}
-	return &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], At: st["merge_at"], Sent: st["merge_sent"]}, false
+	if pr.Head != h {
+		if base == "" {
+			return nil, ""
+		}
+		clean, err := c.Git.CleanMerges(ctx, path, h, pr.Head, base)
+		switch {
+		case err != nil:
+			return nil, ""
+		case !clean && c.Git.Rev(ctx, path, pr.Head+"^{commit}") != "":
+			return nil, voidHead
+		case !clean:
+			return nil, ""
+		}
+	}
+	return &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], At: st["merge_at"], Sent: st["merge_sent"]}, ""
 }
 
 // probeBaseMerge tries merging the base into the pull request's head, or

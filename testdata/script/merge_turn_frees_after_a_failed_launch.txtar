@@ -1,0 +1,38 @@
+# A merge line whose agent never started leaves the ticket at stage merge,
+# launching. The turn frees once the command that launched it is gone, so
+# the other orders go on.
+exec tkt start ACM-1
+exec tkt start ACM-2
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-2 commit -q --allow-empty -m 'ACM-2 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-2 push -q origin ACM-2
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+gitvar H2 $FAKE_WT_ROOT/ACM-2 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) | gsub("H2"; $H2) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+exec tkt merge ACM-1 --passed all
+exec tkt merge ACM-2 --passed all
+jqedit $WORK/prs.json '.[0].statusCheckRollup[0] |= (.status = "COMPLETED" | .conclusion = "SUCCESS")'
+
+env FAKE_HERDR_START_ERRORS=server_error
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.ticket, .action, .reason]' '["ACM-1","merge","merge_due"]'
+env FAKE_HERDR_START_ERRORS=
+state $FAKE_WT_ROOT/ACM-1 stage merge
+state $FAKE_WT_ROOT/ACM-1 status launching
+
+# ACM-1 waits for you, and ACM-2, due now, merges.
+jqedit $WORK/prs.json '.[1].statusCheckRollup[0] |= (.status = "COMPLETED" | .conclusion = "SUCCESS")'
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::launch","ACM-2:merge:merge_due"]'
+
+-- prs.json --
+[
+  {"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "IN_PROGRESS", "conclusion": ""}],
+   "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]},
+  {"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "H2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "IN_PROGRESS", "conclusion": ""}],
+   "reviews": [{"body": "Reviewed head: H2\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the sign-up page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H2"}}]}
+]

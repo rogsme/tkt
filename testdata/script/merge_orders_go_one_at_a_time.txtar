@@ -18,7 +18,10 @@ exec tkt merge ACM-1 --passed all
 exec tkt merge ACM-2 --passed all
 jqedit $WORK/prs.json 'map(.statusCheckRollup[0] |= (.status = "COMPLETED" | .conclusion = "SUCCESS"))'
 
-# Both are due: one pass sends one merge line, and the other waits.
+# Both are due: one pass sends one merge line, and the other waits, as a
+# dry run says first.
+exec tkt watch --once --dry-run --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1:merge:merge_due","ACM-2::turn"]'
 resetlog
 exec tkt watch --once --json
 envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1:merge:merge_due","ACM-2::turn"]'
@@ -33,7 +36,7 @@ envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-
 exec tkt merge ACM-2 --passed all --json
 envelope '.result | [.action, .waits, .after]' '["ordered","turn","ACM-1"]'
 exec tkt merge ACM-2 --passed all
-stdout 'ACM-2  merges #2 once ACM-1 merged first'
+stdout 'ACM-2  merges #2 once ACM-1 went first'
 
 # Once ACM-1's pull request merged, its finish-ticket only waits for the
 # checks after the merge, and ACM-2 goes.

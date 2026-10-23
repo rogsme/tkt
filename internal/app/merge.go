@@ -14,6 +14,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/forge"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
+	"gitlab.com/rogs/tkt/internal/lock"
 )
 
 // MergeOpts are tkt merge's arguments. Passed names the human verification
@@ -107,9 +108,9 @@ func (r *MergeResult) waitText() string {
 	case WaitSync:
 		return "tkt watch merged " + r.base + " into it, and a review cleared the new head"
 	case WaitReview:
-		return "a review clears its head " + short(r.Head)
+		return "review-pr cleared its head " + short(r.Head)
 	case WaitTurn:
-		return r.After + " merged first"
+		return or(r.After, "the merge another tkt sends now") + " went first"
 	}
 	return "its checks pass at " + short(r.Head)
 }
@@ -202,21 +203,26 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	res.PR, res.Head, res.Verified = row.PR.Number, row.PR.Head, row.PR.Head
 	if o.Head != "" && !strings.HasPrefix(res.Head, o.Head) {
 		v := c.Git.Rev(c.Ctx, path, o.Head+"^{commit}")
-		if v == "" || !c.Git.CleanMerges(c.Ctx, path, v, res.Head, l.baseRef) {
+		clean := false
+		if v != "" {
+			if clean, err = c.Git.CleanMerges(c.Ctx, path, v, res.Head, l.baseRef); err != nil {
+				return nil, err
+			}
+		}
+		if !clean {
 			return nil, apperr.New(apperr.MergeHeadMoved, "%s's pull request is at %s now, and more than clean merges of the base came after %s, where the steps ran; run them again on the new head", id, short(res.Head), o.Head).
 				WithHint("tkt show %s --steps", id).With("head", res.Head)
 		}
 		res.Verified = v
 	}
-	// The review must be at the head finish-ticket merges. After a sync, the
-	// order waits for one, which tkt watch starts.
-	cleared := f.AtHead && (f.Verdict == contract.VerdictReadyForHuman || f.Verdict == contract.VerdictClear)
-	if !cleared && (f.AtHead || res.Verified == res.Head) {
-		return nil, apperr.New(apperr.NoVerification, "no review clears %s's head %s: finish-ticket merges only a head reviewed clean", id, short(res.Head)).
+	// finish-ticket merges on review-pr's READY_FOR_HUMAN at the head it
+	// merges. A head only the review bot cleared, or one a sync made, waits
+	// for that review, which tkt watch starts.
+	ready := row.reviewReady
+	waitsReview := !ready && (f.AtHead && f.Verdict == contract.VerdictClear || !f.AtHead && res.Verified != res.Head)
+	if !ready && !waitsReview {
+		return nil, apperr.New(apperr.NoVerification, "no review clears %s's head %s: finish-ticket merges only a head review-pr reviewed clean", id, short(res.Head)).
 			WithHint("tkt ls %s", id)
-	}
-	if f.Verdict == contract.VerdictClear {
-		c.UI.Warn("only the review bot cleared %s's head; finish-ticket asks for a review that says %s at the head, and stops with Status: %s without one", id, contract.VerdictReadyForHuman, contract.StatusBlocked)
 	}
 	// The line says the steps passed on the verified head, so they are the
 	// numbers of its procedure; after a sync, finish-ticket matches them
@@ -238,12 +244,19 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		res.Waits = WaitSync
 	case f.Checks == "fail":
 		return nil, apperr.New(apperr.MergeChecksFail, "the checks fail at %s's head %s", id, short(res.Head)).WithHint("tkt run %s ci", id)
-	case !cleared:
+	case waitsReview:
 		res.Waits = WaitReview
 	case f.Checks == "pending":
 		res.Waits = WaitChecks
+	case !c.takeTurn():
+		// Another tkt merge is between this check and its line.
+		res.Waits = WaitTurn
 	default:
-		if other := c.mergeInFlight(l.agents, id); other != "" {
+		other, err := c.mergeInFlight(l.agents, id)
+		if err != nil {
+			return nil, err
+		}
+		if other != "" {
 			res.Waits, res.After = WaitTurn, other
 		}
 	}
@@ -254,7 +267,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		}
 		// A new order is a new word from you: tkt watch forgets that it
 		// sent one on this head already.
-		kv := []string{"merge_head", res.Verified, "merge_steps", stepList(got), "merge_as", o.As, "merge_at", c.Now().UTC().Format(history.TimeFormat)}
+		kv := []string{"merge_head", res.Verified, "merge_steps", stepList(got), "merge_as", o.As, "merge_at", c.Now().UTC().Format(history.TimeFormat), "merge_sent", ""}
 		if strings.HasPrefix(ts.st["watch_last"], actMerge+":") {
 			kv = append(kv, "watch_last", "", "watch_pause", "", "watch_head", "")
 		}
@@ -271,7 +284,8 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		return res, nil
 	}
 	// The lock stays held, so the order cannot change while the line goes
-	// out, and a --cancel after it finds the line sent.
+	// out, and a --cancel after it finds the line sent. So does the turn,
+	// so no other merge line goes out before this one shows as in flight.
 	run, err := c.run(RunOpts{ID: id, Stage: "merge", As: o.As, Dry: o.Dry, line: config.MergeLine(got, res.Verified, res.Head)})
 	if err != nil {
 		return nil, err
@@ -313,16 +327,36 @@ func (c *Ctx) passedSteps(id, head, passed string) ([]int, error) {
 	return got, nil
 }
 
+// mergeTurnLock is the lock a tkt merge holds from its check that no other
+// merge runs until its line is out.
+const mergeTurnLock = "merge-turn"
+
+// takeTurn takes the repository's merge turn for this command, and reports
+// whether it got it. A dry run sends nothing, so it takes nothing.
+func (c *Ctx) takeTurn() bool {
+	if c.Dry {
+		return true
+	}
+	f, err := lock.Try(c.Repo.Common, mergeTurnLock)
+	if err != nil {
+		return false
+	}
+	c.locks = append(c.locks, f)
+	return true
+}
+
 // mergeInFlight names a ticket other than except whose merge line went out
 // and whose pull request is still open while its finish-ticket runs, or
 // "". One merge goes at a time: a second finish-ticket that checks the base
 // before the first one merges would merge an integration nobody reviewed.
-// A pull request that merged frees the turn while its finish-ticket waits
-// for the checks after the merge; one tkt cannot read keeps it.
-func (c *Ctx) mergeInFlight(agents []herdr.Agent, except string) string {
+// A launch counts while its command holds the ticket's lock, so one that
+// failed frees the turn; a pull request that merged frees it while its
+// finish-ticket waits for the checks after the merge; one tkt cannot read
+// keeps it.
+func (c *Ctx) mergeInFlight(agents []herdr.Agent, except string) (string, error) {
 	es, err := c.WT.List(c.Ctx)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	f := c.LC.Forge
 	gh := forge.GH{R: c.R, Repo: f.Host + "/" + f.Repo, Name: f.Repo}
@@ -334,7 +368,7 @@ func (c *Ctx) mergeInFlight(agents []herdr.Agent, except string) string {
 		if err != nil || ts.st["stage"] != "merge" {
 			continue
 		}
-		busy := ts.st["status"] == "tab" || ts.st["status"] == "launching"
+		busy := (ts.st["status"] == "tab" || ts.st["status"] == "launching") && c.ticketLocked(t.ID)
 		for _, ag := range herdr.AgentsInPath(agents, t.Path) {
 			busy = busy || ag.Status == herdr.Working || ag.Status == herdr.Blocked
 		}
@@ -343,15 +377,15 @@ func (c *Ctx) mergeInFlight(agents []herdr.Agent, except string) string {
 		}
 		prs, err := gh.ListHead(c.Ctx, t.ID, false)
 		if err != nil {
-			return t.ID
+			return t.ID, nil
 		}
 		for _, p := range gh.Mine(prs, t.ID) {
 			if p.State == "OPEN" {
-				return t.ID
+				return t.ID, nil
 			}
 		}
 	}
-	return ""
+	return "", nil
 }
 
 // dropOrder forgets a ticket's merge order and records why: cancelled by

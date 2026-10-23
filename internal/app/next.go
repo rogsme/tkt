@@ -76,7 +76,9 @@ func human(reason, text string) Next {
 // read both, from a look with probe. MergeSteps holds the steps of a merge
 // order that holds at the head, such as 1,2,3, or "" without one; MergeHead
 // is the head they passed on, which clean merges of the base may have left
-// behind, and MergeAs the preset the order names.
+// behind, and MergeAs the preset the order names. ReviewReady says review-
+// pr's READY_FOR_HUMAN summary is at the head, which finish-ticket merges
+// on; the review bot's CLEAR is not one.
 type Facts struct {
 	ID          string
 	PRState     string
@@ -102,6 +104,7 @@ type Facts struct {
 	MergeSteps  string
 	MergeHead   string
 	MergeAs     string
+	ReviewReady bool
 	BotWait     time.Duration
 	Waited      time.Duration
 }
@@ -145,12 +148,15 @@ func NextStep(f Facts) Next {
 		return command(ReasonFindings, "tkt", "run", id, "address")
 	case f.Checks == "fail":
 		return command(ReasonChecksFail, "tkt", "run", id, "ci")
-	case f.MergeSteps != "" && f.AtHead && (f.Verdict == contract.VerdictClear || f.Verdict == contract.VerdictReadyForHuman):
+	case f.MergeSteps != "" && f.ReviewReady:
 		argv := []string{"tkt", "merge", id, "--passed", f.MergeSteps, "--head", f.MergeHead}
 		if f.MergeAs != "" {
 			argv = append(argv, "--as", f.MergeAs)
 		}
 		return command(ReasonMergeDue, argv...)
+	case f.MergeSteps != "" && f.AtHead && f.Verdict == contract.VerdictClear:
+		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone.
+		return command(ReasonNeedsReview, "tkt", "run", id, "review")
 	case f.AtHead && f.Verdict == contract.VerdictClear:
 		return command(ReasonBotClear, "tkt", "run", id, "verify")
 	case f.AtHead && f.Verdict == contract.VerdictReadyForHuman:
@@ -253,7 +259,7 @@ func factsFor(r Row) Facts {
 	if r.PR != nil {
 		f.PRState, f.Mergeable, f.Head = r.PR.State, r.PR.Mergeable, r.PR.Head
 	}
-	f.BaseMerge = r.BaseMerge
+	f.BaseMerge, f.ReviewReady = r.BaseMerge, r.reviewReady
 	if r.Checks != nil {
 		f.Checks = r.Checks.State
 	}
