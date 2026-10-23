@@ -128,7 +128,7 @@ sequenceDiagram
   tkt->>tkt: git fetch origin main
   tkt->>wt: wt switch --create ACM-123 --base origin/main
   wt->>wt: create the worktree, run pre-start hooks
-  tkt->>herdr: open a tab named ACM-123
+  tkt->>herdr: open a tab named ACM-123 (claude)
   tkt->>herdr: herdr agent start, in build mode
   herdr->>agent: launch Claude Code or OpenCode
   tkt->>herdr: herdr agent prompt with the start line

@@ -13,10 +13,11 @@ Presets choose the agent. Each is a [presets.NAME] table:
   model = "acme/small#max"      # leave out for the harness's default model
   serves = ["small"]
 
-Order matters. The first preset is the default, and its tabs carry the bare
-ticket id; other presets' tabs read "ACM-12 (fast)". When a prompt carries a
-Model: line, tkt start picks the first preset that serves it. tkt resume
-picks the first preset of the session's harness. --as NAME picks one yourself.
+Order matters. The first preset is the default. A ticket's tab names its
+preset, the default one too: "ACM-12 (claude)", "ACM-12 (fast)". When a
+prompt carries a Model: line, tkt start picks the first preset that serves
+it. tkt resume picks the first preset of the session's harness. --as NAME
+picks one yourself.
 
 A Claude Code model reads model#effort, such as "opus#high". An OpenCode model
 reads provider/model#variant.

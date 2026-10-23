@@ -276,11 +276,8 @@ func (c Config) StageLine(stage, id string, vars ...string) (string, error) {
 	return strings.NewReplacer(pairs...).Replace(t), nil
 }
 
-// TabLabel names a ticket's tab: the bare id for the default preset,
-// otherwise "ID (preset)".
+// TabLabel names a ticket's tab "ID (preset)", so the tab says what runs
+// in it, the default preset too.
 func (c Config) TabLabel(id, preset string) string {
-	if preset == c.Default().Name {
-		return id
-	}
 	return id + " (" + preset + ")"
 }

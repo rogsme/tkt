@@ -39,7 +39,7 @@ plan.
 A loop ends only when the ticket is ready for you, merged or closed, or with
 tkt auto --stop, which it notices at its next look. Ctrl-C ends it with exit 5
 and leaves the ticket marked for auto, so tkt ls shows auto.wanted. While a
-loop drives the ticket, its tab reads ACM-12 (auto).
+loop drives the ticket, its tab reads ACM-12 (claude, auto).
 
 At most [auto] max_parallel tkt auto agents work at once in a repository. A
 loop holds a slot while its agent works and gives it up while it waits for CI,

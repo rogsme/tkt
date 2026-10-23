@@ -15,7 +15,7 @@ env HERDR_PANE_ID=
 jqedit $FAKE_DIR/herdr.json '.agents = [] | .tabs |= map(select(.tab_id == "w1:t1")) | .panes |= map(select(.pane_id == "w1:p1"))'
 exec tkt watch --once --json
 envelope '.result.tickets[0] | [.action, .stage]' '["run","ci"]'
-logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-1 --label ACM-1
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-1 --label 'ACM-1 (claude)'
 logged herdr agent start acm-1 --kind claude
 
 # With no pane in the repository, as after a reboot with nothing open, it
@@ -32,8 +32,8 @@ exec tkt watch --once --json
 envelope '.result.tickets[0] | [.action, .stage]' '["run","ci"]'
 stderr 'no herdr workspace had a pane in '$REPO', so tkt watch opened workspace w[0-9]+ there'
 logged herdr workspace create --cwd $REPO --label app --no-focus
-jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label == "ACM-1") | .workspace_id] | length' 1
-jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label == "ACM-1") | .workspace_id][0] == ([.workspaces[] | select(.label == "app") | .workspace_id][0])' true
+jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label == "ACM-1 (claude)") | .workspace_id] | length' 1
+jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label == "ACM-1 (claude)") | .workspace_id][0] == ([.workspaces[] | select(.label == "app") | .workspace_id][0])' true
 
 # The next pass finds that workspace from its pane, and opens no other.
 resetlog

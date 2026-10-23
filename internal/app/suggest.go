@@ -167,10 +167,7 @@ func (c *Ctx) suggestPane(ts *ticketState, preset config.Preset, name string) (t
 	if ok && p.TabID == ts.st["tab"] && (c.Dry || c.H.PaneIsShell(c.Ctx, p.PaneID)) {
 		return p.TabID, p.PaneID, nil
 	}
-	label := suggestLock
-	if preset.Name != c.Cfg.Default().Name {
-		label += " (" + preset.Name + ")"
-	}
+	label := c.Cfg.TabLabel(suggestLock, preset.Name)
 	ws := c.Getenv("HERDR_WORKSPACE_ID")
 	if c.Dry {
 		c.Would(herdr.TabCreateArgv(ws, c.Repo.Root, label))

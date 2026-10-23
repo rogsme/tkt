@@ -224,7 +224,7 @@ func TestStageLinesAndOverrides(t *testing.T) {
 
 func TestTabLabel(t *testing.T) {
 	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}))
-	if got := c.TabLabel("ACM-1", "claude"); got != "ACM-1" {
+	if got := c.TabLabel("ACM-1", "claude"); got != "ACM-1 (claude)" {
 		t.Errorf("default preset: %q", got)
 	}
 	if got := c.TabLabel("ACM-1", "fast"); got != "ACM-1 (fast)" {

@@ -13,7 +13,7 @@ exec tkt ls --no-fetch --json
 envelope '.result.rows[0] | [.phase, .auto.running, .auto.paused, .auto.why]' '["needs_you",true,"needs_you","agent_blocked"]'
 logged herdr notification show 'ACM-12: needs you'
 grep '"event":"auto","action":"pause","stop":"needs_you"' $HOME/.local/state/tkt/history.jsonl
-jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label | startswith("ACM-12")) | .label]' '["ACM-12 (auto)"]'
+jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label | startswith("ACM-12")) | .label]' '["ACM-12 (claude, auto)"]'
 
 # You answered in the tab, and then the pull request merged: the loop takes
 # the mark off the tab and ends.
@@ -23,7 +23,7 @@ wait
 stdout '"stop": *"merged"'
 state $FAKE_WT_ROOT/ACM-12 auto_stop merged
 state $FAKE_WT_ROOT/ACM-12 auto_pause ''
-jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label | startswith("ACM-12")) | .label]' '["ACM-12"]'
+jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label | startswith("ACM-12")) | .label]' '["ACM-12 (claude)"]'
 
 # One step at a time, a plan without --approve-plan is a pause too, and
 # nothing is sent.
