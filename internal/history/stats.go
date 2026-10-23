@@ -49,6 +49,9 @@ type Filter struct {
 	IDs []string
 	// Since keeps tickets started at or after it; zero keeps all.
 	Since time.Time
+	// Chores keeps the runs of chores too, which a start that names its
+	// chore marks; without it, only tickets count.
+	Chores bool
 }
 
 // Timelines builds each ticket's latest way from start to merge. A ticket
@@ -72,6 +75,9 @@ func Timelines(events []Event, f Filter, waiting []string, now time.Time) ([]Tic
 	var sum Summary
 	for _, key := range order {
 		evs := byTicket[key]
+		if !f.Chores && slices.ContainsFunc(evs, func(e Event) bool { return e.Chore != "" }) {
+			continue
+		}
 		sort.SliceStable(evs, func(i, j int) bool { return evs[i].At < evs[j].At })
 		t, ok := timeline(lastCycle(evs), waiting, now)
 		if !ok {

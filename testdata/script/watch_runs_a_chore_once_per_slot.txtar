@@ -1,0 +1,62 @@
+# tkt watch starts a chore's run when its slot comes, once, however many
+# slots passed while no watch ran. The first pass to see a chore only arms
+# it. A slot that comes while the last run is open is skipped, and a run
+# that ended with nothing to change goes.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+
+exec tkt watch --once --json
+envelope '.result.chores[0] | [.chore, .action, .reason]' '["deps","","armed"]'
+envelope '.result.chores[0].next | test("T09:00:00Z$|T[0-9:]+Z$")' 'true'
+grep '^deps=20' $REPO/.git/tkt/chores
+! exists $FAKE_WT_ROOT/deps-run
+
+# A stamp from long ago: the slots that passed since run once.
+cp $WORK/old $REPO/.git/tkt/chores
+exec tkt watch --once --dry-run --json
+envelope '[.result.actions[].display | select(startswith("tkt "))]' '["tkt chore run deps"]'
+! exists $FAKE_WT_ROOT/deps-run
+
+resetlog
+exec tkt watch --once --json
+envelope '.result.chores[0] | [.action, .run, .reason]' '["run","deps-run","due"]'
+stderr 'deps: started deps-run, the run due at '
+exists $FAKE_WT_ROOT/deps-run
+state $FAKE_WT_ROOT/deps-run chore deps
+logged herdr notification show 'deps: chore started' --body 'tkt watch started deps-run on schedule'
+! grep '^deps=2020' $REPO/.git/tkt/chores
+
+# The slot is taken: the next pass waits for the next one.
+exec tkt watch --once --json
+envelope '.result.chores[0] | [.action, .reason]' '["","not_due"]'
+envelope '[.result.tickets[] | .ticket + ":" + .reason]' '["deps-run:check_agent"]'
+
+# A slot that comes while the run is open is skipped, not kept for later.
+cp $WORK/old $REPO/.git/tkt/chores
+exec tkt watch --once --json
+envelope '.result.chores[0] | [.action, .run, .reason]' '["","deps-run","open_run"]'
+stderr 'deps: skipped the run due at .*, since deps-run is still open'
+! grep '^deps=2020' $REPO/.git/tkt/chores
+exec tkt watch --once --json
+envelope '.result.chores[0].reason' 'not_due'
+
+# The run ends with nothing to change, so the next pass removes it.
+cp $WORK/done.txt $FAKE_DIR/screen
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets' '[{"action":"done","reason":"no_changes","ticket":"deps-run"}]'
+logged wt -C $REPO remove deps-run --foreground --reap --format json
+! exists $FAKE_WT_ROOT/deps-run
+houserules
+
+-- config.toml --
+[chores.deps]
+repo = "~/../app"
+schedule = "0 9 * * *"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies."
+-- old --
+deps=2020-01-01T00:00:00Z
+-- done.txt --
+Every dependency is current.
+Status: DONE

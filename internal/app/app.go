@@ -241,10 +241,12 @@ func (c *Ctx) ticketPath(id string) (string, error) {
 	return e.Path, nil
 }
 
-// ticketWorktree is a worktree that belongs to a ticket.
+// ticketWorktree is a worktree that belongs to a ticket, or to a chore's
+// run: then Chore names the chore, and ID is the run's branch.
 type ticketWorktree struct {
-	ID   string
-	Path string
+	ID    string
+	Path  string
+	Chore string
 }
 
 func (c *Ctx) ticketWorktrees(es wt.Entries) []ticketWorktree {
@@ -255,6 +257,49 @@ func (c *Ctx) ticketWorktrees(es wt.Entries) []ticketWorktree {
 		}
 	}
 	return out
+}
+
+// workWorktrees lists the worktrees tkt drives: the tickets', and the
+// chore runs', which tkt chore run made and whose state names the chore.
+func (c *Ctx) workWorktrees(es wt.Entries) []ticketWorktree {
+	out := c.ticketWorktrees(es)
+	for _, e := range es {
+		if chore := c.choreOf(e); chore != "" {
+			out = append(out, ticketWorktree{ID: e.Branch, Path: e.Path, Chore: chore})
+		}
+	}
+	return out
+}
+
+// choreOf names the chore whose run the worktree holds, or "": a run's
+// directory is named after its branch, which is no ticket id, and its state
+// names the chore.
+func (c *Ctx) choreOf(e wt.Entry) string {
+	if e.Path == c.Repo.Root || filepath.Base(e.Path) != e.Branch || c.LC.ScratchName(e.Branch) != nil {
+		return ""
+	}
+	ts, err := c.readState(e.Path)
+	if err != nil {
+		return ""
+	}
+	return ts.st["chore"]
+}
+
+// workID turns what a person typed into the id of a ticket, or of a chore
+// run that has a worktree: its branch, as tkt chore run named it.
+func (c *Ctx) workID(raw string) (string, error) {
+	id, err := c.LC.NormalizeID(raw)
+	if err == nil || c.LC.ScratchName(raw) != nil {
+		return id, err
+	}
+	es, lerr := c.WT.List(c.Ctx)
+	if lerr != nil {
+		return "", lerr
+	}
+	if e, ok := es.Find(raw); ok && c.choreOf(e) != "" {
+		return raw, nil
+	}
+	return "", err
 }
 
 // screenErr attaches the agent's screen to an uncertain-outcome error.

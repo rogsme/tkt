@@ -108,7 +108,7 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 	}
 	var tickets []ticketWorktree
 	if o.All {
-		tickets = c.ticketWorktrees(es)
+		tickets = c.workWorktrees(es)
 		if len(tickets) == 0 {
 			a.UI.Info("no ticket worktrees")
 			return res, nil
@@ -132,15 +132,15 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		}
 	} else {
 		for _, raw := range o.IDs {
-			id, err := c.LC.NormalizeID(raw)
+			id, err := c.workID(raw)
 			if err != nil {
 				return nil, err
 			}
-			path := ""
+			t := ticketWorktree{ID: id}
 			if e, ok := es.Find(id); ok {
-				path = e.Path
+				t.Path, t.Chore = e.Path, c.choreOf(e)
 			}
-			tickets = append(tickets, ticketWorktree{ID: id, Path: path})
+			tickets = append(tickets, t)
 		}
 	}
 	agents, err := c.H.Agents(c.Ctx)
@@ -170,7 +170,7 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		if err := c.lockTicket(t.ID); err != nil {
 			return nil, err
 		}
-		reasons, closeTabs, merged := c.doneCheck(gh, t.ID, t.Path, herdr.AgentsInPath(agents, t.Path), panes, tabs)
+		reasons, closeTabs, merged := c.doneCheck(gh, t, herdr.AgentsInPath(agents, t.Path), panes, tabs)
 		if len(reasons) > 0 {
 			a.UI.Info("%s kept:", t.ID)
 			for _, r := range reasons {
@@ -186,8 +186,11 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 			st = ts.st
 		}
 		// finish-ticket's report names the tickets the merge unblocked, and
-		// its session holds the report until the tabs close.
-		dt.Unblocked = c.sessionUnblocked(t.ID, t.Path, herdr.AgentsInPath(agents, t.Path), st)
+		// its session holds the report until the tabs close. A chore's run
+		// has no ticket, and no finish-ticket.
+		if t.Chore == "" {
+			dt.Unblocked = c.sessionUnblocked(t.ID, t.Path, herdr.AgentsInPath(agents, t.Path), st)
+		}
 		for _, tab := range closeTabs {
 			if c.Dry {
 				c.Would([]string{"herdr", "tab", "close", tab})
@@ -215,7 +218,10 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 			return nil, apperr.New(apperr.WtRemoveFailed, "wt remove %s failed (see above)", t.ID)
 		}
 		c.removeTmp(t.ID, tmp)
-		c.record(history.Event{Ticket: t.ID, Event: history.Merged, PR: merged.Number, MergedAt: merged.MergedAt, OpenedAt: merged.CreatedAt})
+		// A chore's run that changed nothing merged nothing.
+		if merged.Number > 0 {
+			c.record(history.Event{Ticket: t.ID, Event: history.Merged, PR: merged.Number, MergedAt: merged.MergedAt, OpenedAt: merged.CreatedAt})
+		}
 		c.record(history.Event{Ticket: t.ID, Event: history.Done, Unblocked: dt.Unblocked})
 		c.noteUnblocked(t.ID, dt.Unblocked)
 		// A ticket another merge named, and that merged since, is done.
@@ -247,8 +253,11 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 }
 
 // doneCheck lists why a ticket's worktree must stay, the tabs to close, and
-// the merged pull request.
-func (c *Ctx) doneCheck(gh forge.GH, id, path string, agents []herdr.Agent, panes []herdr.Pane, tabs []herdr.Tab) (reasons, closeTabs []string, pr forge.PR) {
+// the merged pull request. A chore's run that never opened a pull request
+// goes too, once its branch holds nothing the base lacks: it ended with
+// nothing to change.
+func (c *Ctx) doneCheck(gh forge.GH, t ticketWorktree, agents []herdr.Agent, panes []herdr.Pane, tabs []herdr.Tab) (reasons, closeTabs []string, pr forge.PR) {
+	id, path := t.ID, t.Path
 	f := c.LC.Forge
 	oid := ""
 	prs, err := gh.ListHead(c.Ctx, id, false)
@@ -256,7 +265,8 @@ func (c *Ctx) doneCheck(gh forge.GH, id, path string, agents []herdr.Agent, pane
 		reasons = append(reasons, err.Error())
 	} else {
 		var open, merged []forge.PR
-		for _, p := range gh.Mine(prs, id) {
+		mine := gh.Mine(prs, id)
+		for _, p := range mine {
 			switch p.State {
 			case "OPEN":
 				open = append(open, p)
@@ -269,7 +279,9 @@ func (c *Ctx) doneCheck(gh forge.GH, id, path string, agents []herdr.Agent, pane
 		}
 		switch len(merged) {
 		case 0:
-			reasons = append(reasons, fmt.Sprintf("no merged pull request has %s as its head branch", id))
+			if t.Chore == "" || len(mine) > 0 {
+				reasons = append(reasons, fmt.Sprintf("no merged pull request has %s as its head branch", id))
+			}
 		case 1:
 		default:
 			reasons = append(reasons, fmt.Sprintf("several merged pull requests have %s as their head branch", id))

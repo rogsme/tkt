@@ -191,7 +191,7 @@ func (a *App) beginTicket(ctx context.Context, raw string, dry, force bool) (*Ct
 		c.release()
 		return nil, "", "", nil, err
 	}
-	id, err := c.LC.NormalizeID(raw)
+	id, err := c.workID(raw)
 	if err != nil {
 		return fail(err)
 	}

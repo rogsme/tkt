@@ -72,7 +72,7 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 // as tkt merge does, so no other command gets in between.
 func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 	a := c.App
-	id, err := c.LC.NormalizeID(o.ID)
+	id, err := c.workID(o.ID)
 	if err != nil {
 		return nil, err
 	}

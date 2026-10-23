@@ -107,6 +107,29 @@ func (g *globals) completePresets(*cobra.Command, []string, string) ([]string, c
 	return out, noFiles
 }
 
+// completeChores offers the chores of the repository tkt runs in, with
+// their schedule.
+func (g *globals) completeChores(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, noFiles
+	}
+	cfg, err := config.Load(g.app().ConfigDir())
+	if err != nil {
+		return nil, noFiles
+	}
+	repo, err := gitx.Git{R: runner.Exec{}}.Resolve(cmd.Context(), g.dirForCompletion())
+	if err != nil {
+		return nil, noFiles
+	}
+	var out []string
+	for _, ch := range cfg.Chores {
+		if ch.RunsIn(repo.Root) {
+			out = append(out, ch.Name+"\t"+ch.Schedule.String())
+		}
+	}
+	return out, noFiles
+}
+
 // completePanes offers the herdr panes inside the ticket's worktree, named
 // by their agent.
 func (g *globals) completePanes(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {

@@ -20,7 +20,7 @@ export const columns: { title: string; phases: string[] }[] = [
 	{ title: "Building", phases: ["building", "ci", "working"] },
 	{ title: "Review", phases: ["waiting_review", "reviewing", "needs_fix", "fixing", "verifying"] },
 	{ title: "Ready", phases: ["ready_for_human", "merging"] },
-	{ title: "Merged", phases: ["merged", "closed"] },
+	{ title: "Merged", phases: ["merged", "closed", "finished"] },
 ];
 
 /** columnOf names the column a ticket sits in. */
@@ -61,6 +61,7 @@ const hints: Record<AttentionKind, (id: string) => string> = {
 	failed: () => "/inbox",
 	unblocked: (id) => `/start ${id}`,
 	suggested: () => "/inbox",
+	chore: (id) => `/show ${id}`,
 };
 
 /** footer is the line under the board: the commands for it, and first,
@@ -89,7 +90,8 @@ export function watchStage(r: Row): string {
 }
 
 /** The board's columns and their widths. AGE is the time since tkt start,
- * TIME the time in the phase, as in tkt ls; NOTES takes the rest. */
+ * TIME the time in the phase, as in tkt ls; NOTES takes the rest. TICKET
+ * widens for a chore's run, whose id is its branch. */
 const heads: [string, number][] = [
 	["TICKET", 9],
 	["AGE", 4],
@@ -99,21 +101,28 @@ const heads: [string, number][] = [
 	["PR", 6],
 ];
 
+function widths(rows: Row[]): number[] {
+	const w = heads.map(([, n]) => n);
+	w[0] = Math.min(24, Math.max(w[0], ...rows.map((r) => r.ticket.length)));
+	return w;
+}
+
 /** boardLines renders the board's body for a width: a header, one line per
  * ticket, the ones that need you first, then what each of those needs. */
 export function boardLines(s: BoardState, width: number): Line[] {
 	const lines: Line[] = [];
 	const needs = new Set(s.items.map((a) => a.ticket));
 	const rows = [...s.rows].sort((a, b) => Number(needs.has(b.ticket)) - Number(needs.has(a.ticket)) || a.ticket.localeCompare(b.ticket, undefined, { numeric: true }));
+	const w = widths(rows);
 	if (rows.length === 0) lines.push({ text: fit('No tickets yet. Say "start ACM-123".', width), tone: "muted" });
-	else lines.push({ text: fit([...heads.map(([h, n]) => pad(h, n)), "NOTES"].join(" "), width), tone: "muted" });
+	else lines.push({ text: fit([...heads.map(([h], i) => pad(h, w[i])), "NOTES"].join(" "), width), tone: "muted" });
 	for (const r of rows) {
 		let tone: Tone = "text";
 		if (needs.has(r.ticket)) tone = "warning";
 		else if (r.stale) tone = "error";
 		else if (r.phase === "ready_for_human") tone = "success";
-		else if (r.phase === "merged" || r.phase === "closed" || r.phase === "queued") tone = "muted";
-		lines.push({ text: fit(rowText(r, s), width), tone });
+		else if (r.phase === "merged" || r.phase === "closed" || r.phase === "queued" || r.phase === "finished") tone = "muted";
+		lines.push({ text: fit(rowText(r, s, w), width), tone });
 	}
 	if (s.items.length > 0) {
 		lines.push({ text: "", tone: "text" });
@@ -124,16 +133,19 @@ export function boardLines(s: BoardState, width: number): Line[] {
 	return lines;
 }
 
-/** phaseLabel names a phase for people. */
-export function phaseLabel(phase: string): string {
-	return phase === "ready_for_human" ? "ready to verify" : phase.replaceAll("_", " ");
+/** phaseLabel names a phase for people. A chore's pull request is ready
+ * for you to merge, as no skill merges one without a ticket. */
+export function phaseLabel(phase: string, chore = ""): string {
+	if (phase === "ready_for_human") return chore ? "ready to merge" : "ready to verify";
+	return phase.replaceAll("_", " ");
 }
 
-function rowText(r: Row, s: BoardState): string {
+function rowText(r: Row, s: BoardState, w: number[]): string {
 	const agent = !r.agent ? "-" : (r.agent.background ?? 0) > 0 ? "waiting" : r.agent.status;
-	const cells = [r.ticket, since(r.started, s.now) || "-", phaseLabel(r.phase), since(r.phase_since, s.now) || "-", agent, r.pr ? `#${r.pr.number}` : "-"];
-	const parts = cells.map((c, i) => pad(c, heads[i][1]));
+	const cells = [r.ticket, since(r.started, s.now) || "-", phaseLabel(r.phase, r.chore), since(r.phase_since, s.now) || "-", agent, r.pr ? `#${r.pr.number}` : "-"];
+	const parts = cells.map((c, i) => pad(c, w[i]));
 	const flags: string[] = [];
+	if (r.chore) flags.push("chore");
 	if (r.hold) flags.push("hold");
 	else if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : "auto");
 	else if (r.auto?.wanted) flags.push("auto stalled");

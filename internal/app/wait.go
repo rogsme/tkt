@@ -62,7 +62,7 @@ func (a *App) Wait(ctx context.Context, o WaitOpts) (*WaitResult, error) {
 		return nil, err
 	}
 	defer c.release()
-	id, err := c.LC.NormalizeID(o.ID)
+	id, err := c.workID(o.ID)
 	if err != nil {
 		return nil, err
 	}

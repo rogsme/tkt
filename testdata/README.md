@@ -88,6 +88,13 @@ After a change to `tkt sync`, `tkt watch` or the tabs' `TMPDIR`, in a scratch Gi
 5. From a terminal outside herdr, `tkt watch --once --dry-run` finds the workspace from the panes and says what each ticket would get.
 6. Verify two tickets whose pull requests touch different files, and leave a merge order on each while their checks run. The first one merges. Within a few minutes the second one is synced with no agent, review-pr reviews its new head in a fresh session, and finish-ticket gets `... passed on head A. The pull request is at B now, after clean merges of the base.`, checks the merge itself, and merges without asking for the steps again.
 
+After a change to chores, in a scratch GitHub repository with the lifecycle configuration, a `[chores.deps]` table whose `repo` is that repository, and a prompt that makes a small change, such as adding a line to a file:
+
+1. Run `tkt chores`: it lists the chore with its next slot. Run `tkt chore run deps --dry-run`, then `tkt chore run deps`. A tab named after the run's branch opens, its agent gets the prompt and the rule about how a run ends, and it opens one pull request and ends with `Status: READY_FOR_REVIEW`. `tkt ls` lists the run, and the chat's board marks it chore, with its diff and its pull request's title.
+2. Run `tkt chore run deps` again: it refuses while the first run is open. Make its checks fail on a new head: within a minute `tkt watch` runs ci on it. Merge its pull request on GitHub: within a minute `tkt watch` removes the run.
+3. Change the prompt to ask for nothing, and run it again: the agent ends with `Status: DONE`, and `tkt watch` removes the run with nothing pushed.
+4. Set the schedule a few minutes ahead with `tkt watch` running: the run starts at that minute, with a notification. Stop the watch over a slot, and start it again: the missed slot runs once.
+
 After a change to `tkt hook tmp` or its plugin, with a preset that runs OpenCode:
 
 1. Run `tkt hook tmp --install`, then `opencode service restart` while no agent works. `tkt doctor` says the plugin is in place.

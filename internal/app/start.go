@@ -28,6 +28,11 @@ type StartOpts struct {
 	// Unattended adds config.UnattendedLine to the prompt, for a tkt auto
 	// that approves the plan itself.
 	Unattended bool
+	// chore names the chore tkt chore run starts a run of, in the worktree
+	// that Scratch names, with Prompt as its prompt. Unlike a scratch
+	// worktree's, a run's agent gets its prompt, its tabs a TMPDIR, and its
+	// start goes into the history.
+	chore string
 }
 
 // StartResult is what tkt start did.
@@ -60,7 +65,9 @@ func (r *StartResult) Text(w io.Writer) {
 // Start creates or reuses a ticket's worktree, opens its tab, starts an agent
 // and sends it the prompt. A scratch start has no ticket and sends nothing.
 func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
-	scratch := o.Scratch != ""
+	// named is a worktree with no ticket: a scratch one, or a chore's run.
+	named := o.Scratch != ""
+	scratch := named && o.chore == ""
 	text := ""
 	if o.Prompt.Set {
 		var err error
@@ -84,7 +91,7 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 	}
 	var id string
 	switch {
-	case scratch:
+	case named:
 		if err := c.LC.ScratchName(o.Scratch); err != nil {
 			return nil, err
 		}
@@ -113,12 +120,15 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 	}
 	name := prompt.AgentName(id)
 	again, stage, busy := "tkt start "+id, "start", "use tkt run or tkt resume, or close it"
-	if scratch {
+	switch {
+	case scratch:
 		again, stage, busy = "tkt start --scratch "+id, "", "close it"
-	} else if !o.Prompt.Set {
+	case named:
+		again, stage = "tkt chore run "+o.chore, stageChore
+	case !o.Prompt.Set:
 		text, _ = c.stageLine("start", id)
 	}
-	if o.Unattended && !scratch {
+	if o.Unattended && !named {
 		sep := " "
 		if strings.Contains(text, "\n") {
 			sep = "\n\n"
@@ -139,7 +149,7 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		return nil, err
 	}
 	res := &StartResult{Ticket: id, Worktree: path, WorktreeCreated: created, Stage: stage, DryRun: c.Dry}
-	if scratch {
+	if named {
 		res.Ticket, res.Scratch = "", id
 	}
 	ts := &ticketState{st: map[string]string{}}
@@ -164,7 +174,7 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		a.UI.Info("continuing the start that stopped at the agent's startup dialog")
 		tab, pane, name, h = st["tab"], st["pane"], st["agent"], st["harness"]
 		preset.Name = st["preset"]
-	case len(inPath) > 0 && scratch:
+	case len(inPath) > 0 && named:
 		return nil, apperr.New(apperr.AgentRunning, "an agent already runs in %s (pane %s)", path, inPath[0].PaneID).
 			WithHint("switch to pane %s", inPath[0].PaneID)
 	case len(inPath) > 0:
@@ -179,9 +189,12 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 			return nil, err
 		}
 		c.save(ts, "ticket", id, "preset", preset.Name, "harness", h, "stage", stage, "tab", tab, "pane", pane, "agent", name, "status", "tab")
+		if o.chore != "" {
+			c.save(ts, "chore", o.chore)
+		}
 		if !scratch && st["started"] == "" {
 			c.save(ts, "started", c.Now().UTC().Format(history.TimeFormat))
-			c.record(history.Event{Ticket: id, Event: history.Started})
+			c.record(history.Event{Ticket: id, Event: history.Started, Chore: o.chore})
 			c.forgetUnblocked(id)
 		}
 		if !c.Dry {
@@ -204,7 +217,7 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		case agent.NotReady:
 			c.save(ts, "status", "not_ready")
 			rerun := again
-			if !scratch {
+			if !named {
 				rerun += " with the same prompt"
 			}
 			return nil, c.screenErr(apperr.New(apperr.AgentNotReady,

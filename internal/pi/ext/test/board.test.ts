@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { attentionOf } from "../attention.ts";
-import { boardColumns, boardLines, columnOf, footer, grid, order, statusText, title } from "../board.ts";
+import { boardColumns, boardLines, columnOf, footer, grid, order, phaseLabel, statusText, title } from "../board.ts";
 import { row } from "./fixtures.ts";
 
 const now = Date.parse("2026-01-01T02:00:00Z");
@@ -110,4 +110,13 @@ test("the board marks a merge order until the merge is due", () => {
 	assert.doesNotMatch(two.text, /merges when green/);
 	assert.match(two.text, / merging /);
 	assert.equal(columnOf(row({ phase: "merging" })), "Ready");
+});
+
+test("a chore's run shows as one, and its pull request is yours to merge", () => {
+	const rows = [row({ ticket: "deps-2026-10-26", chore: "deps", phase: "ready_for_human", pr: { number: 44, state: "OPEN", head: "abc" } })];
+	const [head, line] = boardLines({ rows, jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
+	assert.match(head.text, /^TICKET {10}AGE/);
+	assert.match(line.text, /^deps-2026-10-26 +2h +ready to merge .*#44 .*chore$/);
+	assert.equal(phaseLabel("ready_for_human"), "ready to verify");
+	assert.equal(columnOf(row({ phase: "finished" })), "Merged");
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ago, expandIds, keyFromTracker, keyOf, mentions, mergeText, normalizeId, rowsOf, stampText, updateNotice, stepText } from "../model.ts";
+import { ago, choresText, expandIds, keyFromTracker, keyOf, mentions, mergeText, normalizeId, rowsOf, stampText, updateNotice, stepText } from "../model.ts";
 import { row } from "./fixtures.ts";
 
 test("normalizeId", () => {
@@ -81,4 +81,12 @@ test("mergeText says what tkt merge did", () => {
 	assert.match(mergeText({ ...r, action: "cancelled", sent: "2026-01-01T00:00:00Z" }), /no merge order now\. finish-ticket got the merge line at 2026-01-01T00:00:00Z/);
 	assert.equal(mergeText({ ...r, action: "cancelled" }), "ACM-12 has no merge order now.");
 	assert.match(mergeText({ ...r, action: "none", sent: "2026-01-01T00:00:00Z" }), /finish-ticket got the merge line at 2026-01-01T00:00:00Z/);
+});
+
+test("choresText lists the chores with the run that holds the next one back", () => {
+	const chore = { name: "deps", schedule: "0 9 * * 1,4", as: "", last: "", due: false, next: "2026-10-26T12:00:00Z", runs: ["deps-2026-10-22"], open: "deps-2026-10-22" };
+	const text = choresText({ repo: "/w/app", watch: { running: false }, chores: [chore], elsewhere: [] });
+	assert.match(text, /^- deps \(0 9 \* \* 1,4\): next .*Oct 26.*; deps-2026-10-22 is still open/);
+	assert.match(text, /tkt watch does not run for this repository/);
+	assert.match(choresText({ repo: "/w/app", watch: { running: true }, chores: [], elsewhere: [] }), /^No chore runs in this repository/);
 });

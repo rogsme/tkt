@@ -436,6 +436,55 @@ func watchCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func choresCmd(g *globals) *cobra.Command {
+	var o app.ChoresOpts
+	return &cobra.Command{
+		Use:   "chores",
+		Short: "List the repository's chores, with their next run",
+		Long:  helpText("chores"),
+		Example: `  tkt chores
+  tkt chores --json`,
+		SuggestFor: []string{"schedule", "cron", "jobs"},
+		Args:       cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().Chores(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+}
+
+func choreCmd(g *globals) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "chore",
+		Short: "Run one of the repository's chores now",
+		Long:  helpText("chores"),
+		Args:  cobra.NoArgs,
+	}
+	var o app.ChoreRunOpts
+	run := &cobra.Command{
+		Use:   "run NAME",
+		Short: "Start a run of a chore now: a branch, a tab and an agent with the chore's prompt",
+		Long:  helpText("chores"),
+		Example: `  tkt chore run deps
+  tkt chore run deps --dry-run`,
+		ValidArgsFunction: g.completeChores,
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt chore run NAME")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.Name = args[0]
+			res, err := g.app().ChoreRun(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	run.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
+	cmd.AddCommand(run)
+	return cmd
+}
+
 func holdCmd(g *globals) *cobra.Command {
 	var o app.HoldOpts
 	cmd := &cobra.Command{

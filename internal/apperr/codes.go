@@ -41,6 +41,7 @@ const (
 	ConfirmationRequired Code = "confirmation_required"
 	StepsIncomplete      Code = "steps_incomplete"
 	Cancelled            Code = "cancelled"
+	UnknownChore         Code = "unknown_chore"
 
 	ToolMissing            Code = "tool_missing"
 	ToolTooOld             Code = "tool_too_old"
@@ -98,6 +99,7 @@ const (
 	MergeBaseConflicts  Code = "merge_base_conflicts"
 	MergeChecksFail     Code = "merge_checks_fail"
 	PullRequestMerged   Code = "pull_request_merged"
+	ChoreRunning        Code = "chore_running"
 
 	WtFailed          Code = "wt_failed"
 	WtSwitchFailed    Code = "wt_switch_failed"
@@ -143,6 +145,7 @@ var Registry = []Info{
 	{ConfirmationRequired, ExitUsage, "the command needs --yes when stdin is not a terminal"},
 	{StepsIncomplete, ExitUsage, "tkt merge --passed does not name every human verification step, and finish-ticket merges only when all passed"},
 	{Cancelled, ExitUsage, "the answer to a confirmation was no"},
+	{UnknownChore, ExitUsage, "no chore of that name runs in this repository"},
 
 	{ToolMissing, ExitEnvironment, "a required program is not installed"},
 	{ToolTooOld, ExitEnvironment, "a required program is older than tkt supports"},
@@ -200,6 +203,7 @@ var Registry = []Info{
 	{MergeBaseConflicts, ExitState, "merging the base into the branch conflicts, and human verification never carries over the resolution: sync, then verify the new head"},
 	{MergeChecksFail, ExitState, "the checks fail at the pull request's head"},
 	{PullRequestMerged, ExitState, "the ticket's pull request is merged already"},
+	{ChoreRunning, ExitState, "the chore's last run is still open: its agent works, or its pull request waits for a merge"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},

@@ -37,16 +37,43 @@ type WatchOpts struct {
 
 // WatchResult is what tkt watch did in its last pass; with --stop, whether
 // it stopped one; with --install or --uninstall, the service it set up or
-// removed.
+// removed. Chores says what the pass did with each of the repository's
+// chores.
 type WatchResult struct {
 	Repo    string         `json:"repo"`
 	Passes  int            `json:"passes"`
 	Tickets []WatchTicket  `json:"tickets"`
+	Chores  []WatchChore   `json:"chores"`
 	Stopped bool           `json:"stopped"`
 	Service *ServiceResult `json:"service"`
 	DryRun  bool           `json:"dry_run"`
 	Actions []Action       `json:"actions"`
 }
+
+// WatchChore is what one pass did with a chore. Action is run when it
+// started a run, named Run, or "" when it left the chore. Reason is due when
+// it ran, or why it did not: armed (the first pass to see the chore arms
+// it, so its first run is its next slot), not_due, open_run (the slot passed
+// while the last run, Run, is still open, so the pass skipped it), slot
+// (every [auto] max_parallel slot is taken) or failed, with Error. Next is
+// the chore's next slot, in UTC.
+type WatchChore struct {
+	Chore  string `json:"chore"`
+	Action string `json:"action"`
+	Run    string `json:"run,omitempty"`
+	Reason string `json:"reason"`
+	Next   string `json:"next"`
+	Error  string `json:"error,omitempty"`
+}
+
+// The reasons a pass leaves a chore alone.
+const (
+	ChoreDue     = "due"
+	ChoreArmed   = "armed"
+	ChoreNotDue  = "not_due"
+	ChoreOpenRun = "open_run"
+	ChoreFailed  = "failed"
+)
 
 // WatchTicket is what one pass did with a ticket. Action is done, sync or
 // run (with Stage), or "" when it left the ticket alone. Reason is the
@@ -57,6 +84,7 @@ type WatchResult struct {
 // slot (every [auto] max_parallel slot is taken), turn (another ticket's
 // merge goes first), worktree_gone (its directory or state is gone),
 // round_limit or no_progress (it waits for you), or its next step's reason.
+// A chore's run is a row here too, named by its branch.
 type WatchTicket struct {
 	Ticket string `json:"ticket"`
 	Action string `json:"action"`
@@ -88,6 +116,21 @@ func (r *WatchResult) Text(w io.Writer) {
 	}
 	if len(rows) > 0 {
 		output.Table(w, []string{"TICKET", "STEP", "WHY"}, rows)
+	}
+	rows = nil
+	for _, ch := range r.Chores {
+		step := or(ch.Action, "-")
+		if ch.Run != "" {
+			step += " " + ch.Run
+		}
+		why := ch.Reason
+		if ch.Error != "" {
+			why += ": " + ch.Error
+		}
+		rows = append(rows, []string{ch.Chore, step, why, localTime(ch.Next)})
+	}
+	if len(rows) > 0 {
+		output.Table(w, []string{"CHORE", "STEP", "WHY", "NEXT"}, rows)
 	}
 }
 
@@ -190,9 +233,13 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 	}
 	switch n.Reason {
 	case ReasonMerged:
-		if p.DoneAfterMerge && f.LastStatus == contract.StatusDone {
+		// You merge a chore's pull request yourself, so no finish-ticket
+		// says it is done: its run goes once no agent works there.
+		if p.DoneAfterMerge && (f.LastStatus == contract.StatusDone || f.Chore != "" && f.Agent != herdr.Working && f.Agent != herdr.Blocked) {
 			return act(actDone, "")
 		}
+	case ReasonNoChanges:
+		return act(actDone, "")
 	case ReasonBaseMoved:
 		if f.BaseMerge == "conflict" || f.BaseMerge == "" && f.Mergeable == "CONFLICTING" {
 			return fix("resolve")
@@ -243,7 +290,7 @@ func watchPauseText(id, why, last string) string {
 	case actSync + ":":
 		return "tkt watch could not merge the base on this head; tkt sync " + id + " says why"
 	case actDone + ":":
-		return "tkt watch could not remove the merged ticket; tkt done " + id + " says why"
+		return "tkt watch could not remove it; tkt done " + id + " says why"
 	case actMerge + ":":
 		return "finish-ticket got the merge line on this head, and the pull request is still open; read what the agent said in its tab"
 	}
@@ -303,29 +350,32 @@ func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
 		c.locks = append(c.locks, f)
 		w.writeStatus(nil)
 	}
-	res := &WatchResult{Repo: c.Repo.Root, Tickets: []WatchTicket{}, DryRun: c.Dry, Actions: []Action{}}
+	res := &WatchResult{Repo: c.Repo.Root, Tickets: []WatchTicket{}, Chores: []WatchChore{}, DryRun: c.Dry, Actions: []Action{}}
 	lastErr := ""
 	self := binaryStamp()
 	for {
 		if !o.Once {
 			a.UI.ForgetWarnings()
 		}
-		tickets, err := w.pass(ctx)
+		tickets, chores, err := w.pass(ctx)
 		w.passes++
 		res.Passes = w.passes
 		if ctx.Err() == nil {
 			w.writeStatus(err)
 		}
 		if o.Once {
-			res.Tickets, res.Actions = tickets, append([]Action{}, w.plan...)
+			res.Tickets, res.Chores, res.Actions = tickets, chores, append([]Action{}, w.plan...)
 			if tickets == nil {
 				res.Tickets = []WatchTicket{}
+			}
+			if chores == nil {
+				res.Chores = []WatchChore{}
 			}
 			return res, err
 		}
 		switch {
 		case err == nil:
-			res.Tickets, lastErr = tickets, ""
+			res.Tickets, res.Chores, lastErr = tickets, chores, ""
 		case ctx.Err() == nil && apperr.As(err).Msg != lastErr:
 			// One warning for each new failure, such as herdr going down,
 			// not one a minute.
@@ -403,6 +453,9 @@ type watcher struct {
 	opened string
 	// turn is the ticket whose merge goes now, if any: one goes at a time.
 	turn string
+	// choreFail is, for each chore, the slot and the failure it reported
+	// last, so a run that keeps failing to start is reported once.
+	choreFail map[string]string
 }
 
 func (w *watcher) writeStatus(err error) {
@@ -514,42 +567,44 @@ func (c *Ctx) findWorkspace(opened string) (string, error) {
 	return best, nil
 }
 
-// pass reads every ticket once and takes each one's step. It returns nil
-// tickets when it could not read them.
-func (w *watcher) pass(ctx context.Context) ([]WatchTicket, error) {
+// pass reads every ticket and chore run once and takes each one's step,
+// then starts the chores that are due. It returns nil when it could not
+// read them.
+func (w *watcher) pass(ctx context.Context) ([]WatchTicket, []WatchChore, error) {
 	a, err := w.app()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	c, err := a.begin(ctx, w.c.Dry, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer c.release()
 	defer func() { w.plan = append(w.plan, c.Plan...) }()
 	es, err := c.WT.List(c.Ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	l, err := c.look(lookOpts{fetch: !c.Dry, probe: true})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if l.src.Forge != "ok" {
 		if l.forgeErr != nil {
-			return nil, l.forgeErr
+			return nil, nil, l.forgeErr
 		}
-		return nil, apperr.New(apperr.ForgeQueryFailed, "tkt watch cannot read the pull requests")
+		return nil, nil, apperr.New(apperr.ForgeQueryFailed, "tkt watch cannot read the pull requests")
 	}
 	if l.src.Herdr != "ok" {
-		return nil, apperr.New(apperr.HerdrFailed, "tkt watch cannot reach herdr")
+		return nil, nil, apperr.New(apperr.HerdrFailed, "tkt watch cannot reach herdr")
 	}
 	out := []WatchTicket{}
 	seen := map[string]bool{}
 	if w.turn, err = c.mergeInFlight(l.agents, ""); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	for _, t := range c.ticketWorktrees(es) {
+	var runs []choreRun
+	for _, t := range c.workWorktrees(es) {
 		if ctx.Err() != nil {
 			break
 		}
@@ -565,10 +620,102 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, error) {
 			break
 		}
 		w.freeSlot(t.ID, row)
-		out = append(out, w.step(ctx, a, c, t, row, f))
+		res := w.step(ctx, a, c, t, row, f)
+		out = append(out, res)
+		if t.Chore != "" {
+			r := runOf(row, true)
+			// A run the step removed is gone.
+			r.Open = r.Open && res.Action != actDone
+			runs = append(runs, r)
+		}
 	}
 	w.dropSlots(seen)
-	return out, nil
+	if ctx.Err() != nil {
+		return out, []WatchChore{}, nil
+	}
+	return out, w.chores(ctx, a, c, runs), nil
+}
+
+// chores starts each chore of the repository whose slot came, once per
+// slot, however many slots passed while no tkt watch ran. A slot that comes
+// while the chore's last run is open is skipped; one that comes while every
+// agent slot is taken waits for a later pass.
+func (w *watcher) chores(ctx context.Context, a *App, c *Ctx, runs []choreRun) []WatchChore {
+	out := []WatchChore{}
+	stamps := choreStamps(c.Repo.Common)
+	now := c.Now()
+	for _, ch := range c.repoChores() {
+		wc := WatchChore{Chore: ch.Name}
+		last, seen := stamps[ch.Name]
+		due, next := choreSlots(ch, last, now)
+		if !next.IsZero() {
+			wc.Next = next.UTC().Format(history.TimeFormat)
+		}
+		switch open := openRun(runs, ch.Name); {
+		case !seen:
+			// A chore's first run is its first slot after tkt watch saw it,
+			// not one that passed before it was set up.
+			c.stampChore(ch.Name, now)
+			wc.Reason = ChoreArmed
+		case due.IsZero():
+			wc.Reason = ChoreNotDue
+		case open != "":
+			c.stampChore(ch.Name, due)
+			wc.Reason, wc.Run = ChoreOpenRun, open
+			c.UI.Info("%s: skipped the run due at %s, since %s is still open", ch.Name, due.Format("Mon 15:04"), open)
+		case !w.takeSlot("chore:" + ch.Name):
+			wc.Reason = WatchSlot
+		default:
+			wc.Action, wc.Reason = actRun, ChoreDue
+			w.runChore(ctx, a, c, ch.Name, due, &wc)
+		}
+		out = append(out, wc)
+	}
+	return out
+}
+
+// runChore starts a run of a chore whose slot came, and records the slot
+// once the run started. A start that fails is tried again at the next pass,
+// and reported once for each slot and failure.
+func (w *watcher) runChore(ctx context.Context, a *App, c *Ctx, name string, due time.Time, wc *WatchChore) {
+	slot := "chore:" + name
+	if c.Dry {
+		w.openWorkspace(c)
+		c.Would([]string{"tkt", "chore", "run", name})
+		return
+	}
+	err := w.openWorkspace(c)
+	var r *ChoreRunResult
+	if err == nil {
+		r, err = a.ChoreRun(context.WithoutCancel(ctx), ChoreRunOpts{Name: name})
+	}
+	if err != nil {
+		if f := w.slots[slot]; f != nil {
+			f.Close()
+			delete(w.slots, slot)
+		}
+		msg := apperr.As(err).Msg
+		wc.Action, wc.Reason, wc.Error = "", ChoreFailed, msg
+		if key := due.UTC().Format(history.TimeFormat) + " " + msg; w.choreFail[name] != key {
+			if w.choreFail == nil {
+				w.choreFail = map[string]string{}
+			}
+			w.choreFail[name] = key
+			c.UI.Warn("%s: tkt watch could not start the chore: %s", name, msg)
+			c.notify(name, notice{"chore did not start", msg, "request"})
+		}
+		return
+	}
+	delete(w.choreFail, name)
+	c.stampChore(name, due)
+	// The slot is the run's now, freed once its agent stops working.
+	if f := w.slots[slot]; f != nil {
+		delete(w.slots, slot)
+		w.slots[r.Run] = f
+	}
+	wc.Run = r.Run
+	c.UI.Info("%s: started %s, the run due at %s", name, r.Run, due.Format("Mon 15:04"))
+	c.notify(name, notice{"chore started", "tkt watch started " + r.Run + " on schedule", "none"})
 }
 
 // step decides and takes one ticket's step.

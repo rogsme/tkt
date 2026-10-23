@@ -18,6 +18,9 @@ export interface Next {
 
 export interface Row {
 	ticket: string;
+	/** chore names the chore whose run this row is; the ticket is then the
+	 * run's branch. */
+	chore?: string;
 	path: string;
 	/** background counts the tasks an idle agent waits on, such as a CI
 	 * watcher; it goes on by itself when they finish. */
@@ -67,6 +70,27 @@ export interface LsResult {
 	watch?: { running: boolean; last_pass: string; error: string };
 	rows: Row[];
 	unblocked?: Unblocked[];
+}
+
+/** ChoresResult is what tkt chores prints: the repository's chores, each
+ * with its next and last slot, in UTC, and the run still open. */
+export interface ChoresResult {
+	repo: string;
+	watch: { running: boolean };
+	chores: { name: string; schedule: string; as: string; last: string; due: boolean; next: string; runs: string[]; open: string }[];
+	elsewhere: string[];
+}
+
+/** choresText lists the chores for the chat, with times in local time. */
+export function choresText(r: ChoresResult): string {
+	if (r.chores.length === 0) return "No chore runs in this repository: a [chores.NAME] table in config.toml whose repo is this repository adds one.";
+	const when = (at: string) => {
+		const t = Date.parse(at);
+		return Number.isNaN(t) ? "-" : new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+	};
+	const lines = r.chores.map((c) => `- ${c.name} (${c.schedule}): next ${when(c.next)}${c.open ? `; ${c.open} is still open, so that slot is skipped unless it merges first` : ""}${c.due ? "; a slot is due" : ""}`);
+	if (!r.watch.running) lines.push("tkt watch does not run for this repository, so no chore runs on schedule.");
+	return lines.join("\n");
 }
 
 /** rowsOf takes tkt ls's rows from a result, or from the partial result an

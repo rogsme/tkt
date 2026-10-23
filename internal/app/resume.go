@@ -53,7 +53,7 @@ func (a *App) Resume(ctx context.Context, o ResumeOpts) (*ResumeResult, error) {
 		return nil, err
 	}
 	defer c.release()
-	id, err := c.LC.NormalizeID(o.ID)
+	id, err := c.workID(o.ID)
 	if err != nil {
 		return nil, err
 	}

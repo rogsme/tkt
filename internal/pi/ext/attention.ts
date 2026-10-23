@@ -5,7 +5,7 @@
 
 import { picksText, type Row, type SuggestResult, type Unblocked } from "./model.ts";
 
-export type AttentionKind = "plan" | "question" | "blocked" | "check" | "ready" | "merged" | "next" | "paused" | "stalled" | "failed" | "unblocked" | "suggested";
+export type AttentionKind = "plan" | "question" | "blocked" | "check" | "ready" | "merged" | "next" | "paused" | "stalled" | "failed" | "unblocked" | "suggested" | "chore";
 
 export interface Attention {
 	/** key is the same while the ticket stays in the same situation, so a
@@ -53,6 +53,7 @@ const usual: Record<AttentionKind, Choice[]> = {
 	blocked: [...look, dismiss],
 	paused: [...look, dismiss],
 	ready: [{ label: "Open the checklist", do: "check" }, dismiss],
+	chore: [{ label: "Show its last message", do: "show" }, dismiss],
 	next: [
 		{ label: "Continue", do: "next" },
 		{ label: "Show its last message", do: "show" },
@@ -135,6 +136,19 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 	}
 	if (a?.wanted && !row.hold) return item("stalled", "auto stalled", `${id} is marked for auto, but no tkt auto loop drives it. /auto ${id} on resumes it.`);
 	if (row.watch?.paused) return watchPaused(row, item);
+	if (row.chore) {
+		// No skill reviews, fixes or merges a pull request without a ticket,
+		// so a chore's run comes to you where a ticket's goes on.
+		const pr = row.pr ? `pull request #${row.pr.number}` : "pull request";
+		switch (reason) {
+			case "chore_ready":
+				return item("chore", "ready to merge", `${id}: chore ${row.chore}'s ${pr} is ready. Review it and merge it yourself; tkt watch removes the run after the merge.`);
+			case "chore_findings":
+				return item("chore", "review found something", `${id}: the review found something on chore ${row.chore}'s ${pr}. Read it, then tell its agent what to fix, or merge it as it is.`, false, [reply]);
+			case "no_changes":
+				return watching ? undefined : item("merged", "nothing to change", `${id}: chore ${row.chore} found nothing to change. /done ${id} removes the run.`);
+		}
+	}
 	switch (row.phase) {
 		case "awaiting_approval":
 			return item("plan", "plan ready", planText(id));
@@ -247,5 +261,5 @@ export function suggestedOf(r: SuggestResult, at: number): Attention {
 
 /** sound picks the herdr notification sound for an item. */
 export function sound(a: Attention): "done" | "request" {
-	return a.kind === "ready" || a.kind === "merged" || a.kind === "unblocked" || a.kind === "suggested" ? "done" : "request";
+	return a.kind === "ready" || a.kind === "merged" || a.kind === "unblocked" || a.kind === "suggested" || a.kind === "chore" ? "done" : "request";
 }

@@ -1,0 +1,45 @@
+A chore is an agent run you schedule, such as a dependency upgrade. Each run
+is a branch and a pull request with no ticket. tkt ships no chores: you
+define them in config.toml, each with the repository it runs in (tkt help
+config):
+
+  [chores.deps]
+  repo = "~/code/acme/app"
+  schedule = "0 9 * * 1,4"     # cron's five fields, in local time
+  branch = "deps-{date}"       # {name}, {date} and {time}; the default is {name}-{date}
+  as = "fast"                  # the preset; leave out for the default
+  prompt = "Upgrade the dependencies. Read each migration guide, and note the breaking changes in the pull request."
+
+That repository's tkt watch starts a run when its slot comes. A run gets a
+branch from the base on the remote, its own worktree and tab, and an agent
+with the chore's prompt and one rule: commit on the run's branch, push it,
+open one pull request to the base, and end with Status: READY_FOR_REVIEW
+once it is open, or with Status: DONE, committing nothing, when there is
+nothing to change. The run's id is its branch, such as deps-2026-10-26: tkt
+ls lists it beside the tickets, and tkt run, sync, show, send, hold, resume,
+wait, history and done take it.
+
+From there tkt watch treats the pull request as it does a ticket's: it
+merges a moved base when a sync is due, and runs ci once per head when the
+checks fail. No skill reviews, fixes or merges a pull request without a
+ticket, so tkt ls says when the review bot found something, and when the
+pull request is ready for you to merge. Merge it yourself; tkt watch then
+removes the run, and removes at once a run that ended with nothing to
+change.
+
+A prompt that runs a slash command, such as /upgrade-dependencies, goes
+alone and on one line, since the command would read the rule as its
+arguments: the command says how the run ends, and a run that ends with
+neither a pull request nor Status: DONE waits for you.
+
+A slot that passes while the chore's last run is still open is skipped, so
+one run waits for you at a time. A slot missed while no tkt watch ran runs
+once when one runs again, however many passed. The first tkt watch to see a
+chore starts its first run at its next slot.
+
+tkt chores lists the repository's chores: the next slot, the last one tkt
+watch took or skipped, and the run still open. tkt chore run NAME starts a
+run now, and refuses while the chore's last run is open.
+
+A chore that needs no agent, such as npx skills update, belongs in a plain
+systemd timer or cron job, without tkt.

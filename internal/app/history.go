@@ -52,6 +52,8 @@ type HistoryEvent struct {
 	PR     int    `json:"pr,omitempty"`
 	// Unblocked lists the tickets finish-ticket said the merge unblocked.
 	Unblocked []string `json:"unblocked,omitempty"`
+	// Chore names the chore whose run started, on its start.
+	Chore string `json:"chore,omitempty"`
 }
 
 // PRHistory is a pull request of the ticket's branch.
@@ -139,6 +141,10 @@ func (t *TicketHistory) text(w io.Writer) {
 // line says what an event means, in a few words.
 func (e HistoryEvent) line() string {
 	switch e.Event {
+	case history.Started:
+		if e.Chore != "" {
+			return "started, a run of chore " + e.Chore
+		}
 	case history.Approved:
 		return "plan approved"
 	case history.Stage:
@@ -218,7 +224,12 @@ func (a *App) History(ctx context.Context, o HistoryOpts) (*HistoryResult, error
 	for _, raw := range o.IDs {
 		id, err := c.LC.NormalizeID(raw)
 		if err != nil {
-			return nil, err
+			// A chore's run is named by its branch, and its history outlives
+			// its worktree.
+			if c.LC.ScratchName(raw) != nil {
+				return nil, err
+			}
+			id = raw
 		}
 		if !slices.Contains(ids, id) {
 			ids = append(ids, id)
@@ -239,11 +250,11 @@ func (a *App) History(ctx context.Context, o HistoryOpts) (*HistoryResult, error
 		th := TicketHistory{Ticket: id, Events: []HistoryEvent{}, PullRequests: []PRHistory{}}
 		for _, e := range events {
 			if e.Repo == res.Repo && e.Ticket == id {
-				th.Events = append(th.Events, HistoryEvent{At: e.At, Event: e.Event, Phase: e.Phase, From: e.From, Stage: e.Stage, Action: e.Action, Stop: e.Stop, PR: e.PR, Unblocked: e.Unblocked})
+				th.Events = append(th.Events, HistoryEvent{At: e.At, Event: e.Event, Phase: e.Phase, From: e.From, Stage: e.Stage, Action: e.Action, Stop: e.Stop, PR: e.PR, Unblocked: e.Unblocked, Chore: e.Chore})
 			}
 		}
 		sort.SliceStable(th.Events, func(i, j int) bool { return th.Events[i].At < th.Events[j].At })
-		if tls, _ := history.Timelines(events, history.Filter{Repo: res.Repo, IDs: []string{id}}, WaitingOnYou, a.Now()); len(tls) > 0 {
+		if tls, _ := history.Timelines(events, history.Filter{Repo: res.Repo, IDs: []string{id}, Chores: true}, WaitingOnYou, a.Now()); len(tls) > 0 {
 			th.Timeline = &tls[0]
 		}
 		if res.Forge == "ok" {

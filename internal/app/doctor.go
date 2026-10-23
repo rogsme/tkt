@@ -20,6 +20,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/gitx"
 	"gitlab.com/rogs/tkt/internal/lifecycle"
+	"gitlab.com/rogs/tkt/internal/lock"
 	"gitlab.com/rogs/tkt/internal/runner"
 	"gitlab.com/rogs/tkt/internal/wt"
 )
@@ -63,7 +64,7 @@ var doctorGroups = []struct {
 }{
 	{"Tools", []string{"git", "wt", "herdr", "gh", "pi"}},
 	{"Harnesses", []string{"opencode_plugin"}},
-	{"Project", []string{"repository", "lifecycle", "worktrunk_hooks"}},
+	{"Project", []string{"repository", "lifecycle", "worktrunk_hooks", "chores"}},
 	{"Environment", []string{"config", "herdr_env", "services", "log"}},
 }
 
@@ -328,6 +329,7 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 		}
 	}
 	add(func() Check { return a.pluginCheck(cfg, cfgErr) })
+	add(func() Check { return a.choresCheck(cfg, cfgErr, repo) })
 	add(func() Check {
 		if repo.Root == "" {
 			return Check{ID: "worktrunk_hooks", Status: CheckSkip, Message: "not inside a repository"}
@@ -368,6 +370,43 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 		return res, apperr.New(apperr.ChecksFailed, "failing checks: %s", strings.Join(failed, ", ")).With("checks", res.Checks)
 	}
 	return res, nil
+}
+
+// choresCheck checks that each chore's repository exists, and that a tkt
+// watch runs for this repository to start its chores: a chore whose watch
+// never runs never runs either, and says nothing.
+func (a *App) choresCheck(cfg config.Config, cfgErr error, repo gitx.Repo) Check {
+	switch {
+	case cfgErr != nil:
+		return Check{ID: "chores", Status: CheckSkip, Message: "the settings do not load"}
+	case len(cfg.Chores) == 0:
+		return Check{ID: "chores", Status: CheckSkip, Message: "config.toml sets no chores"}
+	}
+	var here, elsewhere []string
+	for _, ch := range cfg.Chores {
+		if fi, err := os.Stat(filepath.Join(ch.Repo, ".git")); err != nil || fi == nil {
+			return Check{ID: "chores", Status: CheckWarn, Message: fmt.Sprintf("chore %s runs in %s, which is not a git repository, so it never runs", ch.Name, ch.Repo),
+				Hint: "fix the chore's repo in " + filepath.Join(a.ConfigDir(), config.FileName)}
+		}
+		if repo.Root != "" && ch.RunsIn(repo.Root) {
+			here = append(here, fmt.Sprintf("%s (next %s)", ch.Name, ch.Schedule.Next(a.Now().Local()).Format("Mon 01-02 15:04")))
+		} else {
+			elsewhere = append(elsewhere, ch.Name)
+		}
+	}
+	msg := ""
+	if len(here) > 0 {
+		msg = "here: " + strings.Join(here, ", ")
+		if f, err := lock.Try(repo.Common, watchLock); err == nil {
+			f.Close()
+			return Check{ID: "chores", Status: CheckWarn, Message: "no tkt watch runs for this repository, so its chores never start: " + strings.Join(here, ", "),
+				Hint: "tkt watch --install keeps one running; a tkt command in a herdr pane starts one"}
+		}
+	}
+	if len(elsewhere) > 0 {
+		msg = strings.TrimPrefix(msg+"; other repositories: "+strings.Join(elsewhere, ", "), "; ")
+	}
+	return Check{ID: "chores", Status: CheckOK, Message: msg}
 }
 
 // toolCheck checks that a program is installed and, when min is set, new

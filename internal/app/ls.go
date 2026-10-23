@@ -105,10 +105,13 @@ type RowMerge struct {
 // for a free slot before it starts the ticket.
 const ReasonAwaitingSlot = "awaiting_slot"
 
-// Row is one ticket in tkt ls. A null field is unknown or absent; Sources
-// says which sources were read. Times are UTC, as 2006-01-02T15:04:05Z.
+// Row is one ticket in tkt ls, or one chore's run: then Chore names the
+// chore, and Ticket is the run's branch. A null field is unknown or absent;
+// Sources says which sources were read. Times are UTC, as
+// 2006-01-02T15:04:05Z.
 type Row struct {
 	Ticket     string         `json:"ticket"`
+	Chore      string         `json:"chore"`
 	Path       string         `json:"path"`
 	Tabs       []herdr.Tab    `json:"tabs"`
 	Agent      *RowAgent      `json:"agent"`
@@ -386,7 +389,7 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	defer c.release()
 	var want []string
 	for _, raw := range o.IDs {
-		id, err := c.LC.NormalizeID(raw)
+		id, err := c.workID(raw)
 		if err != nil {
 			return nil, err
 		}
@@ -421,7 +424,7 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 		a.UI.Warn("%s", l.forgeErr.Error())
 	}
 
-	tickets := c.ticketWorktrees(entries)
+	tickets := c.workWorktrees(entries)
 	var missing []string
 	if len(want) > 0 {
 		var picked []ticketWorktree
@@ -582,7 +585,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
-	row.Hold = st["hold"] != ""
+	row.Hold, row.Chore = st["hold"] != "", or(t.Chore, st["chore"])
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan, Rounds: atoi(st["rounds"]),
 		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"], Note: st["auto_note"]}
 	if !row.Auto.Running {

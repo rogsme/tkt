@@ -1,0 +1,66 @@
+# A chore's pull request moves as a ticket's does, short of what needs a
+# ticket: tkt watch runs ci when the checks fail, tkt ls says when the
+# review found something and when the pull request is ready for you to
+# merge, and once you merged it, tkt watch removes the run without waiting
+# for a finish-ticket that never runs.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt chore run deps
+env WT=$FAKE_WT_ROOT/deps-run
+realgit -C $WT commit -q --allow-empty -m 'Upgrade the dependencies'
+realgit -C $WT push -q origin deps-run
+gitvar H1 $WT HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1SHORT"; $H1[0:7]) | gsub("H1"; $H1) else . end)'
+cp $WORK/prs.json $FAKE_DIR/prs.json
+
+# The checks fail: tkt watch runs ci on the run's branch.
+jqedit $FAKE_DIR/prs.json '.[0].statusCheckRollup[0].conclusion = "FAILURE"'
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets' '[{"action":"run","reason":"checks_fail","stage":"ci","ticket":"deps-run"}]'
+logged herdr agent start deps-run --kind claude
+grep 'The checks on this branch''s pull request fail at its head.' $FAKE_DIR/prompts
+state $WT stage ci
+
+# Green, with no review yet: it waits for the bot, then is yours to merge.
+jqedit $FAKE_DIR/prs.json '.[0].statusCheckRollup[0].conclusion = "SUCCESS"'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.chore, .next.reason, .phase]' '["deps","awaiting_bot","waiting_review"]'
+
+# The bot clears it: the pull request waits for your merge, which no
+# skill makes for a pull request without a ticket.
+jqedit $FAKE_DIR/prs.json '.[0].reviews = [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** · head `H1SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": $H1}}]'
+jqedit $FAKE_DIR/prs.json 'walk(if type == "string" then gsub("H1SHORT"; $H1[0:7]) else . end)'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.next.reason, .next.kind, .phase]' '["chore_ready","human","ready_for_human"]'
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","chore_ready"]'
+
+# The bot found something: that is yours too.
+jqedit $FAKE_DIR/prs.json '.[0].reviews[0].body = "**Automated review: FINDINGS** · head `" + $H1[0:7] + "`"'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.next.reason, .phase]' '["chore_findings","needs_you"]'
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","chore_findings"]'
+
+# You merge it: the next pass removes the run, with no Status: DONE.
+realgit -C $REPO merge -q --no-ff -m 'Merge deps-run' deps-run
+realgit -C $REPO push -q origin main
+jqedit $FAKE_DIR/prs.json '.[0].state = "MERGED"'
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets' '[{"action":"done","reason":"merged","ticket":"deps-run"}]'
+logged wt -C $REPO remove deps-run --foreground --reap --format json
+! exists $WT
+grep '"ticket":"deps-run","event":"merged","pr":44' $HOME/.local/state/tkt/history.jsonl
+houserules
+
+-- config.toml --
+[chores.deps]
+repo = "~/../app"
+schedule = "0 9 * * 1"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies."
+-- prs.json --
+[{"number": 44, "state": "OPEN", "title": "deps-run: Upgrade the dependencies", "headRefName": "deps-run", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+  "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": []}]

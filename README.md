@@ -7,7 +7,7 @@
 - starts Claude Code or OpenCode in that tab;
 - hands the agent its prompt.
 
-Each command is one step you take, and `tkt ls` suggests the next one. `tkt watch`, which tkt starts by itself, takes the upkeep steps for every ticket: it merges a moved base when a sync is due, fixes failing checks once per head, and removes a ticket once finish-ticket merged it. When you want, `tkt auto` takes all the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
+Each command is one step you take, and `tkt ls` suggests the next one. `tkt watch`, which tkt starts by itself, takes the upkeep steps for every ticket: it merges a moved base when a sync is due, fixes failing checks once per head, and removes a ticket once finish-ticket merged it. It also runs the chores you schedule, such as a weekly dependency upgrade. When you want, `tkt auto` takes all the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
 
 People and programs both drive tkt. Every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
 
@@ -82,6 +82,8 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt merge ID --passed STEPS` | Once the human verification steps passed, sends finish-ticket the word to merge in a fresh session, naming the head they passed on. When finish-ticket could not merge yet, leaves a merge order that `tkt watch` carries out: it syncs a clean base, has the new head reviewed, waits for green checks, and merges one ticket at a time. The steps carry over clean merges of the base, so a verified batch merges while you are away. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
 | `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees, and names the tickets each merge unblocked, which `tkt ls` lists and the tkt agent offers to start. `--all` checks every ticket worktree. |
+| `tkt chores` | Lists the repository's chores, the agent runs you schedule in `config.toml`, with their next run and the run still open. |
+| `tkt chore run NAME` | Starts a run of a chore now: a branch from the fetched base, its worktree and tab, and an agent with the chore's prompt. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
 | `tkt show ID` | Prints the agent's last message, such as the plan; `--screen` its live screen; `--steps` the human verification steps. |
 | `tkt wait ID` | Blocks until the ticket's agent needs you or has finished. |
@@ -99,7 +101,22 @@ A ticket from start to merge, in short:
 4. Act on the verdict with `address`, or on a moved base with `tkt sync ACM-12`, and review again.
 5. Verify, then `tkt merge ACM-12 --passed all`: finish-ticket merges, and `tkt watch` removes the ticket after its `Status: DONE`.
 
-For work with no ticket, `tkt start --scratch spike-login` makes the worktree, branch and tab `spike-login` and starts the agent without sending it anything. The other commands work on tickets only, so remove that worktree with `wt remove spike-login`.
+For work with no ticket, `tkt start --scratch spike-login` makes the worktree, branch and tab `spike-login` and starts the agent without sending it anything. The other commands work on tickets and chore runs only, so remove that worktree with `wt remove spike-login`.
+
+### Chores
+
+A chore is an agent run you schedule, such as a dependency upgrade. tkt ships none: each one is a table in `config.toml`, with the repository it runs in:
+
+```toml
+[chores.deps]
+repo = "~/code/acme/app"
+schedule = "0 9 * * 1,4"   # cron's five fields, in local time
+branch = "deps-{date}"
+as = "fast"
+prompt = "Upgrade the dependencies. Read each migration guide, and note the breaking changes in the pull request."
+```
+
+That repository's `tkt watch` starts a run when its slot comes: a branch from the base on the remote, its own worktree and tab, and an agent with the prompt and one rule, which says to open one pull request and end with `Status: READY_FOR_REVIEW`, or with `Status: DONE` when there is nothing to change. The run's id is its branch, such as `deps-2026-10-26`, and `tkt ls`, `tkt run`, `tkt sync`, `tkt done` and the board take it like a ticket's. `tkt watch` syncs its base and fixes its checks; no skill reviews or merges a pull request without a ticket, so you merge it yourself, and `tkt watch` then removes the run. A slot that comes while the last run is still open is skipped, and a slot missed while no watch ran runs once when one runs again. `tkt help chores` has the details. A chore that needs no agent, such as `npx skills update`, belongs in a plain systemd timer or cron job.
 
 ### The tkt agent
 
@@ -127,6 +144,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/send ID TEXT`, `/show ID`, `/peek ID` | Talks to the ticket's agent, prints its last message, or watches its live screen. |
 | `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. Once every step passed, it merges with `tkt merge`: now, or with a merge order that `tkt watch` carries out once the head is synced, reviewed and green. |
 | `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
+| `/chores [run NAME]` | The repository's chores with their next run; `run NAME` starts a run now. |
 | `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |
 | `/update` | Installs a newer tkt, then offers to quit. Reopen the chat with the `tkt agent --session ID` it prints to run the new tkt. The board names a newer release when the chat finds one. |

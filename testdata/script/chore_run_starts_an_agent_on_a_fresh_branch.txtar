@@ -1,0 +1,93 @@
+# tkt chore run starts a run of a chore now: a branch from the fetched base,
+# its worktree and a tab with its own TMPDIR, and an agent with the chore's
+# prompt and the rule that says how a run ends. tkt ls and tkt chores list
+# the run, and no second run starts while it is open.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+
+# tkt doctor says that no watch runs to start the chore on schedule.
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "chores") | .status' warn
+envelope '.result.checks[] | select(.id == "chores") | .message | test("^no tkt watch runs for this repository, so its chores never start: deps \\(next Mon [0-9-]+ 09:00\\), lint \\(next Sun [0-9-]+ 00:00\\)$")' true
+
+! exec tkt chore run nope
+rc 2
+stderr 'no chore named ''nope'' runs in '$REPO' \(chores: deps lint\)'
+
+exec tkt chore run deps --dry-run --json
+envelope '[.result.actions[].display | select(startswith("wt "))]' '["wt -C '$REPO' switch --create deps-run --base origin/main --no-cd --format json"]'
+! exists $FAKE_WT_ROOT/deps-run
+
+exec tkt chore run deps
+stdout '^deps  deps-run  '$FAKE_WT_ROOT'/deps-run  tab w1:t10  agent deps-run \(claude, claude\)$'
+logged git -C $REPO fetch --quiet origin main
+logged wt -C $REPO switch --create deps-run --base origin/main --no-cd --format json
+logcontains '--label deps-run --env TMPDIR='
+logged herdr agent start deps-run --kind claude
+state $FAKE_WT_ROOT/deps-run chore deps
+state $FAKE_WT_ROOT/deps-run stage chore
+grep 'Upgrade the dependencies, then open a pull request.' $FAKE_DIR/prompts
+grep 'This is a scheduled chore with no ticket, on branch deps-run in this worktree. Commit what you change on this branch, push it to origin, and open one pull request from it to main.' $FAKE_DIR/prompts
+grep 'End with Status: READY_FOR_REVIEW once the pull request is open, or with Status: DONE, and nothing committed or pushed, when there is nothing to change.' $FAKE_DIR/prompts
+grep '"ticket":"deps-run","event":"started","chore":"deps"' $HOME/.local/state/tkt/history.jsonl
+houserules
+
+# The run is open while its agent works on it, so a second one waits.
+! exec tkt chore run deps
+rc 4
+stderr 'chore ''deps'' has a run still open, deps-run'
+exec tkt ls --no-fetch --json
+envelope '[.result.rows[] | .ticket + ":" + .chore + ":" + .next.reason]' '["deps-run:deps:check_agent"]'
+exec tkt chores --json
+envelope '.result.chores[0] | [.name, .schedule, .open, .last, .due]' '["deps","0 9 * * 1","deps-run","",false]'
+envelope '.result.chores[1] | [.name, .schedule, .open]' '["lint","@weekly",""]'
+envelope '.result.chores[0].next | test("^20[0-9-]+T[0-9:]+Z$")' 'true'
+exec tkt chores
+stdout '^deps +0 9 \* \* 1 +Mon .* +- +deps-run \(open\)$'
+stdout 'tkt watch does not run for this repository'
+exec tkt show deps-run
+exec tkt hold deps-run
+stdout 'deps-run  on hold'
+exec tkt hold deps-run --off
+
+# Its agent ends with nothing to change: the run is finished, tkt done
+# removes it, and the history keeps it.
+cp $WORK/done.txt $FAKE_DIR/screen
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.next.reason, .phase, .next.text]' '["no_changes","finished","tkt done deps-run"]'
+exec tkt done deps-run
+stdout 'deps-run  removed'
+! exists $FAKE_WT_ROOT/deps-run
+exec tkt history deps-run
+stdout 'started, a run of chore deps'
+exec tkt stats --json
+envelope '.result.tickets' '[]'
+
+# A run never starts on an older run's branch: one that the remote has
+# moves it to the next free name.
+realgit -C $REPO push -q origin main:refs/heads/deps-run
+exec tkt chore run deps
+exists $FAKE_WT_ROOT/deps-run-2
+! exists $FAKE_WT_ROOT/deps-run
+
+# A prompt that runs a slash command goes alone: the command would read
+# tkt's rule as its arguments.
+rm $FAKE_DIR/prompts
+exec tkt chore run lint
+grep -count=1 '^/lint-everything$' $FAKE_DIR/prompts
+! grep 'scheduled chore' $FAKE_DIR/prompts
+
+-- config.toml --
+[chores.deps]
+repo = "~/../app"
+schedule = "0 9 * * 1"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies, then open a pull request."
+
+[chores.lint]
+repo = "~/../app"
+schedule = "@weekly"
+prompt = "/lint-everything"
+-- done.txt --
+Every dependency is current.
+Status: DONE
