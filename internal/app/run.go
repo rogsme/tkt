@@ -10,6 +10,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/agent"
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/config"
+	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/harness"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
@@ -101,6 +102,14 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		return nil, err
 	}
 	st := ts.st
+	if chore := st["chore"]; chore != "" && o.line == "" {
+		for _, skill := range contract.Skills {
+			if strings.Contains(text, skill) {
+				return nil, apperr.New(apperr.StageNeedsTicket, "%s is a run of chore %s, with no ticket, and the %s stage runs %s, which needs one", id, chore, o.Stage, skill).
+					WithHint("tkt run %s ci, or tkt run %s --prompt TEXT", id, id)
+			}
+		}
+	}
 	preset := c.Cfg.Default()
 	switch {
 	case o.As != "":

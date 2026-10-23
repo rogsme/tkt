@@ -94,14 +94,14 @@ After a change to `tkt sync`, `tkt watch` or the tabs' `TMPDIR`, in a scratch Gi
 After a change to chores, in a scratch GitHub repository with the lifecycle configuration, a `[chores.deps]` table whose `repo` is that repository, and a prompt that makes a small change, such as adding a line to a file:
 
 1. Run `tkt chores`: it lists the chore with its next slot. Run `tkt chore run deps --dry-run`, then `tkt chore run deps`. A tab named after the run's branch opens, its agent gets the prompt and the rule about how a run ends, and it opens one pull request and ends with `Status: READY_FOR_REVIEW`. `tkt ls` lists the run, and the chat's board marks it chore, with its diff and its pull request's title.
-2. Run `tkt chore run deps` again: it refuses while the first run is open. Make its checks fail on a new head: within a minute `tkt watch` runs ci on it. Merge its pull request on GitHub: within a minute `tkt watch` removes the run.
+2. Run `tkt chore run deps` again: it refuses while the first run is open. Make its checks fail on a new head: within a minute `tkt watch` runs ci on it. Merge its pull request on GitHub: within a minute `tkt watch` removes the run. Start another run and close its pull request instead: `tkt watch` removes that one too, and the next run takes a new branch name.
 3. Change the prompt to ask for nothing, and run it again: the agent ends with `Status: DONE`, and `tkt watch` removes the run with nothing pushed.
 4. Set the schedule a few minutes ahead with `tkt watch` running: the run starts at that minute, with a notification. Stop the watch over a slot, and start it again: the missed slot runs once.
 
 After a change to the status pages, with `[status.github]` naming `https://www.githubstatus.com` and the components tkt depends on:
 
 1. `tkt watch --once --json` reads the page: `incidents` is empty while GitHub works. A component name that the page lacks gets a warning.
-2. To try an incident, point a `[status.test]` table at a `file://` directory whose `api/v2/summary.json` reports `partial_outage` for a component it lists: the next pass notifies, leaves a ticket with failing checks alone with the reason `incident`, and the chat's board says so at its top. Set the component back to `operational`: the next read notifies that it works again, and the ci run goes.
+2. To try an incident, point a `[status.test]` table at a `file://` directory whose `api/v2/summary.json` reports `partial_outage` for a component it lists: `tkt watch --once` notifies, leaves a ticket with failing checks alone with the reason `incident`, and the chat's board says so at its top while a watch runs. Set the component back to `operational`: the next read notifies that it works again, and the ci run goes. A running watch reads the pages every five minutes.
 
 After a change to `tkt hook tmp` or its plugin, with a preset that runs OpenCode:
 

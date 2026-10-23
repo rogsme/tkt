@@ -16,14 +16,15 @@ import (
 // tkt watch last read it. While one does, tkt watch starts no agent: a fix
 // for checks that fail because CI is down, or a run on a model that does not
 // answer, only spends a round. Page is the [status.NAME] the page has in
-// config.toml, Service what the page calls its service, and Since when tkt
-// first read the problem, in UTC.
+// config.toml, Service what the page calls its service, Since when tkt first
+// read the problem, and Seen when it last did, in UTC.
 type Incident struct {
 	Page    string `json:"page"`
 	Service string `json:"service"`
 	Problem string `json:"problem"`
 	URL     string `json:"url"`
 	Since   string `json:"since"`
+	Seen    string `json:"seen"`
 }
 
 // statusEvery is how often tkt watch reads the status pages, which ask to be
@@ -78,8 +79,10 @@ func holdText(incs []Incident) string {
 
 // readStatus reads the status pages config.toml names, at most every
 // statusEvery, and keeps what they report as the watcher's incidents. It
-// notifies when an incident starts and when it ends. A page tkt cannot
-// read keeps what it said last, and is reported once.
+// notifies when an incident starts and when it ends. A page tkt cannot read
+// is reported once, and keeps what it said last for statusFor: a page that
+// fails to answer during an incident should neither let every agent loose
+// at once nor hold them for good.
 func (w *watcher) readStatus(c *Ctx) {
 	pages := c.Cfg.Status
 	if len(pages) == 0 {
@@ -118,11 +121,15 @@ func (w *watcher) readStatus(c *Ctx) {
 		prev[i.Page] = i
 	}
 	var incs []Incident
+	unread := map[string]bool{}
 	for i, p := range pages {
 		if err := got[i].err; err != nil {
+			unread[p.Name] = true
 			w.warnOnce(c, "read "+p.Name+" "+err.Error(), "cannot read the status page %s: %v", p.Name, err)
 			if old, ok := prev[p.Name]; ok {
-				incs = append(incs, old)
+				if seen, err := time.Parse(time.RFC3339, old.Seen); err == nil && now.Sub(seen) < statusFor {
+					incs = append(incs, old)
+				}
 			}
 			continue
 		}
@@ -133,7 +140,8 @@ func (w *watcher) readStatus(c *Ctx) {
 		if problem == "" {
 			continue
 		}
-		inc := Incident{Page: p.Name, Service: or(got[i].s.Page.Name, p.Name), Problem: problem, URL: p.URL, Since: now.UTC().Format(history.TimeFormat)}
+		at := now.UTC().Format(history.TimeFormat)
+		inc := Incident{Page: p.Name, Service: or(got[i].s.Page.Name, p.Name), Problem: problem, URL: p.URL, Since: at, Seen: at}
 		if old, ok := prev[p.Name]; ok {
 			inc.Since = old.Since
 		}
@@ -147,6 +155,11 @@ func (w *watcher) readStatus(c *Ctx) {
 		delete(prev, i.Page)
 	}
 	for _, i := range prev {
+		if unread[i.Page] {
+			c.UI.Warn("%s's status page has not answered for %s, so tkt watch starts agents again", i.Service, statusFor)
+			c.notify(i.Service, notice{"status unknown", "its status page does not answer, so tkt watch starts agents again", "request"})
+			continue
+		}
 		c.UI.Info("%s works again, so tkt watch starts agents again", i.Service)
 		c.notify(i.Service, notice{"resolved", "tkt watch starts agents again", "done"})
 	}

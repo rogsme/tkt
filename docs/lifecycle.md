@@ -318,13 +318,13 @@ flowchart LR
   run --> change{"anything<br/>to change?"}
   change -->|"no: Status: DONE"| gone["tkt watch removes the run"]
   change -->|"yes: Status: READY_FOR_REVIEW"| pr["tkt watch syncs the base<br/>and fixes the checks"]
-  pr --> you(["you review and merge it"])
+  pr --> you(["you merge it, or close it"])
   you --> gone
 ```
 
 The repository's `tkt watch` starts a run when its slot comes, once per slot, however many passed while no watch ran; the first watch to see a chore starts its first run at the next slot. `tkt chore run deps` starts one now. Each run gets a branch from the base on the remote, named by the chore's `branch` setting, such as `deps-2026-10-26`, and never an older run's branch. Its agent gets the chore's prompt and one rule from tkt: commit on the run's branch, push it, open one pull request to the base, and end with `Status: READY_FOR_REVIEW`, or with `Status: DONE` and nothing pushed when there is nothing to change.
 
-From there the pull request moves as a ticket's does, short of what needs a ticket. `tkt watch` syncs its base when a sync is due and runs `ci` once per head when its checks fail. review-pr, address-pr-review and finish-ticket each start from a ticket, so none of them takes a chore's pull request: the review bot in CI reviews it, `tkt ls` says when the review found something and when the pull request is ready, and you merge it yourself. `tkt watch` then removes the run, as `tkt done` would. A slot that comes while the last run is still open is skipped, so one run waits for you at a time.
+From there the pull request moves as a ticket's does, short of what needs a ticket. `tkt watch` syncs its base when a sync is due and runs `ci` once per head when its checks fail. review-pr, address-pr-review and finish-ticket each start from a ticket, so none of them takes a chore's pull request: the review bot in CI reviews it, `tkt ls` says when the review found something and when the pull request is ready, and you merge it yourself, or close it to drop the run. `tkt watch` then removes the run, as `tkt done` would. A slot that comes while the last run is still open is skipped, so one run waits for you at a time. A run whose start stopped before its agent got the prompt, as on a pre-start hook that failed, waits for you too: `tkt chore run deps` goes on with it.
 
 ## Syncing with the base
 
@@ -339,7 +339,7 @@ flowchart LR
   agent --> next
 ```
 
-`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge. A conflict goes to the `resolve` stage, which merges the base, resolves the conflicts with `resolving-merge-conflicts`, changes nothing else, refreshes the pull request's review brief, and pushes once. Review findings stay for `address`.
+`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge. A conflict goes to the `resolve` stage, which merges the base, resolves the conflicts with `resolving-merge-conflicts`, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
 
 A clean merge does not make the pull request's review brief stale: the merge commit's tree equals what `git merge-tree` gives for its two parents, and review-pr checks that for itself instead of trusting tkt.
 

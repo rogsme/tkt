@@ -1,0 +1,55 @@
+# tkt finds a run's pull request by its branch, so a run never takes the
+# branch of an older run, even once that one merged and the forge deleted
+# its branch: the new run would inherit the old pull request.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt chore run deps
+env WT=$FAKE_WT_ROOT/deps-run
+realgit -C $WT commit -q --allow-empty -m 'Upgrade the dependencies'
+realgit -C $WT push -q origin deps-run
+gitvar H1 $WT HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+cp $WORK/prs.json $FAKE_DIR/prs.json
+
+# You merge it, the forge deletes the branch, and tkt done removes the run.
+realgit -C $REPO merge -q --no-ff -m 'Merge deps-run' deps-run
+realgit -C $REPO push -q origin main
+realgit -C $REPO push -q origin :deps-run
+realgit -C $REPO fetch -q --prune origin
+jqedit $FAKE_DIR/prs.json '.[0].state = "MERGED"'
+exec tkt done deps-run
+stdout 'deps-run  removed'
+
+# The next run takes a new name, with no pull request yet.
+exec tkt chore run deps
+exists $FAKE_WT_ROOT/deps-run-2
+! exists $FAKE_WT_ROOT/deps-run
+exec tkt ls --no-fetch --json
+envelope '[.result.rows[] | .ticket + ":" + (.pr | tostring) + ":" + .next.reason]' '["deps-run-2:null:check_agent"]'
+exec tkt chores --json
+envelope '.result.chores[0].open' 'deps-run-2'
+
+# You close a run's pull request to drop it: tkt watch removes the run.
+realgit -C $FAKE_WT_ROOT/deps-run-2 commit -q --allow-empty -m 'Upgrade again'
+realgit -C $FAKE_WT_ROOT/deps-run-2 push -q origin deps-run-2
+gitvar H2 $FAKE_WT_ROOT/deps-run-2 HEAD
+jqedit $FAKE_DIR/prs.json '. + [{"number": 45, "state": "CLOSED", "title": "Upgrade again", "headRefName": "deps-run-2", "headRefOid": $H2, "headRepository": {"nameWithOwner": "acme/app"}}]'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.next.reason, .next.text]' '["closed","tkt done deps-run-2"]'
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets' '[{"action":"done","reason":"closed","ticket":"deps-run-2"}]'
+logged herdr notification show 'deps-run-2: removed' --body 'you closed the run''s pull request, so tkt watch removed its tabs and worktree'
+! exists $FAKE_WT_ROOT/deps-run-2
+houserules
+
+-- config.toml --
+[chores.deps]
+repo = "~/../app"
+schedule = "0 9 * * 1"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies."
+-- prs.json --
+[{"number": 44, "state": "OPEN", "title": "Upgrade the dependencies", "headRefName": "deps-run", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+  "createdAt": "2026-10-22T09:00:00Z", "mergedAt": "2026-10-22T10:00:00Z",
+  "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": []}]

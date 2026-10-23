@@ -253,9 +253,9 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 }
 
 // doneCheck lists why a ticket's worktree must stay, the tabs to close, and
-// the merged pull request. A chore's run that never opened a pull request
-// goes too, once its branch holds nothing the base lacks: it ended with
-// nothing to change.
+// the merged pull request. A chore's run goes too when you closed its pull
+// request, and when it never opened one and its branch holds nothing the
+// base lacks: it ended with nothing to change.
 func (c *Ctx) doneCheck(gh forge.GH, t ticketWorktree, agents []herdr.Agent, panes []herdr.Pane, tabs []herdr.Tab) (reasons, closeTabs []string, pr forge.PR) {
 	id, path := t.ID, t.Path
 	f := c.LC.Forge
@@ -264,14 +264,15 @@ func (c *Ctx) doneCheck(gh forge.GH, t ticketWorktree, agents []herdr.Agent, pan
 	if err != nil {
 		reasons = append(reasons, err.Error())
 	} else {
-		var open, merged []forge.PR
-		mine := gh.Mine(prs, id)
-		for _, p := range mine {
+		var open, merged, closed []forge.PR
+		for _, p := range gh.Mine(prs, id) {
 			switch p.State {
 			case "OPEN":
 				open = append(open, p)
 			case "MERGED":
 				merged = append(merged, p)
+			case "CLOSED":
+				closed = append(closed, p)
 			}
 		}
 		if len(open) > 0 {
@@ -279,7 +280,12 @@ func (c *Ctx) doneCheck(gh forge.GH, t ticketWorktree, agents []herdr.Agent, pan
 		}
 		switch len(merged) {
 		case 0:
-			if t.Chore == "" || len(mine) > 0 {
+			switch {
+			case t.Chore != "" && len(closed) > 0:
+				// You closed the run's pull request to drop it, and it keeps
+				// the run's commits: its head must be all the branch holds.
+				oid = closed[0].HeadRefOid
+			case t.Chore == "":
 				reasons = append(reasons, fmt.Sprintf("no merged pull request has %s as its head branch", id))
 			}
 		case 1:

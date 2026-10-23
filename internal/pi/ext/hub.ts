@@ -9,7 +9,7 @@ import { type Component, isViewportTUI, type TUI, VStack } from "@earendil-works
 import { type Attention, attentionOf, sound, suggestedOf, unblockedOf } from "./attention.ts";
 import type { BoardState } from "./board.ts";
 import { Jobs, type Job } from "./jobs.ts";
-import { type Incident, keyFromTracker, keyOf, type Envelope, type LsResult, normalizeId, type Row, rowsOf, type SuggestResult, type Unblocked, type UpdateResult, updateNotice } from "./model.ts";
+import { type Incident, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf, type SuggestResult, type Unblocked, type UpdateResult, updateNotice } from "./model.ts";
 import { hud } from "./ui.ts";
 
 /** pollMs is how often the board reads tkt ls while nothing else wakes it. */
@@ -216,7 +216,7 @@ export class Hub {
 		if (!rows || this.stopped) return;
 		this.rows = rows;
 		this.unblocked = (env.ok ? env.result?.unblocked : undefined) ?? [];
-		this.incidents = (env.ok ? env.result?.incidents : undefined) ?? [];
+		this.incidents = incidentsOf(env);
 		const w = env.ok ? env.result?.watch : undefined;
 		if (w) this.watching = !w.running ? "off" : w.error ? "failing" : "on";
 		// A chore's run is named by its branch, which may look like an id.
@@ -383,11 +383,16 @@ export class Hub {
 		return this.rows.find((r) => r.ticket === id);
 	}
 
-	/** idOf turns what you typed into an id on the board, such as a chore's
-	 * run, whose case counts, or else into a ticket id. */
+	/** idOf turns what you typed into an id: one on the board, a ticket's,
+	 * or a chore run's as typed. */
 	idOf(raw: string): string {
-		const r = this.rows.find((x) => x.ticket.toLowerCase() === raw.trim().toLowerCase());
-		return r ? r.ticket : normalizeId(raw, this.key);
+		return idOf(raw, this.rows, this.key);
+	}
+
+	/** idsIn reads the ids in what you typed: tickets and their ranges, and
+	 * chore runs by their branch. */
+	idsIn(text: string): string[] {
+		return idsIn(text, this.rows, this.key);
 	}
 
 	/** suggested keeps a suggest-tickets run's picks for the board, or drops

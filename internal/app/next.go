@@ -123,6 +123,9 @@ func NextStep(f Facts) Next {
 	switch {
 	case f.PRState == "MERGED":
 		return command(ReasonMerged, "tkt", "done", id)
+	case f.PRState == "CLOSED" && f.Chore != "":
+		// Closing a chore's pull request drops the run.
+		return command(ReasonClosed, "tkt", "done", id)
 	case f.PRState == "CLOSED":
 		return human(ReasonClosed, "closed without merging")
 	case f.Agent == herdr.Working:
@@ -133,6 +136,10 @@ func NextStep(f Facts) Next {
 		return human(ReasonAgentBlocked, "answer the agent in its tab")
 	case f.PRState == "":
 		switch {
+		case f.Agent == "" && f.Chore != "" && unstarted(f.Launch):
+			// The run's start stopped before its agent got the prompt, so no
+			// session holds anything to resume: tkt chore run goes on with it.
+			return command(ReasonNoAgent, "tkt", "chore", "run", f.Chore)
 		case f.Agent == "":
 			return command(ReasonNoAgent, "tkt", "resume", id)
 		case f.Chore != "" && f.LastStatus == contract.StatusDone:

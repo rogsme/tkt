@@ -106,9 +106,12 @@ const heads: [string, number][] = [
 	["DIFF", 11],
 ];
 
-function widths(rows: Row[]): number[] {
+/** widths sizes the columns for the rows: TICKET takes the longest id, up
+ * to 32 characters on a screen, and whole for the model's text (width 0). */
+function widths(rows: Row[], width: number): number[] {
 	const w = heads.map(([, n]) => n);
-	w[0] = Math.min(24, Math.max(w[0], ...rows.map((r) => r.ticket.length)));
+	w[0] = Math.max(w[0], ...rows.map((r) => r.ticket.length));
+	if (width > 0) w[0] = Math.min(32, w[0]);
 	return w;
 }
 
@@ -120,7 +123,7 @@ export function boardLines(s: BoardState, width: number): Line[] {
 	for (const i of s.incidents ?? []) lines.push({ text: fit(`! ${i.service}: ${i.problem}. tkt watch starts no agent until it ends.`, width), tone: "error" });
 	const needs = new Set(s.items.map((a) => a.ticket));
 	const rows = [...s.rows].sort((a, b) => Number(needs.has(b.ticket)) - Number(needs.has(a.ticket)) || a.ticket.localeCompare(b.ticket, undefined, { numeric: true }));
-	const w = widths(rows);
+	const w = widths(rows, width);
 	if (rows.length === 0) lines.push({ text: fit('No tickets yet. Say "start ACM-123".', width), tone: "muted" });
 	else lines.push({ text: fit([...heads.map(([h], i) => pad(h, w[i])), "NOTES"].join(" "), width), tone: "muted" });
 	for (const r of rows) {

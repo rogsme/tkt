@@ -12,6 +12,8 @@ import (
 
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/config"
+	"gitlab.com/rogs/tkt/internal/forge"
+	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/lock"
 	"gitlab.com/rogs/tkt/internal/output"
@@ -76,12 +78,14 @@ func choreSlots(ch config.Chore, last, now time.Time) (due, next time.Time) {
 	return due, ch.Schedule.Next(now)
 }
 
-// choreStamps reads the last slot of each chore from choresPath.
+// choreStamps reads the last slot of each chore from choresPath. A chore's
+// key is slot.NAME: the file's own updated key could be a chore's name.
 func choreStamps(common string) map[string]time.Time {
 	out := map[string]time.Time{}
 	for k, v := range state.Read(choresPath(common)) {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			out[k] = t
+		name, ok := strings.CutPrefix(k, "slot.")
+		if t, err := time.Parse(time.RFC3339, v); ok && err == nil {
+			out[name] = t
 		}
 	}
 	return out
@@ -92,34 +96,74 @@ func (c *Ctx) stampChore(name string, at time.Time) {
 	if c.Dry {
 		return
 	}
-	if _, err := state.Update(choresPath(c.Repo.Common), c.Now(), name, at.UTC().Format(history.TimeFormat)); err != nil {
+	if _, err := state.Update(choresPath(c.Repo.Common), c.Now(), "slot."+name, at.UTC().Format(history.TimeFormat)); err != nil {
 		c.UI.Warn("cannot write %s: %v", choresPath(c.Repo.Common), err)
 	}
 }
 
 // choreRun is a run of a chore that has a worktree, and whether it is still
 // open: its agent works on it, or its pull request waits for a merge. A run
-// that merged, closed, or ended with nothing to change is not.
+// that merged, closed, or ended with nothing to change is not. Fresh says
+// its start stopped before its agent got the prompt, such as at a startup
+// dialog or on a pre-start hook that failed: tkt chore run goes on with it.
 type choreRun struct {
-	ID, Chore string
-	Open      bool
+	ID, Chore   string
+	Open, Fresh bool
 }
 
-// openRun names the chore's run that is still open, or "".
-func openRun(runs []choreRun, chore string) string {
+// openRun returns the chore's run that is still open, if any.
+func openRun(runs []choreRun, chore string) (choreRun, bool) {
 	for _, r := range runs {
 		if r.Chore == chore && r.Open {
-			return r.ID
+			return r, true
 		}
 	}
-	return ""
+	return choreRun{}, false
 }
 
 // runOf judges a chore run's row. While the forge cannot be read, a run
 // counts as open, so no second one starts beside it.
 func runOf(row Row, forgeOK bool) choreRun {
-	open := !forgeOK || row.PR == nil && row.Next.Reason != ReasonNoChanges || row.PR != nil && row.PR.State == "OPEN"
-	return choreRun{ID: row.Ticket, Chore: row.Chore, Open: open}
+	r := choreRun{ID: row.Ticket, Chore: row.Chore}
+	r.Open = !forgeOK || row.PR == nil && row.Next.Reason != ReasonNoChanges || row.PR != nil && row.PR.State == "OPEN"
+	busy := row.Agent != nil && (row.Agent.Status == herdr.Working || row.Agent.Status == herdr.Blocked)
+	r.Fresh = r.Open && row.PR == nil && !busy && unstarted(row.Launch)
+	return r
+}
+
+// unstarted reports whether a launch status says the agent never got its
+// prompt: tkt chore run made the worktree, or opened the tab, or launched an
+// agent that stopped at a startup dialog.
+func unstarted(launch string) bool {
+	return launch == "" || launch == "tab" || launch == "launching" || launch == "not_ready"
+}
+
+// claimRun marks the run's worktree as the chore's after tkt start failed
+// once worktrunk had made it, such as on a pre-start hook that failed, and
+// reports whether the run has a worktree. The run then shows in tkt ls,
+// holds the next slot back instead of having a second worktree made beside
+// it, and tkt chore run goes on with it.
+func (c *Ctx) claimRun(run, chore string) bool {
+	if c.Dry {
+		return false
+	}
+	ctx := context.WithoutCancel(c.Ctx)
+	es, err := c.WT.List(ctx)
+	if err != nil {
+		return false
+	}
+	e, ok := es.Find(run)
+	if !ok || filepath.Base(e.Path) != run {
+		return false
+	}
+	ts, err := c.stateAt(ctx, e.Path)
+	if err != nil {
+		return false
+	}
+	if ts.st["chore"] == "" {
+		c.save(ts, "chore", chore, "ticket", run, "stage", stageChore)
+	}
+	return true
 }
 
 // choreRuns reads the chore runs that have a worktree.
@@ -146,11 +190,15 @@ func (c *Ctx) choreRuns(ctx context.Context, es wt.Entries) ([]choreRun, error) 
 }
 
 // runName picks the branch of a chore's run that starts at now: the one its
-// branch setting names, or, when a branch, a worktree or the remote has that
-// name already, the first of it with -2 to -9 after it that is free. A run
-// always starts afresh, never on an older run's branch.
+// branch setting names, or, when a branch, a worktree, the remote or any pull
+// request has that name already, the first of it with -2 to -9 after it that
+// is free. A run always starts afresh, never on an older run's branch: tkt
+// finds a run's pull request by its branch, so a name an older pull request
+// had, merged and deleted since, would bring that one back.
 func (c *Ctx) runName(ch config.Chore, es wt.Entries, now time.Time) (string, error) {
 	f := c.LC.Forge
+	gh := forge.GH{R: c.R, Repo: f.Host + "/" + f.Repo, Name: f.Repo}
+	haveGH := f.Kind == "GitHub" && f.Host != "" && f.Repo != "" && found("gh")
 	base := ch.BranchFor(now.Local())
 	for i := 1; i <= 9; i++ {
 		name := base
@@ -167,6 +215,15 @@ func (c *Ctx) runName(ch config.Chore, es wt.Entries, now time.Time) (string, er
 		}
 		if heads, reached := c.Git.LsRemoteHeads(c.Ctx, root, f.Remote, name); reached && heads != "" {
 			continue
+		}
+		if haveGH {
+			prs, err := gh.ListHead(c.Ctx, name, false)
+			if err != nil {
+				return "", err
+			}
+			if len(gh.Mine(prs, name)) > 0 {
+				continue
+			}
 		}
 		return name, nil
 	}
@@ -203,7 +260,8 @@ func (r *ChoreRunResult) Text(w io.Writer) {
 // ChoreRun starts a run of a chore now: a branch from the fetched base, its
 // worktree and tab, and an agent with the chore's prompt and the rule that
 // says how a run ends. It refuses while the chore's last run is open, as
-// tkt watch skips a slot then.
+// tkt watch skips a slot then, unless that run's start stopped before its
+// agent got the prompt: then it goes on with that run.
 func (a *App) ChoreRun(ctx context.Context, o ChoreRunOpts) (*ChoreRunResult, error) {
 	c, err := a.begin(ctx, o.Dry, false)
 	if err != nil {
@@ -236,13 +294,18 @@ func (a *App) ChoreRun(ctx context.Context, o ChoreRunOpts) (*ChoreRunResult, er
 	if err != nil {
 		return nil, err
 	}
-	if open := openRun(runs, ch.Name); open != "" {
-		return nil, apperr.New(apperr.ChoreRunning, "chore '%s' has a run still open, %s: a chore runs again once its last run merged, or ended with nothing to change", ch.Name, open).
-			WithHint("tkt ls %s", open).With("run", open)
-	}
-	run, err := c.runName(ch, es, c.Now())
-	if err != nil {
-		return nil, err
+	run := ""
+	switch r, open := openRun(runs, ch.Name); {
+	case open && !r.Fresh:
+		return nil, apperr.New(apperr.ChoreRunning, "chore '%s' has a run still open, %s: a chore runs again once its last run merged, or ended with nothing to change", ch.Name, r.ID).
+			WithHint("tkt ls %s", r.ID).With("run", r.ID)
+	case open:
+		run = r.ID
+		a.UI.Info("going on with %s, whose start stopped before its agent got the prompt", run)
+	default:
+		if run, err = c.runName(ch, es, c.Now()); err != nil {
+			return nil, err
+		}
 	}
 	f := c.LC.Forge
 	// A command reads the lines after it as its arguments, so a prompt that
@@ -253,6 +316,9 @@ func (a *App) ChoreRun(ctx context.Context, o ChoreRunOpts) (*ChoreRunResult, er
 	}
 	sr, err := a.Start(ctx, StartOpts{Scratch: run, Prompt: prompt.Source{Text: text, Set: true}, As: ch.As, Dry: o.Dry, chore: ch.Name})
 	if err != nil {
+		if c.claimRun(run, ch.Name) {
+			err = apperr.As(err).With("run", run)
+		}
 		return nil, err
 	}
 	return &ChoreRunResult{Chore: ch.Name, Run: run, Worktree: sr.Worktree, Tab: sr.Tab, Pane: sr.Pane, Agent: sr.Agent, Preset: sr.Preset,
@@ -351,7 +417,10 @@ func (a *App) Chores(ctx context.Context, _ ChoresOpts) (*ChoresResult, error) {
 	stamps := choreStamps(c.Repo.Common)
 	now := c.Now()
 	for _, ch := range mine {
-		info := ChoreInfo{Name: ch.Name, Schedule: ch.Schedule.String(), Branch: ch.Branch, As: ch.As, Runs: []string{}, Open: openRun(runs, ch.Name)}
+		info := ChoreInfo{Name: ch.Name, Schedule: ch.Schedule.String(), Branch: ch.Branch, As: ch.As, Runs: []string{}}
+		if r, open := openRun(runs, ch.Name); open {
+			info.Open = r.ID
+		}
 		last, seen := stamps[ch.Name]
 		due, next := choreSlots(ch, last, now)
 		if seen {

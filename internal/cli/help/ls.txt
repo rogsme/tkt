@@ -37,11 +37,13 @@ A verdict on an older head does not count, so after every push the next step
 waits for a new review.
 
 A chore's run is a row too, named by its branch (tkt help chores). No skill
-reviews, fixes or merges a pull request without a ticket, so three rules
+reviews, fixes or merges a pull request without a ticket, so some rules
 differ for it: an agent that ended with Status: DONE and no pull request
-found nothing to change (tkt done ID); findings in the review at the head
-are yours to read; and a green pull request that the bot cleared, or did
-not review within bot_wait, is yours to merge.
+found nothing to change, and a pull request you closed drops the run (tkt
+done ID, for both); a start that stopped before the agent got its prompt
+goes on with tkt chore run NAME; findings in the review at the head are
+yours to read; and a green pull request that the bot cleared, or did not
+review within bot_wait, is yours to merge.
 
 With --json each row's next step is an object whose argv, when set, is the
 command to run, and whose reason names the rule: merged, closed,

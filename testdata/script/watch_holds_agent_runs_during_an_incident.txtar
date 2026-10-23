@@ -81,7 +81,7 @@ interval = "1s"
 page = "file://$WORK/github"
 components = ["Actions", "Pull Requests"]
 -- old --
-deps=2020-01-01T00:00:00Z
+slot.deps=2020-01-01T00:00:00Z
 -- outage.json --
 {"page": {"name": "GitHub"}, "status": {"indicator": "major", "description": "Partial System Outage"},
  "components": [{"name": "Actions", "status": "partial_outage"}, {"name": "Pull Requests", "status": "operational"}, {"name": "Codespaces", "status": "major_outage"}],

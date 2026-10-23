@@ -1,0 +1,45 @@
+# A status page that stops answering during an incident keeps holding the
+# agents for fifteen minutes from its last answer, so one failed read lets
+# nothing loose, then lets them go, and says it cannot tell.
+mkdir $HOME/.config/tkt
+expand $WORK/config.toml
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+mkdir $WORK/github/api/v2
+cp $WORK/outage.json $WORK/github/api/v2/summary.json
+
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::incident"]'
+
+# The page stops answering: what it said last still holds.
+rm $WORK/github/api/v2/summary.json
+exec tkt watch --once --json
+stderr 'cannot read the status page github'
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::incident"]'
+
+# Fifteen minutes after its last answer, the hold lapses.
+jqedit $REPO/.git/tkt/status '.incidents[0].seen = "2020-01-01T00:00:00Z"'
+resetlog
+exec tkt watch --once --json
+stderr 'GitHub''s status page has not answered for 15m0s, so tkt watch starts agents again'
+logged herdr notification show 'GitHub: status unknown' --body 'its status page does not answer, so tkt watch starts agents again'
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1:run:checks_fail"]'
+envelope '.result.incidents' '[]'
+
+-- config.toml --
+[status.github]
+page = "file://$WORK/github"
+components = ["Actions"]
+-- outage.json --
+{"page": {"name": "GitHub"}, "status": {"indicator": "major", "description": "Partial System Outage"},
+ "components": [{"name": "Actions", "status": "partial_outage"}], "incidents": []}
+-- prs.json --
+[
+  {"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}], "reviews": []}
+]

@@ -252,6 +252,11 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		}
 	case ReasonNoChanges:
 		return act(actDone, "")
+	case ReasonClosed:
+		// Closing a chore's pull request drops the run, as merging it does.
+		if p.DoneAfterMerge && f.Chore != "" && f.Agent != herdr.Working && f.Agent != herdr.Blocked {
+			return act(actDone, "")
+		}
 	case ReasonBaseMoved:
 		if f.BaseMerge == "conflict" || f.BaseMerge == "" && f.Mergeable == "CONFLICTING" {
 			return fix("resolve")
@@ -289,9 +294,27 @@ func watchArgv(a watchAct, id string, n Next) []string {
 	return []string{"tkt", "run", id, a.Stage}
 }
 
+// doneText says why tkt watch removed a ticket, or a chore's run, from the
+// next step it answered.
+func doneText(chore, why string) string {
+	switch {
+	case chore == "":
+		return "finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree"
+	case why == ReasonNoChanges:
+		return "the run found nothing to change, so tkt watch removed its tabs and worktree"
+	case why == ReasonClosed:
+		return "you closed the run's pull request, so tkt watch removed its tabs and worktree"
+	}
+	return "you merged the run's pull request, so tkt watch removed its tabs and worktree"
+}
+
 // watchPauseText says why tkt watch leaves a ticket for you, from the
-// pause and its last step.
-func watchPauseText(id, why, last string) string {
+// pause and its last step. A chore's run has no plan, and counts its fix
+// runs from its start.
+func watchPauseText(id, why, last string, chore bool) string {
+	if why == StopRoundLimit && chore {
+		return "tkt watch reached [auto] max_rounds fix runs since the run started; read the checks, then decide"
+	}
 	if why == StopRoundLimit {
 		return "tkt watch reached [auto] max_rounds fix runs since the plan's approval; read the review, then decide"
 	}
@@ -602,6 +625,9 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, []WatchChore, error)
 	}
 	defer c.release()
 	defer func() { w.plan = append(w.plan, c.Plan...) }()
+	// The pages come first: when GitHub is down, so is the read of the
+	// pull requests, and that is the incident to report.
+	w.readStatus(c)
 	es, err := c.WT.List(c.Ctx)
 	if err != nil {
 		return nil, nil, err
@@ -619,7 +645,6 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, []WatchChore, error)
 	if l.src.Herdr != "ok" {
 		return nil, nil, apperr.New(apperr.HerdrFailed, "tkt watch cannot reach herdr")
 	}
-	w.readStatus(c)
 	out := []WatchTicket{}
 	seen := map[string]bool{}
 	if w.turn, err = c.mergeInFlight(l.agents, ""); err != nil {
@@ -673,7 +698,7 @@ func (w *watcher) chores(ctx context.Context, a *App, c *Ctx, runs []choreRun) [
 		if !next.IsZero() {
 			wc.Next = next.UTC().Format(history.TimeFormat)
 		}
-		switch open := openRun(runs, ch.Name); {
+		switch r, open := openRun(runs, ch.Name); {
 		case !seen:
 			// A chore's first run is its first slot after tkt watch saw it,
 			// not one that passed before it was set up.
@@ -681,10 +706,10 @@ func (w *watcher) chores(ctx context.Context, a *App, c *Ctx, runs []choreRun) [
 			wc.Reason = ChoreArmed
 		case due.IsZero():
 			wc.Reason = ChoreNotDue
-		case open != "":
+		case open:
 			c.stampChore(ch.Name, due)
-			wc.Reason, wc.Run = ChoreOpenRun, open
-			c.UI.Info("%s: skipped the run due at %s, since %s is still open", ch.Name, due.Format("Mon 15:04"), open)
+			wc.Reason, wc.Run = ChoreOpenRun, r.ID
+			c.UI.Info("%s: skipped the run due at %s, since %s is still open", ch.Name, due.Format("Mon 15:04"), r.ID)
 		case w.hold() != "":
 			wc.Reason = WatchIncident
 		case !w.takeSlot("chore:" + ch.Name):
@@ -699,8 +724,9 @@ func (w *watcher) chores(ctx context.Context, a *App, c *Ctx, runs []choreRun) [
 }
 
 // runChore starts a run of a chore whose slot came, and records the slot
-// once the run started. A start that fails is tried again at the next pass,
-// and reported once for each slot and failure.
+// once the run started. A start that fails before it made the run's worktree
+// is tried again at the next pass; one that fails after waits for you, and
+// the run holds the slot. Each failure is reported once for each slot.
 func (w *watcher) runChore(ctx context.Context, a *App, c *Ctx, name string, due time.Time, wc *WatchChore) {
 	slot := "chore:" + name
 	if c.Dry {
@@ -718,8 +744,24 @@ func (w *watcher) runChore(ctx context.Context, a *App, c *Ctx, name string, due
 			f.Close()
 			delete(w.slots, slot)
 		}
-		msg := apperr.As(err).Msg
-		wc.Action, wc.Reason, wc.Error = "", ChoreFailed, msg
+		e := apperr.As(err)
+		run, _ := e.Details["run"].(string)
+		switch {
+		case e.Code == apperr.ChoreRunning && run != "":
+			// A run started since this pass read the runs, such as one you
+			// started yourself: this slot has it.
+			c.stampChore(name, due)
+			wc.Action, wc.Reason, wc.Run = "", ChoreOpenRun, run
+			return
+		case e.Code == apperr.TicketLocked:
+			// Another command starts a run of the chore right now.
+			wc.Action, wc.Reason = "", WatchLocked
+			return
+		case run != "":
+			c.stampChore(name, due)
+		}
+		msg := e.Msg
+		wc.Action, wc.Reason, wc.Error, wc.Run = "", ChoreFailed, msg, run
 		if key := due.UTC().Format(history.TimeFormat) + " " + msg; w.choreFail[name] != key {
 			if w.choreFail == nil {
 				w.choreFail = map[string]string{}
@@ -843,8 +885,8 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	case actSync:
 		c.UI.Info("%s: synced with the base, with no agent", t.ID)
 	case actDone:
-		c.UI.Info("%s: removed it after finish-ticket's Status: DONE", t.ID)
-		body := "finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree"
+		body := doneText(t.Chore, act.Why)
+		c.UI.Info("%s: %s", t.ID, body)
 		if done != nil && len(done.Tickets) > 0 && len(done.Tickets[0].Unblocked) > 0 {
 			body += "; the merge unblocked " + idsText(done.Tickets[0].Unblocked)
 		}
@@ -953,7 +995,7 @@ func (w *watcher) pause(c *Ctx, ts *ticketState, id, head, why, last string) {
 	c.save(ts, "watch_pause", why, "watch_head", head)
 	c.record(history.Event{Ticket: id, Event: history.Watch, Action: actPause, Stop: why})
 	if !strings.HasPrefix(ts.st["watch_fail"], last+" ") {
-		c.notify(id, notice{"needs you", watchPauseText(id, why, last), "request"})
+		c.notify(id, notice{"needs you", watchPauseText(id, why, last, ts.st["chore"] != ""), "request"})
 	}
 }
 

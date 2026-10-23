@@ -51,6 +51,7 @@ resolve or review run, no merge line and no chore run, since each would only
 spend a round on a service that is down. Syncs and removals, which need no
 agent, go on. It notifies when an incident starts and when it ends, and tkt
 ls and the tkt agent's board show it while it lasts. A page it cannot read
+keeps what it said last for fifteen minutes after its last answer, then
 holds nothing back.
 
 One tkt watch runs per repository. Every tkt command in a herdr pane starts

@@ -113,11 +113,19 @@ func TestWatchPausesNeedYou(t *testing.T) {
 	if got := PhaseOf(f, NextStep(f)); got != PhaseNeedsYou {
 		t.Errorf("a ticket watch paused on is %s", got)
 	}
-	if got := watchPauseText("ACM-1", StopNoProgress, "run:ci@h1"); got != "tkt watch ran ci on this head, and the checks still fail; read what the agent said in its tab" {
+	if got := watchPauseText("ACM-1", StopNoProgress, "run:ci@h1", false); got != "tkt watch ran ci on this head, and the checks still fail; read what the agent said in its tab" {
 		t.Errorf("pause text: %q", got)
 	}
-	if got := watchPauseText("ACM-1", StopNoProgress, "run:review@h1"); !strings.Contains(got, "ran review on this head for your merge order") {
+	if got := watchPauseText("ACM-1", StopNoProgress, "run:review@h1", false); !strings.Contains(got, "ran review on this head for your merge order") {
 		t.Errorf("pause text after a review: %q", got)
+	}
+	if got := watchPauseText("deps-1", StopRoundLimit, "run:ci@h1", true); strings.Contains(got, "plan") {
+		t.Errorf("a chore's run has no plan: %q", got)
+	}
+	for _, why := range []string{ReasonMerged, ReasonNoChanges, ReasonClosed} {
+		if got := doneText("deps", why); strings.Contains(got, "finish-ticket") {
+			t.Errorf("doneText for a chore's run, %s: %q", why, got)
+		}
 	}
 }
 

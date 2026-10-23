@@ -1,0 +1,34 @@
+# Each chore keeps its own last slot, whatever its name, even one named
+# like the stamp file's own updated key: a chore that waits for an agent
+# slot keeps its due slot while another chore runs.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt watch --once --json
+envelope '[.result.chores[] | .chore + ":" + .reason]' '["deps:armed","updated:armed"]'
+cp $WORK/old $REPO/.git/tkt/chores
+
+# Both are due, and one agent slot is free: deps runs, updated waits.
+exec tkt watch --once --json
+envelope '[.result.chores[] | .chore + ":" + .reason]' '["deps:due","updated:slot"]'
+exec tkt watch --once --json
+envelope '[.result.chores[] | .chore + ":" + .reason]' '["deps:not_due","updated:due"]'
+exists $FAKE_WT_ROOT/updated-run
+
+-- config.toml --
+[auto]
+max_parallel = 1
+
+[chores.deps]
+repo = "~/../app"
+schedule = "0 9 * * *"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies."
+
+[chores.updated]
+repo = "~/../app"
+schedule = "0 9 * * *"
+branch = "{name}-run"
+prompt = "Check that the changelog is up to date."
+-- old --
+slot.deps=2020-01-01T00:00:00Z
+slot.updated=2020-01-01T00:00:00Z

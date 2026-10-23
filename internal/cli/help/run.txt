@@ -24,6 +24,10 @@ Stages:
 
 config.toml can change these lines or add stages (tkt help config).
 
+A chore's run takes ci, resolve, verify and your own --prompt. It has no
+ticket, so tkt run refuses it a stage whose line runs a lifecycle skill,
+such as review, address or start, which needs one.
+
 tkt run refuses while the agent works or waits for your answer (tkt wait
 blocks until it is done). It also refuses while the ticket is still in
 planning, because that agent may hold a plan waiting for your approval;

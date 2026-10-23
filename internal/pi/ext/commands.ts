@@ -13,7 +13,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		const words = prefix.split(/\s+/);
 		const last = (words.pop() ?? "").toUpperCase();
 		const head = words.length ? `${words.join(" ")} ` : "";
-		const items = hub.rows.filter((r) => r.ticket.startsWith(last)).map((r) => ({ value: head + r.ticket, label: r.ticket, description: r.phase.replaceAll("_", " ") }));
+		const items = hub.rows.filter((r) => r.ticket.toUpperCase().startsWith(last)).map((r) => ({ value: head + r.ticket, label: r.ticket, description: r.phase.replaceAll("_", " ") }));
 		return items.length ? items : null;
 	};
 	const one = (args: string, ctx: ExtensionCommandContext, usage: string): string | undefined => {
@@ -210,7 +210,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		description: "What happened to tickets, merged ones too: events, commits and reviews: /history ACM-12 [ACM-13 ...]",
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
-			const list = expandIds(args, hub.key);
+			const list = hub.idsIn(args);
 			if (list.length === 0) return ctx.ui.notify("usage: /history ACM-12 [ACM-13 ...]", "warning");
 			say(await act.history(hub, list, false));
 		},
@@ -219,7 +219,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerCommand("stats", {
 		description: "How long tickets took from start to merge: /stats [ACM-12 ...]",
 		getArgumentCompletions: ids,
-		handler: async (args) => say(await act.stats(hub, expandIds(args, hub.key))),
+		handler: async (args) => say(await act.stats(hub, hub.idsIn(args))),
 	});
 
 	pi.registerCommand("update", {

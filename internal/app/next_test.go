@@ -65,6 +65,14 @@ func TestNextStepTable(t *testing.T) {
 		// skill takes a pull request without a ticket. The bot still gets
 		// its say first.
 		{Facts{Chore: "deps", Agent: "idle", LastStatus: "DONE"}, "tkt done ACM-1", "command", ReasonNoChanges},
+		// A run whose start stopped before its agent got the prompt goes on
+		// with tkt chore run; one whose prompt may have gone in has a
+		// session to resume.
+		{Facts{Chore: "deps", Launch: "tab"}, "tkt chore run deps", "command", ReasonNoAgent},
+		{Facts{Chore: "deps", Launch: "not_ready"}, "tkt chore run deps", "command", ReasonNoAgent},
+		{Facts{Chore: "deps", Launch: "prompt_uncertain"}, "tkt resume ACM-1", "command", ReasonNoAgent},
+		{Facts{Chore: "deps", Launch: "submitted"}, "tkt resume ACM-1", "command", ReasonNoAgent},
+		{Facts{Chore: "deps", PRState: "CLOSED", Agent: "idle"}, "tkt done ACM-1", "command", ReasonClosed},
 		{Facts{Chore: "deps", Agent: "idle", LastStatus: "READY_FOR_REVIEW"}, "check the agent in its tab", "human", ReasonCheckAgent},
 		{Facts{Chore: "deps", PRState: "MERGED", Agent: "idle"}, "tkt done ACM-1", "command", ReasonMerged},
 		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "STALE_BASE", AtHead: true}, "tkt sync ACM-1", "command", ReasonBaseMoved},

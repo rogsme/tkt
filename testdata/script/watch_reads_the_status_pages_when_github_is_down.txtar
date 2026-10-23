@@ -1,0 +1,39 @@
+# When GitHub's API is down, so tkt watch cannot read the pull requests, it
+# still reads the status pages first: it notifies about the incident, and
+# tkt ls, which fails on the forge, carries it for the board.
+mkdir $HOME/.config/tkt
+expand $WORK/config.toml
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+mkdir $WORK/github/api/v2
+cp $WORK/outage.json $WORK/github/api/v2/summary.json
+env FAKE_GH_FAIL=1
+resetlog
+! exec tkt watch --once --json
+envelope '.error.message' 'gh pr list failed: HTTP 502'
+stderr 'GitHub reports API Requests major outage; tkt watch starts no agent until it ends'
+logged herdr notification show 'GitHub: incident' --body 'API Requests major outage; tkt watch starts no agent until it ends'
+exists $REPO/.git/tkt/status
+
+cp $WORK/watch.toml $HOME/.config/tkt/config.toml
+expand $HOME/.config/tkt/config.toml
+exec tkt watch &
+waitfile $REPO/.git/tkt/watch
+! exec tkt ls --no-fetch --json
+envelope '.error.code' 'forge_query_failed'
+envelope '.error.details.incidents[0] | [.service, .problem]' '["GitHub","API Requests major outage"]'
+exec tkt watch --stop
+
+-- config.toml --
+[status.github]
+page = "file://$WORK/github"
+components = ["API Requests"]
+-- watch.toml --
+[watch]
+interval = "1s"
+
+[status.github]
+page = "file://$WORK/github"
+components = ["API Requests"]
+-- outage.json --
+{"page": {"name": "GitHub"}, "status": {"indicator": "major", "description": "Partial System Outage"},
+ "components": [{"name": "API Requests", "status": "major_outage"}], "incidents": [{"name": "API requests fail"}]}

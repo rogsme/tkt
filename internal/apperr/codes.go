@@ -42,6 +42,7 @@ const (
 	StepsIncomplete      Code = "steps_incomplete"
 	Cancelled            Code = "cancelled"
 	UnknownChore         Code = "unknown_chore"
+	StageNeedsTicket     Code = "stage_needs_ticket"
 
 	ToolMissing            Code = "tool_missing"
 	ToolTooOld             Code = "tool_too_old"
@@ -146,6 +147,7 @@ var Registry = []Info{
 	{StepsIncomplete, ExitUsage, "tkt merge --passed does not name every human verification step, and finish-ticket merges only when all passed"},
 	{Cancelled, ExitUsage, "the answer to a confirmation was no"},
 	{UnknownChore, ExitUsage, "no chore of that name runs in this repository"},
+	{StageNeedsTicket, ExitUsage, "the stage runs a lifecycle skill, which needs a ticket, and a chore's run has none"},
 
 	{ToolMissing, ExitEnvironment, "a required program is not installed"},
 	{ToolTooOld, ExitEnvironment, "a required program is older than tkt supports"},

@@ -141,3 +141,11 @@ test("an incident tops the board", () => {
 	assert.equal(lines[0].tone, "error");
 	assert.match(lines[1].text, /^TICKET/);
 });
+
+test("a long run id stays whole for the model", () => {
+	const id = "update-the-dependencies-of-the-app-2026-10-26";
+	const rows = [row({ ticket: id, chore: "update-the-dependencies-of-the-app" })];
+	const s = { rows, jobs: new Map<string, string>(), items: [], now, tick: 0, repo: "app" };
+	assert.ok(statusText(s).includes(id));
+	assert.ok(boardLines(s, 200)[1].text.startsWith(id.slice(0, 32) + " "));
+});

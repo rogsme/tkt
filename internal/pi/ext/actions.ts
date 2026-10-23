@@ -81,6 +81,7 @@ export function startPicks(hub: Hub, mode: Mode): string {
  * a tkt auto loop drives the ticket from there; a loop that already waits
  * on the plan goes on by itself. */
 export async function approve(hub: Hub, id: string, then: "manual" | "auto"): Promise<string> {
+	if (hub.row(id)?.chore) return `${id} is a run of a chore, with no ticket and no plan to approve. /send ${id} TEXT tells its agent what to do.`;
 	const env = await hub.run({ ticket: id, label: "approve", args: ["approve", id], quiet: true });
 	if (!env.ok) return failure(id, env);
 	const row = hub.row(id);
@@ -141,6 +142,9 @@ export function resume(hub: Hub, id: string): string {
 }
 
 export async function auto(hub: Hub, id: string, on: boolean, approvePlan: boolean, as = ""): Promise<string> {
+	// tkt auto refuses a run's id, and its loop runs detached, so the chat
+	// says so here rather than after a silent failure.
+	if (hub.row(id)?.chore) return `${id} is a run of a chore: tkt auto drives tickets only. tkt watch syncs its base and fixes its checks, and you merge its pull request.`;
 	if (on) {
 		hub.startAuto(id, approvePlan, as);
 		return `tkt auto now drives ${id}${approvePlan ? ", approving its plan too" : ""}. The board shows when it needs you.`;

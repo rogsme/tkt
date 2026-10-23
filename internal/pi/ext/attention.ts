@@ -23,6 +23,9 @@ export interface Attention {
 	/** offers are the answers the item's situation calls for, such as one
 	 * more fix run; /inbox puts them before its kind's usual answers. */
 	offers?: Choice[];
+	/** chore marks an item of a chore's run, which tkt auto does not drive
+	 * and which has no plan to approve. */
+	chore?: boolean;
 }
 
 /** Choice is one answer /inbox offers for an item. do names the action, and
@@ -80,10 +83,14 @@ const usual: Record<AttentionKind, Choice[]> = {
 	],
 };
 
+/** ticketOnly are the answers that need a ticket: tkt auto drives tickets
+ * only, and a chore's run has no plan. */
+const ticketOnly = new Set<Choice["do"]>(["approve", "approve_auto", "auto_on", "auto_off"]);
+
 /** choicesOf lists the answers /inbox offers for an item: its situation's
  * first, so Enter takes the step that moves the ticket on, then its kind's. */
 export function choicesOf(a: Attention): Choice[] {
-	return [...(a.offers ?? []), ...usual[a.kind]];
+	return [...(a.offers ?? []), ...usual[a.kind]].filter((c) => !(a.chore && ticketOnly.has(c.do)));
 }
 
 const reply: Choice = { label: "Reply to the agent", description: "Type what to tell it; it reads the text as a new prompt.", do: "reply" };
@@ -124,7 +131,7 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 	const a = row.auto;
 	const reason = row.next?.reason ?? "";
 	const base = [id, row.phase, row.pr?.head ?? "", row.last_status, reason, a?.paused ?? "", a?.why ?? ""].join("|");
-	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: `${kind}|${base}`, ticket: id, kind, title, text, byAuto, offers });
+	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: `${kind}|${base}`, ticket: id, kind, title, text, byAuto, offers, chore: !!row.chore });
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
 	if (a?.running && !row.hold) {
 		// A pause stays in the loop's state until its next look. Once the
@@ -147,6 +154,10 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 				return item("chore", "review found something", `${id}: the review found something on chore ${row.chore}'s ${pr}. Read it, then tell its agent what to fix, or merge it as it is.`, false, [reply]);
 			case "no_changes":
 				return watching ? undefined : item("merged", "nothing to change", `${id}: chore ${row.chore} found nothing to change. /done ${id} removes the run.`);
+			case "closed":
+				return watching ? undefined : item("merged", "closed", `${id}: you closed chore ${row.chore}'s ${pr}. /done ${id} removes the run.`);
+			case "no_agent":
+				if (row.next?.argv?.[1] === "chore") return item("check", "did not start", `${id}: the run of chore ${row.chore} stopped before its agent got the prompt. /chores run ${row.chore} goes on with it, or /done ${id} drops it.`);
 		}
 	}
 	switch (row.phase) {

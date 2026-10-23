@@ -116,6 +116,14 @@ export function rowsOf(env: Envelope<LsResult>): Row[] | undefined {
 	return Array.isArray(rows) ? (rows as Row[]) : undefined;
 }
 
+/** incidentsOf takes what the status pages report from tkt ls's result,
+ * or from the error a failed forge read gives, which may be the incident. */
+export function incidentsOf(env: Envelope<LsResult>): Incident[] {
+	if (env.ok && env.result) return env.result.incidents ?? [];
+	const incs = env.error?.details?.incidents;
+	return Array.isArray(incs) ? (incs as Incident[]) : [];
+}
+
 /** UpdateResult is what tkt update prints. dev says tkt is a development
  * build, which only --force replaces. */
 export interface UpdateResult {
@@ -238,6 +246,30 @@ export function normalizeId(raw: string, key: string): string {
 	const m = s.match(/^([A-Z][A-Z0-9]*)?[-_ ]?(\d+)$/);
 	if (m && key && (!m[1] || m[1] === key)) return `${key}-${Number(m[2])}`;
 	return s;
+}
+
+/** idOf turns what a person typed into an id: one on the board, matched
+ * without case, since a chore run's id is its branch and keeps its case; a
+ * ticket id, given the tracker's key; or else the text as typed, as for a
+ * run that is gone from the board but not from the history. */
+export function idOf(raw: string, rows: Row[], key: string): string {
+	const r = rows.find((x) => x.ticket.toLowerCase() === raw.trim().toLowerCase());
+	if (r) return r.ticket;
+	const id = normalizeId(raw, key);
+	const m = id.match(/^([A-Z][A-Z0-9]*)-\d+$/);
+	return m && (!key || m[1] === key) ? id : raw.trim();
+}
+
+/** idsIn reads the ids in a person's text: tickets and their ranges, such
+ * as ACM-12 to ACM-15, and chore runs by their branch. */
+export function idsIn(text: string, rows: Row[], key: string): string[] {
+	const out = expandIds(text, key);
+	for (const w of text.split(/[\s,]+/)) {
+		if (!w || /^\d+$/.test(w) || /^(to|through|and)$/i.test(w)) continue;
+		const id = idOf(w, rows, key);
+		if (!/^[A-Z][A-Z0-9]*-\d+$/.test(id) && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id) && !out.includes(id)) out.push(id);
+	}
+	return out;
 }
 
 /** keyOf finds the tracker key that ticket ids share, such as ACM. */

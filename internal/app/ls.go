@@ -492,8 +492,10 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 			WithHint("tkt start %s", missing[0]).With("rows", res.Rows).With("missing", missing)
 	}
 	if l.forgeErr != nil {
+		// The board reads the rows, and what the status pages report, from
+		// this error: GitHub's own incident shows when it fails the read.
 		e := apperr.As(l.forgeErr)
-		return res, apperr.New(e.Code, "%s", e.Msg).With("rows", res.Rows).Wrap(l.forgeErr)
+		return res, apperr.New(e.Code, "%s", e.Msg).With("rows", res.Rows).With("incidents", res.Incidents).Wrap(l.forgeErr)
 	}
 	return res, nil
 }

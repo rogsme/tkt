@@ -23,9 +23,17 @@ From there tkt watch treats the pull request as it does a ticket's: it
 merges a moved base when a sync is due, and runs ci once per head when the
 checks fail. No skill reviews, fixes or merges a pull request without a
 ticket, so tkt ls says when the review bot found something, and when the
-pull request is ready for you to merge. Merge it yourself; tkt watch then
-removes the run, and removes at once a run that ended with nothing to
-change.
+pull request is ready for you to merge. Merge it yourself, or close it to
+drop the run; tkt watch then removes the run, and removes at once a run that
+ended with nothing to change. tkt run refuses a run the stages that need a
+ticket, such as review and address, and tkt approve, tkt auto and tkt merge
+take tickets only.
+
+A run whose start stopped before its agent got the prompt, as at a startup
+dialog or on a pre-start hook that failed, waits for you and holds the
+chore's next slots: tkt chore run NAME goes on with it in its worktree, and
+tkt done drops it. A run never takes the branch of an older one, or of any
+pull request, since tkt finds a run's pull request by its branch.
 
 A prompt that runs a slash command, such as /upgrade-dependencies, goes
 alone and on one line, since the command would read the rule as its
@@ -40,7 +48,8 @@ incident, a due run waits, as every agent run does (tkt help watch).
 
 tkt chores lists the repository's chores: the next slot, the last one tkt
 watch took or skipped, and the run still open. tkt chore run NAME starts a
-run now, and refuses while the chore's last run is open.
+run now, and refuses while the chore's last run is open, unless that run's
+start stopped before its agent got the prompt: then it goes on with it.
 
 A chore that needs no agent, such as npx skills update, belongs in a plain
 systemd timer or cron job, without tkt.

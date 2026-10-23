@@ -52,6 +52,7 @@ resetlog
 exec tkt watch --once --json
 envelope '.result.tickets' '[{"action":"done","reason":"merged","ticket":"deps-run"}]'
 logged wt -C $REPO remove deps-run --foreground --reap --format json
+logged herdr notification show 'deps-run: removed' --body 'you merged the run''s pull request, so tkt watch removed its tabs and worktree'
 ! exists $WT
 grep '"ticket":"deps-run","event":"merged","pr":44' $HOME/.local/state/tkt/history.jsonl
 houserules

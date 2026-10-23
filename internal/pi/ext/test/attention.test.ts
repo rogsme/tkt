@@ -205,3 +205,17 @@ test("a chore's run asks for you where no skill takes over", () => {
 	assert.equal(attentionOf(nothing, false, false)?.kind, "merged");
 	assert.match(attentionOf(nothing, false, false)?.text ?? "", /\/done deps-1 removes the run/);
 });
+
+test("a chore's run gets no tkt auto and no plan answers", () => {
+	const next = attentionOf(row({ ticket: "deps-1", chore: "deps", phase: "needs_fix", next: { kind: "command", reason: "checks_fail", argv: ["tkt", "run", "deps-1", "ci"], text: "tkt run deps-1 ci" } }), false);
+	assert.equal(next?.kind, "next");
+	assert.ok(!choicesOf(next!).some((c) => c.do === "auto_on"), "tkt auto drives tickets only");
+	assert.ok(choicesOf(next!).some((c) => c.do === "next"));
+	const ticket = attentionOf(row({ phase: "needs_fix", next: { kind: "command", reason: "checks_fail", argv: ["tkt", "run", "ACM-12", "ci"], text: "tkt run ACM-12 ci" } }), false);
+	assert.ok(choicesOf(ticket!).some((c) => c.do === "auto_on"));
+	const stuck = attentionOf(row({ ticket: "deps-1", chore: "deps", phase: "no_agent", agent: null, launch: "tab", next: { kind: "command", reason: "no_agent", argv: ["tkt", "chore", "run", "deps"], text: "tkt chore run deps" } }), false);
+	assert.match(stuck?.text ?? "", /stopped before its agent got the prompt\. \/chores run deps goes on with it/);
+	const closed = row({ ticket: "deps-1", chore: "deps", phase: "closed", pr: { number: 44, state: "CLOSED" }, next: { kind: "command", reason: "closed", argv: ["tkt", "done", "deps-1"], text: "tkt done deps-1" } });
+	assert.equal(attentionOf(closed, false, true), undefined);
+	assert.match(attentionOf(closed, false, false)?.text ?? "", /you closed chore deps's pull request #44\. \/done deps-1 removes the run/);
+});
