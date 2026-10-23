@@ -37,6 +37,7 @@ const (
 	ReasonChecksFail           = "checks_fail"
 	ReasonBotClear             = "bot_clear"
 	ReasonReviewClear          = "review_clear"
+	ReasonMergeDue             = "merge_due"
 	ReasonAwaitingBot          = "awaiting_bot"
 	ReasonBotSilent            = "bot_silent"
 	ReasonNeedsReview          = "needs_review"
@@ -72,7 +73,9 @@ func human(reason, text string) Next {
 // why tkt watch left it for you, round_limit or no_progress. ForgeLag says
 // the forge still shows an older head than the branch has, as right after
 // a push, and Idle how long the agent has sat idle; tkt auto and tkt watch
-// read both, from a look with probe.
+// read both, from a look with probe. MergeSteps holds the steps of a merge
+// order for the head, such as 1,2,3, or "" without one, and MergeAs the
+// preset it names.
 type Facts struct {
 	ID          string
 	PRState     string
@@ -95,6 +98,8 @@ type Facts struct {
 	Launch      string
 	AutoWait    string
 	AutoPause   string
+	MergeSteps  string
+	MergeAs     string
 	BotWait     time.Duration
 	Waited      time.Duration
 }
@@ -130,7 +135,7 @@ func NextStep(f Facts) Next {
 	case f.Checks == "pending":
 		return Next{Kind: "wait", Reason: ReasonCIPending, Text: "wait for CI"}
 	case f.AtHead && f.Verdict == contract.VerdictStaleBase, f.Mergeable == "CONFLICTING", f.BaseMerge == "conflict",
-		f.LastStatus == contract.StatusBlockedForSync && f.Behind > 0:
+		f.LastStatus == contract.StatusBlockedForSync && f.Behind > 0, f.MergeSteps != "" && f.Behind > 0:
 		return command(ReasonBaseMoved, "tkt", "sync", id)
 	case f.LastStatus == contract.StatusHumanQAFailed:
 		return command(ReasonQAFailed, "tkt", "run", id, "address")
@@ -138,6 +143,12 @@ func NextStep(f Facts) Next {
 		return command(ReasonFindings, "tkt", "run", id, "address")
 	case f.Checks == "fail":
 		return command(ReasonChecksFail, "tkt", "run", id, "ci")
+	case f.MergeSteps != "" && f.AtHead && (f.Verdict == contract.VerdictClear || f.Verdict == contract.VerdictReadyForHuman):
+		argv := []string{"tkt", "merge", id, "--passed", f.MergeSteps, "--head", f.Head}
+		if f.MergeAs != "" {
+			argv = append(argv, "--as", f.MergeAs)
+		}
+		return command(ReasonMergeDue, argv...)
 	case f.AtHead && f.Verdict == contract.VerdictClear:
 		return command(ReasonBotClear, "tkt", "run", id, "verify")
 	case f.AtHead && f.Verdict == contract.VerdictReadyForHuman:
@@ -166,6 +177,7 @@ const (
 	PhaseWorking          = "working"
 	PhaseNeedsYou         = "needs_you"
 	PhaseReadyForHuman    = "ready_for_human"
+	PhaseMerging          = "merging"
 	PhaseMerged           = "merged"
 	PhaseClosed           = "closed"
 	PhaseNoAgent          = "no_agent"
@@ -206,6 +218,8 @@ func PhaseOf(f Facts, n Next) string {
 			return PhaseFixing
 		case "verify":
 			return PhaseVerifying
+		case "merge":
+			return PhaseMerging
 		}
 		return PhaseWorking
 	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval, ReasonBotSilent:
@@ -222,6 +236,8 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseNeedsFix
 	case ReasonReviewClear, ReasonBotClear:
 		return PhaseReadyForHuman
+	case ReasonMergeDue:
+		return PhaseMerging
 	}
 	return PhaseUnknown
 }
@@ -250,6 +266,9 @@ func factsFor(r Row) Facts {
 	}
 	if r.Watch != nil {
 		f.WatchPause = r.Watch.Paused
+	}
+	if r.Merge != nil {
+		f.MergeSteps, f.MergeAs = stepList(r.Merge.Steps), r.Merge.As
 	}
 	return f
 }

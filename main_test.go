@@ -18,6 +18,7 @@ import (
 	"github.com/itchyny/gojq"
 	"github.com/rogpeppe/go-internal/testscript"
 
+	"gitlab.com/rogs/tkt/internal/app"
 	"gitlab.com/rogs/tkt/internal/cli"
 	"gitlab.com/rogs/tkt/internal/fake"
 	"gitlab.com/rogs/tkt/internal/harness"
@@ -38,11 +39,18 @@ func TestMain(m *testing.M) {
 		"claude":   fake.Claude,
 		"git":      fake.Git,
 		"pi":       fake.Pi,
+		// The service managers and their helpers, for tkt watch --install.
+		"systemctl":      fake.Systemctl,
+		"systemd-escape": fake.SystemdEscape,
+		"loginctl":       fake.Loginctl,
+		"launchctl":      fake.Launchctl,
 	})
 }
 
-// tktMain runs tkt and records its exit status for the rc command.
+// tktMain runs tkt as main does, and records its exit status for the rc
+// command.
 func tktMain() {
+	app.LeaveTicketTmp(os.Getenv, os.Setenv)
 	code := cli.Main(context.Background(), os.Args[1:], "test", cli.IO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Getenv: os.Getenv})
 	if f := os.Getenv("TKT_RC_FILE"); f != "" {
 		os.WriteFile(f, []byte(strconv.Itoa(code)), 0o644)
@@ -188,6 +196,15 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"claudedir":   cmdClaudeDir,
 	"gitvar":      cmdGitVar,
 	"mkrelease":   cmdMkRelease,
+	"unitvar":     cmdUnitVar,
+}
+
+// unitvar VAR PATH: sets VAR to PATH as systemd-escape --path names it.
+func cmdUnitVar(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 2 {
+		ts.Fatalf("usage: unitvar VAR PATH")
+	}
+	ts.Setenv(args[0], fake.EscapePath(args[1]))
 }
 
 // rc N: the last tkt command exited with status N.

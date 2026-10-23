@@ -94,7 +94,7 @@
       "path": "start",
       "use": "start [ID | --scratch NAME]",
       "short": "Create the worktree and tab, start an agent and send it the prompt",
-      "long": "tkt start creates or reuses the ticket's worktree through worktrunk, opens a\nherdr tab named after the ticket, starts an agent in build mode (Claude Code\nwith --dangerously-skip-permissions, OpenCode on its Build agent) and sends it\nthe prompt, typically the dispatcher's start-ticket block.\n\nA new branch starts from the base on the remote, such as origin/main: tkt\nfetches it first, so the plan starts from the code the base holds now. When\nthe fetch fails, the branch starts from the local base.\n\nThe ticket's tab gets TMPDIR set to a private directory, such as\n/tmp/tkt-acme-app-ACM-12-123456, so agents of two tickets never write the\nsame temporary file. Every tab tkt opens for the ticket gets the same one,\nand tkt done removes it.\n\nWithout an ID, tkt start takes the first ticket id in the prompt; with both,\nthey must match. Without a prompt, it sends the start stage line. --prompt -\nreads the prompt from stdin, which keeps a long prompt out of your shell\nhistory; --prompt-file reads it from a file.\n\nThe prompt's Model: line, when it has one, picks the preset (tkt help config);\n--as picks one yourself.\n\ntkt start refuses when an agent already runs in the worktree: use tkt run for\na fresh session, or tkt resume to bring back the last one. When the agent stops\nat a startup dialog, answer it in the tab and rerun the same tkt start: it\ncontinues where it stopped.\n\n--scratch NAME starts work that has no ticket. tkt start makes the worktree\nand branch NAME and a tab named NAME, starts the agent and sends it nothing.\nNAME takes letters, digits, '-' and '_', and must not be a ticket id. Other\ntkt commands work on tickets only, so they do not see this worktree; remove\nit with wt remove NAME.",
+      "long": "tkt start creates or reuses the ticket's worktree through worktrunk, opens a\nherdr tab named after the ticket, starts an agent in build mode (Claude Code\nwith --dangerously-skip-permissions, OpenCode on its Build agent) and sends it\nthe prompt, typically the dispatcher's start-ticket block.\n\nA new branch starts from the base on the remote, such as origin/main: tkt\nfetches it first, so the plan starts from the code the base holds now. When\nthe fetch fails, the branch starts from the local base.\n\nThe ticket's tab gets TMPDIR set to a private directory, such as\n/tmp/tkt-acme-app-ACM-12-123456, so agents of two tickets never write the\nsame temporary file. Every tab tkt opens for the ticket gets the same one,\nand tkt done removes it. OpenCode runs its tools in its own service, outside\nthe tab, so its agents get the directory through tkt's plugin (tkt help\nhook).\n\nWithout an ID, tkt start takes the first ticket id in the prompt; with both,\nthey must match. Without a prompt, it sends the start stage line. --prompt -\nreads the prompt from stdin, which keeps a long prompt out of your shell\nhistory; --prompt-file reads it from a file.\n\nThe prompt's Model: line, when it has one, picks the preset (tkt help config);\n--as picks one yourself.\n\ntkt start refuses when an agent already runs in the worktree: use tkt run for\na fresh session, or tkt resume to bring back the last one. When the agent stops\nat a startup dialog, answer it in the tab and rerun the same tkt start: it\ncontinues where it stopped.\n\n--scratch NAME starts work that has no ticket. tkt start makes the worktree\nand branch NAME and a tab named NAME, starts the agent and sends it nothing.\nNAME takes letters, digits, '-' and '_', and must not be a ticket id. Other\ntkt commands work on tickets only, so they do not see this worktree; remove\nit with wt remove NAME.",
       "example": "  xclip -selection clipboard -o | tkt start --prompt -\n  tkt start ACM-12\n  tkt start ACM-12 --prompt-file plan-request.md --as fast\n  tkt start ACM-12 --dry-run\n  tkt start --scratch spike-login --as fast",
       "group": "lifecycle",
       "args": [
@@ -420,8 +420,8 @@
       "path": "watch",
       "use": "watch",
       "short": "Keep the repository's tickets moving: sync moved bases, fix failing checks, remove finished tickets",
-      "long": "tkt watch keeps a repository's tickets moving, every ticket and not only the\nones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads\nevery ticket with a fixed number of gh calls, and takes at most one step per\nticket, from the same rules as tkt ls:\n\n  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,\n    unless [watch] done_after_merge = false;\n  - the base moved at a moment a sync is due (a conflict, the bot's\n    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base\n    itself, as tkt sync does, with no agent, and runs resolve on a conflict;\n  - the checks fail at the head: it runs ci in a fresh session, once per\n    head.\n\nEverything else waits for you or for tkt auto: plans, reviews, findings,\nhuman verification and the merge. It leaves alone a ticket on hold (tkt\nhold), one a tkt auto loop drives, one another tkt command works on, one\nwhose agent works or asks a question, and one whose worktree directory is\ngone. It replaces an agent with a fresh session only after the agent sat\nidle for five minutes, since a person may still use that session, and it\nwaits while the forge still shows an older head than the branch has. A step it would repeat on the same head,\nor a fix run past [auto] max_rounds, waits for you instead: tkt ls shows the\nticket as needs_you, with watch.paused saying why, and herdr notifies once.\n\nIts agent runs take the [auto] max_parallel slots tkt auto uses. It records\neach step in the history, and shows a herdr notification for each agent run,\nfailure and removal; a clean sync stays quiet. A sync that fails, such as\nwhile the network is down, is tried again at the next pass, with one\nnotification for each head and reason.\n\nOne tkt watch runs per repository. Every tkt command in a herdr pane starts\nit when none runs, in a session of its own, so it outlives the command and the\npane; it writes its lines to watch.log in the repository's git directory,\nunder tkt/. It waits a minute between two starts, so a watch that exits at\nonce is not started again by every command. [watch] autostart = false, or\nTKT_WATCH=off, turns that off. tkt ls --json says whether it runs, in\nwatch.running, and watch.error says why its last pass failed. tkt watch\n--stop stops it, after the step it is taking; a second SIGTERM stops it at\nonce. When tkt update replaces tkt, the watch stops by\nitself, and the next tkt command starts one that runs the new tkt. Outside a herdr pane it finds the workspace whose\npanes work in the repository, and while herdr is down it waits.\n\n--once takes one pass and exits; with --dry-run it says what each ticket would\nget, and changes nothing.",
-      "example": "  tkt watch\n  tkt watch --once --dry-run\n  tkt watch --stop",
+      "long": "tkt watch keeps a repository's tickets moving, every ticket and not only the\nones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads\nevery ticket with a fixed number of gh calls, and takes at most one step per\nticket, from the same rules as tkt ls:\n\n  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,\n    unless [watch] done_after_merge = false;\n  - the base moved at a moment a sync is due (a conflict, the bot's\n    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base\n    itself, as tkt sync does, with no agent, and runs resolve on a conflict;\n  - the checks fail at the head: it runs ci in a fresh session, once per\n    head;\n  - a merge order from tkt merge is for the head, and its checks passed: it\n    sends finish-ticket the merge line in a fresh session. A new head drops\n    the order, with a notification, and a base that moved gets a sync first.\n\nEverything else waits for you or for tkt auto: plans, reviews, findings,\nhuman verification and the word to merge. It leaves alone a ticket on hold (tkt\nhold), one a tkt auto loop drives, one another tkt command works on, one\nwhose agent works or asks a question, and one whose worktree directory is\ngone. It replaces an agent with a fresh session only after the agent sat\nidle for five minutes, since a person may still use that session, and it\nwaits while the forge still shows an older head than the branch has. A step\nit would repeat on the same head, or a fix run past [auto] max_rounds, waits\nfor you instead: tkt ls shows the ticket as needs_you, with watch.paused\nsaying why, and herdr notifies once.\n\nIts agent runs take the [auto] max_parallel slots tkt auto uses. It records\neach step in the history, and shows a herdr notification for each agent run,\nfailure and removal; a clean sync stays quiet. A sync that fails, such as\nwhile the network is down, is tried again at the next pass, with one\nnotification for each head and reason.\n\nOne tkt watch runs per repository. Every tkt command in a herdr pane starts\nit when none runs, in a session of its own, so it outlives the command and the\npane; it writes its lines to watch.log in the repository's git directory,\nunder tkt/. It waits a minute between two starts, so a watch that exits at\nonce is not started again by every command. [watch] autostart = false, or\nTKT_WATCH=off, turns that off. tkt ls --json says whether it runs, in\nwatch.running, and watch.error says why its last pass failed. tkt watch\n--stop stops it, after the step it is taking; a second SIGTERM stops it at\nonce. When tkt update replaces tkt, the watch stops by itself, and the next\ntkt command starts one that runs the new tkt.\n\nOutside a herdr pane it finds the workspace whose panes work in the\nrepository. When none has a pane there, it opens one before its first step,\nsince every step works in herdr. While herdr is down it waits.\n\n--install keeps it running while no terminal is open: it writes systemd user\nunits, or launchd agents on macOS, for herdr's server and for this\nrepository's tkt watch, with this shell's PATH, since the agents in herdr's\npanes inherit herdr's. It asks before loginctl enable-linger, which keeps\nthe units running past your last session and starts them at boot; --yes\nanswers yes, and without a terminal the answer is no. Without linger,\nsystemd stops the units when your last session ends, so herdr's unit stays\noff, since it would take every agent with it, and tkt watch runs from login\nto logout. With linger, herdr's unit goes on, and starts unless herdr\nalready runs. tkt commands then start the unit rather than a watch of their\nown, and --stop stops the unit, which signals tkt watch alone, so it\nfinishes the step it took. --uninstall removes this repository's unit;\nherdr's stays. tkt doctor checks that they run and that their PATH finds the\ntools and harnesses.\n\n--once takes one pass and exits; with --dry-run it says what each ticket would\nget, and changes nothing. --install and --uninstall take --dry-run too.",
+      "example": "  tkt watch\n  tkt watch --once --dry-run\n  tkt watch --stop\n  tkt watch --install\n  tkt watch --uninstall",
       "group": "lifecycle",
       "args": [],
       "flags": [
@@ -429,7 +429,13 @@
           "name": "dry-run",
           "type": "bool",
           "default": "false",
-          "usage": "with --once, say what each ticket would get instead of doing it"
+          "usage": "with --once, say what each ticket would get instead of doing it; with --install or --uninstall, what would change"
+        },
+        {
+          "name": "install",
+          "type": "bool",
+          "default": "false",
+          "usage": "run tkt watch for this repository, and herdr's server, as services that start at boot"
         },
         {
           "name": "once",
@@ -442,6 +448,18 @@
           "type": "bool",
           "default": "false",
           "usage": "stop the tkt watch that runs for this repository"
+        },
+        {
+          "name": "uninstall",
+          "type": "bool",
+          "default": "false",
+          "usage": "stop running tkt watch for this repository as a service"
+        },
+        {
+          "name": "yes",
+          "type": "bool",
+          "default": "false",
+          "usage": "with --install, start the services at boot without asking (loginctl enable-linger)"
         }
       ],
       "result": {
@@ -454,6 +472,17 @@
         "dry_run": "boolean",
         "passes": "integer",
         "repo": "string",
+        "service": {
+          "fields": {
+            "files": "array of string",
+            "herdr": "string",
+            "linger": "string",
+            "manager": "string",
+            "removed": "boolean",
+            "unit": "string"
+          },
+          "nullable": true
+        },
         "stopped": "boolean",
         "tickets": [
           {
@@ -658,6 +687,90 @@
       }
     },
     {
+      "path": "merge",
+      "use": "merge ID",
+      "short": "Have finish-ticket merge a verified ticket, now or once its checks pass",
+      "long": "tkt merge hands a ticket whose human verification passed to finish-ticket.\nIt sends a fresh session in the ticket's tab the line\n\n  Use the finish-ticket skill to merge the PR. Human verification steps 1\n  to 3 passed.\n\nfinish-ticket then checks CI, the review and the feedback at the exact\nhead, merges, waits for post-merge CI, completes the ticket in the tracker,\nand ends with Status: DONE. tkt watch removes the ticket after that.\n\n--passed names the steps that passed: numbers and ranges such as 1-3 or\n1,2,4, or all. finish-ticket merges only when every step passed, so tkt\nmerge refuses a list that leaves one out; to waive a step, tell the agent\nin the ticket's tab yourself. --head names the head the steps ran on, and\ntkt merge refuses once the pull request moved past it. Before any session\nstarts, it also refuses a head no review cleared, a branch behind its base\n(finish-ticket would stop with BLOCKED_FOR_SYNC; sync, then verify the new\nhead) and failing checks. finish-ticket checks the rest itself, such as a\nreview that says READY_FOR_HUMAN at the head: when only the review bot\ncleared it, tkt merge warns that finish-ticket stops with Status: BLOCKED\nwithout one.\n\nWhile the checks at the head still run, tkt merge leaves a merge order\ninstead, and tkt watch sends the line once they pass, on the --as preset\nif you named one. tkt ls shows the order in the merge field, and the tkt\nagent's board as merges when green. A new head drops it, with a\nnotification, since the steps ran on the old one; a base that moves\nmeanwhile gets a sync first, which makes a new head too. An order on a\nhead whose line went out once already, as after finish-ticket stopped,\nsends it again.\n\n--cancel drops the order. tkt merge holds the ticket's lock until the line\nis sent, so --cancel either drops the order before or finds the line sent:\nit then says when, and stopping finish-ticket is up to you, in the\nticket's tab.",
+      "example": "  tkt merge ACM-12 --passed 1-3\n  tkt merge ACM-12 --passed all --head a1b2c3d\n  tkt merge ACM-12 --cancel",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "as",
+          "type": "string",
+          "default": "",
+          "usage": "run finish-ticket on PRESET instead of the ticket's"
+        },
+        {
+          "name": "cancel",
+          "type": "bool",
+          "default": "false",
+          "usage": "drop the ticket's merge order"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "head",
+          "type": "string",
+          "default": "",
+          "usage": "the head the steps ran on; tkt merge refuses once the pull request moved past it"
+        },
+        {
+          "name": "passed",
+          "type": "string",
+          "default": "",
+          "usage": "the human verification steps that passed: numbers and ranges such as 1-3 or 1,2,4, or all"
+        }
+      ],
+      "result": {
+        "action": "string",
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "dry_run": "boolean",
+        "head": "string",
+        "pr": "integer",
+        "run": {
+          "fields": {
+            "actions": [
+              {
+                "argv": "array of string",
+                "display": "string"
+              }
+            ],
+            "agent": "string",
+            "dry_run": "boolean",
+            "harness": "string",
+            "pane": "string",
+            "preset": "string",
+            "replaced_session": "string",
+            "resent": "boolean",
+            "session": "string",
+            "stage": "string",
+            "tab": "string",
+            "ticket": "string"
+          },
+          "nullable": true
+        },
+        "sent": "string",
+        "steps": "array of integer",
+        "ticket": "string"
+      }
+    },
+    {
       "path": "resume",
       "use": "resume ID",
       "short": "Relaunch the ticket's newest session when no agent runs for it",
@@ -837,6 +950,15 @@
             "idle_since": "string",
             "last_status": "string",
             "launch": "string",
+            "merge": {
+              "fields": {
+                "as": "string",
+                "at": "string",
+                "head": "string",
+                "steps": "array of integer"
+              },
+              "nullable": true
+            },
             "next": {
               "argv": "array of string",
               "kind": "string",
@@ -1137,6 +1259,45 @@
             "want": "string"
           }
         ]
+      }
+    },
+    {
+      "path": "hook tmp",
+      "use": "tmp",
+      "short": "Give OpenCode agents their ticket's TMPDIR, and move the /tmp paths they type into it",
+      "long": "tkt hook tmp keeps the temporary files of OpenCode agents apart, one ticket\nfrom another. OpenCode runs every agent's tools in its one background\nservice, so the TMPDIR tkt gives a ticket's tab never reaches them, and two\nagents that write /tmp/pr-body.md overwrite each other. Claude Code needs\nnone of this: it runs its tools in the ticket's tab, under its TMPDIR.\n\ntkt hook tmp --install writes tkt's plugin into OpenCode's global plugins\ndirectory, ~/.config/opencode/plugins/tkt.js, next to the plugins herdr and\nothers install there. OpenCode loads it when its service starts. In a\nticket's worktree, the plugin asks tkt hook tmp about every tool call and\nshell, and\n\n  - gives each shell the ticket's own TMPDIR, the directory tkt start made;\n  - moves a new path under /tmp into that directory when a file tool names\n    it, or a shell command uses it unquoted, at the start of a word or after\n    =: /tmp/notes.md becomes $TMPDIR/notes.md, and later calls find it there;\n  - adds a line to the agent's system prompt that says so, and that quotes\n    keep a path as written, since an agent that does not expect the move\n    fights it.\n\nA path stays when /tmp holds its name already, such as a file you put\nthere, when the name is one other programs own (a hidden name, a tkt-\ndirectory, Claude Code's and OpenCode's own), and when it is a bare /tmp.\nIn a shell command, a path stays in quotes, where it is as often a search\npattern or a message as a place; in here-documents and here-strings, which\nare data or another program's script; in arithmetic; after a colon, as on\nanother host; and inside an option, as in -o/tmp/x. A name moves everywhere\nin the command or nowhere, so a command never reads from one place what it\nwrote to the other. The content and text fields of a tool call stay as\nwritten, and only the shell and the file tools (read, write, edit, glob,\ngrep, list, patch) are touched: another tool may run its command or name\nits path on another machine. Outside a ticket's worktree the plugin changes\nnothing, except a TMPDIR that names a ticket's directory: a service started\nin a ticket's tab passes that one to its shells, and tkt done removes it.\n\nWithout --install, tkt hook tmp answers one request from the plugin: JSON\non stdin with the call's directories, its shell's TMPDIR, and its tool\ninput or shell command; --json prints the answer. tkt doctor warns when a\npreset runs OpenCode and the plugin is missing or comes from another tkt.",
+      "example": "  tkt hook tmp --install\n  echo '{\"directories\": [\"'$PWD'\"], \"command\": \"cat > /tmp/pr-body.md\"}' | tkt hook tmp",
+      "group": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "with --install, print the change instead of making it"
+        },
+        {
+          "name": "install",
+          "type": "bool",
+          "default": "false",
+          "usage": "write tkt's plugin into OpenCode's global plugins directory"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "command": "string",
+        "dry_run": "boolean",
+        "input": "object",
+        "installed": "boolean",
+        "plugin": "string",
+        "system": "string",
+        "ticket": "string",
+        "tmpdir": "string"
       }
     },
     {
@@ -1454,6 +1615,11 @@
       "summary": "the command needs --yes when stdin is not a terminal"
     },
     {
+      "code": "steps_incomplete",
+      "exit": 2,
+      "summary": "tkt merge --passed does not name every human verification step, and finish-ticket merges only when all passed"
+    },
+    {
       "code": "cancelled",
       "exit": 2,
       "summary": "the answer to a confirmation was no"
@@ -1524,11 +1690,6 @@
       "summary": "tkt does not run inside a herdr pane"
     },
     {
-      "code": "herdr_workspace_missing",
-      "exit": 3,
-      "summary": "outside a herdr pane, tkt watch finds no herdr workspace with a pane in the repository"
-    },
-    {
       "code": "worktree_layout",
       "exit": 3,
       "summary": "the worktree directory is not named after its branch"
@@ -1567,6 +1728,11 @@
       "code": "terminal_required",
       "exit": 3,
       "summary": "the command is interactive and needs a terminal on stdin and stdout"
+    },
+    {
+      "code": "service_unsupported",
+      "exit": 3,
+      "summary": "tkt watch --install found neither systemd nor launchd to run the services"
     },
     {
       "code": "ticket_locked",
@@ -1714,6 +1880,26 @@
       "summary": "a tkt watch already runs for the repository, or did not stop when asked"
     },
     {
+      "code": "merge_head_moved",
+      "exit": 4,
+      "summary": "the pull request's head moved since the human verification steps ran on it"
+    },
+    {
+      "code": "merge_behind_base",
+      "exit": 4,
+      "summary": "the branch is behind its base, so finish-ticket would not merge it: sync, then verify the new head"
+    },
+    {
+      "code": "merge_checks_fail",
+      "exit": 4,
+      "summary": "the checks fail at the pull request's head"
+    },
+    {
+      "code": "pull_request_merged",
+      "exit": 4,
+      "summary": "the ticket's pull request is merged already"
+    },
+    {
       "code": "wt_failed",
       "exit": 1,
       "summary": "worktrunk failed or printed output tkt cannot read"
@@ -1789,6 +1975,11 @@
       "summary": "tkt cannot unpack its bundled pi, or write the extension or settings it starts pi with"
     },
     {
+      "code": "service_failed",
+      "exit": 1,
+      "summary": "a systemctl, launchctl or loginctl command failed, or tkt cannot write a service's file"
+    },
+    {
       "code": "agent_not_ready",
       "exit": 5,
       "summary": "the agent stopped at a startup dialog; answer it in its pane"
@@ -1857,6 +2048,10 @@
     {
       "name": "TKT_WATCH",
       "description": "off keeps tkt commands from starting tkt watch, as [watch] autostart = false does"
+    },
+    {
+      "name": "TKT_SERVICE_MANAGER",
+      "description": "systemd or launchd: the services tkt watch --install writes, instead of launchd on macOS and systemd elsewhere; any other value means neither"
     },
     {
       "name": "CLAUDE_CONFIG_DIR",

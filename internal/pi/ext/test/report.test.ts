@@ -77,3 +77,18 @@ test("historyText", () => {
 	assert.doesNotMatch(short, /BUG/);
 	assert.match(short, /could not read the pull requests/);
 });
+
+test("historyText words what tkt watch and tkt merge did", () => {
+	process.env.TZ = "UTC";
+	const events = [
+		{ at: "2026-01-01T01:00:00Z", event: "hold", action: "on" },
+		{ at: "2026-01-01T02:00:00Z", event: "sync", action: "merged" },
+		{ at: "2026-01-01T03:00:00Z", event: "watch", action: "run", stage: "ci" },
+		{ at: "2026-01-01T04:00:00Z", event: "merge", action: "ordered" },
+		{ at: "2026-01-01T05:00:00Z", event: "watch", action: "merge" },
+	];
+	const text = historyText({ repo: "r", forge: "ok", tickets: [{ ticket: "ACM-12", timeline: null, events, pull_requests: [] }] }, false);
+	for (const want of ["put on hold", "merged the base, with no agent", "tkt watch ran ci", "merge order left, for when the checks pass", "tkt watch carried out the merge order"]) {
+		assert.match(text, new RegExp(`^- 2026-01-01 0\\d:00 ${want}$`, "m"), want);
+	}
+});

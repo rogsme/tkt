@@ -131,6 +131,19 @@ function eventText(e: HistoryEvent): string {
 			return ["auto", e.action, e.stage, e.stop].filter(Boolean).join(" ");
 		case "merged":
 			return `merged #${e.pr}`;
+		case "hold":
+			return e.action === "off" ? "taken off hold" : "put on hold";
+		case "sync":
+			return "merged the base, with no agent";
+		case "watch":
+			if (e.action === "pause") return `tkt watch waits for you: ${e.stop}`;
+			if (e.stop === "failed") return `tkt watch could not ${[e.action, e.stage].filter(Boolean).join(" ")}`;
+			if (e.action === "merge") return "tkt watch carried out the merge order";
+			return `tkt watch ran ${e.stage}`;
+		case "merge":
+			if (e.action === "ordered") return "merge order left, for when the checks pass";
+			if (e.action === "dropped") return "merge order dropped by a new head";
+			return "merge order cancelled";
 	}
 	return e.event;
 }

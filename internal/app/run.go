@@ -25,6 +25,9 @@ type RunOpts struct {
 	Pane   string
 	Force  bool
 	Dry    bool
+	// line is a line another command sends under Stage, as tkt merge sends
+	// finish-ticket's under merge.
+	line string
 }
 
 // RunResult is what tkt run did.
@@ -50,24 +53,32 @@ func (r *RunResult) Text(w io.Writer) {
 // Run replaces the ticket's idle agent with a fresh session and sends it a
 // stage line or a prompt.
 func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
-	text := ""
 	if o.Prompt.Set {
-		var err error
-		if text, err = prompt.Read(o.Prompt, a.Stdin, a.StdinTTY, a.UI); err != nil {
+		text, err := prompt.Read(o.Prompt, a.Stdin, a.StdinTTY, a.UI)
+		if err != nil {
 			return nil, err
 		}
+		o.line = text
 	}
 	c, err := a.begin(ctx, o.Dry, o.Force)
 	if err != nil {
 		return nil, err
 	}
 	defer c.release()
+	return c.run(o)
+}
+
+// run is tkt run within a command that may hold the ticket's lock already,
+// as tkt merge does, so no other command gets in between.
+func (c *Ctx) run(o RunOpts) (*RunResult, error) {
+	a := c.App
 	id, err := c.LC.NormalizeID(o.ID)
 	if err != nil {
 		return nil, err
 	}
 	c.ticket(id)
-	if !o.Prompt.Set {
+	text := o.line
+	if text == "" {
 		if text, err = c.stageLine(o.Stage, id); err != nil {
 			return nil, err
 		}

@@ -1,0 +1,39 @@
+tkt hook tmp keeps the temporary files of OpenCode agents apart, one ticket
+from another. OpenCode runs every agent's tools in its one background
+service, so the TMPDIR tkt gives a ticket's tab never reaches them, and two
+agents that write /tmp/pr-body.md overwrite each other. Claude Code needs
+none of this: it runs its tools in the ticket's tab, under its TMPDIR.
+
+tkt hook tmp --install writes tkt's plugin into OpenCode's global plugins
+directory, ~/.config/opencode/plugins/tkt.js, next to the plugins herdr and
+others install there. OpenCode loads it when its service starts. In a
+ticket's worktree, the plugin asks tkt hook tmp about every tool call and
+shell, and
+
+  - gives each shell the ticket's own TMPDIR, the directory tkt start made;
+  - moves a new path under /tmp into that directory when a file tool names
+    it, or a shell command uses it unquoted, at the start of a word or after
+    =: /tmp/notes.md becomes $TMPDIR/notes.md, and later calls find it there;
+  - adds a line to the agent's system prompt that says so, and that quotes
+    keep a path as written, since an agent that does not expect the move
+    fights it.
+
+A path stays when /tmp holds its name already, such as a file you put
+there, when the name is one other programs own (a hidden name, a tkt-
+directory, Claude Code's and OpenCode's own), and when it is a bare /tmp.
+In a shell command, a path stays in quotes, where it is as often a search
+pattern or a message as a place; in here-documents and here-strings, which
+are data or another program's script; in arithmetic; after a colon, as on
+another host; and inside an option, as in -o/tmp/x. A name moves everywhere
+in the command or nowhere, so a command never reads from one place what it
+wrote to the other. The content and text fields of a tool call stay as
+written, and only the shell and the file tools (read, write, edit, glob,
+grep, list, patch) are touched: another tool may run its command or name
+its path on another machine. Outside a ticket's worktree the plugin changes
+nothing, except a TMPDIR that names a ticket's directory: a service started
+in a ticket's tab passes that one to its shells, and tkt done removes it.
+
+Without --install, tkt hook tmp answers one request from the plugin: JSON
+on stdin with the call's directories, its shell's TMPDIR, and its tool
+input or shell command; --json prints the answer. tkt doctor warns when a
+preset runs OpenCode and the plugin is missing or comes from another tkt.

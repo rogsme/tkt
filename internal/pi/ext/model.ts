@@ -41,6 +41,10 @@ export interface Row {
 	 * run:ci@HEAD; paused says why it waits for you, round_limit or
 	 * no_progress. */
 	watch?: { last: string; paused: string } | null;
+	/** merge is the merge order tkt merge left for the current head while
+	 * its checks ran: tkt watch hands the steps to finish-ticket once they
+	 * pass. */
+	merge?: { head: string; steps: number[]; at: string } | null;
 	phase: string;
 	phase_since: string;
 	started: string;
@@ -94,6 +98,26 @@ export function stepText(did: { action: string; stage?: string }): string {
 			return "merging the base";
 	}
 	return `running ${did.stage ?? did.action}`;
+}
+
+/** MergeResult is what tkt merge prints: merging (finish-ticket got the
+ * merge line), ordered (tkt watch sends it once the checks pass), cancelled,
+ * or none, with sent saying when finish-ticket last got the line. */
+export interface MergeResult {
+	ticket: string;
+	pr: number;
+	head: string;
+	steps: number[];
+	action: "merging" | "ordered" | "cancelled" | "none";
+	sent?: string;
+}
+
+/** mergeText says what tkt merge did, for the chat. */
+export function mergeText(r: MergeResult): string {
+	if (r.action === "ordered") return `${r.ticket} merges once its checks pass: tkt watch sends finish-ticket the merge line then. The board shows it as merges when green.`;
+	if (r.action === "cancelled") return `${r.ticket} has no merge order now.`;
+	if (r.action === "none") return r.sent ? `${r.ticket} has no merge order: finish-ticket got the merge line at ${r.sent}. To stop it, tell its agent in the ticket's tab.` : `${r.ticket} has no merge order.`;
+	return `${r.ticket}: finish-ticket merges pull request #${r.pr} in a fresh session in its tab. Once it ends with Status: DONE, tkt watch removes the ticket, or /done ${r.ticket} does.`;
 }
 
 /** ago renders milliseconds for people: 45s, 12m, 3h, 2d. */

@@ -99,7 +99,7 @@ func TestStageLinesNameRegisteredSkills(t *testing.T) {
 		}
 	}
 	named := regexp.MustCompile(`the ([a-z]+(?:-[a-z]+)+) skill`)
-	lines := map[string]string{"approve": config.ApproveLine}
+	lines := map[string]string{"approve": config.ApproveLine, "merge": config.MergeLine([]int{1})}
 	for stage, line := range config.BuiltinStages {
 		lines[stage] = line
 	}
@@ -171,5 +171,30 @@ func TestCleanMergesKeepTheReviewBrief(t *testing.T) {
 		if !strings.Contains(rule, want) {
 			t.Errorf("review-pr's clean-merge rule no longer says %q", want)
 		}
+	}
+}
+
+func TestMergeLineIsFinishTicketsExplicitWord(t *testing.T) {
+	skill := read(t, "finish-ticket-authorization.md")
+	line := config.MergeLine([]int{1, 2, 3})
+	// The skill runs only on the user's explicit word, which the line says.
+	if !strings.Contains(skill, `Use only when the user explicitly says \"merge the PR\"`) {
+		t.Fatalf("finish-ticket no longer runs on \"merge the PR\":\n%s", skill)
+	}
+	if !strings.Contains(line, "merge the PR") {
+		t.Errorf("the merge line %q does not say merge the PR", line)
+	}
+	// It merges only with every numbered step confirmed as passed, so the
+	// line names them all.
+	if !strings.Contains(skill, "Every numbered human step explicitly confirmed as passed by the user") {
+		t.Errorf("finish-ticket no longer asks for every step:\n%s", skill)
+	}
+	if !strings.Contains(line, "steps 1 to 3 passed") {
+		t.Errorf("the merge line %q does not confirm the steps", line)
+	}
+	// It stops when the base moved after the review, which tkt merge
+	// checks first.
+	if !strings.Contains(skill, "When the base moved at all after the review, stop with `Status: "+contract.StatusBlockedForSync+"`") {
+		t.Errorf("finish-ticket no longer stops on a moved base:\n%s", skill)
 	}
 }

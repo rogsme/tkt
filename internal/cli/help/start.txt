@@ -10,7 +10,9 @@ the fetch fails, the branch starts from the local base.
 The ticket's tab gets TMPDIR set to a private directory, such as
 /tmp/tkt-acme-app-ACM-12-123456, so agents of two tickets never write the
 same temporary file. Every tab tkt opens for the ticket gets the same one,
-and tkt done removes it.
+and tkt done removes it. OpenCode runs its tools in its own service, outside
+the tab, so its agents get the directory through tkt's plugin (tkt help
+hook).
 
 Without an ID, tkt start takes the first ticket id in the prompt; with both,
 they must match. Without a prompt, it sends the start stage line. --prompt -

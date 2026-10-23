@@ -6,7 +6,7 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 
 ## Layout
 
-- `main.go` sets the version and calls `internal/cli`.
+- `main.go` sets the version, takes tkt's own TMPDIR out of a ticket's directory, so nothing tkt starts keeps one that `tkt done` removes, and calls `internal/cli`.
 - `internal/cli` wires cobra and fang: flags, help, completion, error printing. It holds no command logic.
 - `internal/app` runs each command and returns a typed result plus an error. The `*Opts` structs are a command's arguments.
 - `internal/apperr` holds every error code and its exit status, in `codes.go`. It is the only place an exit status is assigned.
@@ -26,9 +26,9 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 - stdout carries only a command's result. Progress, warnings and dry-run lines go to stderr through `output.UI`. A child process's stdout is captured, never passed through.
 - In a dry run, a change goes through `Ctx.Would` with the exact argv a real run would execute. Use the `...Argv` builders so both paths share the command.
 - Worktrees are created and removed only through `wt`, with its hooks. Agents start only through `herdr agent start`, never by running `claude` directly.
-- A ticket's tabs open only through `openTab`, which sets `TMPDIR` to the ticket's private directory (`internal/app/tmp.go`), so two tickets' agents never share a temporary file. `tkt done` removes the directory.
+- A ticket's tabs open only through `openTab`, which sets `TMPDIR` to the ticket's private directory (`internal/app/tmp.go`), so two tickets' agents never share a temporary file. `tkt done` removes the directory. OpenCode runs every agent's tools in its one service, outside the tab, so tkt's OpenCode plugin, which `tkt hook tmp --install` writes, gives its shells that directory and moves the new `/tmp` paths an agent types into it (`internal/app/hook.go`); the rules live in Go, and the plugin asks `tkt hook tmp` on every call. Claude Code runs its tools in the tab and needs no hook; a second Bash rewrite hook would cancel the user's own, such as RTK's.
 - One exception: `tkt agent` replaces tkt's own process with pi through `runner.Replacer`, which logs the command first. pi is the front end in the person's own pane, not a ticket's agent, so it does not go through `herdr agent start`.
-- Another: `tkt watch` runs for days. Every repository command in a herdr pane starts it when none runs (`ensureWatch`), through `runner.Spawner`, which logs the command first and starts it in a session of its own. It takes its steps by calling the other commands' `App` methods, and keeps no state of its own beyond the ticket's state file and `tkt/watch` in the common git directory. The scripts set `TKT_WATCH=off`, so a watch never outlives one.
+- Another: `tkt watch` runs for days. Every repository command in a herdr pane starts it when none runs (`ensureWatch`), through `runner.Spawner`, which logs the command first and starts it in a session of its own. It takes its steps by calling the other commands' `App` methods, and keeps no state of its own beyond the ticket's state file and `tkt/watch` in the common git directory. The scripts set `TKT_WATCH=off`, so a watch never outlives one. `tkt watch --install` writes the systemd units or launchd agents that run it and herdr's server (`internal/service`), with the `PATH` of the shell it runs in, since the agents in herdr's panes inherit herdr's; tkt commands then start the unit instead.
 - Reach for the standard library first. A new dependency needs a reason in its commit message.
 - Match the surrounding code's naming and comment density. Comments say why, not what.
 
@@ -39,7 +39,8 @@ tkt reads no skill files at run time. It depends on these lines from gitlab.com/
 - the configuration markers and the `## Forge` and `- Ticket ids:` lines that `/setup-rogs` writes;
 - the status lines in that repository's CLAUDE.md registry;
 - review-pr's `Verdict:` and `Reviewed head:` lines, and the numbered steps under `## Human verification` in its ready summary;
-- the skill names in the built-in stage lines and in the line `tkt approve` sends;
+- the skill names in the built-in stage lines and in the lines `tkt approve` and `tkt merge` send;
+- finish-ticket's rules that it merges only on the user's explicit word, with every human verification step confirmed, and stops with `BLOCKED_FOR_SYNC` when the base moved after the review, which the line `tkt merge` sends, and its refusals, rely on;
 - review-pr's rule that a clean merge of the base keeps the pull request's review brief current, which `tkt sync` relies on when it pushes such a merge itself;
 - start-ticket's `## Unattended runs` section, which keys on the word "unattended" in the line `tkt auto --approve-plan` adds to the start line.
 

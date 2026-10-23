@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 
+	"gitlab.com/rogs/tkt/internal/app"
 	"gitlab.com/rogs/tkt/internal/cli"
 )
 
@@ -13,6 +14,7 @@ import (
 var version string
 
 func main() {
+	app.LeaveTicketTmp(os.Getenv, os.Setenv)
 	os.Exit(cli.Main(context.Background(), os.Args[1:], version, cli.IO{
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,

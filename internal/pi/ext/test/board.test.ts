@@ -101,3 +101,13 @@ test("the board says whether tkt watch runs, and what it runs", () => {
 	assert.match(one.text, / watch: ci$/);
 	assert.doesNotMatch(two.text, /watch/);
 });
+
+test("the board marks a merge order until the merge is due", () => {
+	const merge = { head: "abc", steps: [1, 2], at: "2026-01-01T01:00:00Z" };
+	const rows = [row({ ticket: "ACM-1", phase: "ci", merge }), row({ ticket: "ACM-2", phase: "merging", merge })];
+	const [, one, two] = boardLines({ rows, jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
+	assert.match(one.text, / merges when green$/);
+	assert.doesNotMatch(two.text, /merges when green/);
+	assert.match(two.text, / merging /);
+	assert.equal(columnOf(row({ phase: "merging" })), "Ready");
+});

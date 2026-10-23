@@ -179,6 +179,22 @@ func (c Client) TabCreate(ctx context.Context, workspace, cwd, label string, env
 	return v.Tab.ID, v.Root.ID, err
 }
 
+// WorkspaceCreateArgv is the herdr command that opens a workspace in cwd
+// without focusing it.
+func WorkspaceCreateArgv(cwd, label string) []string {
+	return []string{"herdr", "workspace", "create", "--cwd", cwd, "--label", label, "--no-focus"}
+}
+
+// WorkspaceCreate opens a workspace and returns its id.
+func (c Client) WorkspaceCreate(ctx context.Context, cwd, label string) (string, error) {
+	v, err := decode[struct {
+		Workspace struct {
+			ID string `json:"workspace_id"`
+		} `json:"workspace"`
+	}](c.call(ctx, false, WorkspaceCreateArgv(cwd, label)[1:]...))
+	return v.Workspace.ID, err
+}
+
 // TabClose closes a tab.
 func (c Client) TabClose(ctx context.Context, tab string) error {
 	_, err := c.call(ctx, false, "tab", "close", tab)

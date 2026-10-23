@@ -57,6 +57,8 @@ func TestAutoStepTable(t *testing.T) {
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{Last: "sync:@h1"}, pause(StopNoProgress)},
 		{with(open, func(f *Facts) { f.Checks = "fail" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "ci"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "READY_FOR_HUMAN", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
+		// A merge order is yours: tkt auto leaves it to tkt watch.
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.MergeSteps = "READY_FOR_HUMAN", true, "1" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopMergeOrdered}},
 		{with(open, func(f *Facts) { f.LastStatus = "AWAITING_POST_APPROVAL" }), AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		{with(open, func(f *Facts) { f.PRState = "MERGED" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopMerged}},
 		{with(open, func(f *Facts) { f.PRState = "CLOSED" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopClosed}},

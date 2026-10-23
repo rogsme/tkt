@@ -19,7 +19,7 @@ export const columns: { title: string; phases: string[] }[] = [
 	{ title: "Needs you", phases: ["awaiting_approval", "needs_you", "no_agent", "unknown"] },
 	{ title: "Building", phases: ["building", "ci", "working"] },
 	{ title: "Review", phases: ["waiting_review", "reviewing", "needs_fix", "fixing", "verifying"] },
-	{ title: "Ready", phases: ["ready_for_human"] },
+	{ title: "Ready", phases: ["ready_for_human", "merging"] },
 	{ title: "Merged", phases: ["merged", "closed"] },
 ];
 
@@ -137,6 +137,7 @@ function rowText(r: Row, s: BoardState): string {
 	else if (r.auto?.wanted) flags.push("auto stalled");
 	const ws = watchStage(r);
 	if (ws) flags.push(`watch: ${ws}`);
+	if (r.merge && r.phase !== "merging") flags.push("merges when green");
 	const job = s.jobs.get(r.ticket);
 	if (job) flags.push(`${job} ${spinner[s.tick % spinner.length]}`);
 	if (r.stale) flags.push("stale");

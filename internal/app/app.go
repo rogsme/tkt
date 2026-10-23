@@ -86,6 +86,8 @@ type Ctx struct {
 	Agent agent.Ops
 	Plan  []Action
 	locks []*os.File
+	// held lists the tickets whose locks this command holds.
+	held map[string]bool
 }
 
 // begin checks the tools every repository command needs and loads the
@@ -124,7 +126,7 @@ func (c *Ctx) release() {
 	for _, f := range c.locks {
 		f.Close()
 	}
-	c.locks = nil
+	c.locks, c.held = nil, nil
 }
 
 // ticket marks the commands that follow as working on id, for the log.
@@ -157,7 +159,7 @@ func (c *Ctx) needHerdr() error {
 }
 
 func (c *Ctx) lockTicket(id string) error {
-	if c.Dry {
+	if c.Dry || c.held[id] {
 		return nil
 	}
 	f, err := lock.Try(c.Repo.Common, id)
@@ -169,6 +171,10 @@ func (c *Ctx) lockTicket(id string) error {
 		return apperr.New(apperr.Internal, "cannot lock %s: %v", id, err)
 	}
 	c.locks = append(c.locks, f)
+	if c.held == nil {
+		c.held = map[string]bool{}
+	}
+	c.held[id] = true
 	return nil
 }
 

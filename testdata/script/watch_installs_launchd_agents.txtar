@@ -1,0 +1,43 @@
+# On macOS, tkt watch --install writes launchd agents, which start at
+# login, and loads the repository's. herdr's server already runs here, so
+# its agent waits for the next login.
+env TKT_SERVICE_MANAGER=launchd
+env AGENTS=$HOME/Library/LaunchAgents
+exec tkt watch --install --json
+envelope '.result.service | [.manager, .herdr, .linger]' '["launchd","running",""]'
+exec ls $AGENTS
+stdout '^tkt\.herdr\.plist$'
+stdout '^tkt\.watch\.\S+\.app\.plist$'
+grep '<string>.*/herdr</string>' $AGENTS/tkt.herdr.plist
+exec grep -l '<string>'$REPO'</string>' -r $AGENTS
+stdout '/tkt\.watch\.\S+\.app\.plist$'
+exec grep -l '<string>'$REPO'/.git/tkt/watch.log</string>' -r $AGENTS
+stdout '/tkt\.watch\.\S+\.app\.plist$'
+logcontains 'launchctl bootstrap gui/'
+! logcontains 'tkt.herdr.plist'
+jqeq $FAKE_DIR/launchd.json '[.active[] | test("^tkt[.]watch[.].*[.]app$")]' '[true]'
+
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "services") | .status' ok
+
+# herdr's agent loaded but stopped, as after herdr server stop, starts with
+# kickstart: launchd refuses to load an agent twice.
+jqedit $FAKE_DIR/launchd.json '.enabled += ["tkt.herdr"]'
+env FAKE_HERDR_DOWN=1
+resetlog
+exec tkt watch --install --json
+envelope '.result.service.herdr' started
+logcontains 'launchctl kickstart gui/'
+logcontains '/tkt.herdr'
+! logcontains 'tkt.herdr.plist'
+env FAKE_HERDR_DOWN=
+
+# --stop unloads the agent; --uninstall removes its plist too.
+exec tkt watch --stop
+stdout 'stopped tkt watch for '$REPO
+jqeq $FAKE_DIR/launchd.json '.active' '["tkt.herdr"]'
+exec tkt watch --uninstall
+stdout 'removed tkt\.watch\.\S+\.app'
+exec ls $AGENTS
+stdout '^tkt\.herdr\.plist$'
+! stdout 'tkt\.watch'

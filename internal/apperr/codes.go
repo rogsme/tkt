@@ -39,6 +39,7 @@ const (
 	PromptInvalid        Code = "prompt_invalid"
 	PromptFileUnreadable Code = "prompt_file_unreadable"
 	ConfirmationRequired Code = "confirmation_required"
+	StepsIncomplete      Code = "steps_incomplete"
 	Cancelled            Code = "cancelled"
 
 	ToolMissing            Code = "tool_missing"
@@ -54,7 +55,6 @@ const (
 	ConfigInvalid          Code = "config_invalid"
 	ConfigLegacy           Code = "config_legacy"
 	HerdrEnvMissing        Code = "herdr_env_missing"
-	HerdrWorkspaceMissing  Code = "herdr_workspace_missing"
 	WorktreeLayout         Code = "worktree_layout"
 	WorktreeBranchMismatch Code = "worktree_branch_mismatch"
 	NoPresetForHarness     Code = "no_preset_for_harness"
@@ -63,6 +63,7 @@ const (
 	UpdateNotWritable      Code = "update_not_writable"
 	PiMissing              Code = "pi_missing"
 	TerminalRequired       Code = "terminal_required"
+	ServiceUnsupported     Code = "service_unsupported"
 
 	TicketLocked        Code = "ticket_locked"
 	WorktreeLockTimeout Code = "worktree_lock_timeout"
@@ -93,6 +94,10 @@ const (
 	UnpushedCommits     Code = "unpushed_commits"
 	SyncConflict        Code = "sync_conflict"
 	WatchRunning        Code = "watch_running"
+	MergeHeadMoved      Code = "merge_head_moved"
+	MergeBehindBase     Code = "merge_behind_base"
+	MergeChecksFail     Code = "merge_checks_fail"
+	PullRequestMerged   Code = "pull_request_merged"
 
 	WtFailed          Code = "wt_failed"
 	WtSwitchFailed    Code = "wt_switch_failed"
@@ -109,6 +114,7 @@ const (
 	UpdateVerify      Code = "update_verify_failed"
 	Internal          Code = "internal"
 	PiUnpackFailed    Code = "pi_unpack_failed"
+	ServiceFailed     Code = "service_failed"
 
 	AgentNotReady   Code = "agent_not_ready"
 	PromptUncertain Code = "prompt_uncertain"
@@ -135,6 +141,7 @@ var Registry = []Info{
 	{PromptInvalid, ExitUsage, "the prompt holds a NUL byte"},
 	{PromptFileUnreadable, ExitUsage, "the prompt file cannot be read"},
 	{ConfirmationRequired, ExitUsage, "the command needs --yes when stdin is not a terminal"},
+	{StepsIncomplete, ExitUsage, "tkt merge --passed does not name every human verification step, and finish-ticket merges only when all passed"},
 	{Cancelled, ExitUsage, "the answer to a confirmation was no"},
 
 	{ToolMissing, ExitEnvironment, "a required program is not installed"},
@@ -150,7 +157,6 @@ var Registry = []Info{
 	{ConfigInvalid, ExitEnvironment, "tkt's own configuration file is invalid"},
 	{ConfigLegacy, ExitEnvironment, "tkt's configuration is in the old presets and stages files"},
 	{HerdrEnvMissing, ExitEnvironment, "tkt does not run inside a herdr pane"},
-	{HerdrWorkspaceMissing, ExitEnvironment, "outside a herdr pane, tkt watch finds no herdr workspace with a pane in the repository"},
 	{WorktreeLayout, ExitEnvironment, "the worktree directory is not named after its branch"},
 	{WorktreeBranchMismatch, ExitEnvironment, "the worktree is not on the ticket's branch"},
 	{NoPresetForHarness, ExitEnvironment, "no preset uses the session's harness"},
@@ -159,6 +165,7 @@ var Registry = []Info{
 	{UpdateNotWritable, ExitEnvironment, "tkt cannot replace its own binary"},
 	{PiMissing, ExitEnvironment, "tkt agent has no pi to run: this tkt has no bundled pi and TKT_PI names none"},
 	{TerminalRequired, ExitEnvironment, "the command is interactive and needs a terminal on stdin and stdout"},
+	{ServiceUnsupported, ExitEnvironment, "tkt watch --install found neither systemd nor launchd to run the services"},
 
 	{TicketLocked, ExitState, "another tkt command is working on the ticket"},
 	{WorktreeLockTimeout, ExitState, "another tkt start kept the worktree lock too long"},
@@ -189,6 +196,10 @@ var Registry = []Info{
 	{UnpushedCommits, ExitState, "the ticket's branch has commits that are not on the remote"},
 	{SyncConflict, ExitState, "merging the base conflicts, and --no-agent kept tkt sync from starting a session to resolve it"},
 	{WatchRunning, ExitState, "a tkt watch already runs for the repository, or did not stop when asked"},
+	{MergeHeadMoved, ExitState, "the pull request's head moved since the human verification steps ran on it"},
+	{MergeBehindBase, ExitState, "the branch is behind its base, so finish-ticket would not merge it: sync, then verify the new head"},
+	{MergeChecksFail, ExitState, "the checks fail at the pull request's head"},
+	{PullRequestMerged, ExitState, "the ticket's pull request is merged already"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},
@@ -205,6 +216,7 @@ var Registry = []Info{
 	{UpdateVerify, ExitTool, "the downloaded binary did not run or did not print its version; nothing was replaced"},
 	{Internal, ExitTool, "an unexpected failure inside tkt"},
 	{PiUnpackFailed, ExitTool, "tkt cannot unpack its bundled pi, or write the extension or settings it starts pi with"},
+	{ServiceFailed, ExitTool, "a systemctl, launchctl or loginctl command failed, or tkt cannot write a service's file"},
 
 	{AgentNotReady, ExitUncertain, "the agent stopped at a startup dialog; answer it in its pane"},
 	{PromptUncertain, ExitUncertain, "tkt cannot confirm the agent received the prompt; check before sending it again"},

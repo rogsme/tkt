@@ -1,9 +1,15 @@
 package app
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
+
+	"gitlab.com/rogs/tkt/internal/gitx"
+	"gitlab.com/rogs/tkt/internal/herdr"
+	"gitlab.com/rogs/tkt/internal/runner"
+	"gitlab.com/rogs/tkt/internal/wt"
 )
 
 func TestWatchStepTable(t *testing.T) {
@@ -54,6 +60,16 @@ func TestWatchStepTable(t *testing.T) {
 		{with(failing, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), p, watchMemory{}, leave(ReasonFindings)},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), p, watchMemory{}, leave(ReasonBotClear)},
 		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL", Behind: -1}, p, watchMemory{}, leave(ReasonPlanAwaitsApproval)},
+		// A merge order you left goes ahead without settling, once per head;
+		// on a branch behind its base, the sync comes first.
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.MergeSteps, f.Idle = "READY_FOR_HUMAN", true, "1,2", time.Minute
+		}), p, watchMemory{}, watchAct{Kind: actMerge, Why: ReasonMergeDue}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.MergeSteps = "READY_FOR_HUMAN", true, "1,2" }), p, watchMemory{Last: "merge:@h1"}, pause(StopNoProgress)},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.MergeSteps, f.Behind = "READY_FOR_HUMAN", true, "1,2", 2 }), p, watchMemory{}, watchAct{Kind: actSync, Why: ReasonBaseMoved}},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.MergeSteps, f.Checks = "READY_FOR_HUMAN", true, "1,2", "pending"
+		}), p, watchMemory{}, leave(ReasonCIPending)},
 	}
 	for _, tc := range cases {
 		if got := watchStep(NextStep(tc.f), tc.f, tc.p, tc.m); got != tc.want {
@@ -77,5 +93,42 @@ func TestWatchEnvLeavesTheTicketBehind(t *testing.T) {
 	want := []string{"HOME=/home/dev", "TMPDIR=/tmp"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// A workspace tkt watch opened stays its workspace while herdr has it, even
+// before herdr reports a pane of it in the repository, so a pass never opens
+// a second one.
+func TestFindWorkspaceKeepsTheOneItOpened(t *testing.T) {
+	panes := `{"result":{"panes":[{"pane_id":"w7:p1","workspace_id":"w7","cwd":"/home/acme"},{"pane_id":"w2:p1","workspace_id":"w2","cwd":"/srv/other"}]}}`
+	r := runner.Func(func(_ context.Context, cmd runner.Cmd) runner.Result {
+		switch cmd.Argv[0] {
+		case "herdr":
+			return runner.Result{Stdout: []byte(panes)}
+		case "wt":
+			return runner.Result{Stdout: []byte(`[{"branch":"main","path":"/r"}]`)}
+		}
+		return runner.Result{Code: 1}
+	})
+	c := &Ctx{App: &App{R: r}, Ctx: context.Background(), Repo: gitx.Repo{Root: "/r"}, H: herdr.Client{R: r}, WT: wt.Client{R: r, Root: "/r"}}
+	for opened, want := range map[string]string{"": "", "w7": "w7", "w9": ""} {
+		if ws, err := c.findWorkspace(opened); err != nil || ws != want {
+			t.Errorf("findWorkspace(%q) = %q, %v; want %q", opened, ws, err, want)
+		}
+	}
+}
+
+func TestLeaveTicketTmp(t *testing.T) {
+	for in, want := range map[string]string{
+		"/tmp/tkt-acme-app-ACM-12-123":  "/tmp",
+		"/var/tmp/tkt-acme-app-ACM-1-9": "/var/tmp",
+		"/tmp":                          "",
+		"":                              "",
+	} {
+		got := ""
+		LeaveTicketTmp(func(string) string { return in }, func(_, v string) error { got = v; return nil })
+		if got != want {
+			t.Errorf("TMPDIR=%q became %q, want %q", in, got, want)
+		}
 	}
 }

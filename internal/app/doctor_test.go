@@ -14,6 +14,7 @@ func TestDoctorPretty(t *testing.T) {
 		{ID: "lifecycle", Status: CheckFail, Message: "/home/acme/app/docs/agents has no lifecycle configuration",
 			Hint: "run /setup-rogs in this project"},
 		{ID: "herdr_env", Status: CheckWarn, Message: "not inside a herdr pane"},
+		{ID: "services", Status: CheckSkip, Message: "tkt watch runs in no service"},
 		{ID: "harness.claude", Status: CheckOK, Message: "2.1.303 (Claude Code)"},
 		{ID: "gh", Status: CheckSkip, Message: "the forge is unknown"},
 	}}
@@ -35,8 +36,9 @@ func TestDoctorPretty(t *testing.T) {
 
   Environment
     warn  herdr pane  not inside a herdr pane
+    skip  services    tkt watch runs in no service
 
-  3 ok, 1 warn, 1 fail, 1 skip  fix the failing checks before using tkt
+  3 ok, 1 warn, 1 fail, 2 skip  fix the failing checks before using tkt
 
 `
 	if got := b.String(); got != want {

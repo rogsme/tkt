@@ -44,6 +44,14 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 5 * time.Minute}, "wait for the review bot", "wait", ReasonAwaitingBot},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 15 * time.Minute}, "the review bot has not reviewed this head; check its CI job, or run tkt run ACM-1 review", "human", ReasonBotSilent},
 		{Facts{PRState: "OPEN", Agent: "idle", Background: true}, "wait (the agent waits on a background task)", "wait", ReasonAgentWaiting},
+		// A merge order waits for CI, syncs a branch behind its base, and
+		// is due once the checks pass at a head reviewed clean.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "wait for CI", "wait", ReasonCIPending},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2", Behind: 1}, "tkt sync ACM-1", "command", ReasonBaseMoved},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "tkt merge ACM-1 --passed 1,2 --head h1", "command", ReasonMergeDue},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "none", Verdict: "CLEAR", AtHead: true, Head: "h1", MergeSteps: "1"}, "tkt merge ACM-1 --passed 1 --head h1", "command", ReasonMergeDue},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "tkt run ACM-1 ci", "command", ReasonChecksFail},
+		{Facts{PRState: "OPEN", Agent: "working", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "wait (agent working)", "wait", ReasonAgentWorking},
 	}
 	for _, tc := range cases {
 		tc.f.ID = "ACM-1"

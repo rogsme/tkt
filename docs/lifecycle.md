@@ -70,7 +70,7 @@ flowchart TD
   sync[tkt sync ACM-123<br/>merge a clean base, or resolve a conflict in a fresh session]
   cifix[tkt run ACM-123 ci<br/>fix the failing checks, push once]
   human[You run the human verification steps<br/>optional: tkt run ACM-123 verify]
-  merge[You tell the agent in the tab to merge<br/>finish-ticket]
+  merge[tkt merge ACM-123 --passed 1-3<br/>finish-ticket in a fresh session]
   done[tkt done ACM-123<br/>close the tab, remove the worktree]
 
   ct -.-> ticket
@@ -135,7 +135,7 @@ sequenceDiagram
 
 The new branch starts from the base on the remote: tkt fetches it first, so the plan starts from the code the base holds now, not from a local `main` that nobody pulled. When the fetch fails, it warns and starts from the local base.
 
-The tab's `TMPDIR` is a private directory for the ticket, such as `/tmp/tkt-acme-app-ACM-123-123456`, so `mktemp`, Python, Node, Go and `gh` in two tickets' agents never write the same temporary file.
+The tab's `TMPDIR` is a private directory for the ticket, such as `/tmp/tkt-acme-app-ACM-123-123456`, so `mktemp`, Python, Node, Go and `gh` in two tickets' agents never write the same temporary file. Claude Code runs its tools in the tab, so its agents have it. OpenCode runs every agent's tools in its one background service instead, which the tab's environment never reaches: `tkt hook tmp --install` puts tkt's plugin into OpenCode, which gives each shell in a ticket's worktree that ticket's `TMPDIR`, and moves into the ticket's directory a new `/tmp` path, such as `/tmp/pr-body.md`, that a file tool names or a shell command uses unquoted. A path in quotes, as in a search or a message, stays as written. `tkt doctor` warns while it is missing.
 
 tkt keeps the ticket's preset, session, tab and pane in the worktree's git directory, so the record disappears with the worktree. The prompt's `Model:` line, when it has one, picks the first preset that serves that model.
 
@@ -192,11 +192,13 @@ When the verdict is `READY_FOR_HUMAN`, or the bot's `CLEAR`, run the numbered st
 
 ### 8. finish-ticket merges
 
-No stage line sends this, because `finish-ticket` merges only on your explicit word. In the tab, tell the agent which steps passed:
+`finish-ticket` merges only on your explicit word, so no stage line sends it. Once every step passed, `tkt merge ACM-123 --passed 1-3` sends that word for you, to a fresh session in the ticket's tab:
 
 ```
-Merge the PR. Human verification steps 1 to 3 passed.
+Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed.
 ```
+
+`--passed all` names every step, and `/check` in the tkt agent runs it when you mark the last one passed. Before any session starts, tkt merge refuses a list that leaves a step out, a head the steps did not run on (`--head`), one no review cleared, a branch behind its base, and failing checks; `finish-ticket` checks the rest itself. While the checks at the head still run, it leaves a merge order instead, and `tkt watch` sends the line once they pass; a new head drops the order, since the steps ran on the old one. `tkt merge ACM-123 --cancel` drops an order, or says when the line went out. To waive a step, or to merge after a step failed, tell the agent in the tab yourself.
 
 Before it merges, `finish-ticket` requires green CI for the exact head, a `READY_FOR_HUMAN` verdict for that same head and base, no open feedback, and your confirmation of every human step. It then merges, checks that the merge commit's tree equals the reviewed head's, waits for post-merge CI, posts a `## Completion` comment, and moves the ticket to `done`.
 
@@ -213,7 +215,7 @@ Before it merges, `finish-ticket` requires green CI for the exact head, a `READY
 tkt done ACM-123
 ```
 
-Run it from another tab. It confirms through `gh` that the pull request merged, closes the ticket's tabs, removes the worktree through `wt remove`, and removes the ticket's temporary directory. It keeps the worktree, and says why, when the worktree has uncommitted changes, the branch tip is neither the merged head nor in the base, or an agent still works there. `tkt done --all` checks every ticket worktree at once. It also records the merge in tkt's history, so `tkt stats` can tell how long the ticket took from `tkt start` to the merge, and how much of that it waited for you.
+`tkt watch` runs it for you once `finish-ticket` ends with `Status: DONE`; otherwise, run it from another tab. It confirms through `gh` that the pull request merged, closes the ticket's tabs, removes the worktree through `wt remove`, and removes the ticket's temporary directory. It keeps the worktree, and says why, when the worktree has uncommitted changes, the branch tip is neither the merged head nor in the base, or an agent still works there. `tkt done --all` checks every ticket worktree at once. It also records the merge in tkt's history, so `tkt stats` can tell how long the ticket took from `tkt start` to the merge, and how much of that it waited for you.
 
 ## Letting tkt auto drive
 
@@ -251,12 +253,16 @@ flowchart TD
   behind -->|conflict| resolve["resolve in a fresh session"]
   behind -->|no| ci{"checks fail at the head?"}
   ci -->|yes| fix["ci in a fresh session,<br/>once per head, up to max_rounds"]
-  ci -->|no| leave
+  ci -->|no| order{"your merge order<br/>for this head, checks green?"}
+  order -->|yes| merge["tkt merge: finish-ticket<br/>in a fresh session"]
+  order -->|no| leave
 ```
 
-Plans, reviews, findings, human verification and the merge stay with you, or with `tkt auto`. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
+Plans, reviews, findings and human verification stay with you, or with `tkt auto`, and so does the word to merge: watch merges only through the merge order `tkt merge` leaves when you verified a head whose checks still run. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
 
-You rarely start it yourself: every tkt command in a herdr pane starts one when none runs for the repository, in a session of its own, so it outlives the command and the pane. `[watch] autostart = false`, or `TKT_WATCH=off`, turns that off; `tkt watch --stop` stops it, after the step it is taking; `tkt watch --once --dry-run` says what one pass would do to each ticket. Outside a herdr pane, it finds the workspace whose panes work in the repository, and while herdr is down it waits. `tkt hold ACM-123` keeps it, and `tkt auto`, away from a ticket.
+You rarely start it yourself: every tkt command in a herdr pane starts one when none runs for the repository, in a session of its own, so it outlives the command and the pane. `[watch] autostart = false`, or `TKT_WATCH=off`, turns that off; `tkt watch --stop` stops it, after the step it is taking; `tkt watch --once --dry-run` says what one pass would do to each ticket. Outside a herdr pane, it finds the workspace whose panes work in the repository, or opens one there before its first step when none has a pane; while herdr is down it waits. `tkt hold ACM-123` keeps it, and `tkt auto`, away from a ticket.
+
+`tkt watch --install` keeps it running while no terminal is open: it makes `tkt watch` and herdr's server systemd user units, or launchd agents on macOS, that start at boot, with the `PATH` of the shell you ran it from. On Linux that takes `loginctl enable-linger`, which it asks about: without it, systemd stops the units when your last session ends, so herdr's stays off. Every tkt command then starts the unit rather than a watch of its own, and `tkt watch --stop` stops the unit. `tkt doctor` checks that both run and that their `PATH` finds the harnesses.
 
 ## Syncing with the base
 
@@ -282,7 +288,7 @@ A sync costs a CI run and a review, so tkt syncs a ticket that is behind only at
 | The branch conflicts | The forge reports the pull request as conflicting, or `git merge-tree` finds a conflict | Nothing merges, and conflicts only grow. |
 | A review can't happen | The bot posts `STALE_BASE`, or review-pr stops with `BLOCKED_FOR_SYNC` | review-pr reviews only a head that contains the current base. |
 | You are about to verify | You open `/check` in the tkt agent on a ticket that is behind | Your steps should run on the code that will merge, so `/check` offers to sync first. |
-| A merge is due | finish-ticket stops with `BLOCKED_FOR_SYNC` | finish-ticket merges only when the base has not moved since the review. |
+| A merge is due | A merge order on a ticket that is behind, or finish-ticket stops with `BLOCKED_FOR_SYNC` | finish-ticket merges only when the base has not moved since the review. |
 
 A ticket without a pull request waits, since work-ticket merges the base itself right before it pushes, and so does a reviewed ticket that nobody verifies or merges yet. With five tickets in flight, syncing every branch whenever the base moves would cost four CI runs and four reviews per merge; at these moments a merge costs a sync only for the tickets that reach one, usually the next one you merge.
 

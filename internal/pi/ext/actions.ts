@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import { type Envelope, stepText, type UpdateResult } from "./model.ts";
+import { type Envelope, type MergeResult, mergeText, stepText, type UpdateResult } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
@@ -78,6 +78,15 @@ export function sync(hub: Hub, id: string): string {
 	return `Queued: tkt sync for ${id}. It merges the base itself when the merge is clean, and hands a conflict to a fresh session.`;
 }
 
+/** merge hands a ticket whose steps all passed on head to finish-ticket:
+ * tkt merge sends it the merge line now, or leaves an order that tkt watch
+ * carries out once the checks pass. */
+export function merge(hub: Hub, id: string, steps: number[], head: string): string {
+	const args = ["merge", id, "--passed", steps.join(","), ...(head ? ["--head", head] : [])];
+	hub.add({ ticket: id, label: "merge", args, then: (env) => (env.ok && env.result ? hub.post(mergeText(env.result as MergeResult)) : undefined) });
+	return `Queued: tkt merge for ${id}. finish-ticket merges it now when the checks passed at its head; otherwise tkt watch hands it over once they do.`;
+}
+
 /** resume relaunches the ticket's newest session when no agent runs for it. */
 export function resume(hub: Hub, id: string): string {
 	hub.add({ ticket: id, label: "resume", args: ["resume", id] });
@@ -127,6 +136,12 @@ interface AutoOnce {
 /** next takes the ticket's next step, as tkt auto would: it asks tkt for
  * the step first, without taking it, so it can say what happens. */
 export async function next(hub: Hub, id: string): Promise<string> {
+	// A merge order is yours, so tkt auto never takes it; tkt merge does.
+	const n = hub.row(id)?.next;
+	if (n?.reason === "merge_due" && n.argv) {
+		hub.add({ ticket: id, label: "merge", args: n.argv.slice(1), then: (env) => (env.ok && env.result ? hub.post(mergeText(env.result as MergeResult)) : undefined) });
+		return `Queued: ${id}'s merge order. finish-ticket gets the merge line in a fresh session.`;
+	}
 	const dry = await hub.tkt<AutoOnce>(["auto", id, "--once", "--dry-run"]);
 	if (!dry.ok) {
 		if (dry.error?.code === "auto_running") return `tkt auto already drives ${id}; it goes on by itself.`;
@@ -144,6 +159,8 @@ export async function next(hub: Hub, id: string): Promise<string> {
 			return `${id}'s plan waits for your approval: /show ${id}, then /approve ${id}.`;
 		case "ready_for_human":
 			return `${id} is ready for human verification: /check ${id}.`;
+		case "merge_ordered":
+			return `${id}'s merge order is due: tkt watch sends finish-ticket the merge line.`;
 		case "merged":
 			return `${id} is merged: /done ${id} removes it.`;
 		case "needs_you":
@@ -230,7 +247,8 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	if (!env.ok || !env.result) return failure(id, env);
 	const steps = env.result.steps;
 	const from = env.result.source === "pull_request" ? `The review bot cleared the head; these steps come from pull request #${env.result.pr}.` : "";
-	const key = `${id}@${hub.row(id)?.pr?.head ?? ""}`;
+	const head = hub.row(id)?.pr?.head ?? "";
+	const key = `${id}@${head}`;
 	const got = await checklist(ctx, id, steps, marks.get(key) ?? [], from);
 	marks.set(key, got);
 	hub.pi.appendEntry("tkt-check", { key, marks: got });
@@ -248,7 +266,21 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 		return `${id}: ${t.fail} step${t.fail === 1 ? "" : "s"} failed.`;
 	}
 	if (t.open > 0) return `${id}: ${t.pass} passed, ${t.skip} skipped, ${t.open} not run yet. /check ${id} goes on.`;
-	return `${id}: every step passed${t.skip ? ` (${t.skip} skipped)` : ""}. Merge it, then say "${id} is merged, remove it".`;
+	// finish-ticket merges only when every step passed, or you waived it
+	// with a reason, which only you can give.
+	if (t.skip > 0) return `${id}: ${t.pass} passed and ${t.skip} skipped. finish-ticket merges only when each step passed or you waived it with a reason: tell its agent in the tab which steps passed and why you skip the others.`;
+	// tkt merge refuses a head that moved since the steps ran, which it can
+	// check only against the head they ran on.
+	if (!head) return `${id}: every step passed, but the board has no head for its pull request yet. /check ${id} again in a moment to merge it.`;
+	const pending = hub.row(id)?.checks?.state === "pending";
+	const go = await ask(ctx, `${id}: every step passed. Merge it?`, [
+		pending
+			? { label: "Merge once CI is green", description: "tkt merge leaves an order, and tkt watch sends finish-ticket the merge line once the checks pass." }
+			: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab." },
+		{ label: "Not yet" },
+	], false);
+	if (!go?.answer.startsWith("Merge")) return `${id}: every step passed. /check ${id} merges it when you are ready.`;
+	return merge(hub, id, steps.map((s) => s.n), head);
 }
 
 /** inbox walks what needs you, each with fixed answers. It asks about each

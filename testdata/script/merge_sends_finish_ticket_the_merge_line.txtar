@@ -1,0 +1,85 @@
+# Once every human verification step passed, tkt merge sends a fresh session
+# finish-ticket's merge line, naming the steps. It refuses what
+# finish-ticket would refuse.
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+
+# finish-ticket merges only when every step passed.
+! exec tkt merge ACM-12 --passed 1 --json
+rc 2
+envelope '.error.code' steps_incomplete
+envelope '.error.message' '--passed names step 1, but the pull request''s procedure has steps 1 and 2: finish-ticket merges only when every step passed'
+! exec tkt merge ACM-12 --passed 1-x --json
+rc 2
+envelope '.error.code' usage
+
+# A procedure that numbers two steps 1 still names steps 1 and 2.
+jqedit $WORK/prs.json '.[0].reviews[0].body |= sub("2\\. Sign out"; "1. Sign out")'
+exec tkt merge ACM-12 --passed 1 --dry-run --json
+envelope '.result | [.action, .steps]' '["merging",[1]]'
+jqedit $WORK/prs.json '.[0].reviews[0].body |= sub("1\\. Sign out"; "2. Sign out")'
+
+# Only the review bot cleared the head: finish-ticket asks for review-pr's
+# READY_FOR_HUMAN, so tkt merge warns before it goes on.
+cp $WORK/prs.json $WORK/ready.json
+jqedit $WORK/prs.json '.[0].body = .[0].reviews[0].body | .[0].reviews = [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** · head `x` · reviewed against ACM-12", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": $H1}}]'
+exec tkt merge ACM-12 --passed all --dry-run
+stderr 'only the review bot cleared ACM-12''s head; finish-ticket asks for a review that says READY_FOR_HUMAN'
+cp $WORK/ready.json $WORK/prs.json
+
+# The steps ran on another head.
+! exec tkt merge ACM-12 --passed all --head 1234567 --json
+rc 4
+envelope '.error.code' merge_head_moved
+
+# A dry run says what it would send, and sends nothing.
+resetlog
+exec tkt merge ACM-12 --passed 1-2 --dry-run --json
+envelope '.result | [.action, .steps, .dry_run]' '["merging",[1,2],true]'
+envelope '.result.actions[-1].argv[4]' 'Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed.'
+! exists $FAKE_DIR/prompts
+
+exec tkt merge ACM-12 --passed 1,2 --head $H1 --json
+envelope '.result | [.action, .steps, .pr, .head]' '["merging",[1,2],7,"'$H1'"]'
+envelope '.result.run.stage' merge
+grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed.$' $FAKE_DIR/prompts
+state $FAKE_WT_ROOT/ACM-12 stage merge
+exec tkt history ACM-12
+stdout 'ran merge'
+
+# A branch behind its base would stop finish-ticket with BLOCKED_FOR_SYNC.
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+! exec tkt merge ACM-12 --passed all --json
+rc 4
+envelope '.error.code' merge_behind_base
+envelope '.error.hint' 'tkt sync ACM-12, then verify the new head once it is reviewed'
+realgit -C $REPO reset -q --hard HEAD~1
+realgit -C $REPO push -q -f origin main
+
+# Failing checks, and a head no review cleared, are refused too.
+jqedit $WORK/prs.json '.[0].statusCheckRollup[0].conclusion = "FAILURE"'
+! exec tkt merge ACM-12 --passed all --json
+rc 4
+envelope '.error.code' merge_checks_fail
+jqedit $WORK/prs.json '.[0].reviews = []'
+! exec tkt merge ACM-12 --passed all --json
+rc 4
+envelope '.error.code' no_verification_steps
+
+# A merged pull request is tkt done's.
+jqedit $WORK/prs.json '.[0].state = "MERGED"'
+! exec tkt merge ACM-12 --passed all --json
+rc 4
+envelope '.error.code' pull_request_merged
+envelope '.error.hint' 'tkt done ACM-12'
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open http://localhost:3000/login and sign in with a wrong password.\n   Expected: the form shows an error.\n2. Sign out, then press Back.\n   Expected: the login page shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

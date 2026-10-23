@@ -20,25 +20,32 @@ import (
 	"gitlab.com/rogs/tkt/internal/lock"
 	"gitlab.com/rogs/tkt/internal/output"
 	"gitlab.com/rogs/tkt/internal/runner"
+	"gitlab.com/rogs/tkt/internal/service"
 	"gitlab.com/rogs/tkt/internal/state"
 )
 
-// WatchOpts are tkt watch's arguments.
+// WatchOpts are tkt watch's arguments. Install and Uninstall add or remove
+// the services that run it; Yes answers yes to starting them at boot.
 type WatchOpts struct {
-	Once bool
-	Stop bool
-	Dry  bool
+	Once      bool
+	Stop      bool
+	Dry       bool
+	Install   bool
+	Uninstall bool
+	Yes       bool
 }
 
-// WatchResult is what tkt watch did in its last pass, or, with --stop,
-// whether it stopped one.
+// WatchResult is what tkt watch did in its last pass; with --stop, whether
+// it stopped one; with --install or --uninstall, the service it set up or
+// removed.
 type WatchResult struct {
-	Repo    string        `json:"repo"`
-	Passes  int           `json:"passes"`
-	Tickets []WatchTicket `json:"tickets"`
-	Stopped bool          `json:"stopped"`
-	DryRun  bool          `json:"dry_run"`
-	Actions []Action      `json:"actions"`
+	Repo    string         `json:"repo"`
+	Passes  int            `json:"passes"`
+	Tickets []WatchTicket  `json:"tickets"`
+	Stopped bool           `json:"stopped"`
+	Service *ServiceResult `json:"service"`
+	DryRun  bool           `json:"dry_run"`
+	Actions []Action       `json:"actions"`
 }
 
 // WatchTicket is what one pass did with a ticket. Action is done, sync or
@@ -59,6 +66,10 @@ type WatchTicket struct {
 }
 
 func (r *WatchResult) Text(w io.Writer) {
+	if r.Service != nil {
+		fmt.Fprint(w, r.Service.text(r.Repo, r.DryRun))
+		return
+	}
 	if r.Stopped {
 		fmt.Fprintf(w, "stopped tkt watch for %s\n", r.Repo)
 		return
@@ -104,8 +115,12 @@ const (
 // with a fresh session: a person may still be reading or typing there.
 const watchSettle = 5 * time.Minute
 
-// actDone is tkt watch's own action: it runs tkt done.
-const actDone = "done"
+// tkt watch's own actions: actDone runs tkt done, and actMerge carries out a
+// merge order with tkt merge.
+const (
+	actDone  = "done"
+	actMerge = "merge"
+)
 
 // WatchPolicy is what tkt watch may do.
 type WatchPolicy struct {
@@ -133,10 +148,10 @@ func (a watchAct) key(head string) string { return a.Kind + ":" + a.Stage + "@" 
 // watchStep decides what tkt watch does for one ticket, from the rule tkt
 // ls applies, as autoStep does for tkt auto. watch takes only the upkeep
 // nobody needs to decide on: it removes a ticket once finish-ticket ends
-// with Status: DONE, syncs a moved base, and fixes failing checks, once per
-// head and up to [auto] max_rounds. The plan, reviews, findings and the
-// merge stay with you and with tkt auto, and a ticket on hold, or one a tkt
-// auto loop drives, is left alone.
+// with Status: DONE, syncs a moved base, fixes failing checks, once per head
+// and up to [auto] max_rounds, and carries out the merge order you left with
+// tkt merge. The plan, reviews and findings stay with you and with tkt auto,
+// and a ticket on hold, or one a tkt auto loop drives, is left alone.
 func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 	leave := func(why string) watchAct { return watchAct{Why: why} }
 	pause := func(why string) watchAct { return watchAct{Why: why, Pause: true} }
@@ -180,17 +195,23 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		return act(actSync, "")
 	case ReasonChecksFail:
 		return fix("ci")
+	case ReasonMergeDue:
+		// You left the order, so no settling: the session goes for the merge.
+		return act(actMerge, "")
 	}
 	return leave(n.Reason)
 }
 
-// watchArgv is the tkt command a step amounts to, for dry runs.
-func watchArgv(a watchAct, id string) []string {
+// watchArgv is the tkt command a step amounts to, for dry runs. A merge is
+// the ticket's next step, which carries the order's steps and head.
+func watchArgv(a watchAct, id string, n Next) []string {
 	switch a.Kind {
 	case actDone:
 		return []string{"tkt", "done", id}
 	case actSync:
 		return []string{"tkt", "sync", id, "--no-agent"}
+	case actMerge:
+		return n.Argv
 	}
 	return []string{"tkt", "run", id, a.Stage}
 }
@@ -210,6 +231,8 @@ func watchPauseText(id, why, last string) string {
 		return "tkt watch could not merge the base on this head; tkt sync " + id + " says why"
 	case actDone + ":":
 		return "tkt watch could not remove the merged ticket; tkt done " + id + " says why"
+	case actMerge + ":":
+		return "tkt watch sent finish-ticket the merge line on this head, and the pull request is still open; read what the agent said in its tab"
 	}
 	return "tkt watch took a step on this head that changed nothing"
 }
@@ -220,8 +243,11 @@ func watchPauseText(id, why, last string) string {
 // pass; with Dry it says what each ticket would get. With Stop it stops the
 // tkt watch that runs for the repository.
 func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
-	if o.Dry && !o.Once && !o.Stop {
+	if o.Dry && !o.Once && !o.Stop && !o.Install && !o.Uninstall {
 		return nil, apperr.New(apperr.Usage, "--dry-run needs --once: a dry run takes one pass").WithHint("tkt watch --once --dry-run")
+	}
+	if o.Yes && !o.Install {
+		return nil, apperr.New(apperr.Usage, "--yes answers --install's question about starting at boot").WithHint("tkt watch --install --yes")
 	}
 	a.watching = true
 	c, err := a.begin(ctx, o.Dry, false)
@@ -229,8 +255,13 @@ func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
 		return nil, err
 	}
 	defer c.release()
-	if o.Stop {
+	switch {
+	case o.Stop:
 		return c.stopWatch()
+	case o.Install:
+		return c.installWatch(o)
+	case o.Uninstall:
+		return c.uninstallWatch()
 	}
 	if err := c.LC.RequireGitHub("watch"); err != nil {
 		return nil, err
@@ -345,14 +376,18 @@ func (c *Ctx) watchStatus() WatchStatus {
 	return WatchStatus{Running: c.watchRunning(), LastPass: st["pass"], Error: st["error"]}
 }
 
-// watcher is one tkt watch run: the slots its agents hold, and what its
-// dry runs would do.
+// watcher is one tkt watch run: the slots its agents hold, what its dry runs
+// would do, and the herdr workspace its pass opens tabs in.
 type watcher struct {
 	c       *Ctx
 	slots   map[string]*os.File
 	started string
 	passes  int
 	plan    []Action
+	ws      string
+	// opened is the workspace tkt watch opened, which it keeps using while
+	// it exists, even before herdr reports a pane of it in the repository.
+	opened string
 }
 
 func (w *watcher) writeStatus(err error) {
@@ -381,19 +416,21 @@ func (w *watcher) writeStatus(err error) {
 func (w *watcher) app() (*App, error) {
 	a := w.c.App
 	if a.Getenv("HERDR_ENV") == "1" && a.Getenv("HERDR_WORKSPACE_ID") != "" {
+		w.ws = a.Getenv("HERDR_WORKSPACE_ID")
 		return a, nil
 	}
-	ws, err := w.c.findWorkspace()
+	ws, err := w.c.findWorkspace(w.opened)
 	if err != nil {
 		return nil, err
 	}
+	w.ws = ws
 	cp := *a
 	cp.Getenv = func(k string) string {
 		switch k {
 		case "HERDR_ENV":
 			return "1"
 		case "HERDR_WORKSPACE_ID":
-			return ws
+			return w.ws
 		case "HERDR_PANE_ID", "HERDR_TAB_ID":
 			return ""
 		}
@@ -402,10 +439,35 @@ func (w *watcher) app() (*App, error) {
 	return &cp, nil
 }
 
+// openWorkspace opens a herdr workspace in the repository when none has a
+// pane there, before the pass takes a step: every step works in herdr, and
+// outside a pane, as after a reboot, nothing else gives tkt watch one. The
+// next pass finds it from its pane.
+func (w *watcher) openWorkspace(c *Ctx) error {
+	if w.ws != "" {
+		return nil
+	}
+	label := filepath.Base(c.Repo.Root)
+	if c.Dry {
+		c.Would(herdr.WorkspaceCreateArgv(c.Repo.Root, label))
+		w.ws = "<workspace>"
+		return nil
+	}
+	ws, err := c.H.WorkspaceCreate(c.Ctx, c.Repo.Root, label)
+	if err != nil {
+		return herdrErr(err)
+	}
+	c.UI.Info("no herdr workspace had a pane in %s, so tkt watch opened workspace %s there", c.Repo.Root, ws)
+	w.ws, w.opened = ws, ws
+	return nil
+}
+
 // findWorkspace finds the herdr workspace that holds the repository's
 // panes: the one with the most panes in its primary worktree or a ticket
-// worktree. herdr numbers workspaces per server, so nothing can store one.
-func (c *Ctx) findWorkspace() (string, error) {
+// worktree. With none, it is opened, the workspace tkt watch opened, while
+// herdr still has a pane in it, or "". herdr numbers workspaces per server,
+// so nothing can store one.
+func (c *Ctx) findWorkspace(opened string) (string, error) {
 	panes, err := c.H.Panes(c.Ctx)
 	if err != nil {
 		return "", herdrErr(err)
@@ -418,8 +480,9 @@ func (c *Ctx) findWorkspace() (string, error) {
 	for _, e := range es {
 		dirs = append(dirs, e.Path)
 	}
-	count, best := map[string]int{}, ""
+	count, best, alive := map[string]int{}, "", false
 	for _, p := range panes {
+		alive = alive || opened != "" && p.WorkspaceID == opened
 		for _, d := range dirs {
 			if herdr.Inside(p.Cwd, d) {
 				count[p.WorkspaceID]++
@@ -430,9 +493,8 @@ func (c *Ctx) findWorkspace() (string, error) {
 			}
 		}
 	}
-	if best == "" {
-		return "", apperr.New(apperr.HerdrWorkspaceMissing, "no herdr workspace has a pane in %s, so tkt watch has nowhere to open tabs", c.Repo.Root).
-			WithHint("open a herdr pane in %s", c.Repo.Root)
+	if best == "" && alive {
+		best = opened
 	}
 	return best, nil
 }
@@ -501,6 +563,11 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		return res
 	}
 	f.Hold = f.Hold || ts.st["hold"] != ""
+	// The steps of a merge order ran on its head; a new one drops it.
+	if o := ts.st["merge_head"]; o != "" && f.Head != "" && o != f.Head && !f.ForgeLag && !c.Dry {
+		c.dropOrder(ts, t.ID, "dropped")
+		c.notify(t.ID, notice{"merge order dropped", "the head moved after you verified it; check the new head once it is reviewed", "request"})
+	}
 	mem := watchMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["watch_last"]}
 	p := WatchPolicy{MaxRounds: c.Cfg.Auto.MaxRounds, DoneAfterMerge: c.Cfg.Watch.DoneAfterMerge}
 	act := watchStep(row.Next, f, p, mem)
@@ -520,18 +587,23 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	if act.Kind == "" {
 		return res
 	}
-	if act.Kind == actRun && !w.takeSlot(t.ID) {
+	if (act.Kind == actRun || act.Kind == actMerge) && !w.takeSlot(t.ID) {
 		res.Action, res.Stage, res.Reason = "", "", WatchSlot
 		return res
 	}
 	if c.Dry {
-		c.Would(watchArgv(act, t.ID))
+		w.openWorkspace(c)
+		c.Would(watchArgv(act, t.ID, row.Next))
 		return res
 	}
 	// A step that started finishes even when tkt watch is asked to stop; a
 	// stop before it starts leaves the ticket for the next watch.
 	if ctx.Err() != nil {
 		res.Action, res.Stage, res.Reason = "", "", act.Why
+		return res
+	}
+	if err := w.openWorkspace(c); err != nil {
+		res.Action, res.Stage, res.Error = "", "", apperr.As(err).Msg
 		return res
 	}
 	// Remember the step before taking it, so one that fails is not taken
@@ -541,11 +613,17 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		kv = append(kv, "rounds", strconv.Itoa(mem.Rounds+1))
 	}
 	c.save(ts, kv...)
-	if err := w.do(ctx, a, act, t.ID); err != nil {
+	if err := w.do(ctx, a, act, t.ID, ts); err != nil {
+		if errors.Is(err, errOrderWaits) {
+			c.save(ts, "watch_last", mem.Last)
+			res.Action, res.Reason = "", ReasonCIPending
+			return res
+		}
 		res.Error = apperr.As(err).Msg
-		// A sync that failed changed nothing, such as one while the network
-		// is down, so the next pass tries it again.
-		if act.Kind == actSync {
+		// A sync or a merge that failed sent nothing, such as one while the
+		// network is down, so the next pass tries it again. One whose outcome
+		// is uncertain waits for you: the merge line may have gone in.
+		if (act.Kind == actSync || act.Kind == actMerge) && apperr.Lookup(apperr.As(err).Code).Exit != apperr.ExitUncertain {
 			c.save(ts, "watch_last", mem.Last)
 		}
 		w.failed(c, ts, t.ID, act, f.Head, res.Error)
@@ -564,9 +642,17 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	case actDone:
 		c.UI.Info("%s: removed it after finish-ticket's Status: DONE", t.ID)
 		c.notify(t.ID, notice{"removed", "finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree", "done"})
+	case actMerge:
+		c.UI.Info("%s: the checks passed, so finish-ticket merges it", t.ID)
+		c.record(history.Event{Ticket: t.ID, Event: history.Watch, Action: actMerge})
+		c.notify(t.ID, notice{"merging", "the checks passed, so a fresh session runs finish-ticket with your merge order", "none"})
 	}
 	return res
 }
+
+// errOrderWaits says a merge order is not due after all: the checks at its
+// head run again, or someone cancelled it meanwhile.
+var errOrderWaits = errors.New("the merge order waits")
 
 func watchRunText(stage string) string {
 	if stage == "resolve" {
@@ -577,11 +663,17 @@ func watchRunText(stage string) string {
 
 // do takes a step. It finishes the step even when tkt watch is asked to
 // stop meanwhile, so it never leaves a merge half done.
-func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string) error {
+func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *ticketState) error {
 	ctx = context.WithoutCancel(ctx)
 	switch act.Kind {
 	case actDone:
 		_, err := a.Done(ctx, DoneOpts{IDs: []string{id}})
+		return err
+	case actMerge:
+		r, err := a.Merge(ctx, MergeOpts{ID: id, Passed: ts.st["merge_steps"], Head: ts.st["merge_head"], As: ts.st["merge_as"], order: true})
+		if err == nil && r.Action != MergeMerging {
+			return errOrderWaits
+		}
 		return err
 	case actSync:
 		_, err := a.Sync(ctx, SyncOpts{ID: id, NoAgent: true})
@@ -677,33 +769,55 @@ func (w *watcher) dropSlots(keep map[string]bool) {
 }
 
 // stopWatch stops the tkt watch that runs for the repository and waits
-// until it has finished the step it was taking.
+// until it has finished the step it was taking. A watch its service runs
+// stops through the service, which would start it again otherwise.
 func (c *Ctx) stopWatch() (*WatchResult, error) {
 	res := &WatchResult{Repo: c.Repo.Root, Tickets: []WatchTicket{}, DryRun: c.Dry, Actions: []Action{}}
+	if s, err := c.watchService(c.Ctx, c.Repo.Root); err == nil && c.active(c.Ctx, s, s.unit) {
+		argv := service.SystemctlArgv("stop", s.unit)
+		if s.manager == service.Launchd {
+			argv = service.LaunchctlArgv("bootout", s.domain+"/"+s.unit)
+		}
+		if err := c.serviceRun(argv); err != nil {
+			return nil, err
+		}
+		c.UI.Info("stopped %s; the next tkt command in a herdr pane, or the next boot, starts it again", s.unit)
+		res.Stopped, res.Actions = !c.Dry, append([]Action{}, c.Plan...)
+		return res, nil
+	}
 	if !c.watchRunning() {
 		c.UI.Info("no tkt watch runs for %s", c.Repo.Root)
 		return res, nil
 	}
+	stopped, err := c.signalWatch()
+	if err != nil {
+		return nil, err
+	}
+	res.Stopped, res.Actions = stopped, append([]Action{}, c.Plan...)
+	return res, nil
+}
+
+// signalWatch sends the running tkt watch SIGTERM and waits until it has
+// finished the step it was taking. It reports whether it stopped one.
+func (c *Ctx) signalWatch() (bool, error) {
 	pid := atoi(state.Read(watchStatePath(c.Repo.Common))["pid"])
 	if pid <= 0 {
-		return nil, apperr.New(apperr.Internal, "cannot tell which process runs tkt watch for %s", c.Repo.Root)
+		return false, apperr.New(apperr.Internal, "cannot tell which process runs tkt watch for %s", c.Repo.Root)
 	}
 	if c.Dry {
 		c.Would([]string{"kill", "-TERM", strconv.Itoa(pid)})
-		res.Actions = c.Plan
-		return res, nil
+		return false, nil
 	}
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
-		return nil, apperr.New(apperr.Internal, "cannot stop tkt watch (pid %d): %v", pid, err)
+		return false, apperr.New(apperr.Internal, "cannot stop tkt watch (pid %d): %v", pid, err)
 	}
 	for deadline := time.Now().Add(30 * time.Second); c.watchRunning(); c.Sleep(100 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			return nil, apperr.New(apperr.WatchRunning, "tkt watch (pid %d) did not stop within 30 seconds; it finishes the step it took first", pid).
+			return false, apperr.New(apperr.WatchRunning, "tkt watch (pid %d) did not stop within 30 seconds; it finishes the step it took first", pid).
 				WithHint("kill %d stops it at once", pid)
 		}
 	}
-	res.Stopped = true
-	return res, nil
+	return true, nil
 }
 
 // ensureWatch starts tkt watch for the repository when none runs, so its
@@ -737,6 +851,10 @@ func (c *Ctx) ensureWatch() {
 	}
 	if os.WriteFile(mark, nil, 0o644) == nil {
 		os.Chtimes(mark, c.Now(), c.Now())
+	}
+	// A service that tkt watch --install set up runs the repository's watch.
+	if c.startWatchService() {
+		return
 	}
 	log := filepath.Join(dir, "watch.log")
 	if fi, err := os.Stat(log); err == nil && fi.Size() > 1<<20 {
