@@ -59,6 +59,7 @@ type fileTOML struct {
 	Suggest *struct {
 		As string `toml:"as"`
 	} `toml:"suggest"`
+	Chores map[string]choreTOML `toml:"chores"`
 }
 
 // Load reads the settings from dir, tkt's configuration directory. Without
@@ -140,8 +141,8 @@ func parseTOML(c *Config, path, src string) error {
 	return parseSettings(c, path, f)
 }
 
-// parseSettings reads the [auto], [review], [board], [agent], [watch] and
-// [suggest] tables.
+// parseSettings reads the [auto], [review], [board], [agent], [watch],
+// [suggest] and [chores] tables.
 func parseSettings(c *Config, path string, f fileTOML) error {
 	bad := func(key, rule string) error {
 		return apperr.New(apperr.ConfigInvalid, "%s: %s %s", path, key, rule)
@@ -215,7 +216,7 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 		}
 		c.Agent.Extensions = append(c.Agent.Extensions, abs)
 	}
-	return nil
+	return parseChores(c, path, f.Chores)
 }
 
 // absPath expands a leading ~/ to the home directory and reports whether

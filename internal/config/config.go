@@ -51,6 +51,8 @@ type Config struct {
 	Agent         Agent
 	Watch         Watch
 	Suggest       Suggest
+	// Chores are the scheduled runs, of every repository, by name.
+	Chores []Chore
 }
 
 // Suggest holds the [suggest] settings for tkt suggest.
