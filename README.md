@@ -120,7 +120,7 @@ That repository's `tkt watch` starts a run when its slot comes: a branch from th
 
 ### The tkt agent
 
-`tkt agent` opens a chat in your pane about the repository's tickets. Typing `tkt` alone opens it too, at a terminal in a herdr pane inside a configured repository; anywhere else, `tkt` alone prints help.
+`tkt agent` opens a chat in your pane about the repository's tickets. Typing `tkt` alone opens it too, at a terminal in a herdr pane inside a configured repository; anywhere else, `tkt` alone prints help. [`docs/day-in-the-life.md`](docs/day-in-the-life.md) follows one working day in the chat, and shows when to use it and when the terminal does better.
 
 The chat runs [pi](https://github.com/earendil-works/pi), an MIT-licensed coding agent. Release builds of tkt carry pi inside them and unpack it on first use under `~/.local/share/tkt/pi`. A tkt built with `go install` has no pi inside; set `TKT_PI` to a pi binary to use one.
 
@@ -157,7 +157,7 @@ model = "acme/large"
 extensions = ["~/.pi/agent/extensions/acme-provider.ts"]
 ```
 
-`tkt help lifecycle` walks through each step. [`docs/lifecycle.md`](docs/lifecycle.md) follows a ticket from the tracker to a merged pull request, with diagrams of how tkt, the skills, herdr, worktrunk, the tracker and the forge fit together. `tkt COMMAND --help` explains when to use a command and what it refuses.
+`tkt help lifecycle` walks through each step. [`docs/lifecycle.md`](docs/lifecycle.md) follows a ticket from the tracker to a merged pull request, with diagrams of how tkt, the skills, herdr, worktrunk, the tracker and the forge fit together. [`docs/day-in-the-life.md`](docs/day-in-the-life.md) follows a whole day with several tickets at once. `tkt COMMAND --help` explains when to use a command and what it refuses.
 
 ### Settings
 

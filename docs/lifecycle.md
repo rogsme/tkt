@@ -1,6 +1,6 @@
 # The ticket lifecycle
 
-This page follows one ticket, `ACM-123`, from the tracker to a merged pull request. It shows which tool does each step, which [rogs-skills](https://gitlab.com/rogs/skills) skill runs, what tkt does around it, and which line tells you a step is over. `tkt help lifecycle` has the short version for the terminal.
+This page follows one ticket, `ACM-123`, from the tracker to a merged pull request. It shows which tool does each step, which [rogs-skills](https://gitlab.com/rogs/skills) skill runs, what tkt does around it, and which line tells you a step is over. `tkt help lifecycle` has the short version for the terminal, and [`day-in-the-life.md`](day-in-the-life.md) follows a whole day with several tickets at once, mostly in the tkt agent's chat.
 
 ## The parts
 

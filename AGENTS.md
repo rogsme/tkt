@@ -19,7 +19,7 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 
 ## Rules
 
-- A change in behavior comes with a script in `testdata/script/` that shows it, or a unit test next to the code.
+- A change in behavior comes with a script in `testdata/script/` that shows it, or a unit test next to the code. It also updates the README, `docs/lifecycle.md` and `docs/day-in-the-life.md` where they describe it.
 
 - Every external command runs through `runner.Runner`, so it is logged and tests can replace it. Polls that repeat many times a second set `Quiet`.
 - Every failure a person or program sees is an `*apperr.Error` with a registered code. Add the code to `Registry` with its exit status and a summary. Codes never change meaning once released.
@@ -51,7 +51,7 @@ tkt reads no skill files at run time. It depends on these lines from gitlab.com/
 
 ## Writing
 
-Help text, error messages, the README and commit messages follow the skills repository's writing rules:
+Help text, error messages, the README, the pages in `docs/` and commit messages follow the skills repository's writing rules:
 
 - Plain words, short sentences, present tense.
 - No em dashes or en dashes (U+2014, U+2013): rewrite the sentence.
