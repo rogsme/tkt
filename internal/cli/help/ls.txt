@@ -51,7 +51,8 @@ qa_failed, findings, checks_fail, bot_clear, review_clear, awaiting_bot,
 bot_silent, needs_review, no_changes, chore_findings, chore_ready, or
 awaiting_slot for a ticket whose tkt auto loop waits for a slot before the
 ticket has a worktree. Each row also carries chore, the chore's name for a
-chore's run.
+chore's run. incidents lists what the status pages report while a tkt
+watch reads them.
 
 The phase names where a ticket stands: queued, starting, planning,
 awaiting_approval, building, ci, waiting_review, reviewing, needs_fix, fixing,

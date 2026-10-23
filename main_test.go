@@ -197,6 +197,21 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"gitvar":      cmdGitVar,
 	"mkrelease":   cmdMkRelease,
 	"unitvar":     cmdUnitVar,
+	"expand":      cmdExpand,
+}
+
+// expand FILE: replace $WORK, $REPO, $HOME and $FAKE_DIR in FILE with their
+// values, for an archive file that names a path, such as a config.toml.
+func cmdExpand(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: expand FILE")
+	}
+	f := ts.MkAbs(args[0])
+	var pairs []string
+	for _, v := range []string{"WORK", "REPO", "HOME", "FAKE_DIR"} {
+		pairs = append(pairs, "$"+v, ts.Getenv(v))
+	}
+	ts.Check(os.WriteFile(f, []byte(strings.NewReplacer(pairs...).Replace(ts.ReadFile(f))), 0o644))
 }
 
 // unitvar VAR PATH: sets VAR to PATH as systemd-escape --path names it.

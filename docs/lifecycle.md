@@ -294,6 +294,14 @@ flowchart TD
 
 Plans, findings and human verification stay with you, or with `tkt auto`, and so do reviews and the word to merge: watch merges only through the merge order `tkt merge` leaves when you verified a head finish-ticket could not merge yet, and it reviews only the head a sync made for such an order. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
 
+While a status page that `config.toml` names reports a problem, such as a GitHub Actions outage or a model provider's, `tkt watch` starts no agent: no `ci`, `resolve` or `review` run, no merge line and no chore run, since each would only spend a round on a service that is down. Syncs and removals, which need no agent, go on. It reads the pages every five minutes, notifies when an incident starts and when it ends, and `tkt ls` and the tkt agent's board show it while it lasts:
+
+```toml
+[status.github]
+page = "https://www.githubstatus.com"
+components = ["Actions", "Pull Requests", "Git Operations"]
+```
+
 You rarely start it yourself: every tkt command in a herdr pane starts one when none runs for the repository, in a session of its own, so it outlives the command and the pane. `[watch] autostart = false`, or `TKT_WATCH=off`, turns that off; `tkt watch --stop` stops it, after the step it is taking; `tkt watch --once --dry-run` says what one pass would do to each ticket. Outside a herdr pane, it finds the workspace whose panes work in the repository, or opens one there before its first step when none has a pane; while herdr is down it waits. `tkt hold ACM-123` keeps it, and `tkt auto`, away from a ticket.
 
 `tkt watch --install` keeps it running while no terminal is open: it makes `tkt watch` and herdr's server systemd user units, or launchd agents on macOS, that start at boot, with the `PATH` of the shell you ran it from. On Linux that takes `loginctl enable-linger`, which it asks about: without it, systemd stops the units when your last session ends, so herdr's stays off. Every tkt command then starts the unit rather than a watch of its own, and `tkt watch --stop` stops the unit. `tkt doctor` checks that both run and that their `PATH` finds the harnesses.

@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -49,12 +51,27 @@ func (ch Chore) BranchFor(t time.Time) string {
 	return strings.NewReplacer("{name}", ch.Name, "{date}", t.Format("2006-01-02"), "{time}", t.Format("1504")).Replace(ch.Branch)
 }
 
+// StatusPage is a service's status page that tkt watch reads, such as
+// GitHub's: an incident there holds its agent runs until it ends.
+type StatusPage struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+	// Components are the parts of the service that count, such as Actions;
+	// none means the whole page does.
+	Components []string `json:"components"`
+}
+
 type choreTOML struct {
 	Repo     string `toml:"repo"`
 	Schedule string `toml:"schedule"`
 	Branch   string `toml:"branch"`
 	As       string `toml:"as"`
 	Prompt   string `toml:"prompt"`
+}
+
+type statusTOML struct {
+	Page       string   `toml:"page"`
+	Components []string `toml:"components"`
 }
 
 var (
@@ -110,6 +127,29 @@ func parseChores(c *Config, path string, in map[string]choreTOML) error {
 		c.Chores = append(c.Chores, ch)
 	}
 	sort.Slice(c.Chores, func(i, j int) bool { return c.Chores[i].Name < c.Chores[j].Name })
+	return nil
+}
+
+// parseStatus reads the [status.NAME] tables, sorted by name.
+func parseStatus(c *Config, path string, in map[string]statusTOML) error {
+	for name, t := range in {
+		bad := func(format string, args ...any) error {
+			return apperr.New(apperr.ConfigInvalid, "%s: status page '%s': %s", path, name, fmt.Sprintf(format, args...))
+		}
+		u, err := url.Parse(t.Page)
+		switch {
+		case !presetName.MatchString(name):
+			return bad("the name may hold letters, digits, '.', '_' and '-', starting with a letter or digit")
+		case t.Page == "":
+			return bad("page is the status page's address, such as \"https://www.githubstatus.com\"")
+		case err != nil || (u.Scheme != "https" && u.Scheme != "http" && u.Scheme != "file") || u.Host == "" && u.Scheme != "file":
+			return bad("page '%s' is not an http or https address", t.Page)
+		case slices.Contains(t.Components, ""):
+			return bad("components holds an empty name")
+		}
+		c.Status = append(c.Status, StatusPage{Name: name, URL: strings.TrimRight(t.Page, "/"), Components: t.Components})
+	}
+	sort.Slice(c.Status, func(i, j int) bool { return c.Status[i].Name < c.Status[j].Name })
 	return nil
 }
 

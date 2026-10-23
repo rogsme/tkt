@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -78,6 +79,28 @@ func TestChoreErrors(t *testing.T) {
 		_, err := Load(dirWith(t, map[string]string{FileName: src}))
 		if code(err) != apperr.ConfigInvalid || !strings.Contains(apperr.As(err).Msg, want) {
 			t.Errorf("%q: %v, want an error about %s", src, err, want)
+		}
+	}
+}
+
+func TestStatusPages(t *testing.T) {
+	src := "[status.github]\npage = \"https://www.githubstatus.com/\"\ncomponents = [\"Actions\", \"Pull Requests\"]\n\n[status.anthropic]\npage = \"https://status.claude.com\"\n"
+	c, err := Load(dirWith(t, map[string]string{FileName: src}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Status) != 2 || c.Status[0].Name != "anthropic" || c.Status[1].URL != "https://www.githubstatus.com" || !slices.Equal(c.Status[1].Components, []string{"Actions", "Pull Requests"}) {
+		t.Errorf("status %+v", c.Status)
+	}
+	for _, bad := range []string{
+		"[status.github]\n",
+		"[status.github]\npage = \"www.githubstatus.com\"\n",
+		"[status.github]\npage = \"ftp://example.com\"\n",
+		"[status.github]\npage = \"https://www.githubstatus.com\"\ncomponents = [\"\"]\n",
+		"[status.github]\npage = \"https://www.githubstatus.com\"\nservices = [\"Actions\"]\n",
+	} {
+		if _, err := Load(dirWith(t, map[string]string{FileName: bad})); code(err) != apperr.ConfigInvalid {
+			t.Errorf("%q: %v", bad, err)
 		}
 	}
 }

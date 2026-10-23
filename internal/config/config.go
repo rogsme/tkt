@@ -53,6 +53,8 @@ type Config struct {
 	Suggest       Suggest
 	// Chores are the scheduled runs, of every repository, by name.
 	Chores []Chore
+	// Status lists the status pages tkt watch reads, by name.
+	Status []StatusPage
 }
 
 // Suggest holds the [suggest] settings for tkt suggest.

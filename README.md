@@ -7,7 +7,7 @@
 - starts Claude Code or OpenCode in that tab;
 - hands the agent its prompt.
 
-Each command is one step you take, and `tkt ls` suggests the next one. `tkt watch`, which tkt starts by itself, takes the upkeep steps for every ticket: it merges a moved base when a sync is due, fixes failing checks once per head, and removes a ticket once finish-ticket merged it. It also runs the chores you schedule, such as a weekly dependency upgrade. When you want, `tkt auto` takes all the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
+Each command is one step you take, and `tkt ls` suggests the next one. `tkt watch`, which tkt starts by itself, takes the upkeep steps for every ticket: it merges a moved base when a sync is due, fixes failing checks once per head, and removes a ticket once finish-ticket merged it. It also runs the chores you schedule, such as a weekly dependency upgrade, and holds its agents back while a service it depends on reports an incident. When you want, `tkt auto` takes all the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
 
 People and programs both drive tkt. Every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
 
@@ -184,9 +184,13 @@ max_parallel = 3   # tkt auto and tkt watch agents at work at once in a reposito
 
 [watch]
 interval = "60s"   # how often tkt watch looks at every ticket
+
+[status.github]    # tkt watch starts no agent while it reports a problem
+page = "https://www.githubstatus.com"
+components = ["Actions", "Pull Requests", "Git Operations"]
 ```
 
-Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. `tkt help config` has the details.
+Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. A `[status.NAME]` table names a status page that Atlassian Statuspage serves, as GitHub's and most model providers' are: while it reports a problem with a component that counts, `tkt watch` starts no agent, since a fix for checks that fail because CI is down only spends a round, and the board says so at its top. `tkt help config` has the details.
 
 ### Always on
 

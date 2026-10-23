@@ -13,8 +13,9 @@ what needs you: a plan to approve, a question from its agent, a pull request
 ready for human verification, or a tkt auto loop that paused for you. The chat
 scrolls below the board, so it covers nothing. An item leaves the board as
 soon as its ticket moves on, and the chat stays free of them. Each new one
-also shows a herdr notification. The board marks a chore's run. /board hide
-and /board show put the board away and back.
+also shows a herdr notification. The board marks a chore's run, and when a
+status page reports an incident, it says so at its top. /board hide and
+/board show put the board away and back.
 
 Ask how a ticket went, merged ones too: "how did ACM-12 go?", "what failed
 in ACM-12 and ACM-13?". The chat reads tkt history: each step with its time,

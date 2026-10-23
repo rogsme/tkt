@@ -70,6 +70,15 @@ dependency upgrade (tkt help chores). tkt ships none:
   as = "fast"                   # the preset; leave out for the default
   prompt = "Upgrade the dependencies, and note the breaking changes in the pull request."
 
+A [status.NAME] table names a status page that tkt watch reads, one that
+Atlassian Statuspage serves, as GitHub's and most model providers' are.
+While it reports a problem, tkt watch starts no agent. components picks the
+parts of the service that count; without it, any problem on the page does:
+
+  [status.github]
+  page = "https://www.githubstatus.com"
+  components = ["Actions", "Pull Requests", "Git Operations"]
+
 An [agent] table sets up tkt agent's chat. model is a pi model pattern, such as
 provider/id; leave it out for pi's default. extensions lists more pi extension
 files to load, as absolute paths or paths that start with ~/:

@@ -92,6 +92,14 @@ func TestWatchStepTable(t *testing.T) {
 		{with(failing, func(f *Facts) { f.Chore = "deps" }), p, watchMemory{}, watchAct{Kind: actRun, Stage: "ci", Why: ReasonChecksFail}},
 		{with(open, func(f *Facts) { f.Chore, f.Verdict, f.AtHead = "deps", "CLEAR", true }), p, watchMemory{}, leave(ReasonChoreReady)},
 		{with(open, func(f *Facts) { f.Chore, f.Verdict, f.AtHead = "deps", "FINDINGS", true }), p, watchMemory{}, leave(ReasonChoreFindings)},
+		// During an incident no agent starts; the steps that need none go on.
+		{failing, WatchPolicy{MaxRounds: 2, DoneAfterMerge: true, Hold: "GitHub: Actions major outage"}, watchMemory{}, leave(WatchIncident)},
+		{with(open, func(f *Facts) { f.BaseMerge = "conflict" }), WatchPolicy{MaxRounds: 2, Hold: "x"}, watchMemory{}, leave(WatchIncident)},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps = "READY_FOR_HUMAN", true, true, "1,2"
+		}), WatchPolicy{MaxRounds: 2, Hold: "x"}, watchMemory{}, leave(WatchIncident)},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), WatchPolicy{MaxRounds: 2, Hold: "x"}, watchMemory{}, watchAct{Kind: actSync, Why: ReasonBaseMoved}},
+		{with(open, func(f *Facts) { f.PRState, f.LastStatus = "MERGED", "DONE" }), WatchPolicy{MaxRounds: 2, DoneAfterMerge: true, Hold: "x"}, watchMemory{}, watchAct{Kind: actDone, Why: ReasonMerged}},
 	}
 	for _, tc := range cases {
 		if got := watchStep(NextStep(tc.f), tc.f, tc.p, tc.m); got != tc.want {

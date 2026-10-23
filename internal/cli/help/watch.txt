@@ -44,6 +44,15 @@ is still open. A chore's run is a row like a ticket's: watch syncs its base
 when a sync is due, fixes its checks, and removes the run once you merged
 its pull request, or once its agent ended with nothing to change.
 
+The [status.NAME] tables in config.toml name status pages, such as GitHub's
+(tkt help config). tkt watch reads them every five minutes. While one
+reports a problem with a component that counts, it starts no agent: no ci,
+resolve or review run, no merge line and no chore run, since each would only
+spend a round on a service that is down. Syncs and removals, which need no
+agent, go on. It notifies when an incident starts and when it ends, and tkt
+ls and the tkt agent's board show it while it lasts. A page it cannot read
+holds nothing back.
+
 One tkt watch runs per repository. Every tkt command in a herdr pane starts
 it when none runs, in a session of its own, so it outlives the command and the
 pane; it writes its lines to watch.log in the repository's git directory,

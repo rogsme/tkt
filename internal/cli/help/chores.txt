@@ -35,7 +35,8 @@ neither a pull request nor Status: DONE waits for you.
 A slot that passes while the chore's last run is still open is skipped, so
 one run waits for you at a time. A slot missed while no tkt watch ran runs
 once when one runs again, however many passed. The first tkt watch to see a
-chore starts its first run at its next slot.
+chore starts its first run at its next slot. While a status page reports an
+incident, a due run waits, as every agent run does (tkt help watch).
 
 tkt chores lists the repository's chores: the next slot, the last one tkt
 watch took or skipped, and the run still open. tkt chore run NAME starts a

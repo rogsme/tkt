@@ -33,6 +33,8 @@ The `update_` scripts point `TKT_RELEASES` and `TKT_RELEASES_API` at `file://` U
 
 Every fake appends its command line to `$FAKE_LOG`, each word quoted like bash `printf %q`.
 
+A status page in a script is a `file://` URL to a directory under `$WORK` that holds `api/v2/summary.json`, the file Statuspage serves.
+
 `TKT_WATCH=off` keeps every script's tkt commands from starting a `tkt watch` that would outlive the script; the `watch_` scripts turn it back on where they test that. `TKT_SERVICE_MANAGER` picks the services `tkt watch --install` writes, so a script on Linux can test the launchd agents too.
 
 The scripts use these commands beyond testscript's own:
@@ -56,6 +58,7 @@ The scripts use these commands beyond testscript's own:
 | `mkrelease TAG` | Publishes a fake release TAG under `$WORK/rel`: a binary for each system that logs `new-tkt ARGS` and prints `tkt version TAG`, and `SHA256SUMS`. |
 | `envelope [EXPR WANT]` | stdout holds exactly one JSON envelope, and EXPR applied to it gives WANT. |
 | `unitvar VAR PATH` | Sets VAR to PATH as `systemd-escape --path` names it. |
+| `expand FILE` | Replaces `$WORK`, `$REPO`, `$HOME` and `$FAKE_DIR` in FILE with their values, for an archive file that names a path, such as a `config.toml`. |
 
 ## Manual check in herdr
 
@@ -94,6 +97,11 @@ After a change to chores, in a scratch GitHub repository with the lifecycle conf
 2. Run `tkt chore run deps` again: it refuses while the first run is open. Make its checks fail on a new head: within a minute `tkt watch` runs ci on it. Merge its pull request on GitHub: within a minute `tkt watch` removes the run.
 3. Change the prompt to ask for nothing, and run it again: the agent ends with `Status: DONE`, and `tkt watch` removes the run with nothing pushed.
 4. Set the schedule a few minutes ahead with `tkt watch` running: the run starts at that minute, with a notification. Stop the watch over a slot, and start it again: the missed slot runs once.
+
+After a change to the status pages, with `[status.github]` naming `https://www.githubstatus.com` and the components tkt depends on:
+
+1. `tkt watch --once --json` reads the page: `incidents` is empty while GitHub works. A component name that the page lacks gets a warning.
+2. To try an incident, point a `[status.test]` table at a `file://` directory whose `api/v2/summary.json` reports `partial_outage` for a component it lists: the next pass notifies, leaves a ticket with failing checks alone with the reason `incident`, and the chat's board says so at its top. Set the component back to `operational`: the next read notifies that it works again, and the ci run goes.
 
 After a change to `tkt hook tmp` or its plugin, with a preset that runs OpenCode:
 

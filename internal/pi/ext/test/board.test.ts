@@ -120,3 +120,11 @@ test("a chore's run shows as one, and its pull request is yours to merge", () =>
 	assert.equal(phaseLabel("ready_for_human"), "ready to verify");
 	assert.equal(columnOf(row({ phase: "finished" })), "Merged");
 });
+
+test("an incident tops the board", () => {
+	const incidents = [{ page: "github", service: "GitHub", problem: "Actions partial outage", url: "https://www.githubstatus.com", since: "" }];
+	const lines = boardLines({ rows: [row()], jobs: new Map(), items: [], now, tick: 0, repo: "app", incidents }, 200);
+	assert.equal(lines[0].text, "! GitHub: Actions partial outage. tkt watch starts no agent until it ends.");
+	assert.equal(lines[0].tone, "error");
+	assert.match(lines[1].text, /^TICKET/);
+});

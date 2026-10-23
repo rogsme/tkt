@@ -64,12 +64,23 @@ export interface Unblocked {
 	at: string;
 }
 
+/** Incident is a status page that reports a problem with its service, as
+ * tkt watch last read it: while one does, tkt watch starts no agent. */
+export interface Incident {
+	page: string;
+	service: string;
+	problem: string;
+	url: string;
+	since: string;
+}
+
 export interface LsResult {
 	sources: { herdr: string; forge: string; fetch: string };
 	/** watch says whether tkt watch keeps the repository's tickets moving. */
 	watch?: { running: boolean; last_pass: string; error: string };
 	rows: Row[];
 	unblocked?: Unblocked[];
+	incidents?: Incident[];
 }
 
 /** ChoresResult is what tkt chores prints: the repository's chores, each

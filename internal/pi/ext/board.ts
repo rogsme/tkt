@@ -3,7 +3,7 @@
 // it and draws the frame.
 
 import type { Attention, AttentionKind } from "./attention.ts";
-import { since, type Row } from "./model.ts";
+import { type Incident, since, type Row } from "./model.ts";
 
 export type Tone = "text" | "accent" | "warning" | "muted" | "success" | "error";
 
@@ -45,6 +45,9 @@ export interface BoardState {
 	/** watch says whether tkt watch runs, and whether its passes fail;
 	 * undefined until tkt ls says. */
 	watch?: "on" | "off" | "failing";
+	/** incidents is what the status pages report, which holds tkt watch's
+	 * agent runs back until it ends. */
+	incidents?: Incident[];
 }
 
 /** The command that acts on an item, shown beside it on the board. */
@@ -107,10 +110,12 @@ function widths(rows: Row[]): number[] {
 	return w;
 }
 
-/** boardLines renders the board's body for a width: a header, one line per
- * ticket, the ones that need you first, then what each of those needs. */
+/** boardLines renders the board's body for a width: what the status pages
+ * report, a header, one line per ticket, the ones that need you first,
+ * then what each of those needs. */
 export function boardLines(s: BoardState, width: number): Line[] {
 	const lines: Line[] = [];
+	for (const i of s.incidents ?? []) lines.push({ text: fit(`! ${i.service}: ${i.problem}. tkt watch starts no agent until it ends.`, width), tone: "error" });
 	const needs = new Set(s.items.map((a) => a.ticket));
 	const rows = [...s.rows].sort((a, b) => Number(needs.has(b.ticket)) - Number(needs.has(a.ticket)) || a.ticket.localeCompare(b.ticket, undefined, { numeric: true }));
 	const w = widths(rows);

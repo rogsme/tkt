@@ -38,25 +38,27 @@ type WatchOpts struct {
 // WatchResult is what tkt watch did in its last pass; with --stop, whether
 // it stopped one; with --install or --uninstall, the service it set up or
 // removed. Chores says what the pass did with each of the repository's
-// chores.
+// chores, and Incidents what the status pages report, which hold back
+// every agent run.
 type WatchResult struct {
-	Repo    string         `json:"repo"`
-	Passes  int            `json:"passes"`
-	Tickets []WatchTicket  `json:"tickets"`
-	Chores  []WatchChore   `json:"chores"`
-	Stopped bool           `json:"stopped"`
-	Service *ServiceResult `json:"service"`
-	DryRun  bool           `json:"dry_run"`
-	Actions []Action       `json:"actions"`
+	Repo      string         `json:"repo"`
+	Passes    int            `json:"passes"`
+	Tickets   []WatchTicket  `json:"tickets"`
+	Chores    []WatchChore   `json:"chores"`
+	Incidents []Incident     `json:"incidents"`
+	Stopped   bool           `json:"stopped"`
+	Service   *ServiceResult `json:"service"`
+	DryRun    bool           `json:"dry_run"`
+	Actions   []Action       `json:"actions"`
 }
 
 // WatchChore is what one pass did with a chore. Action is run when it
 // started a run, named Run, or "" when it left the chore. Reason is due when
 // it ran, or why it did not: armed (the first pass to see the chore arms
 // it, so its first run is its next slot), not_due, open_run (the slot passed
-// while the last run, Run, is still open, so the pass skipped it), slot
-// (every [auto] max_parallel slot is taken) or failed, with Error. Next is
-// the chore's next slot, in UTC.
+// while the last run, Run, is still open, so the pass skipped it), incident
+// (a status page reports a problem), slot (every [auto] max_parallel slot is
+// taken) or failed, with Error. Next is the chore's next slot, in UTC.
 type WatchChore struct {
 	Chore  string `json:"chore"`
 	Action string `json:"action"`
@@ -82,9 +84,10 @@ const (
 // on it), forge_lag (the forge still shows an older head), agent_settling
 // (its agent stopped minutes ago, and a person may still use the session),
 // slot (every [auto] max_parallel slot is taken), turn (another ticket's
-// merge goes first), worktree_gone (its directory or state is gone),
-// round_limit or no_progress (it waits for you), or its next step's reason.
-// A chore's run is a row here too, named by its branch.
+// merge goes first), incident (a status page reports a problem, so no agent
+// starts), worktree_gone (its directory or state is gone), round_limit or
+// no_progress (it waits for you), or its next step's reason. A chore's run
+// is a row here too, named by its branch.
 type WatchTicket struct {
 	Ticket string `json:"ticket"`
 	Action string `json:"action"`
@@ -132,6 +135,9 @@ func (r *WatchResult) Text(w io.Writer) {
 	if len(rows) > 0 {
 		output.Table(w, []string{"CHORE", "STEP", "WHY", "NEXT"}, rows)
 	}
+	for _, i := range r.Incidents {
+		fmt.Fprintf(w, "%s reports %s, so tkt watch starts no agent\n", i.Service, i.Problem)
+	}
 }
 
 // WatchStatus says whether tkt watch runs for the repository, and how its
@@ -153,6 +159,7 @@ const (
 	WatchLaunch   = "launch"
 	WatchGone     = "worktree_gone"
 	WatchTurn     = "turn"
+	WatchIncident = "incident"
 )
 
 // watchSettle is how long an agent sits idle before tkt watch replaces it
@@ -166,10 +173,12 @@ const (
 	actMerge = "merge"
 )
 
-// WatchPolicy is what tkt watch may do.
+// WatchPolicy is what tkt watch may do. Hold says why it starts no agent
+// for now, such as an incident a status page reports, or is "".
 type WatchPolicy struct {
 	MaxRounds      int
 	DoneAfterMerge bool
+	Hold           string
 }
 
 // watchMemory is what tkt watch keeps about a ticket between passes: the
@@ -208,7 +217,10 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		return a
 	}
 	run := func(stage string) watchAct {
-		if f.Agent != "" && f.Idle > 0 && f.Idle < watchSettle {
+		switch {
+		case p.Hold != "":
+			return leave(WatchIncident)
+		case f.Agent != "" && f.Idle > 0 && f.Idle < watchSettle:
 			return leave(WatchSettling)
 		}
 		return act(actRun, stage)
@@ -249,6 +261,9 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		return fix("ci")
 	case ReasonMergeDue:
 		// You left the order, so no settling: the session goes for the merge.
+		if p.Hold != "" {
+			return leave(WatchIncident)
+		}
 		return act(actMerge, "")
 	case ReasonNeedsReview:
 		// A sync moved the head of a ticket you ordered merged: finish-ticket
@@ -350,7 +365,7 @@ func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
 		c.locks = append(c.locks, f)
 		w.writeStatus(nil)
 	}
-	res := &WatchResult{Repo: c.Repo.Root, Tickets: []WatchTicket{}, Chores: []WatchChore{}, DryRun: c.Dry, Actions: []Action{}}
+	res := &WatchResult{Repo: c.Repo.Root, Tickets: []WatchTicket{}, Chores: []WatchChore{}, Incidents: []Incident{}, DryRun: c.Dry, Actions: []Action{}}
 	lastErr := ""
 	self := binaryStamp()
 	for {
@@ -360,6 +375,7 @@ func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
 		tickets, chores, err := w.pass(ctx)
 		w.passes++
 		res.Passes = w.passes
+		res.Incidents = append([]Incident{}, w.incidents...)
 		if ctx.Err() == nil {
 			w.writeStatus(err)
 		}
@@ -453,6 +469,11 @@ type watcher struct {
 	opened string
 	// turn is the ticket whose merge goes now, if any: one goes at a time.
 	turn string
+	// checked is when it last read the status pages, and incidents what
+	// they reported then; warned holds the warnings it gave already.
+	checked   time.Time
+	incidents []Incident
+	warned    map[string]bool
 	// choreFail is, for each chore, the slot and the failure it reported
 	// last, so a run that keeps failing to start is reported once.
 	choreFail map[string]string
@@ -598,6 +619,7 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, []WatchChore, error)
 	if l.src.Herdr != "ok" {
 		return nil, nil, apperr.New(apperr.HerdrFailed, "tkt watch cannot reach herdr")
 	}
+	w.readStatus(c)
 	out := []WatchTicket{}
 	seen := map[string]bool{}
 	if w.turn, err = c.mergeInFlight(l.agents, ""); err != nil {
@@ -638,8 +660,8 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, []WatchChore, error)
 
 // chores starts each chore of the repository whose slot came, once per
 // slot, however many slots passed while no tkt watch ran. A slot that comes
-// while the chore's last run is open is skipped; one that comes while every
-// agent slot is taken waits for a later pass.
+// while the chore's last run is open is skipped; one that comes during an
+// incident, or while every agent slot is taken, waits for a later pass.
 func (w *watcher) chores(ctx context.Context, a *App, c *Ctx, runs []choreRun) []WatchChore {
 	out := []WatchChore{}
 	stamps := choreStamps(c.Repo.Common)
@@ -663,6 +685,8 @@ func (w *watcher) chores(ctx context.Context, a *App, c *Ctx, runs []choreRun) [
 			c.stampChore(ch.Name, due)
 			wc.Reason, wc.Run = ChoreOpenRun, open
 			c.UI.Info("%s: skipped the run due at %s, since %s is still open", ch.Name, due.Format("Mon 15:04"), open)
+		case w.hold() != "":
+			wc.Reason = WatchIncident
 		case !w.takeSlot("chore:" + ch.Name):
 			wc.Reason = WatchSlot
 		default:
@@ -718,6 +742,9 @@ func (w *watcher) runChore(ctx context.Context, a *App, c *Ctx, name string, due
 	c.notify(name, notice{"chore started", "tkt watch started " + r.Run + " on schedule", "none"})
 }
 
+// hold says why no agent starts this pass, or "".
+func (w *watcher) hold() string { return holdText(w.incidents) }
+
 // step decides and takes one ticket's step.
 func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, row Row, f Facts) WatchTicket {
 	res := WatchTicket{Ticket: t.ID}
@@ -737,7 +764,7 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		c.notify(t.ID, notice{"merge order dropped", voidText(why), "request"})
 	}
 	mem := watchMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["watch_last"]}
-	p := WatchPolicy{MaxRounds: c.Cfg.Auto.MaxRounds, DoneAfterMerge: c.Cfg.Watch.DoneAfterMerge}
+	p := WatchPolicy{MaxRounds: c.Cfg.Auto.MaxRounds, DoneAfterMerge: c.Cfg.Watch.DoneAfterMerge, Hold: w.hold()}
 	act := watchStep(row.Next, f, p, mem)
 	// A fact the rule list cannot see: another tkt command works on the
 	// ticket.

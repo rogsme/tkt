@@ -163,12 +163,14 @@ type Sources struct {
 }
 
 // LsResult is tkt ls's table, whether tkt watch keeps the tickets moving,
-// and the tickets merges unblocked that have no worktree yet.
+// the tickets merges unblocked that have no worktree yet, and what the
+// status pages report, which holds tkt watch's agent runs back.
 type LsResult struct {
 	Sources   Sources     `json:"sources"`
 	Watch     WatchStatus `json:"watch"`
 	Rows      []Row       `json:"rows"`
 	Unblocked []Unblocked `json:"unblocked"`
+	Incidents []Incident  `json:"incidents"`
 	now       time.Time
 }
 
@@ -185,6 +187,14 @@ func (r *LsResult) Text(w io.Writer) {
 		output.Table(w, lsHeader, rows)
 	}
 	r.unblockedText(w)
+	r.incidentText(w)
+}
+
+// incidentText names what the status pages report.
+func (r *LsResult) incidentText(w io.Writer) {
+	for _, i := range r.Incidents {
+		fmt.Fprintf(w, "%s reports %s; tkt watch starts no agent until it ends\n", i.Service, i.Problem)
+	}
 }
 
 // unblockedText names the tickets merges unblocked, which wait for a start.
@@ -204,6 +214,7 @@ func (r *LsResult) unblockedText(w io.Writer) {
 func (r *LsResult) Pretty(w io.Writer, _ string, width int) {
 	if len(r.Rows) == 0 {
 		r.unblockedText(w)
+		r.incidentText(w)
 		return
 	}
 	var (
@@ -270,6 +281,7 @@ func (r *LsResult) Pretty(w io.Writer, _ string, width int) {
 	}
 	fmt.Fprintln(w)
 	r.unblockedText(w)
+	r.incidentText(w)
 }
 
 // phaseStyle colors a phase by who acts next: you, nobody (it is done or
@@ -413,7 +425,7 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	if lookErr != nil {
 		return nil, lookErr
 	}
-	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, Unblocked: []Unblocked{}, now: a.Now()}
+	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, Unblocked: []Unblocked{}, Incidents: c.incidents(), now: a.Now()}
 	if len(want) == 0 {
 		res.Unblocked = c.unblocked(entries)
 	}
