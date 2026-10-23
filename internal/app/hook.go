@@ -430,7 +430,8 @@ export default {
 				const dir = await dirOf(event.sessionID)
 				if (!dir) return
 				const r = ask({ directories: [dir], tool: event.tool, input: event.input })
-				if (r?.input) event.input = r.input
+				// In place, as OpenCode may hold on to the object it passed.
+				if (r?.input) Object.assign(event.input, r.input)
 			})
 		}
 		if (ctx.shell?.hook) {
