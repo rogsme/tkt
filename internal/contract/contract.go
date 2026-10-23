@@ -79,6 +79,11 @@ var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`
 // tkt approve sends, ask for.
 var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr"}
 
+// CleanMergeRule is how review-pr's rule about a review brief across clean
+// base merges begins. tkt sync relies on it: it pushes such merges with no
+// agent, and leaves the brief as it was.
+const CleanMergeRule = "A brief pinned to an earlier head stays current when every commit after that head is a clean merge of the base"
+
 // ResolveSkill is the engineering skill the resolve stage line asks for. It
 // resolves a merge that stopped on conflicts, keeps it a merge, and asks the
 // user about a hunk that decides product behavior.

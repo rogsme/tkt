@@ -159,3 +159,17 @@ func TestResolveStageNamesTheMergeConflictSkill(t *testing.T) {
 		t.Errorf("the resolve stage does not name the %s skill: %s", contract.ResolveSkill, config.BuiltinStages["resolve"])
 	}
 }
+
+func TestCleanMergesKeepTheReviewBrief(t *testing.T) {
+	rule := read(t, "review-pr-clean-merge.md")
+	if !strings.HasPrefix(rule, contract.CleanMergeRule) {
+		t.Fatalf("review-pr's clean-merge rule changed:\n%s", rule)
+	}
+	// tkt sync makes exactly this merge: its second parent is the base, and
+	// it checks the merge's tree against git merge-tree before it pushes.
+	for _, want := range []string{"second parent is an ancestor of the base", "`git merge-tree --write-tree <merge>^1 <merge>^2`", "check each one yourself"} {
+		if !strings.Contains(rule, want) {
+			t.Errorf("review-pr's clean-merge rule no longer says %q", want)
+		}
+	}
+}
