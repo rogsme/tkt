@@ -15,11 +15,13 @@ clean for the review brief: its tree equals what git merge-tree gives for
 its two parents, which review-pr checks for itself.
 
 tkt sync refuses while an agent works in the worktree, while the worktree has
-uncommitted changes, before the branch is on the remote, and when the branch
-has commits the remote lacks, since it pushes only its own merge. When
-someone pushed to the branch since the worktree last moved, it fast-forwards
-first. When the push fails, it undoes its merge, so the branch stays as it
-was.
+uncommitted changes to tracked files (an untracked file does not count),
+before the branch is on the remote, and when the branch has commits the
+remote lacks, since it pushes only its own merge. When someone pushed to the
+branch since the worktree last moved, it fast-forwards first. It pushes the
+merge commit it checked, and when the push fails, or you press Ctrl-C, it
+takes its merge back off the branch, unless a commit came on top of it
+meanwhile: then it leaves the branch alone and says how to drop the merge.
 
 Sync at the moments a ticket needs it: the pull request conflicts, a review
 cannot happen because the base moved (the bot's STALE_BASE, or review-pr's

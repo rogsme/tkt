@@ -112,6 +112,14 @@ func (g Git) Clean(ctx context.Context, path string) bool {
 	return ok && s == ""
 }
 
+// Unchanged reports whether the worktree has no change to a tracked file.
+// Untracked files do not count: a merge leaves them alone, and refuses to
+// overwrite one.
+func (g Git) Unchanged(ctx context.Context, path string) bool {
+	s, ok := g.out(ctx, "-C", path, "status", "--porcelain=v1", "--untracked-files=no")
+	return ok && s == ""
+}
+
 // Count returns git rev-list --count for a range, or -1.
 func (g Git) Count(ctx context.Context, path, rng string) int {
 	s, ok := g.out(ctx, "-C", path, "rev-list", "--count", rng)

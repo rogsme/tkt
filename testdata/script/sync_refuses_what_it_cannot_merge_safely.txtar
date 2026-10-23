@@ -12,11 +12,13 @@ realgit -C $WT push -q origin ACM-12
 realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
 realgit -C $REPO push -q origin main
 
-# Uncommitted changes stay the agent's.
-cp $WORK/note.txt $WT/note.txt
+# Uncommitted changes to tracked files stay the agent's. An untracked file
+# does not count, since a merge leaves it alone.
+cp $WORK/note.txt $WT/docs/agents/forge.md
 ! exec tkt sync ACM-12 --json
 envelope '.error.code' worktree_dirty
-rm $WT/note.txt
+realgit -C $WT checkout -q -- docs/agents/forge.md
+cp $WORK/note.txt $WT/note.txt
 
 # So do commits the agent has not pushed yet.
 realgit -C $WT commit -q --allow-empty -m 'not pushed yet'
@@ -47,7 +49,7 @@ stderr 'git push to origin failed: .*; tkt undid its merge'
 gitvar AFTER $WT HEAD
 exec echo $AFTER
 stdout ^$PUSHED
-realgit -C $WT status --porcelain
+realgit -C $WT status --porcelain --untracked-files=no
 ! stdout .
 
 rm $WORK/origin.git/hooks/pre-receive
@@ -55,6 +57,7 @@ exec tkt sync ACM-12
 stdout 'ACM-12  merged origin/main'
 realgit -C $WT log -1 --format=%P
 stdout '^'$PUSHED' '
+exists $WT/note.txt
 
 -- note.txt --
 work in progress

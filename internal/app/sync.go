@@ -145,8 +145,8 @@ func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
 	if c.Git.CurrentBranch(c.Ctx, path) != id {
 		return nil, apperr.New(apperr.WorktreeBranchMismatch, "%s is not on branch %s", path, id)
 	}
-	if !c.Git.Clean(c.Ctx, path) || c.Git.MergeInProgress(c.Ctx, path) {
-		return nil, apperr.New(apperr.WorktreeDirty, "%s has uncommitted changes or a merge in progress; tkt sync merges only into a clean worktree", path).
+	if !c.Git.Unchanged(c.Ctx, path) || c.Git.MergeInProgress(c.Ctx, path) {
+		return nil, apperr.New(apperr.WorktreeDirty, "%s has uncommitted changes to tracked files or a merge in progress; tkt sync merges only into a clean worktree", path).
 			WithHint("commit or clean up the changes in %s, then tkt sync %s", path, id)
 	}
 	if c.Dry {
@@ -195,46 +195,68 @@ func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
 	}
 	msg := fmt.Sprintf("Merge remote-tracking branch '%s' into %s", res.base, id)
 	merge := gitx.Argv(path, "merge", "--no-ff", "--no-edit", "-m", msg, base)
-	push := gitx.Argv(path, "push", "--quiet", f.Remote, "HEAD:refs/heads/"+id)
 	if c.Dry {
 		c.Would(merge)
-		c.Would(push)
+		c.Would(gitx.Argv(path, "push", "--quiet", f.Remote, "<merge>:refs/heads/"+id))
 		res.Outcome = SyncMerged
 		return res, nil
 	}
 	if r := c.Git.Do(c.Ctx, 5*time.Minute, merge); !r.OK() {
-		// git merge-tree said clean, so a hook stopped it. The session
-		// that resolves conflicts gets it, with the hook's message.
-		c.undoMerge(path, head)
+		// git merge-tree said clean, so something here stopped the merge,
+		// such as a hook or an untracked file in its way. The session
+		// that resolves conflicts gets it.
+		c.abortMerge(path)
 		c.UI.Warn("git merge stopped in %s: %s", path, oneLine(r.ErrText()+"\n"+r.Out()))
 		res.Outcome = SyncConflict
 		return res, nil
 	}
 	next := c.Git.Head(c.Ctx, path)
-	if tree := c.Git.Rev(c.Ctx, path, next+"^{tree}"); tree != m.Tree {
-		c.undoMerge(path, head)
-		return nil, apperr.New(apperr.GitFailed, "the merge commit's tree %s differs from the %s git merge-tree computed; tkt undid the merge", short(tree), short(m.Tree))
+	// The commit must be tkt's merge: the head and the base as its parents,
+	// and the tree git merge-tree computed. Otherwise the branch moved
+	// meanwhile, or a hook changed the commit.
+	if c.Git.Rev(c.Ctx, path, next+"^1") != head || c.Git.Rev(c.Ctx, path, next+"^2") != base {
+		return nil, apperr.New(apperr.GitFailed, "%s moved while tkt sync merged the base, so tkt left it as it is", id).
+			WithHint("check git -C %s log, then tkt sync %s", path, id)
 	}
+	if tree := c.Git.Rev(c.Ctx, path, next+"^{tree}"); tree != m.Tree {
+		return nil, c.undo(path, next, head, apperr.New(apperr.GitFailed, "the merge commit's tree %s differs from the %s git merge-tree computed", short(tree), short(m.Tree)))
+	}
+	// Push the merge tkt checked, not whatever HEAD is by now.
+	push := gitx.Argv(path, "push", "--quiet", f.Remote, next+":refs/heads/"+id)
 	if r := c.Git.Do(c.Ctx, 10*time.Minute, push); !r.OK() {
-		c.undoMerge(path, head)
-		return nil, apperr.New(apperr.GitFailed, "git push to %s failed: %s; tkt undid its merge", f.Remote, oneLine(r.ErrText())).
-			WithHint("tkt sync %s tries again", id)
+		return nil, c.undo(path, next, head, apperr.New(apperr.GitFailed, "git push to %s failed: %s", f.Remote, oneLine(r.ErrText())).
+			WithHint("tkt sync %s tries again", id))
 	}
 	res.Outcome, res.NewHead = SyncMerged, next
 	c.record(history.Event{Ticket: id, Event: history.Sync, Action: SyncMerged})
 	return res, nil
 }
 
-// undoMerge puts the branch back where it was before tkt's merge. --keep
-// refuses to drop a change that is not tkt's, and the worktree was clean.
-func (c *Ctx) undoMerge(path, head string) {
-	if c.Git.MergeInProgress(c.Ctx, path) {
-		c.Git.Do(c.Ctx, time.Minute, gitx.Argv(path, "merge", "--abort"))
-	}
-	if c.Git.Head(c.Ctx, path) != head {
-		if r := c.Git.Do(c.Ctx, time.Minute, gitx.Argv(path, "reset", "--keep", "--quiet", head)); !r.OK() {
-			c.UI.Warn("cannot undo the merge in %s: %s; reset it to %s by hand", path, oneLine(r.ErrText()), short(head))
+// undo takes tkt's merge back off the branch after a later step failed, and
+// says in e whether it could. It moves the branch only while the merge is
+// still its head, so a commit someone made on top of it since stays, merge
+// and all. It runs even when tkt was interrupted, so Ctrl-C during a push
+// leaves no merge behind.
+func (c *Ctx) undo(path, merge, head string, e *apperr.Error) error {
+	ctx := context.WithoutCancel(c.Ctx)
+	if c.Git.Head(ctx, path) == merge {
+		if r := c.Git.Do(ctx, time.Minute, gitx.Argv(path, "reset", "--keep", "--quiet", head)); r.OK() {
+			e.Msg += "; tkt undid its merge"
+			return e
 		}
+	}
+	e.Msg += fmt.Sprintf("; tkt's merge %s stays in %s, unpushed", short(merge), path)
+	return e.WithHint("git -C %s reset --keep %s drops it, when nothing came after it", path, short(head))
+}
+
+// abortMerge ends a merge that stopped, even when tkt was interrupted.
+func (c *Ctx) abortMerge(path string) {
+	ctx := context.WithoutCancel(c.Ctx)
+	if !c.Git.MergeInProgress(ctx, path) {
+		return
+	}
+	if r := c.Git.Do(ctx, time.Minute, gitx.Argv(path, "merge", "--abort")); !r.OK() {
+		c.UI.Warn("cannot abort the merge in %s: %s; run git -C %s merge --abort", path, oneLine(r.ErrText()), path)
 	}
 }
 
