@@ -100,7 +100,7 @@ Every arrow out of a stage is a status line or a verdict on the screen or the pu
 
 ### 1. The ticket exists
 
-A ticket starts in the tracker, in the state the configuration maps to `new`. You can write it by hand, or ask an agent in the main checkout to run `create-ticket`. That skill audits the code for work already done, searches the tracker for duplicates, shows a preview and waits with `Status: AWAITING_CREATE_APPROVAL`. Only after you approve does it create the tickets and their blocked-by relations, read them back, and end with `Status: TICKETS_CREATED`.
+A ticket starts in the tracker, in the state the configuration maps to `new`, or in `blocked` while a ticket it waits on is open. You can write it by hand, or ask an agent in the main checkout to run `create-ticket`. That skill audits the code for work already done, searches the tracker for duplicates, shows a preview and waits with `Status: AWAITING_CREATE_APPROVAL`. Only after you approve does it create the tickets and their blocked-by relations, read them back, and end with `Status: TICKETS_CREATED`.
 
 tkt plays no part here. It needs only the id.
 
@@ -150,7 +150,7 @@ tkt keeps the ticket's preset, session, tab and pane in the worktree's git direc
 
 ### 3. start-ticket plans
 
-The agent checks that it sits in the right worktree, loads the ticket with every comment and relation, and looks for blockers among the tickets in flight. When nothing blocks the ticket, it moves the ticket to `in-progress`, so the board shows it started, and reads the code end to end. It writes no code. It returns a plan that opens with a plain overview and diagrams, maps every acceptance criterion to a step, and names the seams the tests will cover. When plan review is on, a model from another vendor reviews the plan through `review-plan` before you see it. When plan presentation is on, `present-plan` shows it in a browser.
+The agent checks that it sits in the right worktree, loads the ticket with every comment and relation, and looks for blockers among the tickets in flight. When something blocks the ticket, it moves the ticket to `blocked` with a comment that says why, and stops with `Status: BLOCKED`. Otherwise it moves the ticket to `in-progress`, so the board shows it started, and reads the code end to end. It writes no code. It returns a plan that opens with a plain overview and diagrams, maps every acceptance criterion to a step, and names the seams the tests will cover. When plan review is on, a model from another vendor reviews the plan through `review-plan` before you see it. When plan presentation is on, `present-plan` shows it in a browser.
 
 The agent ends with `Status: AWAITING_APPROVAL`. When you drop the ticket instead of approving a plan, tell the agent, and it moves the ticket back.
 
@@ -328,7 +328,7 @@ A ticket without a pull request waits, since work-ticket merges the base itself 
 
 ## Who changes the tracker
 
-Three skills move a ticket, each as soon as its new state is true, so the board stays current:
+Each skill moves a ticket as soon as its new state is true, so the board stays current:
 
 ```mermaid
 stateDiagram-v2
@@ -343,7 +343,11 @@ stateDiagram-v2
   done --> [*]
 ```
 
-work-ticket also moves a ticket that is still `new` before its first edit, and start-ticket moves the ticket back when you drop it instead of approving a plan. `review-pr` never writes to the tracker. `address-pr-review` writes only replacement browser captures. tkt never touches the tracker at all.
+work-ticket also moves a ticket that is still `new` before its first edit, and start-ticket moves the ticket back when you drop it instead of approving a plan.
+
+A ticket that waits on a blocker sits in `blocked`, with a `## Blocked` comment that says why. create-ticket creates a ticket there while a ticket it waits on is open, and start-ticket, work-ticket and address-pr-review move one there when they stop on a blocker. It goes back to the state it had, with an `## Unblocked` comment, when finish-ticket merges its last blocker, or when the next run on it finds its blockers cleared. When the tracker has no blocked state, the ticket keeps its state, and only the comment shows the block.
+
+`review-pr` never writes to the tracker. `address-pr-review` writes only replacement browser captures and the blocked moves. tkt never touches the tracker at all.
 
 ## The rules that hold it together
 
@@ -360,7 +364,7 @@ work-ticket also moves a ticket that is still `new` before its first edit, and s
 | You see | Do |
 |---|---|
 | `Status: SETUP_REQUIRED` | Run `/setup-rogs` and commit its files to the base. |
-| `Status: BLOCKED` with a `Reason:` line | Read the reason in the tab. It names what a person has to decide or fix. |
+| `Status: BLOCKED` with a `Reason:` line | Read the reason in the tab. It names what a person has to decide or fix. When a blocker holds the ticket, the tracker shows it in `blocked`, with the reason in a comment. |
 | The agent waits for an answer | Answer it in the tab. `tkt ls` shows it as blocked. |
 | No agent runs for the ticket | `tkt resume ACM-123` brings back the last session and sends nothing. Use it, not `tkt run`, when the conversation matters, such as a plan waiting for approval. |
 | The pull request closed without merging | Decide by hand. tkt does not guess. |
