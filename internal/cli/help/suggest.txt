@@ -19,9 +19,8 @@ COUNT is how many to pick, 3 by default. The session runs on the [suggest]
 preset (tkt help config), or the default preset; --as picks another, such as
 a cheap one, since the run only reads.
 
---wait waits for the run to end, at most --timeout, and reads the picks:
-each comes with the tkt start command for it, on the first preset that
-serves the model its Model routing names. When suggest-tickets asks a
-question, the wait ends and you answer it in the tab. The tkt agent's
-/suggest does this and offers to start the picks by hand, in auto, or in
-auto after you approve each plan.
+tkt suggest returns once the agent has the line, and reads nothing it
+says. The picks stay in the tab: read them there, ask the agent about them,
+and start the ones you want with tkt start, adding --as PRESET for a pick
+whose model another preset serves. The tkt agent's /suggest opens the same
+tab.

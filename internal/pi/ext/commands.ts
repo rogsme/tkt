@@ -50,7 +50,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerCommand("suggest", {
-		description: "Have suggest-tickets pick tickets that can run side by side, then start them from /inbox: /suggest [N] [as PRESET]",
+		description: "Open a suggest tab where suggest-tickets picks tickets that can run side by side: /suggest [N] [as PRESET]",
 		handler: async (args, ctx) => {
 			const words = args.trim().split(/\s+/).filter(Boolean);
 			const as = preset(words);

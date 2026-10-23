@@ -140,17 +140,23 @@ Three tickets are in flight. To pick what comes next, ask:
 what should I work on next?
 ```
 
-The chat queues suggest-tickets in a suggest tab at the repository's root, on `fast`, as `/suggest 3` would. It reads the tracker and the branches in flight, and changes nothing. A few minutes later the board shows one item, `suggest picks ready`, and the chat says:
+The chat queues suggest-tickets in a suggest tab at the repository's root, on `fast`, as `/suggest 3` would. It reads the tracker and the branches in flight, and changes nothing. The chat never sees the picks; they stay in the suggest tab. A few minutes later that tab ends its report with:
 
 ```
-suggest-tickets picked ACM-131 (frontier), ACM-130 (small) and ACM-133 (small). /inbox starts them, each on the preset its model needs.
+Suggested: ACM-131 (frontier), ACM-130 (small), ACM-133 (small)
 ```
 
-Its tab has the whole report, with what it left out and why: ACM-129 changes the same export code as ACM-121, so the two would collide. `/inbox` offers to start the picks by hand, in full auto, or in auto after the plan, and you pick auto after the plan. ACM-131 starts on `claude` and the other two on `fast`, each in its own tab, such as `ACM-130 (fast, auto)`.
+The report also says what it left out and why: ACM-129 changes the same export code as ACM-121, so the two would collide. You ask the agent there why ACM-133 beats ACM-128, agree with it, and go back to the chat:
+
+```
+start ACM-131 in auto after the plan, and ACM-130 and ACM-133 the same on fast
+```
+
+ACM-131 starts on `claude` and the other two on `fast`, each in its own tab, such as `ACM-130 (fast, auto)`.
 
 Five tickets now run in tkt auto loops, but `[auto] max_parallel` caps the agents tkt auto and tkt watch put to work, not the loops. A loop takes a slot to start a ticket, approve a plan or run a stage, and gives it up while it waits for CI, the review bot or you. ACM-124's planning agent holds one slot and two of the picks take the others, so ACM-133 waits in the queued phase until a plan is ready. ACM-121's agent, which your answer set working, and ACM-127's address session hold no slot, since you started them.
 
-From a terminal, `tkt suggest 3 --wait` runs the same skill and prints a `tkt start` command for each pick, on the preset its model needs.
+From a terminal, `tkt suggest 3` opens the same tab and returns at once.
 
 ## 09:40 Read the plans
 
@@ -403,7 +409,6 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `sync failed` | tkt sync cannot merge the base for now, such as with uncommitted changes in the worktree. | Fix what it names; tkt auto tries again at each look. |
 | `auto paused` | tkt auto paused for another reason, such as an agent in a state tkt does not know. | `/peek ID` shows its screen. |
 | `unblocked` | A merge freed a ticket that has no worktree yet. | `/start ID`, or a start in auto from `/inbox`. |
-| `picks ready` | suggest-tickets picked tickets that can run side by side. | `/inbox` starts them. |
 | `ready to merge`, `review found something` | A chore's pull request is ready, or its review found something. | Merge it on the forge, or tell its agent what to fix. |
 | `nothing to change`, `closed` | A chore's run found nothing, or you closed its pull request, and no tkt watch removed it. | `/done ID`. |
 | `start failed`, `sync failed` and the like | A step the chat queued failed. | `/inbox` says why. |

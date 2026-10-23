@@ -113,7 +113,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		name: "tkt_suggest",
 		label: "tkt suggest",
 		description:
-			"Queue suggest-tickets, which reads the tracker and the work in flight, then picks the next tickets to start, ones that can run side by side. It returns before the picks; the board shows them, and /inbox starts them. count is how many to pick, 3 unless the user names a number. as picks the preset suggest-tickets runs on.",
+			"Queue suggest-tickets, which reads the tracker and the work in flight, then picks the next tickets to start, ones that can run side by side. It opens a suggest tab and returns; the picks show in that tab only, for the user to read. count is how many to pick, 3 unless the user names a number. as picks the preset suggest-tickets runs on.",
 		parameters: Type.Object({
 			count: Type.Optional(Type.Integer({ minimum: 1, maximum: 10, description: "How many tickets to pick; 3 unless the user names a number" })),
 			as: preset,

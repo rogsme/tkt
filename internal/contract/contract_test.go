@@ -67,8 +67,7 @@ func TestReviewSummariesCarryVerdicts(t *testing.T) {
 func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	registry := read(t, "status-lines.md")
 	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked, contract.StatusSetupRequired,
-		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone,
-		contract.StatusTicketsSuggested} {
+		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone} {
 		if !strings.Contains(registry, "`Status: "+s+"`") {
 			t.Errorf("Status: %s is not in the registry", s)
 		}
@@ -260,38 +259,5 @@ func TestUnblockedLineNamesTheTicketsAMergeFreed(t *testing.T) {
 		if got := c.IDs(m[1]); !slices.Equal(got, want) {
 			t.Errorf("%q: %v, want %v", text, got, want)
 		}
-	}
-}
-
-func TestSuggestedLineNamesThePicks(t *testing.T) {
-	report := read(t, "suggest-tickets-report.md")
-	if !strings.HasSuffix(strings.TrimSpace(report), "End with `Status: "+contract.StatusTicketsSuggested+"`.") {
-		t.Fatalf("suggest-tickets no longer ends with Status: %s:\n%s", contract.StatusTicketsSuggested, report)
-	}
-	id := regexp.MustCompile(`^ACM-[1-9][0-9]*$`)
-	// Each form the report gives, as tkt suggest reads it.
-	for _, tc := range []struct {
-		line string
-		want []contract.Suggestion
-	}{
-		{"`Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)`", []contract.Suggestion{{"ACM-14", "frontier"}, {"ACM-21", "acme-small-2"}}},
-		{"`Suggested: ACM-14, ACM-21`", []contract.Suggestion{{"ACM-14", ""}, {"ACM-21", ""}}},
-		{"`Suggested: none`", []contract.Suggestion{}},
-	} {
-		if !strings.Contains(report, tc.line) {
-			t.Errorf("the report no longer gives %s", tc.line)
-			continue
-		}
-		if got := contract.Suggestions(strings.Trim(tc.line, "`")+"\nStatus: "+contract.StatusTicketsSuggested, id); !slices.Equal(got, tc.want) {
-			t.Errorf("%s: %v, want %v", tc.line, got, tc.want)
-		}
-	}
-	// A model the line words with a condition still names its pick.
-	got := contract.Suggestions("Suggested: ACM-14 (acme-small-2, frontier if the schema changes), `ACM-21` (frontier), ACM-x", id)
-	if want := []contract.Suggestion{{"ACM-14", "acme-small-2"}, {"ACM-21", "frontier"}}; !slices.Equal(got, want) {
-		t.Errorf("a model with a condition: %v, want %v", got, want)
-	}
-	if !strings.Contains(config.SuggestLine(3), "the suggest-tickets skill") {
-		t.Errorf("the suggest line %q does not name the skill", config.SuggestLine(3))
 	}
 }

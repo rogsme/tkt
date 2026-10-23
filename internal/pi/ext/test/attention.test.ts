@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { attentionOf, choicesOf, sound, suggestedOf, unblockedOf } from "../attention.ts";
+import { attentionOf, choicesOf, sound, unblockedOf } from "../attention.ts";
 import { row } from "./fixtures.ts";
 
 const working = { pane_id: "p", name: "a", harness: "claude", status: "working" };
@@ -181,17 +181,6 @@ test("tkt watch reviews the head a sync made for a merge order", () => {
 	const merge = { head: "abc", steps: [1], at: "2026-01-02T00:00:00Z" };
 	assert.equal(attentionOf(row({ phase: "waiting_review", next, merge }), false, true), undefined);
 	assert.equal(attentionOf(row({ phase: "waiting_review", next }), false, true)?.kind, "next");
-});
-
-test("suggest-tickets' picks wait on the board for /inbox to start them", () => {
-	const r = { count: 2, pane: "p", status: "idle", last_status: "TICKETS_SUGGESTED", report: "", picks: [{ ticket: "ACM-14", model: "frontier", preset: "" }, { ticket: "ACM-21", model: "", preset: "" }] };
-	const a = suggestedOf(r, 1);
-	assert.match(a.text, /^suggest-tickets picked ACM-14 \(frontier\) and ACM-21, which can run side by side/);
-	assert.deepEqual(
-		choicesOf(a).map((c) => c.do),
-		["start_picks", "start_picks_auto", "start_picks_after_plan", "dismiss"],
-	);
-	assert.notEqual(suggestedOf(r, 2).key, a.key);
 });
 
 test("a chore's run asks for you where no skill takes over", () => {

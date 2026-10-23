@@ -242,8 +242,8 @@ func suggestCmd(g *globals) *cobra.Command {
 		Short: "Have suggest-tickets pick the next tickets to start, ones that can run side by side",
 		Long:  helpText("suggest"),
 		Example: `  tkt suggest
-  tkt suggest 2 --wait
-  tkt suggest --as fast --wait --timeout 15m --json`,
+  tkt suggest 2
+  tkt suggest --as fast --json`,
 		SuggestFor: []string{"next", "pick", "dispatch"},
 		Args: func(_ *cobra.Command, args []string) error {
 			switch {
@@ -265,8 +265,6 @@ func suggestCmd(g *globals) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&o.As, "as", "", "run suggest-tickets on PRESET instead of the [suggest] one")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
-	cmd.Flags().BoolVar(&o.Wait, "wait", false, "wait for the picks, and print the tkt start command for each")
-	cmd.Flags().DurationVar(&o.Timeout, "timeout", 0, "with --wait, give up after DURATION, such as 15m (default: wait without limit)")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	return cmd
 }

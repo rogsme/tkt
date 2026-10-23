@@ -63,7 +63,6 @@ const hints: Record<AttentionKind, (id: string) => string> = {
 	stalled: (id) => `/auto ${id} on`,
 	failed: () => "/inbox",
 	unblocked: (id) => `/start ${id}`,
-	suggested: () => "/inbox",
 	chore: (id) => `/show ${id}`,
 };
 

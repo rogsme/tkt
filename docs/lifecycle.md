@@ -104,14 +104,9 @@ A ticket starts in the tracker, in the state the configuration maps to `new`, or
 
 tkt plays no part here. It needs only the id.
 
-To pick which ready tickets to start, run `tkt suggest 3`, or `/suggest 3` in the tkt agent. A fresh session in a suggest tab at the repository's root runs `suggest-tickets`, which only reads: it keeps the ready tickets whose blockers are all done, ranks them by how many tickets wait on each and then by priority, and drops one that would collide with work in flight, judged from the files each in-flight branch changes, or with another pick. With model routing on, a batch gets at most one heavy ticket. It lists what waits on you first, then ends with the picks:
+To pick which ready tickets to start, run `tkt suggest 3`, or `/suggest 3` in the tkt agent. A fresh session in a suggest tab at the repository's root runs `suggest-tickets`, which only reads: it keeps the ready tickets whose blockers are all done, ranks them by how many tickets wait on each and then by priority, and drops one that would collide with work in flight, judged from the files each in-flight branch changes, or with another pick. With model routing on, a batch gets at most one heavy ticket. It lists what waits on you first, then the picks, each with the model it runs on when model routing is on, and what it left out and why.
 
-```
-Suggested: ACM-123 (frontier), ACM-130 (acme-small-2)
-Status: TICKETS_SUGGESTED
-```
-
-`tkt suggest --wait` prints the `tkt start` command for each, on the first preset that serves its model; the tkt agent's board shows the picks, and `/inbox` starts them by hand, in full auto, or in auto after you approve each plan. `[suggest] as` in `config.toml` names a cheap preset for the run.
+tkt reads none of that report. The picks stay in the suggest tab: read them there, ask its agent about them, and start the ones you want with `tkt start`, or `/start` in the tkt agent, adding `--as` for a pick whose model another preset serves. `[suggest] as` in `config.toml` names a cheap preset for the run.
 
 ### 2. tkt start creates the workspace
 

@@ -70,7 +70,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | Command | What it does |
 |---|---|
 | `tkt agent` | Opens the tkt agent, a chat in your pane that drives your tickets. |
-| `tkt suggest [N]` | Has suggest-tickets pick the next N tickets to start, ones that can run side by side, in a suggest tab at the repository's root; `--wait` prints the `tkt start` command for each, on the preset its model needs. |
+| `tkt suggest [N]` | Has suggest-tickets pick the next N tickets to start, ones that can run side by side, in a suggest tab at the repository's root. The picks stay in that tab, for you to read and start. |
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
 | `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan; `--steer` types it in while the agent works, and `--wait` queues it until the agent stops. |
@@ -134,7 +134,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 
 | Command | What it does |
 |---|---|
-| `/suggest [N] [as PRESET]` | Has suggest-tickets pick tickets that can run side by side; the board shows the picks, and `/inbox` starts them by hand, in full auto, or in auto after the plan, each on the preset its model needs. |
+| `/suggest [N] [as PRESET]` | Opens a suggest tab where suggest-tickets picks tickets that can run side by side; you read the picks there and `/start` the ones you want. |
 | `/start ID... [auto \| after-plan] [as PRESET]` | Starts tickets: by hand, in full auto, or in auto once you approve the plan, on a preset you name. |
 | `/approve ID [auto]` | Approves the plan; with `auto`, `tkt auto` takes over. |
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |
