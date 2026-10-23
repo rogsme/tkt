@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ago, expandIds, keyFromTracker, keyOf, mentions, mergeText, normalizeId, rowsOf, stampText, updateNotice, stepText } from "../model.ts";
+import { ago, choresText, expandIds, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, mentions, mergeText, normalizeId, rowsOf, stampText, updateNotice, stepText } from "../model.ts";
 import { row } from "./fixtures.ts";
 
 test("normalizeId", () => {
@@ -81,4 +81,31 @@ test("mergeText says what tkt merge did", () => {
 	assert.match(mergeText({ ...r, action: "cancelled", sent: "2026-01-01T00:00:00Z" }), /no merge order now\. finish-ticket got the merge line at 2026-01-01T00:00:00Z/);
 	assert.equal(mergeText({ ...r, action: "cancelled" }), "ACM-12 has no merge order now.");
 	assert.match(mergeText({ ...r, action: "none", sent: "2026-01-01T00:00:00Z" }), /finish-ticket got the merge line at 2026-01-01T00:00:00Z/);
+});
+
+test("choresText lists the chores with the run that holds the next one back", () => {
+	const chore = { name: "deps", schedule: "0 9 * * 1,4", as: "", last: "", due: false, next: "2026-10-26T12:00:00Z", runs: ["deps-2026-10-22"], open: "deps-2026-10-22" };
+	const text = choresText({ repo: "/w/app", watch: { running: false }, chores: [chore], elsewhere: [] });
+	assert.match(text, /^- deps \(0 9 \* \* 1,4\): next .*Oct 26.*; deps-2026-10-22 is still open/);
+	assert.match(text, /tkt watch does not run for this repository/);
+	assert.match(choresText({ repo: "/w/app", watch: { running: true }, chores: [], elsewhere: [] }), /^No chore runs in this repository/);
+});
+
+test("idOf and idsIn keep a chore run's id as its branch", () => {
+	const rows = [row({ ticket: "ACM-12" }), row({ ticket: "deps-2026-10-26", chore: "deps" })];
+	assert.equal(idOf("acm-12", rows, "ACM"), "ACM-12");
+	assert.equal(idOf("12", rows, "ACM"), "ACM-12");
+	assert.equal(idOf("DEPS-2026-10-26", rows, "ACM"), "deps-2026-10-26");
+	// A run gone from the board keeps its case, for its history.
+	assert.equal(idOf("deps-2026-10-22", rows, "ACM"), "deps-2026-10-22");
+	assert.equal(idOf("deps-2026", rows, "ACM"), "deps-2026");
+	assert.deepEqual(idsIn("ACM-12 to ACM-14 deps-2026-10-22", rows, "ACM"), ["ACM-12", "ACM-13", "ACM-14", "deps-2026-10-22"]);
+	assert.deepEqual(idsIn("acm-12, deps", rows, "ACM"), ["ACM-12", "deps"]);
+});
+
+test("incidentsOf reads them from a forge failure too", () => {
+	const incident = { page: "github", service: "GitHub", problem: "API Requests major outage", url: "", since: "", seen: "" };
+	assert.deepEqual(incidentsOf({ ok: true, command: "ls", warnings: [], result: { sources: { herdr: "ok", forge: "ok", fetch: "ok" }, rows: [], incidents: [incident] } }), [incident]);
+	assert.deepEqual(incidentsOf({ ok: false, command: "ls", warnings: [], error: { code: "forge_query_failed", exit: 1, message: "gh pr list failed", hint: "", details: { rows: [], incidents: [incident] } } }), [incident]);
+	assert.deepEqual(incidentsOf({ ok: false, command: "ls", warnings: [], error: { code: "internal", exit: 1, message: "x", hint: "", details: {} } }), []);
 });

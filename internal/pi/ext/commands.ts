@@ -5,7 +5,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-c
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import * as act from "./actions.ts";
 import type { Hub } from "./hub.ts";
-import { expandIds, normalizeId } from "./model.ts";
+import { expandIds } from "./model.ts";
 import { board } from "./ui.ts";
 
 export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
@@ -13,7 +13,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		const words = prefix.split(/\s+/);
 		const last = (words.pop() ?? "").toUpperCase();
 		const head = words.length ? `${words.join(" ")} ` : "";
-		const items = hub.rows.filter((r) => r.ticket.startsWith(last)).map((r) => ({ value: head + r.ticket, label: r.ticket, description: r.phase.replaceAll("_", " ") }));
+		const items = hub.rows.filter((r) => r.ticket.toUpperCase().startsWith(last)).map((r) => ({ value: head + r.ticket, label: r.ticket, description: r.phase.replaceAll("_", " ") }));
 		return items.length ? items : null;
 	};
 	const one = (args: string, ctx: ExtensionCommandContext, usage: string): string | undefined => {
@@ -22,7 +22,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 			ctx.ui.notify(`usage: ${usage}`, "warning");
 			return undefined;
 		}
-		return normalizeId(raw, hub.key);
+		return hub.idOf(raw);
 	};
 	const say = (text: string) => hub.post(text);
 	/** preset takes "as NAME" or "--as NAME" out of the words. */
@@ -40,7 +40,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 			const as = preset(words);
 			const modeWord = words.find((w) => ["auto", "full", "after-plan", "manual"].includes(w.toLowerCase()))?.toLowerCase();
 			const list = expandIds(words.filter((w) => w.toLowerCase() !== modeWord).join(" "), hub.key);
-			const rest = words.filter((w) => w.toLowerCase() !== modeWord && /^\d+$/.test(w)).map((w) => normalizeId(w, hub.key));
+			const rest = words.filter((w) => w.toLowerCase() !== modeWord && /^\d+$/.test(w)).map((w) => hub.idOf(w));
 			const all = [...new Set([...list, ...rest])];
 			if (all.length === 0) return ctx.ui.notify("usage: /start ACM-12 [ACM-13 ...] [auto | after-plan] [as PRESET]", "warning");
 			const mode: act.Mode = modeWord === "auto" || modeWord === "full" ? "auto" : modeWord === "after-plan" ? "auto_after_plan" : "manual";
@@ -57,6 +57,16 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 			const n = Number(words.find((w) => /^\d+$/.test(w)) ?? "3");
 			if (n < 1 || n > 10) return ctx.ui.notify("usage: /suggest [1 to 10] [as PRESET]", "warning");
 			say(act.suggest(hub, n, as));
+		},
+	});
+
+	pi.registerCommand("chores", {
+		description: "List the repository's chores with their next run; /chores run NAME starts a run now",
+		handler: async (args, ctx) => {
+			const words = args.trim().split(/\s+/).filter(Boolean);
+			if (words[0]?.toLowerCase() !== "run") return say(await act.chores(hub));
+			if (!words[1]) return ctx.ui.notify("usage: /chores run NAME", "warning");
+			say(act.choreRun(hub, words[1]));
 		},
 	});
 
@@ -200,7 +210,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		description: "What happened to tickets, merged ones too: events, commits and reviews: /history ACM-12 [ACM-13 ...]",
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
-			const list = expandIds(args, hub.key);
+			const list = hub.idsIn(args);
 			if (list.length === 0) return ctx.ui.notify("usage: /history ACM-12 [ACM-13 ...]", "warning");
 			say(await act.history(hub, list, false));
 		},
@@ -209,7 +219,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerCommand("stats", {
 		description: "How long tickets took from start to merge: /stats [ACM-12 ...]",
 		getArgumentCompletions: ids,
-		handler: async (args) => say(await act.stats(hub, expandIds(args, hub.key))),
+		handler: async (args) => say(await act.stats(hub, hub.idsIn(args))),
 	});
 
 	pi.registerCommand("update", {

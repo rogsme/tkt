@@ -58,6 +58,9 @@ type Event struct {
 	OpenedAt string `json:"opened_at,omitempty"`
 	// Unblocked lists the tickets finish-ticket said a merge unblocked.
 	Unblocked []string `json:"unblocked,omitempty"`
+	// Chore names the chore on a chore run's start, whose Ticket is the
+	// run's branch. tkt stats leaves such runs out.
+	Chore string `json:"chore,omitempty"`
 }
 
 // Path returns the history file: next to tkt's command log.

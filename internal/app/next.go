@@ -42,6 +42,12 @@ const (
 	ReasonBotSilent            = "bot_silent"
 	ReasonNeedsReview          = "needs_review"
 	ReasonUnknown              = "unknown"
+	// The reasons only a chore's run gets: it ended with nothing to change,
+	// the review found something, or its pull request waits for your merge.
+	// No skill reviews, fixes or merges a pull request without a ticket.
+	ReasonNoChanges     = "no_changes"
+	ReasonChoreFindings = "chore_findings"
+	ReasonChoreReady    = "chore_ready"
 )
 
 func command(reason string, argv ...string) Next {
@@ -78,9 +84,11 @@ func human(reason, text string) Next {
 // is the head they passed on, which clean merges of the base may have left
 // behind, and MergeAs the preset the order names. ReviewReady says review-
 // pr's READY_FOR_HUMAN summary is at the head, which finish-ticket merges
-// on; the review bot's CLEAR is not one.
+// on; the review bot's CLEAR is not one. Chore names the chore whose run
+// this is, or is "" for a ticket.
 type Facts struct {
 	ID          string
+	Chore       string
 	PRState     string
 	Agent       string
 	Background  bool
@@ -115,6 +123,9 @@ func NextStep(f Facts) Next {
 	switch {
 	case f.PRState == "MERGED":
 		return command(ReasonMerged, "tkt", "done", id)
+	case f.PRState == "CLOSED" && f.Chore != "":
+		// Closing a chore's pull request drops the run.
+		return command(ReasonClosed, "tkt", "done", id)
 	case f.PRState == "CLOSED":
 		return human(ReasonClosed, "closed without merging")
 	case f.Agent == herdr.Working:
@@ -125,8 +136,14 @@ func NextStep(f Facts) Next {
 		return human(ReasonAgentBlocked, "answer the agent in its tab")
 	case f.PRState == "":
 		switch {
+		case f.Agent == "" && f.Chore != "" && unstarted(f.Launch):
+			// The run's start stopped before its agent got the prompt, so no
+			// session holds anything to resume: tkt chore run goes on with it.
+			return command(ReasonNoAgent, "tkt", "chore", "run", f.Chore)
 		case f.Agent == "":
 			return command(ReasonNoAgent, "tkt", "resume", id)
+		case f.Chore != "" && f.LastStatus == contract.StatusDone:
+			return command(ReasonNoChanges, "tkt", "done", id)
 		case f.LastStatus == contract.StatusAwaitingApproval:
 			return human(ReasonPlanAwaitsApproval, "read the plan with tkt show "+id+", then tkt approve "+id)
 		case f.LastStatus == contract.StatusBlocked, f.LastStatus == contract.StatusSetupRequired:
@@ -145,9 +162,18 @@ func NextStep(f Facts) Next {
 	case f.LastStatus == contract.StatusHumanQAFailed:
 		return command(ReasonQAFailed, "tkt", "run", id, "address")
 	case f.AtHead && (f.Verdict == contract.VerdictFindings || f.Verdict == contract.VerdictChangesRequested):
+		if f.Chore != "" {
+			return human(ReasonChoreFindings, "read the review's findings, then have its agent fix them in its tab, or merge the pull request as it is")
+		}
 		return command(ReasonFindings, "tkt", "run", id, "address")
 	case f.Checks == "fail":
 		return command(ReasonChecksFail, "tkt", "run", id, "ci")
+	case f.Chore != "" && (f.AtHead && (f.Verdict == contract.VerdictClear || f.Verdict == contract.VerdictReadyForHuman) || f.BotWait == 0 || f.Waited >= f.BotWait):
+		// finish-ticket merges only a ticket's pull request, so a chore's is
+		// yours, once the review bot has had its say.
+		return human(ReasonChoreReady, "review the pull request, and merge it yourself")
+	case f.Chore != "":
+		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
 	case f.MergeSteps != "" && f.ReviewReady:
 		argv := []string{"tkt", "merge", id, "--passed", f.MergeSteps, "--head", f.MergeHead}
 		if f.MergeAs != "" {
@@ -190,6 +216,8 @@ const (
 	PhaseClosed           = "closed"
 	PhaseNoAgent          = "no_agent"
 	PhaseUnknown          = "unknown"
+	// PhaseFinished is a chore's run that ended with nothing to change.
+	PhaseFinished = "finished"
 )
 
 // WaitingOnYou lists the phases where a ticket waits for a person.
@@ -230,8 +258,12 @@ func PhaseOf(f Facts, n Next) string {
 			return PhaseMerging
 		}
 		return PhaseWorking
-	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval, ReasonBotSilent:
+	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval, ReasonBotSilent, ReasonChoreFindings:
 		return PhaseNeedsYou
+	case ReasonNoChanges:
+		return PhaseFinished
+	case ReasonChoreReady:
+		return PhaseReadyForHuman
 	case ReasonNoAgent:
 		return PhaseNoAgent
 	case ReasonPlanAwaitsApproval:
@@ -252,7 +284,7 @@ func PhaseOf(f Facts, n Next) string {
 
 // factsFor gathers a row's facts.
 func factsFor(r Row) Facts {
-	f := Facts{ID: r.Ticket, LastStatus: r.LastStatus, Behind: -1, Stage: r.Stage, Launch: r.Launch, Hold: r.Hold}
+	f := Facts{ID: r.Ticket, Chore: r.Chore, LastStatus: r.LastStatus, Behind: -1, Stage: r.Stage, Launch: r.Launch, Hold: r.Hold}
 	if r.Agent != nil {
 		f.Agent, f.Background = r.Agent.Status, r.Agent.Background > 0
 	}

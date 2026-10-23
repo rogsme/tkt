@@ -156,6 +156,10 @@ func (a *App) Approve(ctx context.Context, o ApproveOpts) (*SendResult, error) {
 
 // approve checks the plan and sends the approval; tkt auto calls it too.
 func (c *Ctx) approve(id, path string, ts *ticketState, pane string) (*SendResult, error) {
+	if chore := ts.st["chore"]; chore != "" {
+		return nil, apperr.New(apperr.StageNeedsTicket, "%s is a run of chore %s, with no ticket and no plan, and the approval starts work-ticket, which needs a ticket", id, chore).
+			WithHint("tkt send %s TEXT tells its agent what to do", id)
+	}
 	target, err := c.ticketAgent(id, path, pane, ts.st)
 	if err != nil {
 		return nil, err
@@ -191,7 +195,7 @@ func (a *App) beginTicket(ctx context.Context, raw string, dry, force bool) (*Ct
 		c.release()
 		return nil, "", "", nil, err
 	}
-	id, err := c.LC.NormalizeID(raw)
+	id, err := c.workID(raw)
 	if err != nil {
 		return fail(err)
 	}

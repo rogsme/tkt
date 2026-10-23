@@ -60,6 +60,28 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", Head: "h2", MergeSteps: "1,2", MergeHead: "h1"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "tkt run ACM-1 ci", "command", ReasonChecksFail},
 		{Facts{PRState: "OPEN", Agent: "working", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "wait (agent working)", "wait", ReasonAgentWorking},
+		// A chore's run has no ticket: an end with nothing to change removes
+		// it, and the review's findings and the merge are yours, since no
+		// skill takes a pull request without a ticket. The bot still gets
+		// its say first.
+		{Facts{Chore: "deps", Agent: "idle", LastStatus: "DONE"}, "tkt done ACM-1", "command", ReasonNoChanges},
+		// A run whose start stopped before its agent got the prompt goes on
+		// with tkt chore run; one whose prompt may have gone in has a
+		// session to resume.
+		{Facts{Chore: "deps", Launch: "tab"}, "tkt chore run deps", "command", ReasonNoAgent},
+		{Facts{Chore: "deps", Launch: "not_ready"}, "tkt chore run deps", "command", ReasonNoAgent},
+		{Facts{Chore: "deps", Launch: "prompt_uncertain"}, "tkt resume ACM-1", "command", ReasonNoAgent},
+		{Facts{Chore: "deps", Launch: "submitted"}, "tkt resume ACM-1", "command", ReasonNoAgent},
+		{Facts{Chore: "deps", PRState: "CLOSED", Agent: "idle"}, "tkt done ACM-1", "command", ReasonClosed},
+		{Facts{Chore: "deps", Agent: "idle", LastStatus: "READY_FOR_REVIEW"}, "check the agent in its tab", "human", ReasonCheckAgent},
+		{Facts{Chore: "deps", PRState: "MERGED", Agent: "idle"}, "tkt done ACM-1", "command", ReasonMerged},
+		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "STALE_BASE", AtHead: true}, "tkt sync ACM-1", "command", ReasonBaseMoved},
+		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "fail"}, "tkt run ACM-1 ci", "command", ReasonChecksFail},
+		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true}, "read the review's findings, then have its agent fix them in its tab, or merge the pull request as it is", "human", ReasonChoreFindings},
+		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, BotWait: time.Hour}, "review the pull request, and merge it yourself", "human", ReasonChoreReady},
+		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: time.Minute}, "wait for the review bot", "wait", ReasonAwaitingBot},
+		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: time.Hour}, "review the pull request, and merge it yourself", "human", ReasonChoreReady},
+		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok"}, "review the pull request, and merge it yourself", "human", ReasonChoreReady},
 	}
 	for _, tc := range cases {
 		tc.f.ID = "ACM-1"
@@ -106,6 +128,10 @@ func TestPhaseOf(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Background: true, Stage: "work"}, PhaseBuilding},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true}, PhaseNeedsFix},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true}, PhaseReadyForHuman},
+		{Facts{Chore: "deps", Agent: "idle", LastStatus: "DONE"}, PhaseFinished},
+		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true}, PhaseNeedsYou},
+		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok"}, PhaseReadyForHuman},
+		{Facts{Chore: "deps", Agent: "working", Stage: "chore"}, PhaseWorking},
 	}
 	for _, tc := range cases {
 		tc.f.ID = "ACM-1"

@@ -14,7 +14,7 @@ This page follows one ticket, `ACM-123`, from the tracker to a merged pull reque
 | Claude Code or OpenCode | The harness that runs a skill. tkt calls the pair of harness and model a preset. |
 | herdr | The terminal multiplexer. It holds one tab per ticket and knows whether each agent is working, blocked, idle or done. |
 | worktrunk (`wt`) | Creates and removes worktrees, and runs their hooks. |
-| tkt | Runs the mechanical steps between stages: worktrees, tabs, agent sessions, prompts, clean base merges and cleanup. `tkt watch` takes the upkeep steps for every ticket, and `tkt auto` chains all of them for a ticket you hand over. |
+| tkt | Runs the mechanical steps between stages: worktrees, tabs, agent sessions, prompts, clean base merges and cleanup. `tkt watch` takes the upkeep steps for every ticket and starts the chores you schedule, and `tkt auto` chains all of them for a ticket you hand over. |
 | You | Approve the plan (or let `tkt auto --approve-plan` approve it), run the human verification steps, and merge. |
 
 ```mermaid
@@ -294,9 +294,37 @@ flowchart TD
 
 Plans, findings and human verification stay with you, or with `tkt auto`, and so do reviews and the word to merge: watch merges only through the merge order `tkt merge` leaves when you verified a head finish-ticket could not merge yet, and it reviews only the head a sync made for such an order. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
 
+While a status page that `config.toml` names reports a problem, such as a GitHub Actions outage or a model provider's, `tkt watch` starts no agent: no `ci`, `resolve` or `review` run, no merge line and no chore run, since each would only spend a round on a service that is down. Syncs and removals, which need no agent, go on. It reads the pages every five minutes, notifies when an incident starts and when it ends, and `tkt ls` and the tkt agent's board show it while it lasts:
+
+```toml
+[status.github]
+page = "https://www.githubstatus.com"
+components = ["Actions", "Pull Requests", "Git Operations"]
+```
+
 You rarely start it yourself: every tkt command in a herdr pane starts one when none runs for the repository, in a session of its own, so it outlives the command and the pane. `[watch] autostart = false`, or `TKT_WATCH=off`, turns that off; `tkt watch --stop` stops it, after the step it is taking; `tkt watch --once --dry-run` says what one pass would do to each ticket. Outside a herdr pane, it finds the workspace whose panes work in the repository, or opens one there before its first step when none has a pane; while herdr is down it waits. `tkt hold ACM-123` keeps it, and `tkt auto`, away from a ticket.
 
 `tkt watch --install` keeps it running while no terminal is open: it makes `tkt watch` and herdr's server systemd user units, or launchd agents on macOS, that start at boot, with the `PATH` of the shell you ran it from. On Linux that takes `loginctl enable-linger`, which it asks about: without it, systemd stops the units when your last session ends, so herdr's stays off. Every tkt command then starts the unit rather than a watch of its own, and `tkt watch --stop` stops the unit. `tkt doctor` checks that both run and that their `PATH` finds the harnesses.
+
+## Chores
+
+A chore is an agent run you schedule in `config.toml`, such as a dependency upgrade twice a week. It has no ticket: each run is a branch and a pull request.
+
+```mermaid
+flowchart LR
+  slot(["the chore's slot comes"]) --> open{"its last run<br/>still open?"}
+  open -->|yes| skip["skip this slot"]
+  open -->|no| run["a branch from origin/main,<br/>a worktree, a tab, an agent"]
+  run --> change{"anything<br/>to change?"}
+  change -->|"no: Status: DONE"| gone["tkt watch removes the run"]
+  change -->|"yes: Status: READY_FOR_REVIEW"| pr["tkt watch syncs the base<br/>and fixes the checks"]
+  pr --> you(["you merge it, or close it"])
+  you --> gone
+```
+
+The repository's `tkt watch` starts a run when its slot comes, once per slot, however many passed while no watch ran; the first watch to see a chore starts its first run at the next slot. `tkt chore run deps` starts one now. Each run gets a branch from the base on the remote, named by the chore's `branch` setting, such as `deps-2026-10-26`, and never an older run's branch. Its agent gets the chore's prompt and one rule from tkt: commit on the run's branch, push it, open one pull request to the base, and end with `Status: READY_FOR_REVIEW`, or with `Status: DONE` and nothing pushed when there is nothing to change.
+
+From there the pull request moves as a ticket's does, short of what needs a ticket. `tkt watch` syncs its base when a sync is due and runs `ci` once per head when its checks fail. review-pr, address-pr-review and finish-ticket each start from a ticket, so none of them takes a chore's pull request: the review bot in CI reviews it, `tkt ls` says when the review found something and when the pull request is ready, and you merge it yourself, or close it to drop the run. `tkt watch` then removes the run, as `tkt done` would. A slot that comes while the last run is still open is skipped, so one run waits for you at a time. A run whose start stopped before its agent got the prompt, as on a pre-start hook that failed, waits for you too: `tkt chore run deps` goes on with it.
 
 ## Syncing with the base
 
@@ -311,7 +339,7 @@ flowchart LR
   agent --> next
 ```
 
-`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge. A conflict goes to the `resolve` stage, which merges the base, resolves the conflicts with `resolving-merge-conflicts`, changes nothing else, refreshes the pull request's review brief, and pushes once. Review findings stay for `address`.
+`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge. A conflict goes to the `resolve` stage, which merges the base, resolves the conflicts with `resolving-merge-conflicts`, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
 
 A clean merge does not make the pull request's review brief stale: the merge commit's tree equals what `git merge-tree` gives for its two parents, and review-pr checks that for itself instead of trusting tkt.
 
@@ -351,7 +379,7 @@ A ticket that waits on a blocker sits in `blocked`, with a `## Blocked` comment 
 
 ## The rules that hold it together
 
-- One ticket, one branch, one worktree, one tab, all named `ACM-123`.
+- One ticket, one branch, one worktree, one tab, all named `ACM-123`. A chore's run is the same, named after its branch.
 - The implementer never reviews its own change. `tkt run` always starts a fresh session, which makes that easy.
 - The fixer never resolves review threads; the next review does.
 - Only `finish-ticket` merges, and only when you say so.

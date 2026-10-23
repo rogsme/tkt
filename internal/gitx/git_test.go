@@ -163,3 +163,22 @@ func TestCleanMergesTellsAnErrorFromAnUncleanMerge(t *testing.T) {
 		t.Errorf("a missing base: %v, %v", ok, err)
 	}
 }
+
+func TestDiffStat(t *testing.T) {
+	dir := repo(t)
+	g := Git{R: runner.Exec{}}
+	ctx := context.Background()
+	// side changed one line of f since it left main's start.
+	if st, ok := g.DiffStat(ctx, dir, "main...side"); !ok || st != (Stat{Files: 1, Added: 1, Removed: 1}) {
+		t.Errorf("side: %+v, %v", st, ok)
+	}
+	if st, ok := g.DiffStat(ctx, dir, "main...clean"); !ok || st != (Stat{Files: 1, Added: 1}) {
+		t.Errorf("clean: %+v, %v", st, ok)
+	}
+	if st, ok := g.DiffStat(ctx, dir, "side...side"); !ok || st != (Stat{}) {
+		t.Errorf("no change: %+v, %v", st, ok)
+	}
+	if _, ok := g.DiffStat(ctx, dir, "main...no-such-branch"); ok {
+		t.Error("a bad range read as no change")
+	}
+}

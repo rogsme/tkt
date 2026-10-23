@@ -3,7 +3,7 @@
 // it and draws the frame.
 
 import type { Attention, AttentionKind } from "./attention.ts";
-import { since, type Row } from "./model.ts";
+import { type Incident, since, type Row } from "./model.ts";
 
 export type Tone = "text" | "accent" | "warning" | "muted" | "success" | "error";
 
@@ -20,7 +20,7 @@ export const columns: { title: string; phases: string[] }[] = [
 	{ title: "Building", phases: ["building", "ci", "working"] },
 	{ title: "Review", phases: ["waiting_review", "reviewing", "needs_fix", "fixing", "verifying"] },
 	{ title: "Ready", phases: ["ready_for_human", "merging"] },
-	{ title: "Merged", phases: ["merged", "closed"] },
+	{ title: "Merged", phases: ["merged", "closed", "finished"] },
 ];
 
 /** columnOf names the column a ticket sits in. */
@@ -45,6 +45,9 @@ export interface BoardState {
 	/** watch says whether tkt watch runs, and whether its passes fail;
 	 * undefined until tkt ls says. */
 	watch?: "on" | "off" | "failing";
+	/** incidents is what the status pages report, which holds tkt watch's
+	 * agent runs back until it ends. */
+	incidents?: Incident[];
 }
 
 /** The command that acts on an item, shown beside it on the board. */
@@ -61,6 +64,7 @@ const hints: Record<AttentionKind, (id: string) => string> = {
 	failed: () => "/inbox",
 	unblocked: (id) => `/start ${id}`,
 	suggested: () => "/inbox",
+	chore: (id) => `/show ${id}`,
 };
 
 /** footer is the line under the board: the commands for it, and first,
@@ -89,7 +93,9 @@ export function watchStage(r: Row): string {
 }
 
 /** The board's columns and their widths. AGE is the time since tkt start,
- * TIME the time in the phase, as in tkt ls; NOTES takes the rest. */
+ * TIME the time in the phase, as in tkt ls; DIFF what the branch changes
+ * against its base; NOTES takes the rest, with the pull request's title
+ * last. TICKET widens for a chore's run, whose id is its branch. */
 const heads: [string, number][] = [
 	["TICKET", 9],
 	["AGE", 4],
@@ -97,23 +103,36 @@ const heads: [string, number][] = [
 	["TIME", 4],
 	["AGENT", 8],
 	["PR", 6],
+	["DIFF", 11],
 ];
 
-/** boardLines renders the board's body for a width: a header, one line per
- * ticket, the ones that need you first, then what each of those needs. */
+/** widths sizes the columns for the rows: TICKET takes the longest id, up
+ * to 32 characters on a screen, and whole for the model's text (width 0). */
+function widths(rows: Row[], width: number): number[] {
+	const w = heads.map(([, n]) => n);
+	w[0] = Math.max(w[0], ...rows.map((r) => r.ticket.length));
+	if (width > 0) w[0] = Math.min(32, w[0]);
+	return w;
+}
+
+/** boardLines renders the board's body for a width: what the status pages
+ * report, a header, one line per ticket, the ones that need you first,
+ * then what each of those needs. */
 export function boardLines(s: BoardState, width: number): Line[] {
 	const lines: Line[] = [];
+	for (const i of s.incidents ?? []) lines.push({ text: fit(`! ${i.service}: ${i.problem}. tkt watch starts no agent until it ends.`, width), tone: "error" });
 	const needs = new Set(s.items.map((a) => a.ticket));
 	const rows = [...s.rows].sort((a, b) => Number(needs.has(b.ticket)) - Number(needs.has(a.ticket)) || a.ticket.localeCompare(b.ticket, undefined, { numeric: true }));
+	const w = widths(rows, width);
 	if (rows.length === 0) lines.push({ text: fit('No tickets yet. Say "start ACM-123".', width), tone: "muted" });
-	else lines.push({ text: fit([...heads.map(([h, n]) => pad(h, n)), "NOTES"].join(" "), width), tone: "muted" });
+	else lines.push({ text: fit([...heads.map(([h], i) => pad(h, w[i])), "NOTES"].join(" "), width), tone: "muted" });
 	for (const r of rows) {
 		let tone: Tone = "text";
 		if (needs.has(r.ticket)) tone = "warning";
 		else if (r.stale) tone = "error";
 		else if (r.phase === "ready_for_human") tone = "success";
-		else if (r.phase === "merged" || r.phase === "closed" || r.phase === "queued") tone = "muted";
-		lines.push({ text: fit(rowText(r, s), width), tone });
+		else if (r.phase === "merged" || r.phase === "closed" || r.phase === "queued" || r.phase === "finished") tone = "muted";
+		lines.push({ text: fit(rowText(r, s, w), width), tone });
 	}
 	if (s.items.length > 0) {
 		lines.push({ text: "", tone: "text" });
@@ -124,16 +143,28 @@ export function boardLines(s: BoardState, width: number): Line[] {
 	return lines;
 }
 
-/** phaseLabel names a phase for people. */
-export function phaseLabel(phase: string): string {
-	return phase === "ready_for_human" ? "ready to verify" : phase.replaceAll("_", " ");
+/** phaseLabel names a phase for people. A chore's pull request is ready
+ * for you to merge, as no skill merges one without a ticket. */
+export function phaseLabel(phase: string, chore = ""): string {
+	if (phase === "ready_for_human") return chore ? "ready to merge" : "ready to verify";
+	return phase.replaceAll("_", " ");
 }
 
-function rowText(r: Row, s: BoardState): string {
+/** diffText sizes what a branch changes, such as +293 -8, or "-" before it
+ * changes anything. */
+export function diffText(r: Row): string {
+	const d = r.diff;
+	if (!d || (d.added === 0 && d.removed === 0 && d.files === 0)) return "-";
+	const n = (v: number) => (v >= 10_000 ? `${Math.round(v / 1000)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
+	return `+${n(d.added)} -${n(d.removed)}`;
+}
+
+function rowText(r: Row, s: BoardState, w: number[]): string {
 	const agent = !r.agent ? "-" : (r.agent.background ?? 0) > 0 ? "waiting" : r.agent.status;
-	const cells = [r.ticket, since(r.started, s.now) || "-", phaseLabel(r.phase), since(r.phase_since, s.now) || "-", agent, r.pr ? `#${r.pr.number}` : "-"];
-	const parts = cells.map((c, i) => pad(c, heads[i][1]));
+	const cells = [r.ticket, since(r.started, s.now) || "-", phaseLabel(r.phase, r.chore), since(r.phase_since, s.now) || "-", agent, r.pr ? `#${r.pr.number}` : "-", diffText(r)];
+	const parts = cells.map((c, i) => pad(c, w[i]));
 	const flags: string[] = [];
+	if (r.chore) flags.push("chore");
 	if (r.hold) flags.push("hold");
 	else if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : "auto");
 	else if (r.auto?.wanted) flags.push("auto stalled");
@@ -143,7 +174,7 @@ function rowText(r: Row, s: BoardState): string {
 	const job = s.jobs.get(r.ticket);
 	if (job) flags.push(`${job} ${spinner[s.tick % spinner.length]}`);
 	if (r.stale) flags.push("stale");
-	parts.push(flags.join(", "));
+	parts.push([flags.join(", "), r.title ?? ""].filter(Boolean).join("  "));
 	return parts.join(" ").trimEnd();
 }
 

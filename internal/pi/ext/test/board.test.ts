@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { attentionOf } from "../attention.ts";
-import { boardColumns, boardLines, columnOf, footer, grid, order, statusText, title } from "../board.ts";
+import { boardColumns, boardLines, columnOf, diffText, footer, grid, order, phaseLabel, statusText, title } from "../board.ts";
 import { row } from "./fixtures.ts";
 
 const now = Date.parse("2026-01-01T02:00:00Z");
@@ -17,7 +17,7 @@ test("the board puts what needs you first, with what to do about it", () => {
 	const s = { rows, jobs: new Map([["ACM-3", "review"]]), items, now, tick: 1, repo: "app" };
 	assert.equal(title(s), "tkt  app  4 tickets  1 needs you");
 	const [head, ...lines] = boardLines(s, 200);
-	assert.equal(head.text, "TICKET    AGE  PHASE             TIME AGENT    PR     NOTES");
+	assert.equal(head.text, "TICKET    AGE  PHASE             TIME AGENT    PR     DIFF        NOTES");
 	assert.equal(head.tone, "muted");
 	assert.match(lines[0].text, /^ACM-12 +2h +awaiting approval +2h +idle/);
 	assert.equal(lines[0].tone, "warning");
@@ -110,4 +110,42 @@ test("the board marks a merge order until the merge is due", () => {
 	assert.doesNotMatch(two.text, /merges when green/);
 	assert.match(two.text, / merging /);
 	assert.equal(columnOf(row({ phase: "merging" })), "Ready");
+});
+
+test("the board sizes each branch's change and names its pull request", () => {
+	const rows = [
+		row({ ticket: "ACM-1", phase: "ci", pr: { number: 41, state: "OPEN", head: "abc" }, diff: { files: 3, added: 293, removed: 8 }, title: "Provision the agent" }),
+		row({ ticket: "ACM-2", phase: "planning", diff: { files: 0, added: 0, removed: 0 } }),
+		row({ ticket: "ACM-3", phase: "ci", hold: true, diff: { files: 40, added: 12345, removed: 1500 }, title: "Rename the billing table" }),
+	];
+	const [, one, two, three] = boardLines({ rows, jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
+	assert.match(one.text, /^ACM-1 .* #41 +\+293 -8 +Provision the agent$/);
+	assert.match(two.text, /^ACM-2 .* - +- *$/);
+	assert.match(three.text, / \+12k -1\.5k +hold  Rename the billing table$/);
+	assert.equal(diffText(row({ diff: null })), "-");
+});
+
+test("a chore's run shows as one, and its pull request is yours to merge", () => {
+	const rows = [row({ ticket: "deps-2026-10-26", chore: "deps", phase: "ready_for_human", pr: { number: 44, state: "OPEN", head: "abc" }, title: "Upgrade the dependencies" })];
+	const [head, line] = boardLines({ rows, jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
+	assert.match(head.text, /^TICKET {10}AGE/);
+	assert.match(line.text, /^deps-2026-10-26 +2h +ready to merge .*#44 .*chore  Upgrade the dependencies$/);
+	assert.equal(phaseLabel("ready_for_human"), "ready to verify");
+	assert.equal(columnOf(row({ phase: "finished" })), "Merged");
+});
+
+test("an incident tops the board", () => {
+	const incidents = [{ page: "github", service: "GitHub", problem: "Actions partial outage", url: "https://www.githubstatus.com", since: "" }];
+	const lines = boardLines({ rows: [row()], jobs: new Map(), items: [], now, tick: 0, repo: "app", incidents }, 200);
+	assert.equal(lines[0].text, "! GitHub: Actions partial outage. tkt watch starts no agent until it ends.");
+	assert.equal(lines[0].tone, "error");
+	assert.match(lines[1].text, /^TICKET/);
+});
+
+test("a long run id stays whole for the model", () => {
+	const id = "update-the-dependencies-of-the-app-2026-10-26";
+	const rows = [row({ ticket: id, chore: "update-the-dependencies-of-the-app" })];
+	const s = { rows, jobs: new Map<string, string>(), items: [], now, tick: 0, repo: "app" };
+	assert.ok(statusText(s).includes(id));
+	assert.ok(boardLines(s, 200)[1].text.startsWith(id.slice(0, 32) + " "));
 });

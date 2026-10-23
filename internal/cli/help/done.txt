@@ -11,6 +11,10 @@ It keeps the worktree, and says why, when:
   - tkt runs inside the worktree or in the ticket's own tab;
   - a pane outside the ticket's tabs, or the OpenCode service, works in it.
 
+It removes a chore's run the same way, once you merged its pull request or
+closed it, and also one that opened none and holds nothing the base lacks,
+as when its agent found nothing to change (tkt help chores).
+
 --all checks every ticket worktree and asks before removing them; pass --yes
 when stdin is not a terminal. It reads pull requests through gh, so it
 supports GitHub forges only.

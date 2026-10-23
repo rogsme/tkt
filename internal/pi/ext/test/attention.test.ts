@@ -187,3 +187,35 @@ test("suggest-tickets' picks wait on the board for /inbox to start them", () => 
 	);
 	assert.notEqual(suggestedOf(r, 2).key, a.key);
 });
+
+test("a chore's run asks for you where no skill takes over", () => {
+	const pr = { number: 44, state: "OPEN", head: "abc" };
+	const ready = attentionOf(row({ ticket: "deps-1", chore: "deps", phase: "ready_for_human", pr, next: { kind: "human", reason: "chore_ready", argv: null, text: "review the pull request, and merge it yourself" } }), false);
+	assert.equal(ready?.kind, "chore");
+	assert.equal(ready?.title, "ready to merge");
+	assert.match(ready?.text ?? "", /chore deps's pull request #44 is ready\. Review it and merge it yourself/);
+	assert.equal(sound(ready!), "done");
+	assert.ok(!choicesOf(ready!).some((c) => c.do === "check"));
+	const found = attentionOf(row({ ticket: "deps-1", chore: "deps", phase: "needs_you", pr, next: { kind: "human", reason: "chore_findings", argv: null, text: "read" } }), false);
+	assert.equal(found?.title, "review found something");
+	assert.equal(choicesOf(found!)[0].do, "reply");
+	// A run that changed nothing is tkt watch's to remove, or yours without one.
+	const nothing = row({ ticket: "deps-1", chore: "deps", phase: "finished", next: { kind: "command", reason: "no_changes", argv: ["tkt", "done", "deps-1"], text: "tkt done deps-1" } });
+	assert.equal(attentionOf(nothing, false, true), undefined);
+	assert.equal(attentionOf(nothing, false, false)?.kind, "merged");
+	assert.match(attentionOf(nothing, false, false)?.text ?? "", /\/done deps-1 removes the run/);
+});
+
+test("a chore's run gets no tkt auto and no plan answers", () => {
+	const next = attentionOf(row({ ticket: "deps-1", chore: "deps", phase: "needs_fix", next: { kind: "command", reason: "checks_fail", argv: ["tkt", "run", "deps-1", "ci"], text: "tkt run deps-1 ci" } }), false);
+	assert.equal(next?.kind, "next");
+	assert.ok(!choicesOf(next!).some((c) => c.do === "auto_on"), "tkt auto drives tickets only");
+	assert.ok(choicesOf(next!).some((c) => c.do === "next"));
+	const ticket = attentionOf(row({ phase: "needs_fix", next: { kind: "command", reason: "checks_fail", argv: ["tkt", "run", "ACM-12", "ci"], text: "tkt run ACM-12 ci" } }), false);
+	assert.ok(choicesOf(ticket!).some((c) => c.do === "auto_on"));
+	const stuck = attentionOf(row({ ticket: "deps-1", chore: "deps", phase: "no_agent", agent: null, launch: "tab", next: { kind: "command", reason: "no_agent", argv: ["tkt", "chore", "run", "deps"], text: "tkt chore run deps" } }), false);
+	assert.match(stuck?.text ?? "", /stopped before its agent got the prompt\. \/chores run deps goes on with it/);
+	const closed = row({ ticket: "deps-1", chore: "deps", phase: "closed", pr: { number: 44, state: "CLOSED" }, next: { kind: "command", reason: "closed", argv: ["tkt", "done", "deps-1"], text: "tkt done deps-1" } });
+	assert.equal(attentionOf(closed, false, true), undefined);
+	assert.match(attentionOf(closed, false, false)?.text ?? "", /you closed chore deps's pull request #44\. \/done deps-1 removes the run/);
+});

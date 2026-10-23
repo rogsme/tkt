@@ -18,7 +18,14 @@ export interface Next {
 
 export interface Row {
 	ticket: string;
+	/** chore names the chore whose run this row is; the ticket is then the
+	 * run's branch. */
+	chore?: string;
+	/** title is the open pull request's, without the ticket id. */
+	title?: string;
 	path: string;
+	/** diff is what the branch changes against its base. */
+	diff?: { files: number; added: number; removed: number } | null;
 	/** background counts the tasks an idle agent waits on, such as a CI
 	 * watcher; it goes on by itself when they finish. */
 	agent: { pane_id: string; name: string; harness: string; status: string; background?: number } | null;
@@ -61,12 +68,44 @@ export interface Unblocked {
 	at: string;
 }
 
+/** Incident is a status page that reports a problem with its service, as
+ * tkt watch last read it: while one does, tkt watch starts no agent. */
+export interface Incident {
+	page: string;
+	service: string;
+	problem: string;
+	url: string;
+	since: string;
+}
+
 export interface LsResult {
 	sources: { herdr: string; forge: string; fetch: string };
 	/** watch says whether tkt watch keeps the repository's tickets moving. */
 	watch?: { running: boolean; last_pass: string; error: string };
 	rows: Row[];
 	unblocked?: Unblocked[];
+	incidents?: Incident[];
+}
+
+/** ChoresResult is what tkt chores prints: the repository's chores, each
+ * with its next and last slot, in UTC, and the run still open. */
+export interface ChoresResult {
+	repo: string;
+	watch: { running: boolean };
+	chores: { name: string; schedule: string; as: string; last: string; due: boolean; next: string; runs: string[]; open: string }[];
+	elsewhere: string[];
+}
+
+/** choresText lists the chores for the chat, with times in local time. */
+export function choresText(r: ChoresResult): string {
+	if (r.chores.length === 0) return "No chore runs in this repository: a [chores.NAME] table in config.toml whose repo is this repository adds one.";
+	const when = (at: string) => {
+		const t = Date.parse(at);
+		return Number.isNaN(t) ? "-" : new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+	};
+	const lines = r.chores.map((c) => `- ${c.name} (${c.schedule}): next ${when(c.next)}${c.open ? `; ${c.open} is still open, so that slot is skipped unless it merges first` : ""}${c.due ? "; a slot is due" : ""}`);
+	if (!r.watch.running) lines.push("tkt watch does not run for this repository, so no chore runs on schedule.");
+	return lines.join("\n");
 }
 
 /** rowsOf takes tkt ls's rows from a result, or from the partial result an
@@ -75,6 +114,14 @@ export function rowsOf(env: Envelope<LsResult>): Row[] | undefined {
 	if (env.ok && env.result) return env.result.rows;
 	const rows = env.error?.details?.rows;
 	return Array.isArray(rows) ? (rows as Row[]) : undefined;
+}
+
+/** incidentsOf takes what the status pages report from tkt ls's result,
+ * or from the error a failed forge read gives, which may be the incident. */
+export function incidentsOf(env: Envelope<LsResult>): Incident[] {
+	if (env.ok && env.result) return env.result.incidents ?? [];
+	const incs = env.error?.details?.incidents;
+	return Array.isArray(incs) ? (incs as Incident[]) : [];
 }
 
 /** UpdateResult is what tkt update prints. dev says tkt is a development
@@ -199,6 +246,30 @@ export function normalizeId(raw: string, key: string): string {
 	const m = s.match(/^([A-Z][A-Z0-9]*)?[-_ ]?(\d+)$/);
 	if (m && key && (!m[1] || m[1] === key)) return `${key}-${Number(m[2])}`;
 	return s;
+}
+
+/** idOf turns what a person typed into an id: one on the board, matched
+ * without case, since a chore run's id is its branch and keeps its case; a
+ * ticket id, given the tracker's key; or else the text as typed, as for a
+ * run that is gone from the board but not from the history. */
+export function idOf(raw: string, rows: Row[], key: string): string {
+	const r = rows.find((x) => x.ticket.toLowerCase() === raw.trim().toLowerCase());
+	if (r) return r.ticket;
+	const id = normalizeId(raw, key);
+	const m = id.match(/^([A-Z][A-Z0-9]*)-\d+$/);
+	return m && (!key || m[1] === key) ? id : raw.trim();
+}
+
+/** idsIn reads the ids in a person's text: tickets and their ranges, such
+ * as ACM-12 to ACM-15, and chore runs by their branch. */
+export function idsIn(text: string, rows: Row[], key: string): string[] {
+	const out = expandIds(text, key);
+	for (const w of text.split(/[\s,]+/)) {
+		if (!w || /^\d+$/.test(w) || /^(to|through|and)$/i.test(w)) continue;
+		const id = idOf(w, rows, key);
+		if (!/^[A-Z][A-Z0-9]*-\d+$/.test(id) && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id) && !out.includes(id)) out.push(id);
+	}
+	return out;
 }
 
 /** keyOf finds the tracker key that ticket ids share, such as ACM. */

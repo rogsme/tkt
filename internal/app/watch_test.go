@@ -82,6 +82,24 @@ func TestWatchStepTable(t *testing.T) {
 		{with(open, func(f *Facts) { f.BotWait, f.MergeSteps, f.MergeHead, f.Idle = 0, "1,2", "h0", time.Minute }), p, watchMemory{}, leave(WatchSettling)},
 		{with(open, func(f *Facts) { f.BotWait, f.MergeSteps, f.MergeHead = 0, "1,2", "h0" }), p, watchMemory{Last: "run:review@h1"}, pause(StopNoProgress)},
 		{with(open, func(f *Facts) { f.BotWait = 0 }), p, watchMemory{}, leave(ReasonNeedsReview)},
+		// You merge a chore's pull request yourself, so its run goes once no
+		// agent works there, with no Status: DONE; one that ended with
+		// nothing to change goes at once. The rest is yours.
+		{with(open, func(f *Facts) { f.Chore, f.PRState = "deps", "MERGED" }), p, watchMemory{}, watchAct{Kind: actDone, Why: ReasonMerged}},
+		{with(open, func(f *Facts) { f.Chore, f.PRState, f.Agent = "deps", "MERGED", "working" }), p, watchMemory{}, leave(ReasonMerged)},
+		{with(open, func(f *Facts) { f.Chore, f.PRState = "deps", "MERGED" }), WatchPolicy{MaxRounds: 2}, watchMemory{}, leave(ReasonMerged)},
+		{Facts{ID: "deps-1", Chore: "deps", Agent: "idle", LastStatus: "DONE", Behind: -1}, p, watchMemory{}, watchAct{Kind: actDone, Why: ReasonNoChanges}},
+		{with(failing, func(f *Facts) { f.Chore = "deps" }), p, watchMemory{}, watchAct{Kind: actRun, Stage: "ci", Why: ReasonChecksFail}},
+		{with(open, func(f *Facts) { f.Chore, f.Verdict, f.AtHead = "deps", "CLEAR", true }), p, watchMemory{}, leave(ReasonChoreReady)},
+		{with(open, func(f *Facts) { f.Chore, f.Verdict, f.AtHead = "deps", "FINDINGS", true }), p, watchMemory{}, leave(ReasonChoreFindings)},
+		// During an incident no agent starts; the steps that need none go on.
+		{failing, WatchPolicy{MaxRounds: 2, DoneAfterMerge: true, Hold: "GitHub: Actions major outage"}, watchMemory{}, leave(WatchIncident)},
+		{with(open, func(f *Facts) { f.BaseMerge = "conflict" }), WatchPolicy{MaxRounds: 2, Hold: "x"}, watchMemory{}, leave(WatchIncident)},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps = "READY_FOR_HUMAN", true, true, "1,2"
+		}), WatchPolicy{MaxRounds: 2, Hold: "x"}, watchMemory{}, leave(WatchIncident)},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), WatchPolicy{MaxRounds: 2, Hold: "x"}, watchMemory{}, watchAct{Kind: actSync, Why: ReasonBaseMoved}},
+		{with(open, func(f *Facts) { f.PRState, f.LastStatus = "MERGED", "DONE" }), WatchPolicy{MaxRounds: 2, DoneAfterMerge: true, Hold: "x"}, watchMemory{}, watchAct{Kind: actDone, Why: ReasonMerged}},
 	}
 	for _, tc := range cases {
 		if got := watchStep(NextStep(tc.f), tc.f, tc.p, tc.m); got != tc.want {
@@ -95,11 +113,19 @@ func TestWatchPausesNeedYou(t *testing.T) {
 	if got := PhaseOf(f, NextStep(f)); got != PhaseNeedsYou {
 		t.Errorf("a ticket watch paused on is %s", got)
 	}
-	if got := watchPauseText("ACM-1", StopNoProgress, "run:ci@h1"); got != "tkt watch ran ci on this head, and the checks still fail; read what the agent said in its tab" {
+	if got := watchPauseText("ACM-1", StopNoProgress, "run:ci@h1", false); got != "tkt watch ran ci on this head, and the checks still fail; read what the agent said in its tab" {
 		t.Errorf("pause text: %q", got)
 	}
-	if got := watchPauseText("ACM-1", StopNoProgress, "run:review@h1"); !strings.Contains(got, "ran review on this head for your merge order") {
+	if got := watchPauseText("ACM-1", StopNoProgress, "run:review@h1", false); !strings.Contains(got, "ran review on this head for your merge order") {
 		t.Errorf("pause text after a review: %q", got)
+	}
+	if got := watchPauseText("deps-1", StopRoundLimit, "run:ci@h1", true); strings.Contains(got, "plan") {
+		t.Errorf("a chore's run has no plan: %q", got)
+	}
+	for _, why := range []string{ReasonMerged, ReasonNoChanges, ReasonClosed} {
+		if got := doneText("deps", why); strings.Contains(got, "finish-ticket") {
+			t.Errorf("doneText for a chore's run, %s: %q", why, got)
+		}
 	}
 }
 

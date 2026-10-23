@@ -1,0 +1,70 @@
+# A run whose start fails after worktrunk made its worktree, as on a
+# pre-start hook that fails, stays its chore's: tkt ls lists it, it holds
+# the slot instead of having another worktree made beside it every pass,
+# and tkt chore run goes on with it. So does a run whose agent stopped at a
+# startup dialog.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt watch --once --json
+envelope '[.result.chores[] | .reason]' '["armed","armed"]'
+cp $WORK/old $REPO/.git/tkt/chores
+
+env FAKE_WT_SWITCH_FAIL=1
+resetlog
+exec tkt watch --once --json
+envelope '.result.chores[0] | [.chore, .action, .run, .reason]' '["deps","","deps-run","failed"]'
+stderr 'deps: tkt watch could not start the chore: wt created .*deps-run but a hook failed'
+logged herdr notification show 'deps: chore did not start'
+state $FAKE_WT_ROOT/deps-run chore deps
+! grep '^slot.deps=2020' $REPO/.git/tkt/chores
+exec tkt watch --once --json
+envelope '.result.chores[0].reason' 'not_due'
+! exists $FAKE_WT_ROOT/deps-run-2
+exec tkt ls --no-fetch --json
+envelope '[.result.rows[] | .ticket + ":" + .chore + ":" + .next.text]' '["deps-run:deps:tkt chore run deps"]'
+
+# You fix the hook, and go on with the run in its worktree.
+env FAKE_WT_SWITCH_FAIL=
+exec tkt chore run deps
+stderr 'going on with deps-run, whose start stopped before its agent got the prompt'
+stdout '^deps  deps-run  '
+grep 'This is a scheduled chore with no ticket, on branch deps-run in this worktree.' $FAKE_DIR/prompts
+state $FAKE_WT_ROOT/deps-run status submitted
+! exists $FAKE_WT_ROOT/deps-run-2
+
+# Its agent works now, so the run is open, and no second run starts.
+! exec tkt chore run deps
+rc 4
+stderr 'chore ''deps'' has a run still open, deps-run'
+
+# An agent that stops at a startup dialog: answer it, then rerun.
+env FAKE_HERDR_START_STATUS=blocked
+env 'FAKE_HERDR_SCREEN=Yes, I trust this folder'
+! exec tkt chore run lint
+rc 5
+stderr 'answer it there, then rerun tkt chore run lint'
+state $FAKE_WT_ROOT/lint-run status not_ready
+env FAKE_HERDR_START_STATUS=
+env FAKE_HERDR_SCREEN=
+jqedit $FAKE_DIR/herdr.json '.agents |= map(if .name == "lint-run" then .agent_status = "idle" else . end)'
+exec tkt chore run lint
+stderr 'continuing the start'
+grep 'on branch lint-run in this worktree' $FAKE_DIR/prompts
+! exists $FAKE_WT_ROOT/lint-run-2
+houserules
+
+-- config.toml --
+[chores.deps]
+repo = "~/../app"
+schedule = "0 9 * * *"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies."
+
+[chores.lint]
+repo = "~/../app"
+schedule = "0 9 * * 1"
+branch = "{name}-run"
+prompt = "Fix what the linter reports."
+-- old --
+slot.deps=2020-01-01T00:00:00Z
+slot.lint=2099-01-01T00:00:00Z

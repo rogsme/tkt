@@ -10,6 +10,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/agent"
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/config"
+	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/harness"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
@@ -72,7 +73,7 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 // as tkt merge does, so no other command gets in between.
 func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 	a := c.App
-	id, err := c.LC.NormalizeID(o.ID)
+	id, err := c.workID(o.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +102,14 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		return nil, err
 	}
 	st := ts.st
+	if chore := st["chore"]; chore != "" && o.line == "" {
+		for _, skill := range contract.Skills {
+			if strings.Contains(text, skill) {
+				return nil, apperr.New(apperr.StageNeedsTicket, "%s is a run of chore %s, with no ticket, and the %s stage runs %s, which needs one", id, chore, o.Stage, skill).
+					WithHint("tkt run %s ci, or tkt run %s --prompt TEXT", id, id)
+			}
+		}
+	}
 	preset := c.Cfg.Default()
 	switch {
 	case o.As != "":

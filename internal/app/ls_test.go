@@ -60,3 +60,19 @@ func TestQueuedTickets(t *testing.T) {
 		t.Errorf("rows: %+v", rows)
 	}
 }
+
+func TestPRTitle(t *testing.T) {
+	for title, want := range map[string]string{
+		"ACM-12: Add the login page":   "Add the login page",
+		"[ACM-12] Add the login page":  "Add the login page",
+		"ACM-12 - Add the login page":  "Add the login page",
+		"Add the login page (ACM-12)":  "Add the login page (ACM-12)",
+		"ACM-123: Another ticket":      "ACM-123: Another ticket",
+		"  Upgrade the dependencies  ": "Upgrade the dependencies",
+		"ACM-12":                       "",
+	} {
+		if got := prTitle(title, "ACM-12"); got != want {
+			t.Errorf("prTitle(%q) = %q, want %q", title, got, want)
+		}
+	}
+}

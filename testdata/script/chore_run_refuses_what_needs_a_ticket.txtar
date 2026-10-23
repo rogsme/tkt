@@ -1,0 +1,42 @@
+# A chore's run has no ticket, so tkt never sends it a lifecycle skill that
+# needs one: not through tkt run's stages, not through tkt approve. The
+# stages that need none, and your own prompt, go.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt chore run deps
+rm $FAKE_DIR/prompts
+
+! exec tkt run deps-run review
+rc 2
+stderr 'deps-run is a run of chore deps, with no ticket, and the review stage runs review-pr, which needs one'
+! exec tkt run deps-run address
+stderr 'runs address-pr-review'
+! exec tkt run deps-run start
+stderr 'runs start-ticket'
+! exec tkt run deps-run lint
+stderr 'runs review-pr'
+! exec tkt approve deps-run --force
+rc 2
+stderr 'the approval starts work-ticket, which needs a ticket'
+! exists $FAKE_DIR/prompts
+
+exec tkt run deps-run ci
+grep 'The checks on this branch''s pull request fail at its head.' $FAKE_DIR/prompts
+exec tkt run deps-run --prompt 'Bump only the patch versions.'
+grep 'Bump only the patch versions.' $FAKE_DIR/prompts
+
+# tkt auto and tkt merge take tickets only.
+! exec tkt auto deps-run --once
+rc 2
+! exec tkt merge deps-run --passed all
+rc 2
+
+-- config.toml --
+[chores.deps]
+repo = "~/../app"
+schedule = "0 9 * * 1"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies."
+
+[stages]
+lint = "Run the linter, then use the review-pr skill."

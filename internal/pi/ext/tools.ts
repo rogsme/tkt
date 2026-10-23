@@ -9,7 +9,7 @@ import { Type } from "typebox";
 import * as act from "./actions.ts";
 import { phaseLabel, statusText } from "./board.ts";
 import type { Hub } from "./hub.ts";
-import { expandIds, mentions, normalizeId } from "./model.ts";
+import { expandIds, mentions } from "./model.ts";
 import { ask } from "./ui.ts";
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }], details: undefined });
@@ -31,7 +31,7 @@ function list(ids: string[]): string {
 const preset = Type.Optional(Type.String({ description: "A preset from the user's config.toml, such as sol or claude, when the user names one ('as sol', 'with sol', '--as sol'); otherwise leave it out" }));
 
 export function registerTools(pi: ExtensionAPI, hub: Hub): void {
-	const id = (raw: string) => normalizeId(raw, hub.key);
+	const id = (raw: string) => hub.idOf(raw);
 	const ticket = Type.String({ description: "A ticket id, such as ACM-123" });
 
 	pi.registerTool({
@@ -55,7 +55,9 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 				const agent = r.agent ? `${(r.agent.background ?? 0) > 0 ? "idle, waiting on its own background task" : r.agent.status} in pane ${r.agent.pane_id}` : "none";
 				const item = hub.items.find((x) => x.ticket === r.ticket);
 				const lines = [
-					`${r.ticket}: ${phaseLabel(r.phase)}${r.phase_since ? ` since ${r.phase_since}` : ""}, stage ${r.stage || "-"}${r.hold ? "; on hold, so tkt watch and tkt auto leave it alone" : ""}`,
+					`${r.ticket}: ${phaseLabel(r.phase, r.chore)}${r.phase_since ? ` since ${r.phase_since}` : ""}, stage ${r.stage || "-"}${r.hold ? "; on hold, so tkt watch and tkt auto leave it alone" : ""}`,
+					...(r.chore ? [`a run of chore ${r.chore}, with no ticket: the user merges its pull request, and tkt watch then removes it`] : []),
+					...(r.title ? [`title: ${r.title}`] : []),
 					`agent: ${agent}; last status: ${r.last_status || "none"}`,
 					`pull request: ${r.pr ? `#${r.pr.number} ${r.pr.state}` : "none"}; checks: ${r.checks?.state ?? "-"}; review: ${r.review ? `${r.review.verdict}${r.review.at_head ? "" : " (old head)"}` : "-"}`,
 					`auto: ${auto}; rounds ${a?.rounds ?? 0}`,
@@ -118,6 +120,20 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		executionMode: "sequential",
 		async execute(_id, p) {
 			return text(act.suggest(hub, p.count ?? 3, p.as ?? ""));
+		},
+	});
+
+	pi.registerTool({
+		name: "tkt_chores",
+		label: "tkt chores",
+		description:
+			"List the repository's chores, the agent runs the user schedules in config.toml, with their next run; with run, start a run of one now. A run is a branch and a pull request with no ticket, which the user merges; tkt watch starts runs on schedule by itself.",
+		parameters: Type.Object({ run: Type.Optional(Type.String({ description: "The chore to start a run of now, only when the user asks for one" })) }),
+		executionMode: "sequential",
+		async execute(_id, p, _signal, _update, ctx) {
+			if (!p.run) return text(await act.chores(hub));
+			if (!(await guard(hub, ctx, [p.run], `Start a run of chore ${p.run} now?`, "It opens a branch, a tab and an agent with the chore's prompt."))) return text("The user did not confirm; nothing started.");
+			return text(act.choreRun(hub, p.run));
 		},
 	});
 

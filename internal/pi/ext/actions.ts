@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import { type Envelope, type MergeResult, mergeText, picksText, stepText, type SuggestResult, type UpdateResult } from "./model.ts";
+import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, picksText, stepText, type SuggestResult, type UpdateResult } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
@@ -52,6 +52,20 @@ export function suggest(hub: Hub, count: number, as = ""): string {
 	return `Queued: suggest-tickets picks ${n} in a suggest tab, reading only. The board shows the picks when it is done.`;
 }
 
+/** chores lists the repository's chores with their next run. */
+export async function chores(hub: Hub): Promise<string> {
+	const env = await hub.tkt<ChoresResult>(["chores"]);
+	if (!env.ok || !env.result) return failure("chores", env);
+	return choresText(env.result);
+}
+
+/** choreRun starts a run of a chore now, in the background: a branch, a
+ * tab and an agent with the chore's prompt. */
+export function choreRun(hub: Hub, name: string): string {
+	hub.add({ ticket: `chore ${name}`, label: "chore", args: ["chore", "run", name] });
+	return `Queued: a run of chore ${name} in its own tab. The board shows it once it starts.`;
+}
+
 /** startPicks starts the tickets suggest-tickets picked, each on the preset
  * its model needs, and takes the picks off the board. */
 export function startPicks(hub: Hub, mode: Mode): string {
@@ -67,6 +81,7 @@ export function startPicks(hub: Hub, mode: Mode): string {
  * a tkt auto loop drives the ticket from there; a loop that already waits
  * on the plan goes on by itself. */
 export async function approve(hub: Hub, id: string, then: "manual" | "auto"): Promise<string> {
+	if (hub.row(id)?.chore) return `${id} is a run of a chore, with no ticket and no plan to approve. /send ${id} TEXT tells its agent what to do.`;
 	const env = await hub.run({ ticket: id, label: "approve", args: ["approve", id], quiet: true });
 	if (!env.ok) return failure(id, env);
 	const row = hub.row(id);
@@ -127,6 +142,9 @@ export function resume(hub: Hub, id: string): string {
 }
 
 export async function auto(hub: Hub, id: string, on: boolean, approvePlan: boolean, as = ""): Promise<string> {
+	// tkt auto refuses a run's id, and its loop runs detached, so the chat
+	// says so here rather than after a silent failure.
+	if (hub.row(id)?.chore) return `${id} is a run of a chore: tkt auto drives tickets only. tkt watch syncs its base and fixes its checks, and you merge its pull request.`;
 	if (on) {
 		hub.startAuto(id, approvePlan, as);
 		return `tkt auto now drives ${id}${approvePlan ? ", approving its plan too" : ""}. The board shows when it needs you.`;
@@ -172,6 +190,13 @@ interface AutoOnce {
 export async function next(hub: Hub, id: string): Promise<string> {
 	// A merge order is yours, so tkt auto never takes it; tkt merge does.
 	const n = hub.row(id)?.next;
+	// tkt auto drives tickets only, so a chore's run takes its step as tkt
+	// ls names it, such as tkt sync or tkt run ci.
+	if (hub.row(id)?.chore) {
+		if (n?.kind !== "command" || !n.argv) return `${id} has no step to take now: ${n?.text ?? "tkt ls shows it"}.`;
+		hub.add({ ticket: id, label: n.argv[1] === "run" ? n.argv[3] : n.argv[1], args: n.argv.slice(1) });
+		return `Queued: ${n.text}.`;
+	}
 	if (n?.reason === "merge_due" && n.argv) {
 		hub.add({ ticket: id, label: "merge", args: n.argv.slice(1), then: (env) => (env.ok && env.result ? hub.post(mergeText(env.result as MergeResult)) : undefined) });
 		return `Queued: ${id}'s merge order. finish-ticket gets the merge line in a fresh session.`;

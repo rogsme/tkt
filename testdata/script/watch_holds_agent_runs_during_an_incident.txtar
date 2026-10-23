@@ -1,0 +1,100 @@
+# While a status page reports a problem with a component that counts, tkt
+# watch starts no agent: a fix for failing checks and a due chore wait,
+# while a step that needs no agent, such as a clean sync, goes on. It
+# notifies when the incident starts and when it ends, and tkt ls shows it
+# while a watch runs.
+mkdir $HOME/.config/tkt
+expand $WORK/config.toml
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-1
+exec tkt start ACM-2
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-2 commit -q --allow-empty -m 'ACM-2 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-2 push -q origin ACM-2
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+gitvar H2 $FAKE_WT_ROOT/ACM-2 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H2SHORT"; $H2[0:7]) | gsub("H1"; $H1) | gsub("H2"; $H2) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+mkdir $WORK/github/api/v2
+cp $WORK/outage.json $WORK/github/api/v2/summary.json
+cp $WORK/old $REPO/.git/tkt/chores
+
+resetlog
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::incident","ACM-2:sync:base_moved"]'
+envelope '.result.incidents[0] | [.page, .service, .problem]' '["github","GitHub","Actions partial outage"]'
+envelope '.result.chores[0] | [.chore, .action, .reason]' '["deps","","incident"]'
+stderr 'GitHub reports Actions partial outage; tkt watch starts no agent until it ends'
+logged herdr notification show 'GitHub: incident' --body 'Actions partial outage; tkt watch starts no agent until it ends'
+! logged herdr agent start
+exec tkt watch --once
+stdout '^GitHub reports Actions partial outage, so tkt watch starts no agent$'
+
+# tkt ls shows it while a watch runs.
+cp $WORK/watch.toml $HOME/.config/tkt/config.toml
+expand $HOME/.config/tkt/config.toml
+exec tkt watch &
+waitfile $REPO/.git/tkt/watch
+exec tkt ls --no-fetch --json
+envelope '.result.incidents[0] | [.service, .problem]' '["GitHub","Actions partial outage"]'
+exec tkt ls --no-fetch
+stdout '^GitHub reports Actions partial outage; tkt watch starts no agent until it ends$'
+exec tkt watch --stop
+exec tkt ls --no-fetch --json
+envelope '.result.incidents' '[]'
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+
+# The incident ends: the next pass says so, and runs ci.
+cp $WORK/clear.json $WORK/github/api/v2/summary.json
+resetlog
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1:run:checks_fail","ACM-2::forge_lag"]'
+envelope '.result.incidents' '[]'
+envelope '.result.chores[0] | [.action, .run, .reason]' '["run","deps-run","due"]'
+stderr 'GitHub works again, so tkt watch starts agents again'
+logged herdr notification show 'GitHub: resolved' --body 'tkt watch starts agents again'
+logged herdr agent start acm-1 --kind claude
+
+# A page tkt cannot read holds nothing back, and says so once.
+rm $WORK/github/api/v2/summary.json
+exec tkt watch --once --json
+stderr 'cannot read the status page github'
+
+-- config.toml --
+[chores.deps]
+repo = "$REPO"
+schedule = "0 9 * * *"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies."
+
+[status.github]
+page = "file://$WORK/github"
+components = ["Actions", "Pull Requests"]
+-- watch.toml --
+[watch]
+interval = "1s"
+
+[status.github]
+page = "file://$WORK/github"
+components = ["Actions", "Pull Requests"]
+-- old --
+slot.deps=2020-01-01T00:00:00Z
+-- outage.json --
+{"page": {"name": "GitHub"}, "status": {"indicator": "major", "description": "Partial System Outage"},
+ "components": [{"name": "Actions", "status": "partial_outage"}, {"name": "Pull Requests", "status": "operational"}, {"name": "Codespaces", "status": "major_outage"}],
+ "incidents": [{"name": "Disruption with some GitHub services"}]}
+-- clear.json --
+{"page": {"name": "GitHub"}, "status": {"indicator": "minor", "description": "Minor Service Outage"},
+ "components": [{"name": "Actions", "status": "operational"}, {"name": "Pull Requests", "status": "operational"}, {"name": "Codespaces", "status": "degraded_performance"}],
+ "incidents": []}
+-- prs.json --
+[
+  {"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}], "reviews": []},
+  {"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "H2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: STALE_BASE** · head `H2SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H2"}}]}
+]

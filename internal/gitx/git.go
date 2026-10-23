@@ -130,6 +130,37 @@ func (g Git) Count(ctx context.Context, path, rng string) int {
 	return n
 }
 
+// Stat is the size of a diff: the files it changes, and the lines it adds
+// and removes.
+type Stat struct {
+	Files, Added, Removed int
+}
+
+var statRE = regexp.MustCompile(`(\d+) (file|insertion|deletion)`)
+
+// DiffStat sizes the diff a range names, such as origin/main...HEAD for
+// what a branch changes since it left its base. ok is false when git
+// cannot tell.
+func (g Git) DiffStat(ctx context.Context, path, rng string) (Stat, bool) {
+	s, ok := g.out(ctx, "-C", path, "diff", "--shortstat", "--no-ext-diff", "--no-textconv", rng)
+	if !ok {
+		return Stat{}, false
+	}
+	var st Stat
+	for _, m := range statRE.FindAllStringSubmatch(s, -1) {
+		n, _ := strconv.Atoi(m[1])
+		switch m[2] {
+		case "file":
+			st.Files = n
+		case "insertion":
+			st.Added = n
+		case "deletion":
+			st.Removed = n
+		}
+	}
+	return st, true
+}
+
 // IsAncestor reports whether commit is an ancestor of ref.
 func (g Git) IsAncestor(ctx context.Context, dir, commit, ref string) bool {
 	return g.run(ctx, 0, "-C", dir, "merge-base", "--is-ancestor", commit, ref).OK()

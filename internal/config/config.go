@@ -51,6 +51,10 @@ type Config struct {
 	Agent         Agent
 	Watch         Watch
 	Suggest       Suggest
+	// Chores are the scheduled runs, of every repository, by name.
+	Chores []Chore
+	// Status lists the status pages tkt watch reads, by name.
+	Status []StatusPage
 }
 
 // Suggest holds the [suggest] settings for tkt suggest.
@@ -181,7 +185,7 @@ var BuiltinStages = map[string]string{
 	// resolve is the session tkt sync starts when the base merge conflicts.
 	// It leaves the review's findings to address, so a sync never fixes
 	// what nobody asked it to.
-	"resolve": "Fetch {remote} and merge {remote}/{base} into this branch. The merge conflicts: resolve it with the resolving-merge-conflicts skill, keep it a merge, and change nothing the merge does not need. Run the focused checks for the code it touched, commit the merge, and push once, never with force. Then refresh the Review brief in the pull request's body for the new head and base, and end with Status: READY_FOR_REVIEW.",
+	"resolve": "Fetch {remote} and merge {remote}/{base} into this branch. The merge conflicts: resolve it with the resolving-merge-conflicts skill, keep it a merge, and change nothing the merge does not need. Run the focused checks for the code it touched, commit the merge, and push once, never with force. Then refresh the Review brief in the pull request's body for the new head and base, when it has one, and end with Status: READY_FOR_REVIEW.",
 	"verify":  "Run every step of the Human verification section of this branch's pull request with the playwright-cli skill. Report each step as passed or failed with what you saw. Change no code and post nothing.",
 	"ci":      "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
 	"review":  "Use the review-pr skill to review the current PR.",

@@ -101,15 +101,31 @@ type RowMerge struct {
 	Sent string `json:"sent"`
 }
 
+// RowDiff is the size of a branch's own change against its base, as its
+// pull request shows it: the files it changes, and the lines it adds and
+// removes.
+type RowDiff struct {
+	Files   int `json:"files"`
+	Added   int `json:"added"`
+	Removed int `json:"removed"`
+}
+
 // ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
 // for a free slot before it starts the ticket.
 const ReasonAwaitingSlot = "awaiting_slot"
 
-// Row is one ticket in tkt ls. A null field is unknown or absent; Sources
-// says which sources were read. Times are UTC, as 2006-01-02T15:04:05Z.
+// Row is one ticket in tkt ls, or one chore's run: then Chore names the
+// chore, and Ticket is the run's branch. A null field is unknown or absent;
+// Sources says which sources were read. Times are UTC, as
+// 2006-01-02T15:04:05Z.
 type Row struct {
-	Ticket     string         `json:"ticket"`
+	Ticket string `json:"ticket"`
+	Chore  string `json:"chore"`
+	// Title is the open pull request's, without the ticket id it starts
+	// with, or "" before there is one.
+	Title      string         `json:"title"`
 	Path       string         `json:"path"`
+	Diff       *RowDiff       `json:"diff"`
 	Tabs       []herdr.Tab    `json:"tabs"`
 	Agent      *RowAgent      `json:"agent"`
 	LastStatus string         `json:"last_status"`
@@ -160,12 +176,14 @@ type Sources struct {
 }
 
 // LsResult is tkt ls's table, whether tkt watch keeps the tickets moving,
-// and the tickets merges unblocked that have no worktree yet.
+// the tickets merges unblocked that have no worktree yet, and what the
+// status pages report, which holds tkt watch's agent runs back.
 type LsResult struct {
 	Sources   Sources     `json:"sources"`
 	Watch     WatchStatus `json:"watch"`
 	Rows      []Row       `json:"rows"`
 	Unblocked []Unblocked `json:"unblocked"`
+	Incidents []Incident  `json:"incidents"`
 	now       time.Time
 }
 
@@ -182,6 +200,14 @@ func (r *LsResult) Text(w io.Writer) {
 		output.Table(w, lsHeader, rows)
 	}
 	r.unblockedText(w)
+	r.incidentText(w)
+}
+
+// incidentText names what the status pages report.
+func (r *LsResult) incidentText(w io.Writer) {
+	for _, i := range r.Incidents {
+		fmt.Fprintf(w, "%s reports %s; tkt watch starts no agent until it ends\n", i.Service, i.Problem)
+	}
 }
 
 // unblockedText names the tickets merges unblocked, which wait for a start.
@@ -201,6 +227,7 @@ func (r *LsResult) unblockedText(w io.Writer) {
 func (r *LsResult) Pretty(w io.Writer, _ string, width int) {
 	if len(r.Rows) == 0 {
 		r.unblockedText(w)
+		r.incidentText(w)
 		return
 	}
 	var (
@@ -267,6 +294,7 @@ func (r *LsResult) Pretty(w io.Writer, _ string, width int) {
 	}
 	fmt.Fprintln(w)
 	r.unblockedText(w)
+	r.incidentText(w)
 }
 
 // phaseStyle colors a phase by who acts next: you, nobody (it is done or
@@ -386,7 +414,7 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	defer c.release()
 	var want []string
 	for _, raw := range o.IDs {
-		id, err := c.LC.NormalizeID(raw)
+		id, err := c.workID(raw)
 		if err != nil {
 			return nil, err
 		}
@@ -410,7 +438,7 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	if lookErr != nil {
 		return nil, lookErr
 	}
-	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, Unblocked: []Unblocked{}, now: a.Now()}
+	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, Unblocked: []Unblocked{}, Incidents: c.incidents(), now: a.Now()}
 	if len(want) == 0 {
 		res.Unblocked = c.unblocked(entries)
 	}
@@ -421,7 +449,7 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 		a.UI.Warn("%s", l.forgeErr.Error())
 	}
 
-	tickets := c.ticketWorktrees(entries)
+	tickets := c.workWorktrees(entries)
 	var missing []string
 	if len(want) > 0 {
 		var picked []ticketWorktree
@@ -464,8 +492,10 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 			WithHint("tkt start %s", missing[0]).With("rows", res.Rows).With("missing", missing)
 	}
 	if l.forgeErr != nil {
+		// The board reads the rows, and what the status pages report, from
+		// this error: GitHub's own incident shows when it fails the read.
 		e := apperr.As(l.forgeErr)
-		return res, apperr.New(e.Code, "%s", e.Msg).With("rows", res.Rows).Wrap(l.forgeErr)
+		return res, apperr.New(e.Code, "%s", e.Msg).With("rows", res.Rows).With("incidents", res.Incidents).Wrap(l.forgeErr)
 	}
 	return res, nil
 }
@@ -582,7 +612,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
-	row.Hold = st["hold"] != ""
+	row.Hold, row.Chore = st["hold"] != "", or(t.Chore, st["chore"])
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan, Rounds: atoi(st["rounds"]),
 		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"], Note: st["auto_note"]}
 	if !row.Auto.Running {
@@ -618,6 +648,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			row.PR = &RowPR{Number: p.Number, State: "OPEN", Mergeable: p.Mergeable, Head: p.HeadRefOid}
 			row.Checks, row.Review = &checks, verdict
 			row.reviewReady = forge.HumanVerification(p) != nil
+			row.Title = prTitle(p.Title, t.ID)
 		} else if p, ok := closedPR(l.gh.Mine(l.all, t.ID)); ok {
 			row.PR = &RowPR{Number: p.Number, State: p.State}
 		}
@@ -625,6 +656,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	if l.hasBase {
 		if n := c.Git.Count(rctx, t.Path, "HEAD.."+l.baseRef); n >= 0 {
 			row.Behind = &n
+		}
+		if d, ok := c.Git.DiffStat(rctx, t.Path, l.baseRef+"...HEAD"); ok {
+			row.Diff = &RowDiff{Files: d.Files, Added: d.Added, Removed: d.Removed}
 		}
 	}
 	if l.probe && row.PR != nil && row.PR.State == "OPEN" && row.Behind != nil && *row.Behind > 0 {
@@ -768,6 +802,19 @@ func (c *Ctx) queuedTickets() []Row {
 // backgroundGrace bounds how long an idle agent with unfinished background
 // tasks counts as busy. A dev server it left running never reports back.
 const backgroundGrace = time.Hour
+
+// prTitle is a pull request's title without the ticket id it starts with,
+// as in "ACM-12: Add the login page" or "[ACM-12] Add the login page", which
+// the board shows next to the id already.
+func prTitle(title, id string) string {
+	t := strings.TrimSpace(title)
+	for _, p := range []string{"[" + id + "]", "(" + id + ")", id} {
+		if rest, ok := strings.CutPrefix(t, p); ok && (rest == "" || strings.ContainsAny(rest[:1], " :-")) {
+			return strings.TrimLeft(rest, " :-")
+		}
+	}
+	return t
+}
 
 // closedPR picks a ticket's merged pull request, else its latest one.
 func closedPR(prs []forge.PR) (forge.PR, bool) {
