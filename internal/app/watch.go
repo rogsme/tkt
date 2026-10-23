@@ -385,6 +385,9 @@ type watcher struct {
 	passes  int
 	plan    []Action
 	ws      string
+	// opened is the workspace tkt watch opened, which it keeps using while
+	// it exists, even before herdr reports a pane of it in the repository.
+	opened string
 }
 
 func (w *watcher) writeStatus(err error) {
@@ -416,7 +419,7 @@ func (w *watcher) app() (*App, error) {
 		w.ws = a.Getenv("HERDR_WORKSPACE_ID")
 		return a, nil
 	}
-	ws, err := w.c.findWorkspace()
+	ws, err := w.c.findWorkspace(w.opened)
 	if err != nil {
 		return nil, err
 	}
@@ -455,15 +458,16 @@ func (w *watcher) openWorkspace(c *Ctx) error {
 		return herdrErr(err)
 	}
 	c.UI.Info("no herdr workspace had a pane in %s, so tkt watch opened workspace %s there", c.Repo.Root, ws)
-	w.ws = ws
+	w.ws, w.opened = ws, ws
 	return nil
 }
 
 // findWorkspace finds the herdr workspace that holds the repository's
 // panes: the one with the most panes in its primary worktree or a ticket
-// worktree, or "" when none has one. herdr numbers workspaces per server, so
-// nothing can store one.
-func (c *Ctx) findWorkspace() (string, error) {
+// worktree. With none, it is opened, the workspace tkt watch opened, while
+// herdr still has a pane in it, or "". herdr numbers workspaces per server,
+// so nothing can store one.
+func (c *Ctx) findWorkspace(opened string) (string, error) {
 	panes, err := c.H.Panes(c.Ctx)
 	if err != nil {
 		return "", herdrErr(err)
@@ -476,8 +480,9 @@ func (c *Ctx) findWorkspace() (string, error) {
 	for _, e := range es {
 		dirs = append(dirs, e.Path)
 	}
-	count, best := map[string]int{}, ""
+	count, best, alive := map[string]int{}, "", false
 	for _, p := range panes {
+		alive = alive || opened != "" && p.WorkspaceID == opened
 		for _, d := range dirs {
 			if herdr.Inside(p.Cwd, d) {
 				count[p.WorkspaceID]++
@@ -487,6 +492,9 @@ func (c *Ctx) findWorkspace() (string, error) {
 				break
 			}
 		}
+	}
+	if best == "" && alive {
+		best = opened
 	}
 	return best, nil
 }
