@@ -218,6 +218,8 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		c.record(history.Event{Ticket: t.ID, Event: history.Merged, PR: merged.Number, MergedAt: merged.MergedAt, OpenedAt: merged.CreatedAt})
 		c.record(history.Event{Ticket: t.ID, Event: history.Done, Unblocked: dt.Unblocked})
 		c.noteUnblocked(t.ID, dt.Unblocked)
+		// A ticket another merge named, and that merged since, is done.
+		c.forgetUnblocked(t.ID)
 		dt.Outcome = "removed"
 		dt.BranchDeleted = !c.Git.HasRef(c.Ctx, c.Repo.Root, "refs/heads/"+t.ID)
 		res.Tickets = append(res.Tickets, dt)
