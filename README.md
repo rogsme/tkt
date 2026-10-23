@@ -134,7 +134,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 
 | Command | What it does |
 |---|---|
-| `/suggest [N \| REQUEST] [as PRESET]` | Does what `tkt suggest` does; you read the answer in the suggest tab and `/start` the tickets you want. |
+| `/suggest [N \| REQUEST] [as PRESET]` | Does what `tkt suggest` does; `/suggest` alone asks you to type the request. You read the picks in the suggest tab and `/start` the ones you want. |
 | `/start ID... [auto \| after-plan] [as PRESET]` | Starts tickets: by hand, in full auto, or in auto once you approve the plan, on a preset you name. |
 | `/approve ID [auto]` | Approves the plan; with `auto`, `tkt auto` takes over. |
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |

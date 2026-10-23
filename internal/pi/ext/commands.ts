@@ -50,13 +50,19 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerCommand("suggest", {
-		description: "Ask a fresh agent in the suggest tab which tickets to start: /suggest [N | what you want] [as PRESET]",
+		description: "Have suggest-tickets pick tickets to start in the suggest tab: /suggest [N | what you want] [as PRESET], or /suggest alone to type it",
 		handler: async (args, ctx) => {
 			const words = args.trim().split(/\s+/).filter(Boolean);
 			// Only the last two words name a preset, so a request may say "as".
 			const n = words.length;
 			const as = n >= 2 && (words[n - 2] === "as" || words[n - 2] === "--as") ? words.splice(n - 2, 2)[1] : "";
-			const request = words.join(" ");
+			let request = words.join(" ");
+			// Without words, you type the request; a number there is a count too.
+			if (!request) {
+				if (!ctx.hasUI) return ctx.ui.notify("usage: /suggest [1 to 10 | what you want] [as PRESET]", "warning");
+				request = (await ctx.ui.input("What should suggest-tickets look for?", "five tickets tagged feedback, or a number"))?.trim() ?? "";
+				if (!request) return ctx.ui.notify("Nothing sent to suggest-tickets.", "info");
+			}
 			if (/^\d+$/.test(request) && (Number(request) < 1 || Number(request) > 10)) return ctx.ui.notify("usage: /suggest [1 to 10 | what you want] [as PRESET]", "warning");
 			say(act.suggest(hub, request, as));
 		},

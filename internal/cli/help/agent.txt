@@ -24,7 +24,8 @@ and the pull request's commits and reviews with the review bot's findings.
 
 The same actions work without the model as slash commands: /suggest (a
 suggest tab where suggest-tickets picks tickets to start next; add what you
-want, such as /suggest five tickets tagged feedback), /start (add "as
+want, such as /suggest five tickets tagged feedback, or type it when /suggest
+alone asks), /start (add "as
 PRESET" for a preset), /approve, /next, /auto, /hold, /sync, /send, /show,
 /peek (the agent's live screen), /check (the human verification checklist,
 which offers to sync a ticket that is behind first), /done, /inbox (what needs
