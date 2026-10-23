@@ -147,6 +147,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/chores [run NAME]` | The repository's chores with their next run; `run NAME` starts a run now. |
 | `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |
+| `/version` | Says which tkt and pi the chat runs, and whether the tkt on disk is another one now. |
 | `/update` | Installs a newer tkt, then offers to quit. Reopen the chat with the `tkt agent --session ID` it prints to run the new tkt. The board names a newer release when the chat finds one. |
 
 Without an `[agent]` model, pi starts on its own default: in `/model`, press Ctrl+S on a model to make it the default for new chats. An `[agent]` table in `config.toml` picks the model and loads more pi extensions, such as one that adds a model provider:

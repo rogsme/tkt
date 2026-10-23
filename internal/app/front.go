@@ -103,14 +103,15 @@ func (a *App) Front(ctx context.Context, o FrontOpts) (*FrontResult, error) {
 	argv := pi.Argv(rt.Path, ext, launch)
 	res := &FrontResult{Pi: rt.Path, Version: rt.Version, Source: rt.Source, ExtDir: ext, AgentDir: agentDir,
 		Dir: c.Repo.Root, Argv: argv, Env: map[string]string{}, DryRun: c.Dry}
-	for _, kv := range pi.EnvVars(agentDir, self) {
+	if c.Dry && res.Version == "" {
+		res.Version = c.piVersion(rt.Path)
+	}
+	host := pi.Host{AgentDir: agentDir, Bin: self, Version: a.Version, PiVersion: res.Version}
+	for _, kv := range pi.EnvVars(host) {
 		k, v, _ := strings.Cut(kv, "=")
 		res.Env[k] = v
 	}
 	if c.Dry {
-		if res.Version == "" {
-			res.Version = c.piVersion(rt.Path)
-		}
 		c.Would(argv)
 		res.Actions = c.Plan
 		return res, nil
@@ -127,7 +128,7 @@ func (a *App) Front(ctx context.Context, o FrontOpts) (*FrontResult, error) {
 	if !ok {
 		return nil, apperr.New(apperr.Internal, "this tkt cannot replace itself with pi")
 	}
-	err = rep.Replace(c.Ctx, runner.Cmd{Argv: argv}, pi.Env(os.Environ(), agentDir, self))
+	err = rep.Replace(c.Ctx, runner.Cmd{Argv: argv}, pi.Env(os.Environ(), host))
 	return nil, apperr.New(apperr.AgentLaunchFailed, "cannot start %s: %v", rt.Path, err).Wrap(err).
 		WithHint("run tkt doctor, or set TKT_PI to another pi binary")
 }

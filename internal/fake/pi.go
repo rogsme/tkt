@@ -7,7 +7,7 @@ import (
 )
 
 // piEnv are the variables tkt agent sets for pi, which Pi records.
-var piEnv = []string{"PI_CODING_AGENT_DIR", "PI_SKIP_VERSION_CHECK", "PI_TELEMETRY", "TKT_BIN"}
+var piEnv = []string{"PI_CODING_AGENT_DIR", "PI_SKIP_VERSION_CHECK", "PI_TELEMETRY", "TKT_BIN", "TKT_VERSION", "TKT_PI_VERSION"}
 
 // Pi stands in for the pi coding agent. It answers --version; any other
 // call appends the variables tkt agent sets to $FAKE_DIR/pi-env, one

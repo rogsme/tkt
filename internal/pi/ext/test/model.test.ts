@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ago, choresText, expandIds, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, mentions, mergeText, normalizeId, rowsOf, stampText, updateNotice, stepText } from "../model.ts";
+import { ago, choresText, expandIds, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, mentions, mergeText, normalizeId, rowsOf, stampText, updateNotice, stepText, versionText } from "../model.ts";
 import { row } from "./fixtures.ts";
 
 test("normalizeId", () => {
@@ -111,4 +111,14 @@ test("incidentsOf reads them from a forge failure too", () => {
 	assert.deepEqual(incidentsOf({ ok: true, command: "ls", warnings: [], result: { sources: { herdr: "ok", forge: "ok", fetch: "ok" }, rows: [], incidents: [incident] } }), [incident]);
 	assert.deepEqual(incidentsOf({ ok: false, command: "ls", warnings: [], error: { code: "forge_query_failed", exit: 1, message: "gh pr list failed", hint: "", details: { rows: [], incidents: [incident] } } }), [incident]);
 	assert.deepEqual(incidentsOf({ ok: false, command: "ls", warnings: [], error: { code: "internal", exit: 1, message: "x", hint: "", details: {} } }), []);
+});
+
+test("versionText says what the chat runs, and when the installed tkt moved on", () => {
+	assert.equal(versionText("v0.6.0", "1.3.0", "v0.6.0", "/usr/bin/tkt"), "This chat runs tkt v0.6.0, with pi 1.3.0. It is the tkt at /usr/bin/tkt.");
+	assert.equal(
+		versionText("v0.6.0", "1.3.0", "v0.6.1", "/usr/bin/tkt"),
+		"This chat runs tkt v0.6.0, with pi 1.3.0. The tkt at /usr/bin/tkt is v0.6.1 now: quit, then run tkt agent --continue to move this chat to it.",
+	);
+	assert.equal(versionText("v0.6.0", "", "", "/usr/bin/tkt"), "This chat runs tkt v0.6.0. The tkt at /usr/bin/tkt did not say its version.");
+	assert.match(versionText("", "", "v0.6.0", "tkt"), /^This chat does not know its tkt version\. The tkt at tkt is v0\.6\.0 now/);
 });

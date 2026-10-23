@@ -16,6 +16,7 @@ envelope '.result.env.PI_CODING_AGENT_DIR == .result.agent_dir' true
 envelope '.result.env.PI_SKIP_VERSION_CHECK' 1
 envelope '.result.env.PI_TELEMETRY' 0
 envelope '.result.env.TKT_BIN | length > 0' true
+envelope '.result.env | [.TKT_VERSION, .TKT_PI_VERSION]' '["test","1.3.0"]'
 envelope '[.result.actions[].argv] == [.result.argv]' true
 logged pi --version
 stderr '^tkt: dry run: .*pi --no-extensions'

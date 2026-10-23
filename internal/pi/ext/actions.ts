@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, stepText, type SuggestResult, type UpdateResult } from "./model.ts";
+import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, stepText, type SuggestResult, type UpdateResult, versionText } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
@@ -409,6 +409,15 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 	return undefined;
 }
 
+/** version says which tkt and pi this chat runs, and whether the tkt it
+ * calls is another one now. The chat runs the tkt that started it, so only
+ * what tkt agent set then says which; the binary may have changed since. */
+export async function version(hub: Hub): Promise<string> {
+	const r = await hub.pi.exec(hub.bin, ["--version"], { cwd: hub.cwd });
+	const installed = /^tkt version (\S+)/m.exec(r.stdout)?.[1] ?? "";
+	return versionText(process.env.TKT_VERSION ?? "", process.env.TKT_PI_VERSION ?? "", installed, hub.bin);
+}
+
 /** update installs a newer tkt with tkt update, after you confirm. The
  * chat keeps running the old tkt's extension and pi, so it offers to quit;
  * pi then prints the command that reopens the chat on the new tkt. */
@@ -422,7 +431,7 @@ export async function update(hub: Hub, ctx: ExtensionContext): Promise<void> {
 		hub.render();
 		return hub.post(`tkt ${r.from} is up to date.`);
 	}
-	if (!(await ctx.ui.confirm(`Update tkt from ${r.from} to ${r.to}?`, "This chat runs the old tkt until you reopen it. Tickets in tkt auto finish their loops on the old tkt."))) return;
+	if (!(await ctx.ui.confirm(`Update tkt from ${r.from} to ${r.to}?`, "This chat runs the old tkt until you reopen it. tkt auto loops and tkt watch move to the new tkt by themselves."))) return;
 	ctx.ui.setStatus("tkt-update", `tkt: downloading ${r.to}`);
 	const env = await hub.tkt<UpdateResult>(["update", r.to]).finally(() => ctx.ui.setStatus("tkt-update", undefined));
 	if (!env.ok) return hub.post(`tkt update failed: ${reasonOf(env)}`);

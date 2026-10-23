@@ -224,6 +224,11 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		handler: async (args) => say(await act.stats(hub, hub.idsIn(args))),
 	});
 
+	pi.registerCommand("version", {
+		description: "Say which tkt and pi this chat runs, and whether a newer tkt is installed",
+		handler: async () => say(await act.version(hub)),
+	});
+
 	pi.registerCommand("update", {
 		description: "Install the newest tkt, then quit so you reopen the chat on it",
 		handler: async (_args, ctx) => act.update(hub, ctx),

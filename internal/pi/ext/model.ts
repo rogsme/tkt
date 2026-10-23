@@ -144,6 +144,17 @@ export function updateNotice(r: UpdateResult): string | undefined {
 	return r.available && !r.dev && !r.updated ? r.to : undefined;
 }
 
+/** versionText says which tkt and pi a chat runs, from what tkt agent set
+ * when it started the chat, and whether the tkt at bin is another one now,
+ * as after tkt update or a new build. installed is "" when that tkt did not
+ * answer. */
+export function versionText(running: string, pi: string, installed: string, bin: string): string {
+	const runs = running ? `This chat runs tkt ${running}${pi ? `, with pi ${pi}` : ""}.` : "This chat does not know its tkt version.";
+	if (!installed) return `${runs} The tkt at ${bin} did not say its version.`;
+	if (installed === running) return `${runs} It is the tkt at ${bin}.`;
+	return `${runs} The tkt at ${bin} is ${installed} now: quit, then run tkt agent --continue to move this chat to it.`;
+}
+
 /** stepText says what a step of tkt auto does, as tkt auto --once reports
  * it; a sync step has no stage. */
 export function stepText(did: { action: string; stage?: string }): string {
