@@ -69,7 +69,8 @@ export interface Unblocked {
 }
 
 /** Incident is a status page that reports a problem with its service, as
- * tkt watch last read it: while one does, tkt watch starts no agent. */
+ * tkt watch last read it: while one does, tkt watch and tkt auto start no
+ * agent. */
 export interface Incident {
 	page: string;
 	service: string;

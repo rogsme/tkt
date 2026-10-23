@@ -72,8 +72,9 @@ dependency upgrade (tkt help chores). tkt ships none:
 
 A [status.NAME] table names a status page that tkt watch reads, one that
 Atlassian Statuspage serves, as GitHub's and most model providers' are.
-While it reports a problem, tkt watch starts no agent. components picks the
-parts of the service that count; without it, any problem on the page does:
+While it reports a problem, tkt watch and tkt auto start no agent. components
+picks the parts of the service that count; without it, any problem on the page
+does:
 
   [status.github]
   page = "https://www.githubstatus.com"

@@ -182,6 +182,9 @@ interface AutoOnce {
 	stop: string;
 	did: { action: string; stage?: string } | null;
 	wait: string;
+	/** hold is what the status pages report while the step waits for
+	 * their incident to end. */
+	hold?: string;
 	next: { text: string; reason: string };
 }
 
@@ -211,6 +214,7 @@ export async function next(hub: Hub, id: string): Promise<string> {
 		hub.add({ ticket: id, label: r.did.stage || r.did.action, args: ["auto", id, "--once"] });
 		return `Queued: ${id} ${stepText(r.did)}.`;
 	}
+	if (r.wait === "incident") return `${id} waits: ${r.hold || "a status page reports an incident"}, and tkt auto sets no agent to work until it ends. tkt run ${id} STAGE starts one anyway.`;
 	if (r.wait === "awaiting_bot") return `${id} waits for the review bot in CI; ${hub.row(id)?.next.text ?? "tkt ls shows it"}.`;
 	if (r.wait) return `${id} has nothing to do yet: ${r.next.text}.`;
 	switch (r.stop) {

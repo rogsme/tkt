@@ -49,7 +49,7 @@ The [status.NAME] tables in config.toml name status pages, such as GitHub's
 reports a problem with a component that counts, it starts no agent: no ci,
 resolve or review run, no merge line and no chore run, since each would only
 spend a round on a service that is down. Syncs and removals, which need no
-agent, go on. It notifies when an incident starts and when it ends, and tkt
+agent, go on, and tkt auto loops wait the same way (tkt help auto). It notifies when an incident starts and when it ends, and tkt
 ls and the tkt agent's board show it while it lasts. A page it cannot read
 keeps what it said last for fifteen minutes after its last answer, then
 holds nothing back.

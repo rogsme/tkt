@@ -111,8 +111,12 @@ type RowDiff struct {
 }
 
 // ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
-// for a free slot before it starts the ticket.
-const ReasonAwaitingSlot = "awaiting_slot"
+// for a free slot before it starts the ticket, and ReasonIncident of one
+// whose loop waits for a status page's incident to end first.
+const (
+	ReasonAwaitingSlot = "awaiting_slot"
+	ReasonIncident     = "incident"
+)
 
 // Row is one ticket in tkt ls, or one chore's run: then Chore names the
 // chore, and Ticket is the run's branch. A null field is unknown or absent;
@@ -206,7 +210,7 @@ func (r *LsResult) Text(w io.Writer) {
 // incidentText names what the status pages report.
 func (r *LsResult) incidentText(w io.Writer) {
 	for _, i := range r.Incidents {
-		fmt.Fprintf(w, "%s reports %s; tkt watch starts no agent until it ends\n", i.Service, i.Problem)
+		fmt.Fprintf(w, "%s reports %s; tkt watch and tkt auto start no agent until it ends\n", i.Service, i.Problem)
 	}
 }
 
@@ -792,9 +796,12 @@ func (c *Ctx) queuedTickets() []Row {
 			continue
 		}
 		st := state.Read(filepath.Join(dir, id))
+		next, wait := Next{Kind: "wait", Reason: ReasonAwaitingSlot, Text: "wait for a free auto slot ([auto] max_parallel)"}, "slot"
+		if st["wait"] == WaitIncident {
+			next, wait = Next{Kind: "wait", Reason: ReasonIncident, Text: "wait for the incident a status page reports to end"}, WaitIncident
+		}
 		out = append(out, Row{Ticket: id, Tabs: []herdr.Tab{}, Phase: PhaseQueued, PhaseSince: st["since"], Stage: "start",
-			Next: Next{Kind: "wait", Reason: ReasonAwaitingSlot, Text: "wait for a free auto slot ([auto] max_parallel)"},
-			Auto: &RowAuto{Wanted: true, ApprovePlan: st["mode"] == autoPlan, Running: true, Waiting: "slot"}})
+			Next: next, Auto: &RowAuto{Wanted: true, ApprovePlan: st["mode"] == autoPlan, Running: true, Waiting: wait}})
 	}
 	return out
 }

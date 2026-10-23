@@ -44,12 +44,14 @@ type AutoStep struct {
 
 // AutoResult is how tkt auto ended. Stop says why a loop stopped, or why
 // --once took no step, such as a pause for a person; Did is the step --once
-// took, and Wait what it waits for instead.
+// took, and Wait what it waits for instead. Hold is what the status pages
+// report while --once waits for their incident to end.
 type AutoResult struct {
 	Ticket  string     `json:"ticket"`
 	Stop    string     `json:"stop"`
 	Did     *AutoStep  `json:"did"`
 	Wait    string     `json:"wait"`
+	Hold    string     `json:"hold,omitempty"`
 	Next    Next       `json:"next"`
 	Phase   string     `json:"phase"`
 	Rounds  int        `json:"rounds"`
@@ -62,6 +64,8 @@ func (r *AutoResult) Text(w io.Writer) {
 	switch {
 	case r.Did != nil:
 		fmt.Fprintf(w, "%s  %s\n", r.Ticket, stepText(*r.Did))
+	case r.Wait == WaitIncident:
+		fmt.Fprintf(w, "%s  waiting: %s; tkt auto sets no agent to work until it ends\n", r.Ticket, r.Hold)
 	case r.Wait != "":
 		fmt.Fprintf(w, "%s  waiting: %s\n", r.Ticket, r.Next.Text)
 	default:
@@ -183,6 +187,10 @@ const (
 	actPause   = "pause"
 )
 
+// WaitIncident is what tkt auto waits for while a status page reports an
+// incident: --once says so in wait, and tkt ls in auto.waiting.
+const WaitIncident = "incident"
+
 // AutoPolicy is what one tkt auto run may do.
 type AutoPolicy struct {
 	ApprovePlan bool
@@ -196,12 +204,25 @@ type autoMemory struct {
 	Last   string
 }
 
+// autoAct is a step. Why says what a poll waits for when the rule list
+// does not, such as an incident.
 type autoAct struct {
-	Kind, Stage, Stop string
+	Kind, Stage, Stop, Why string
 }
 
 func (a autoAct) key(head string) string {
 	return a.Kind + ":" + a.Stage + "@" + head
+}
+
+// held turns a step that sets an agent to work into a wait while a status
+// page reports an incident, as tkt watch holds its own: a fix for checks
+// that fail because CI is down, or a run on a model that does not answer,
+// only spends a round. A sync needs no agent and goes on.
+func held(a autoAct, hold string) autoAct {
+	if hold != "" && (a.Kind == actStart || a.Kind == actApprove || a.Kind == actRun) {
+		return autoAct{Kind: actPoll, Why: WaitIncident}
+	}
+	return a
 }
 
 // autoStep decides tkt auto's next action from the rule tkt ls applies. It
@@ -292,6 +313,9 @@ type autoView struct {
 	Started bool
 	// Wanted is false once tkt auto --stop cleared the ticket's auto key.
 	Wanted bool
+	// Hold is what the status pages report while they hold agent runs
+	// back, as the running tkt watch last read them, or "".
+	Hold string
 }
 
 // autoWorld is what the loop needs from outside, so tests can script it.
@@ -311,6 +335,10 @@ type autoWorld interface {
 	// frees it once the agent stops working.
 	holdSlot(ctx context.Context) (waited bool, err error)
 	dropSlot()
+	// waitIncident records that the loop waits for an incident to end
+	// before it sets an agent to work, or, with on false, that it no
+	// longer does.
+	waitIncident(on bool, hold string)
 	now() time.Time
 }
 
@@ -338,8 +366,9 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 	res := &AutoResult{Ticket: id, Steps: []AutoStep{}, DryRun: dry}
 	fails := 0
 	// pausedOn is the pause the loop notified about; retry is a step that
-	// failed and that the loop takes again.
-	pausedOn, retry := "", ""
+	// failed and that the loop takes again; incident says it waits for one
+	// to end.
+	pausedOn, retry, incident := "", "", false
 	defer w.dropSlot()
 	for {
 		v, err := w.look(ctx, false)
@@ -364,6 +393,11 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 		a := autoAct{Kind: actStart}
 		if v.Started {
 			a = autoStep(v.Next, v.Facts, p, mem)
+		}
+		a = held(a, v.Hold)
+		if on := a.Why == WaitIncident; on != incident && !once {
+			incident = on
+			w.waitIncident(on, v.Hold)
 		}
 		// A slot counts agents at work: the loop keeps it while its agent
 		// works or starts, and gives it up while it waits for CI, the bot
@@ -398,7 +432,10 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 			continue
 		case actWait, actPoll:
 			if once {
-				res.Wait = v.Next.Reason
+				res.Wait = or(a.Why, v.Next.Reason)
+				if a.Why == WaitIncident {
+					res.Hold = v.Hold
+				}
 				return res, nil
 			}
 			if a.Kind == actWait {
@@ -421,7 +458,7 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 			if err != nil {
 				return nil, err
 			}
-			if autoStep(again.Next, again.Facts, p, mem) != a {
+			if held(autoStep(again.Next, again.Facts, p, mem), again.Hold) != a {
 				continue
 			}
 			v = again
@@ -600,6 +637,7 @@ func (w *ctxWorld) now() time.Time { return w.c.Now() }
 
 func (w *ctxWorld) look(ctx context.Context, fetch bool) (autoView, error) {
 	c := w.c
+	hold := holdText(c.incidents())
 	if w.path == "" {
 		es, err := c.WT.List(c.Ctx)
 		if err != nil {
@@ -607,7 +645,7 @@ func (w *ctxWorld) look(ctx context.Context, fetch bool) (autoView, error) {
 		}
 		e, ok := es.Find(w.id)
 		if !ok {
-			return autoView{Wanted: true}, nil
+			return autoView{Wanted: true, Hold: hold}, nil
 		}
 		w.path = e.Path
 	}
@@ -619,7 +657,7 @@ func (w *ctxWorld) look(ctx context.Context, fetch bool) (autoView, error) {
 		return autoView{}, errForge{l.forgeErr}
 	}
 	row, f := c.row(ctx, l, ticketWorktree{ID: w.id, Path: w.path})
-	v := autoView{Facts: f, Next: row.Next, Phase: row.Phase, Started: true, Wanted: true}
+	v := autoView{Facts: f, Next: row.Next, Phase: row.Phase, Started: true, Wanted: true, Hold: hold}
 	if row.Agent != nil {
 		v.Pane = row.Agent.PaneID
 	}
@@ -836,12 +874,26 @@ func (w *ctxWorld) holdSlot(ctx context.Context) (bool, error) {
 			waiting = true
 			c.UI.Info("%d tkt auto agents already work; %s waits for one to stop ([auto] max_parallel)", n, w.id)
 			w.remember(w.memoryNow(), "auto_wait", "slot")
-			w.queue()
+			w.queue("slot")
 		}
 		if err := w.sleep(ctx, 2*time.Second); err != nil {
 			return false, err
 		}
 	}
+}
+
+func (w *ctxWorld) waitIncident(on bool, hold string) {
+	if w.c.Dry {
+		return
+	}
+	if on {
+		w.c.UI.Info("%s; tkt auto sets no agent to work on %s until it ends", hold, w.id)
+		w.remember(w.memoryNow(), "auto_wait", WaitIncident)
+		w.queue(WaitIncident)
+		return
+	}
+	w.remember(w.memoryNow(), "auto_wait", "")
+	w.unqueue()
 }
 
 func (w *ctxWorld) dropSlot() {
@@ -855,7 +907,9 @@ func (w *ctxWorld) dropSlot() {
 // ticket has a worktree.
 func queuedDir(common string) string { return filepath.Join(common, "tkt", "queued") }
 
-func (w *ctxWorld) queue() {
+// queue marks a ticket with no worktree yet as waiting, for a slot or for
+// an incident to end, so tkt ls can show it.
+func (w *ctxWorld) queue(wait string) {
 	if w.path != "" {
 		return
 	}
@@ -864,7 +918,7 @@ func (w *ctxWorld) queue() {
 		return
 	}
 	p := filepath.Join(dir, w.id)
-	body := "mode=" + w.mode + "\nsince=" + w.c.Now().UTC().Format(history.TimeFormat) + "\n"
+	body := "mode=" + w.mode + "\nsince=" + w.c.Now().UTC().Format(history.TimeFormat) + "\nwait=" + wait + "\n"
 	if os.WriteFile(p, []byte(body), 0o644) == nil {
 		w.queued = p
 	}

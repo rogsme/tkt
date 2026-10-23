@@ -27,8 +27,8 @@ exec tkt watch --once --json
 envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::incident","ACM-2:sync:base_moved"]'
 envelope '.result.incidents[0] | [.page, .service, .problem]' '["github","GitHub","Actions partial outage"]'
 envelope '.result.chores[0] | [.chore, .action, .reason]' '["deps","","incident"]'
-stderr 'GitHub reports Actions partial outage; tkt watch starts no agent until it ends'
-logged herdr notification show 'GitHub: incident' --body 'Actions partial outage; tkt watch starts no agent until it ends'
+stderr 'GitHub reports Actions partial outage; tkt watch and tkt auto start no agent until it ends'
+logged herdr notification show 'GitHub: incident' --body 'Actions partial outage; tkt watch and tkt auto start no agent until it ends'
 ! logged herdr agent start
 exec tkt watch --once
 stdout '^GitHub reports Actions partial outage, so tkt watch starts no agent$'
@@ -41,7 +41,7 @@ waitfile $REPO/.git/tkt/watch
 exec tkt ls --no-fetch --json
 envelope '.result.incidents[0] | [.service, .problem]' '["GitHub","Actions partial outage"]'
 exec tkt ls --no-fetch
-stdout '^GitHub reports Actions partial outage; tkt watch starts no agent until it ends$'
+stdout '^GitHub reports Actions partial outage; tkt watch and tkt auto start no agent until it ends$'
 exec tkt watch --stop
 exec tkt ls --no-fetch --json
 envelope '.result.incidents' '[]'

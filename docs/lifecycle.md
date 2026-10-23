@@ -266,6 +266,7 @@ Status: DONE
 | Checks fail | Runs `tkt run ACM-123 ci`. |
 | Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head | Stops: the ticket is yours to verify and merge. |
 | No bot review after `[review] bot_wait` (15 minutes) | Pauses for you. With no bot (`bot_wait = "0s"`) it runs `tkt run ACM-123 review` instead. |
+| A status page reports an incident (see [tkt watch keeps the tickets moving](#tkt-watch-keeps-the-tickets-moving)) | Waits: it starts, approves and runs nothing, and spends no round, until the incident ends. A sync goes on. |
 
 Where a person decides, it pauses rather than ends: when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. It notifies once, shows the ticket as paused, and goes on by itself when the ticket moves, such as after you answer the agent in its tab. While it drives a ticket, the tab reads `ACM-123 (auto)`. `tkt hold ACM-123` pauses the loop until `tkt hold ACM-123 --off`, without a notification, for a ticket you want to park or drive by hand. At most `[auto] max_parallel` tkt auto agents (3) work at once in a repository; a loop gives up its slot while it waits for CI, the bot or you, and the others wait, queued.
 
@@ -294,7 +295,7 @@ flowchart TD
 
 Plans, findings and human verification stay with you, or with `tkt auto`, and so do reviews and the word to merge: watch merges only through the merge order `tkt merge` leaves when you verified a head finish-ticket could not merge yet, and it reviews only the head a sync made for such an order. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
 
-While a status page that `config.toml` names reports a problem, such as a GitHub Actions outage or a model provider's, `tkt watch` starts no agent: no `ci`, `resolve` or `review` run, no merge line and no chore run, since each would only spend a round on a service that is down. Syncs and removals, which need no agent, go on. It reads the pages every five minutes, notifies when an incident starts and when it ends, and `tkt ls` and the tkt agent's board show it while it lasts:
+While a status page that `config.toml` names reports a problem, such as a GitHub Actions outage or a model provider's, `tkt watch` starts no agent: no `ci`, `resolve` or `review` run, no merge line and no chore run, since each would only spend a round on a service that is down. Syncs and removals, which need no agent, go on, and `tkt auto` loops wait the same way. It reads the pages every five minutes, notifies when an incident starts and when it ends, and `tkt ls` and the tkt agent's board show it while it lasts:
 
 ```toml
 [status.github]
