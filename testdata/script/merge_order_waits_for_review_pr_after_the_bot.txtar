@@ -18,6 +18,7 @@ resetlog
 exec tkt watch --once --json
 envelope '.result.tickets[0] | [.action, .stage, .reason]' '["run","review","needs_review"]'
 grep '^Use the review-pr skill to review the current PR.$' $FAKE_DIR/prompts
+logged herdr notification show 'ACM-12: tkt watch runs review' --body 'only the review bot cleared the head you ordered merged, and finish-ticket merges on review-pr''s verdict; a fresh session reviews it'
 
 # review-pr's READY_FOR_HUMAN, and the bot's later CLEAR on the same head:
 # the order is due.

@@ -66,6 +66,12 @@ test("the key stays while the situation does, and changes with it", () => {
 	const r = row({ phase: "awaiting_approval", last_status: "AWAITING_APPROVAL" });
 	assert.equal(attentionOf(r, false)?.key, attentionOf({ ...r, phase_since: "2026-02-02T00:00:00Z" }, false)?.key);
 	assert.notEqual(attentionOf(r, false)?.key, attentionOf({ ...r, phase: "needs_you", last_status: "BLOCKED" }, false)?.key);
+	// Putting a ticket on hold while its plan waits keeps the plan's item,
+	// so it is not announced again; a pause's reason still tells pauses apart.
+	const waiting = { ...r, auto: auto({ approve_plan: false, paused: "plan_awaits_approval" }) };
+	assert.equal(attentionOf({ ...waiting, hold: true, auto: auto({ approve_plan: false, paused: "hold" }) }, false)?.key, attentionOf(waiting, false)?.key);
+	const paused = row({ phase: "needs_you", auto: auto({ paused: "bot_silent" }) });
+	assert.notEqual(attentionOf(paused, false)?.key, attentionOf({ ...paused, auto: auto({ paused: "no_progress" }) }, false)?.key);
 });
 
 /** offered lists an item's answers as do, or do:stage for a run. */

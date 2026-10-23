@@ -1,0 +1,43 @@
+# While a status page reports an incident, tkt auto sets no agent to work,
+# as tkt watch does: the address run for the bot's findings waits, and
+# spends no round. tkt auto goes by what the running tkt watch last read
+# from the pages, so once no watch runs, nothing holds the fix back.
+mkdir $HOME/.config/tkt
+expand $WORK/config.toml
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1SHORT"; $H1[0:7]) | gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+mkdir $WORK/github/api/v2
+cp $WORK/outage.json $WORK/github/api/v2/summary.json
+exec tkt watch &
+waitfile $REPO/.git/tkt/status
+
+resetlog
+exec tkt auto ACM-1 --once --poll 100ms --json
+envelope '.result | [.wait, .hold, .did]' '["incident","GitHub: Actions major outage",null]'
+exec tkt auto ACM-1 --once --poll 100ms
+stdout '^ACM-1  waiting: GitHub: Actions major outage; tkt auto sets no agent to work until it ends$'
+! logged herdr agent start
+state $FAKE_WT_ROOT/ACM-1 rounds ''
+
+# Once no tkt watch reads the pages, nothing holds the fix back.
+exec tkt watch --stop
+exec tkt auto ACM-1 --once --poll 100ms --json
+envelope '.result.did | [.action, .stage]' '["run","address"]'
+logged herdr agent start acm-1 --kind claude
+
+-- config.toml --
+[status.github]
+page = "file://$WORK/github"
+components = ["Actions"]
+-- outage.json --
+{"page": {"name": "GitHub"}, "status": {"indicator": "major", "description": "Major System Outage"},
+ "components": [{"name": "Actions", "status": "major_outage"}], "incidents": []}
+-- prs.json --
+[{"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+  "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: FINDINGS** head `H1SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

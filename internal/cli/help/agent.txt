@@ -30,8 +30,9 @@ which offers to sync a ticket that is behind first), /done, /inbox (what needs
 you, with fixed answers), /board (every ticket in columns), /chores (the
 repository's chores; /chores run NAME starts a run now), /history, /stats
 and /update. A tool that changes a ticket your message did
-not name asks first, and removing a ticket always asks. Text for a busy agent
-waits in a queue and goes in when the agent stops.
+not name asks first, and removing a ticket always asks. Text for a working
+agent goes in at once, and the agent reads it at its next step; text for an
+agent that asks a question waits until you answer it in its tab.
 
 The chat checks for a newer tkt release when it opens and every six hours,
 and names it under the board. /update installs it with tkt update, then offers

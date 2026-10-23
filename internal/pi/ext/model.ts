@@ -69,7 +69,8 @@ export interface Unblocked {
 }
 
 /** Incident is a status page that reports a problem with its service, as
- * tkt watch last read it: while one does, tkt watch starts no agent. */
+ * tkt watch last read it: while one does, tkt watch and tkt auto start no
+ * agent. */
 export interface Incident {
 	page: string;
 	service: string;
@@ -194,9 +195,11 @@ export function picksText(r: SuggestResult): string {
 /** mergeText says what tkt merge did, for the chat. */
 export function mergeText(r: MergeResult): string {
 	if (r.action === "ordered") {
+		// A head the steps did not run on came from a clean sync; on the
+		// head they ran on, only the review bot cleared it.
 		const once = {
 			sync: "tkt watch merged its base and a review cleared the new head; your steps carry over the clean merge",
-			review: "a review clears the head a sync made; your steps carry over the clean merge",
+			review: r.verified && r.verified !== r.head ? "a review clears the head a sync made; your steps carry over the clean merge" : "review-pr, which tkt watch starts, clears its head, since finish-ticket merges on review-pr's verdict",
 			turn: `${r.after || "the other ticket"} merged first, since one merge goes at a time`,
 			checks: "its checks pass",
 			"": "its checks pass",

@@ -101,6 +101,10 @@ type simWorld struct {
 	// failSync makes that many syncs fail, as with changes in the worktree.
 	failSync int
 	resumes  int
+	// hold is what the status pages report; incidents records each time the
+	// loop starts and stops waiting for one to end.
+	hold      string
+	incidents []bool
 }
 
 const simPoll = 30 * time.Second
@@ -116,7 +120,7 @@ func (w *simWorld) look(_ context.Context, fetch bool) (autoView, error) {
 		w.flip = nil
 	}
 	n := NextStep(w.f)
-	return autoView{Facts: w.f, Next: n, Phase: PhaseOf(w.f, n), Pane: "w1:p10", Started: w.started, Wanted: w.wanted}, nil
+	return autoView{Facts: w.f, Next: n, Phase: PhaseOf(w.f, n), Pane: "w1:p10", Started: w.started, Wanted: w.wanted, Hold: w.hold}, nil
 }
 
 func (w *simWorld) waitAgent(context.Context, string) error {
@@ -171,6 +175,7 @@ func (w *simWorld) stopped(stop string, _ autoView)         { w.stops = append(w
 func (w *simWorld) paused(why string, _ autoView, _ string) { w.pauses = append(w.pauses, why) }
 func (w *simWorld) resumed()                                { w.resumes++ }
 func (w *simWorld) dropSlot()                               { w.slot = false }
+func (w *simWorld) waitIncident(on bool, _ string)          { w.incidents = append(w.incidents, on) }
 func (w *simWorld) now() time.Time                          { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
 
 func (w *simWorld) holdSlot(context.Context) (bool, error) {
@@ -229,6 +234,55 @@ func TestAutoLoopDrivesToReadyForHuman(t *testing.T) {
 	// more for address.
 	if w.slots != 2 || w.slot {
 		t.Errorf("slots taken %d, held at the end %v", w.slots, w.slot)
+	}
+}
+
+// While a status page reports an incident, the loop sets no agent to work
+// and spends no round: the fix waits until the incident ends, while a
+// clean sync, which needs no agent, goes on.
+func TestAutoLoopWaitsOutAnIncident(t *testing.T) {
+	w := &simWorld{
+		f:      Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "fail", Head: "h1", Behind: -1, BotWait: time.Hour},
+		wanted: true, started: true,
+		hold:  "GitHub: Actions major outage",
+		turns: []func(*Facts){pushed("h2")},
+	}
+	w.polls = []func(*Facts){
+		func(*Facts) {},                    // still down: no ci run, no round
+		func(*Facts) { w.hold = "" },       // the incident ends
+		func(f *Facts) { f.Checks = "ok" }, // CI passes on the fix
+		verdict("CLEAR"),
+	}
+	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(w.acts, []string{"run:ci"}) || res.Rounds != 1 || res.Stop != StopReadyForHuman {
+		t.Errorf("acts %v, result %+v", w.acts, res)
+	}
+	if !slices.Equal(w.incidents, []bool{true, false}) || len(w.pauses) != 0 {
+		t.Errorf("incident waits %v, pauses %v", w.incidents, w.pauses)
+	}
+
+	// --once says what it waits for, and why.
+	w = &simWorld{f: Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "fail", Head: "h1", Behind: -1}, started: true, hold: "GitHub: Actions major outage"}
+	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, true, false)
+	if err != nil || res.Did != nil || res.Wait != WaitIncident || res.Hold != "GitHub: Actions major outage" || len(w.acts) != 0 || len(w.incidents) != 0 {
+		t.Errorf("once: %+v %v, acts %v", res, err, w.acts)
+	}
+
+	// A clean sync needs no agent, so it goes on during the incident.
+	w = &simWorld{f: Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "ok", Head: "h1", Behind: 2, Verdict: "STALE_BASE", AtHead: true, BaseMerge: "clean", BotWait: time.Hour}, started: true, hold: "GitHub: Actions major outage"}
+	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, true, false)
+	if err != nil || res.Did == nil || res.Did.Action != actSync || !slices.Equal(w.acts, []string{"sync"}) {
+		t.Errorf("sync: %+v %v, acts %v", res, err, w.acts)
+	}
+
+	// A ticket that has not started waits to start.
+	w = &simWorld{f: Facts{ID: "ACM-2", Behind: -1}, hold: "GitHub: Actions major outage"}
+	res, err = autoLoop(context.Background(), w, "ACM-2", AutoPolicy{}, autoMemory{}, simPoll, true, false)
+	if err != nil || res.Wait != WaitIncident || len(w.acts) != 0 {
+		t.Errorf("start: %+v %v, acts %v", res, err, w.acts)
 	}
 }
 
@@ -380,6 +434,27 @@ func TestAutoSlots(t *testing.T) {
 	// While it waited, a ticket with no worktree showed in queued/.
 	if entries, _ := os.ReadDir(queuedDir(common)); len(entries) != 0 {
 		t.Errorf("queued/ keeps %v after the slot came", entries)
+	}
+}
+
+// A ticket with no worktree yet shows in tkt ls while its loop waits, with
+// what it waits for: a slot, or an incident to end.
+func TestQueuedTicketsSayWhatTheyWaitFor(t *testing.T) {
+	common := t.TempDir()
+	running, err := lock.Try(common, "ACM-3.auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer running.Close()
+	c := &Ctx{App: &App{UI: &output.UI{Err: &bytes.Buffer{}}, Now: time.Now}, Ctx: context.Background(), Repo: gitx.Repo{Common: common}}
+	w := &ctxWorld{c: c, id: "ACM-3", mode: autoPlan}
+	w.queue(WaitIncident)
+	if rows := c.queuedTickets(); len(rows) != 1 || rows[0].Next.Reason != ReasonIncident || rows[0].Auto.Waiting != WaitIncident || !rows[0].Auto.ApprovePlan {
+		t.Errorf("waiting for an incident: %+v", rows)
+	}
+	w.queue("slot")
+	if rows := c.queuedTickets(); len(rows) != 1 || rows[0].Next.Reason != ReasonAwaitingSlot || rows[0].Auto.Waiting != "slot" {
+		t.Errorf("waiting for a slot: %+v", rows)
 	}
 }
 

@@ -19,7 +19,7 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 
 ## Rules
 
-- A change in behavior comes with a script in `testdata/script/` that shows it, or a unit test next to the code.
+- A change in behavior comes with a script in `testdata/script/` that shows it, or a unit test next to the code. It also updates the README, `docs/lifecycle.md` and `docs/day-in-the-life.md` where they describe it.
 
 - Every external command runs through `runner.Runner`, so it is logged and tests can replace it. Polls that repeat many times a second set `Quiet`.
 - Every failure a person or program sees is an `*apperr.Error` with a registered code. Add the code to `Registry` with its exit status and a summary. Codes never change meaning once released.
@@ -51,7 +51,7 @@ tkt reads no skill files at run time. It depends on these lines from gitlab.com/
 
 ## Writing
 
-Help text, error messages, the README and commit messages follow the skills repository's writing rules:
+Help text, error messages, the README, the pages in `docs/` and commit messages follow the skills repository's writing rules:
 
 - Plain words, short sentences, present tense.
 - No em dashes or en dashes (U+2014, U+2013): rewrite the sentence.
@@ -90,4 +90,4 @@ To release, run `just release vX.Y.Z` on master with a clean tree. It runs `just
 - Push a prerelease first after changing the release workflow or `install.sh`.
 - Each release binary embeds its system's pi tarball, so it weighs 40 to 50 MB instead of about 10. The release job downloads the four tarballs from pi's GitHub releases and checks them against `pi.lock` before it builds. The first release with pi inside must be a prerelease, to prove that the job, the upload and `tkt update` cope with that size.
 
-The downloads work because a Cloudflare rule skips the challenge for `/rogs/tkt/releases/download/`; Gitea serves the assets there without redirecting to `/attachments/`. A 403 with `cf-mitigated: challenge` on a download means that rule changed. `go install gitlab.com/rogs/tkt@...` needs the public GitLab mirror. At v0.2.0 the mirror did not exist yet; a "could not read Username for 'https://gitlab.com'" error means it still does not. The README's "Maintainer setup" has the settings outside the repository.
+The downloads work because a Cloudflare rule skips the challenge for `/rogs/tkt/releases/download/`; Gitea serves the assets there without redirecting to `/attachments/`. A 403 with `cf-mitigated: challenge` on a download means that rule changed. `go install gitlab.com/rogs/tkt@...` needs the public GitLab mirror. At v0.2.0 the mirror did not exist yet; a "could not read Username for 'https://gitlab.com'" error means it still does not. The settings outside the repository, that rule among them, were in the README's "Maintainer setup" section until 569e7a5 trimmed it; `git show 569e7a5^:README.md` prints it.

@@ -48,6 +48,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 				const a = r.auto;
 				const auto = !a ? "off"
 					: a.running && a.waiting === "slot" ? "on, queued for a free slot"
+					: a.running && a.waiting === "incident" ? "on, waiting for the incident at the top of the board to end before it sets an agent to work"
 					: a.running && a.paused ? `on, paused for the user (${a.paused}${a.why ? `, ${a.why}` : ""}); it goes on by itself when the ticket moves`
 					: a.running ? `on${a.approve_plan ? ", approving plans" : ""}`
 					: a.wanted ? "stalled: marked for auto, but no loop runs"

@@ -40,7 +40,7 @@ resetlog
 exec tkt watch --once --json
 envelope '.result.tickets[0] | [.action, .stage, .reason]' '["run","review","needs_review"]'
 grep '^Use the review-pr skill to review the current PR.$' $FAKE_DIR/prompts
-logged herdr notification show 'ACM-12: tkt watch runs review'
+logged herdr notification show 'ACM-12: tkt watch runs review' --body 'a clean sync moved the head you ordered merged; a fresh session reviews it, and your steps carry over'
 state $FAKE_WT_ROOT/ACM-12 rounds ''
 
 # The review clears the new head: the order is due, with the head the

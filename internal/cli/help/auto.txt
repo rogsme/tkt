@@ -46,6 +46,12 @@ loop holds a slot while its agent works and gives it up while it waits for CI,
 the bot or you. A ticket waiting for a slot shows as queued in tkt ls, even
 before it has a worktree.
 
+While a status page that the running tkt watch reads reports an incident
+(tkt help watch), the loop sets no agent to work: it starts, approves and
+runs nothing, and spends no round, until the incident ends. A sync needs no
+agent and goes on. tkt ls shows incident in auto.waiting, and --once says it
+waits for the incident. tkt run starts an agent anyway.
+
 --once takes at most one step and exits 0, saying what it did, what it waits
 for, or why it would stop or pause. With --dry-run it prints the step instead.
 --notify shows a herdr notification when the loop pauses for you or ends.

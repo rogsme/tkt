@@ -10,8 +10,8 @@ env FAKE_GH_FAIL=1
 resetlog
 ! exec tkt watch --once --json
 envelope '.error.message' 'gh pr list failed: HTTP 502'
-stderr 'GitHub reports API Requests major outage; tkt watch starts no agent until it ends'
-logged herdr notification show 'GitHub: incident' --body 'API Requests major outage; tkt watch starts no agent until it ends'
+stderr 'GitHub reports API Requests major outage; tkt watch and tkt auto start no agent until it ends'
+logged herdr notification show 'GitHub: incident' --body 'API Requests major outage; tkt watch and tkt auto start no agent until it ends'
 exists $REPO/.git/tkt/status
 
 cp $WORK/watch.toml $HOME/.config/tkt/config.toml

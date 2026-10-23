@@ -130,8 +130,12 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 	const id = row.ticket;
 	const a = row.auto;
 	const reason = row.next?.reason ?? "";
-	const base = [id, row.phase, row.pr?.head ?? "", row.last_status, reason, a?.paused ?? "", a?.why ?? ""].join("|");
-	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: `${kind}|${base}`, ticket: id, kind, title, text, byAuto, offers, chore: !!row.chore });
+	const base = [id, row.phase, row.pr?.head ?? "", row.last_status, reason].join("|");
+	// A pause's own reason is part of its situation. A plan or a question
+	// is the same item whoever waits on it, so a loop that pauses on the
+	// hold you set does not announce the plan again.
+	const keyOf = (kind: AttentionKind) => (kind === "paused" ? `${kind}|${base}|${a?.paused ?? ""}|${a?.why ?? ""}` : `${kind}|${base}`);
+	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: keyOf(kind), ticket: id, kind, title, text, byAuto, offers, chore: !!row.chore });
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
 	if (a?.running && !row.hold) {
 		// A pause stays in the loop's state until its next look. Once the

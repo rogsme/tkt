@@ -13,9 +13,9 @@ import (
 )
 
 // Incident is a status page that reports a problem with its service, as
-// tkt watch last read it. While one does, tkt watch starts no agent: a fix
-// for checks that fail because CI is down, or a run on a model that does not
-// answer, only spends a round. Page is the [status.NAME] the page has in
+// tkt watch last read it. While one does, tkt watch and tkt auto start no
+// agent: a fix for checks that fail because CI is down, or a run on a model
+// that does not answer, only spends a round. Page is the [status.NAME] the page has in
 // config.toml, Service what the page calls its service, Since when tkt first
 // read the problem, and Seen when it last did, in UTC.
 type Incident struct {
@@ -68,7 +68,7 @@ func lastIncidents(common string, now time.Time) []Incident {
 	return f.Incidents
 }
 
-// holdText says why tkt watch starts no agent, or "".
+// holdText says why tkt watch and tkt auto start no agent, or "".
 func holdText(incs []Incident) string {
 	var parts []string
 	for _, i := range incs {
@@ -149,8 +149,8 @@ func (w *watcher) readStatus(c *Ctx) {
 	}
 	for _, i := range incs {
 		if _, ok := prev[i.Page]; !ok {
-			c.UI.Warn("%s reports %s; tkt watch starts no agent until it ends", i.Service, i.Problem)
-			c.notify(i.Service, notice{"incident", i.Problem + "; tkt watch starts no agent until it ends", "request"})
+			c.UI.Warn("%s reports %s; tkt watch and tkt auto start no agent until it ends", i.Service, i.Problem)
+			c.notify(i.Service, notice{"incident", i.Problem + "; tkt watch and tkt auto start no agent until it ends", "request"})
 		}
 		delete(prev, i.Page)
 	}
