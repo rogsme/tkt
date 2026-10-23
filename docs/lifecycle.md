@@ -61,7 +61,7 @@ flowchart TD
   ticket[ACM-123 in the tracker, state new]
   ct[create-ticket<br/>optional: audit, preview, create]
   start[tkt start ACM-123<br/>worktree, tab, agent, start line]
-  st[start-ticket<br/>read-only investigation and plan]
+  st[start-ticket<br/>move to in-progress, investigate, plan]
   plan{You read the plan}
   wk[work-ticket<br/>commits, PR, exact-head CI, handoff]
   review[tkt run ACM-123 review<br/>review-pr in a fresh session]
@@ -150,21 +150,21 @@ tkt keeps the ticket's preset, session, tab and pane in the worktree's git direc
 
 ### 3. start-ticket plans
 
-The agent checks that it sits in the right worktree, loads the ticket with every comment and relation, looks for blockers among the tickets in flight, and reads the code end to end. It writes no code. It returns a plan that opens with a plain overview and diagrams, maps every acceptance criterion to a step, and names the seams the tests will cover. When plan review is on, a model from another vendor reviews the plan through `review-plan` before you see it. When plan presentation is on, `present-plan` shows it in a browser.
+The agent checks that it sits in the right worktree, loads the ticket with every comment and relation, and looks for blockers among the tickets in flight. When nothing blocks the ticket, it moves the ticket to `in-progress`, so the board shows it started, and reads the code end to end. It writes no code. It returns a plan that opens with a plain overview and diagrams, maps every acceptance criterion to a step, and names the seams the tests will cover. When plan review is on, a model from another vendor reviews the plan through `review-plan` before you see it. When plan presentation is on, `present-plan` shows it in a browser.
 
-The agent ends with `Status: AWAITING_APPROVAL`, and the tracker is unchanged.
+The agent ends with `Status: AWAITING_APPROVAL`. When you drop the ticket instead of approving a plan, tell the agent, and it moves the ticket back.
 
 ### 4. You approve, and work-ticket builds
 
 Read the plan with `tkt show ACM-123`, which prints the agent's last message from its session's record. Ask for changes with `tkt send ACM-123 "what to change"` until the plan is right, then approve it with `tkt approve ACM-123`. Both type into the planning session, as an answer in the tab would. Do not use `tkt run` here: it starts a fresh session, and the plan lives in this one. The same session goes on with `work-ticket`:
 
-1. It posts the plan as an `## Approved implementation plan` comment and moves the ticket to `in-progress`.
+1. It posts the plan as an `## Approved implementation plan` comment, after moving the ticket to `in-progress` if it is not there yet.
 2. It implements the plan, test-first where the configuration says so, and commits each unit through `commit`.
 3. It merges the base into the branch, runs the full check, and pushes. Nothing rebases or force-pushes.
 4. With the browser pass on, it captures each visible acceptance criterion with `playwright-cli`.
 5. It opens the pull request through `create-pr`, with a review brief and a numbered human verification procedure.
 6. It waits for CI on the exact head and checks that the head contains the current base.
-7. It posts a handoff comment on the ticket and moves it to `in-review`.
+7. It moves the ticket to `in-review` and posts a handoff comment on it.
 
 It ends with `Status: READY_FOR_REVIEW`.
 
@@ -224,14 +224,14 @@ The steps carry over clean merges of the base: finish-ticket counts a confirmati
 
 The order stands until the pull request merges: when finish-ticket stops with `BLOCKED_FOR_SYNC` because another merge moved the base, `tkt watch` syncs again and sends the line on the new head. A new head of any other kind, a fix or the resolution of a conflict, drops the order with a notification, since the steps ran on code it changed; so does finish-ticket's `HUMAN_QA_FAILED`, and another session taking the ticket over after the line went out. `tkt merge ACM-123 --cancel` drops an order, and says when the line went out. To waive a step, or to merge after a step failed, tell the agent in the tab yourself.
 
-Before it merges, `finish-ticket` requires green CI for the exact head, a `READY_FOR_HUMAN` verdict for that same head and base, no open feedback, and your confirmation of every human step. It then merges, checks that the merge commit's tree equals the reviewed head's, waits for post-merge CI, posts a `## Completion` comment, and moves the ticket to `done`.
+Before it merges, `finish-ticket` requires green CI for the exact head, a `READY_FOR_HUMAN` verdict for that same head and base, no open feedback, and your confirmation of every human step. It then merges, checks that the merge commit's tree equals the reviewed head's, moves the ticket to `done`, waits for post-merge CI, and posts a `## Completion` comment.
 
 | Ending | Next |
 |---|---|
 | `Status: DONE` | Step 9. |
 | `Status: HUMAN_QA_FAILED` | A step failed. The agent records what you saw on the pull request; run `tkt run ACM-123 address`. |
 | `Status: BLOCKED_FOR_SYNC` | The base moved after the review. Even a clean merge would ship an integration nobody reviewed, so the new head needs a review. Your merge order stands: `tkt watch` syncs, has the new head reviewed, and sends the line again, and your steps carry over the clean merge. |
-| `Status: BLOCKED_POST_MERGE` | The merge landed but post-merge CI failed. The ticket stays in `in-review`; look at the base branch's checks. |
+| `Status: BLOCKED_POST_MERGE` | The merge landed but post-merge CI failed. The ticket is `done`, since its change merged, but has no `## Completion` comment yet; look at the base branch's checks. |
 
 ### 9. tkt done cleans up
 
@@ -328,7 +328,7 @@ A ticket without a pull request waits, since work-ticket merges the base itself 
 
 ## Who changes the tracker
 
-Only three skills move a ticket, and each moves it once:
+Three skills move a ticket, each as soon as its new state is true, so the board stays current:
 
 ```mermaid
 stateDiagram-v2
@@ -337,13 +337,13 @@ stateDiagram-v2
   state "in-review" as review
   state "done" as done
   [*] --> new: create-ticket, or by hand
-  new --> progress: work-ticket, before the first edit
-  progress --> review: work-ticket, after exact-head CI passes
-  review --> done: finish-ticket, after the merge is verified
+  new --> progress: start-ticket, once nothing blocks it
+  progress --> review: work-ticket, once exact-head CI passes
+  review --> done: finish-ticket, once the merge is verified
   done --> [*]
 ```
 
-`start-ticket` and `review-pr` never write to the tracker. `address-pr-review` writes only replacement browser captures. tkt never touches the tracker at all.
+work-ticket also moves a ticket that is still `new` before its first edit, and start-ticket moves the ticket back when you drop it instead of approving a plan. `review-pr` never writes to the tracker. `address-pr-review` writes only replacement browser captures. tkt never touches the tracker at all.
 
 ## The rules that hold it together
 

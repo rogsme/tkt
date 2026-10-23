@@ -1,4 +1,4 @@
-description: "Merge the current branch's reviewed pull request and complete its ticket or bundle, only after explicit merge authorization and confirmed human verification: require exact-head CI, a final independent review verdict for the same head and base, and no open feedback; then verify the merge and post-merge CI and move every ticket to done. Use only when the user explicitly says \"merge the PR\", \"finish the ticket\" or \"ship this\"."
+description: "Merge the current branch's reviewed pull request and complete its ticket or bundle, only after explicit merge authorization and confirmed human verification: require exact-head CI, a final independent review verdict for the same head and base, and no open feedback; then verify the merge, move every ticket to done, and verify post-merge CI. Use only when the user explicitly says \"merge the PR\", \"finish the ticket\" or \"ship this\"."
 
 1. Require an explicit instruction from the user to merge this pull request. A green check or a reviewer's verdict is not merge authorization.
 

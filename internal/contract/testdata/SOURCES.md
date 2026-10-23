@@ -12,7 +12,7 @@ Each fixture copies text that another project produces, so a change there shows 
 | `start-ticket-unattended.md` | gitlab.com/rogs/skills `skills/lifecycle/start-ticket/SKILL.md`, the `## Unattended runs` section | `619ef65` |
 | `review-pr-clean-merge.md` | gitlab.com/rogs/skills `skills/lifecycle/review-pr/SKILL.md`, the paragraph on a brief pinned to an earlier head, under `## 3. Review the complete change` | `05d27d5` |
 | `resolving-merge-conflicts.md` | gitlab.com/rogs/skills `skills/engineering/resolving-merge-conflicts/SKILL.md`, whole | `b502691` |
-| `finish-ticket-authorization.md` | gitlab.com/rogs/skills `skills/lifecycle/finish-ticket/SKILL.md`: the description, the first rule of `## 1. Verify authorization and context`, the rule on human steps under `## 2. Verify the merge packet`, the paragraph on confirmations across clean merges, and the paragraph on a base that moved | `500c8cb` |
+| `finish-ticket-authorization.md` | gitlab.com/rogs/skills `skills/lifecycle/finish-ticket/SKILL.md`: the description, the first rule of `## 1. Verify authorization and context`, the rule on human steps under `## 2. Verify the merge packet`, the paragraph on confirmations across clean merges, and the paragraph on a base that moved | `07c3359` |
 | `finish-ticket-unblocked.md` | gitlab.com/rogs/skills `skills/lifecycle/finish-ticket/SKILL.md`: the paragraph on what the merge unblocked, under `## 4. Complete the tickets`, and the report under `## 5. Report` | `a348760` |
 | `suggest-tickets-report.md` | gitlab.com/rogs/skills `skills/lifecycle/suggest-tickets/SKILL.md`, the `## 4. Report` section | `1637529` |
 | `automated-review.txt` | the forge's automated reviewer, not a skill: its review summary line | none |
