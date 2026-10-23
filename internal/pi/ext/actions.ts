@@ -226,13 +226,14 @@ export function restoreMarks(entries: { type: string; customType?: string; data?
 /** check walks the human verification steps: verify first if you want,
  * then the checklist, then a fix session for a failed step. */
 export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promise<string> {
-	// Your steps should run on the code that will merge.
+	// Your steps can run on the code that will merge, or carry over the
+	// clean sync a merge order gets.
 	const behind = hub.row(id)?.behind ?? 0;
 	if (behind > 0) {
 		const n = `${behind} commit${behind === 1 ? "" : "s"}`;
 		const a = await ask(ctx, `${id} is ${n} behind its base. Sync it first?`, [
 			{ label: "Sync first", description: "tkt sync merges the base; the new head gets a review, then /check again." },
-			{ label: "Verify this head anyway" },
+			{ label: "Verify this head", description: "Your steps carry over a clean sync: tkt watch syncs it after you merge, and has the new head reviewed." },
 		], false);
 		if (!a) return "Closed.";
 		if (a.answer.startsWith("Sync")) return `${sync(hub, id)} /check ${id} again once the new head is reviewed.`;
@@ -274,9 +275,11 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	if (!head) return `${id}: every step passed, but the board has no head for its pull request yet. /check ${id} again in a moment to merge it.`;
 	const pending = hub.row(id)?.checks?.state === "pending";
 	const go = await ask(ctx, `${id}: every step passed. Merge it?`, [
-		pending
-			? { label: "Merge once CI is green", description: "tkt merge leaves an order, and tkt watch sends finish-ticket the merge line once the checks pass." }
-			: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab." },
+		behind > 0
+			? { label: "Merge once synced", description: "tkt merge leaves an order: tkt watch merges the base, has the new head reviewed, and sends finish-ticket the merge line once the checks pass." }
+			: pending
+				? { label: "Merge once CI is green", description: "tkt merge leaves an order, and tkt watch sends finish-ticket the merge line once the checks pass." }
+				: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab, or leaves an order while another ticket merges." },
 		{ label: "Not yet" },
 	], false);
 	if (!go?.answer.startsWith("Merge")) return `${id}: every step passed. /check ${id} merges it when you are ready.`;

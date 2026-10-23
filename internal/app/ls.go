@@ -84,16 +84,20 @@ type RowWatch struct {
 	Paused string `json:"paused"`
 }
 
-// RowMerge is a merge order: tkt merge left it because the checks at Head
-// had not passed yet, and tkt watch sends finish-ticket the merge line,
-// naming Steps as passed, once they do. A new head drops it, since the
-// steps ran on the old one.
+// RowMerge is a merge order: the human verification steps passed on Head,
+// and tkt watch sends finish-ticket the merge line, naming Steps as passed,
+// once the checks pass and a review clears the pull request's head. The
+// order holds across clean merges of the base, which tkt sync makes, and
+// stands until the pull request merges; a new head of any other kind drops
+// it, since the steps ran on code it changed. Sent is when the line last
+// went out.
 type RowMerge struct {
 	Head  string `json:"head"`
 	Steps []int  `json:"steps"`
 	// As is the preset finish-ticket runs on, or "" for the ticket's own.
-	As string `json:"as"`
-	At string `json:"at"`
+	As   string `json:"as"`
+	At   string `json:"at"`
+	Sent string `json:"sent"`
 }
 
 // ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
@@ -126,8 +130,12 @@ type Row struct {
 	// alone (tkt hold).
 	Hold  bool      `json:"hold"`
 	Watch *RowWatch `json:"watch"`
-	// Merge is the ticket's merge order for its current head, or null.
+	// Merge is the ticket's merge order when it holds at the pull request's
+	// head, or null.
 	Merge *RowMerge `json:"merge"`
+	// orderVoid says a new head voided the ticket's merge order: tkt watch
+	// drops it.
+	orderVoid bool
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
 	PhaseSince string `json:"phase_since"`
@@ -600,9 +608,11 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		row.BaseMerge = c.probeBaseMerge(rctx, t.Path, row.PR.Head, l.baseRef)
 	}
 	row.Watch = &RowWatch{Last: st["watch_last"]}
-	if h := st["merge_head"]; h != "" && row.PR != nil && row.PR.State == "OPEN" && row.PR.Head == h {
-		row.Merge = &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], At: st["merge_at"]}
+	base := ""
+	if l.hasBase {
+		base = l.baseRef
 	}
+	row.Merge, row.orderVoid = c.mergeOrder(rctx, t.Path, st, row.PR, base)
 	if p := st["watch_pause"]; p != "" && row.PR != nil && st["watch_head"] == row.PR.Head && c.watchRunning() {
 		row.Watch.Paused = p
 	}
@@ -637,6 +647,22 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		}
 	}
 	return row, f
+}
+
+// mergeOrder reads the ticket's merge order, when it holds at the pull
+// request's head: the head its steps passed on, or one that clean merges of
+// the base reached from there. void says a head this worktree knows voided
+// it; a head it has not fetched yet, or a base it lacks, says nothing either
+// way.
+func (c *Ctx) mergeOrder(ctx context.Context, path string, st state.State, pr *RowPR, base string) (o *RowMerge, void bool) {
+	h := st["merge_head"]
+	if h == "" || pr == nil || pr.State != "OPEN" || pr.Head == "" {
+		return nil, false
+	}
+	if pr.Head != h && (base == "" || !c.Git.CleanMerges(ctx, path, h, pr.Head, base)) {
+		return nil, base != "" && c.Git.Rev(ctx, path, pr.Head+"^{commit}") != ""
+	}
+	return &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], At: st["merge_at"], Sent: st["merge_sent"]}, false
 }
 
 // probeBaseMerge tries merging the base into the pull request's head, or

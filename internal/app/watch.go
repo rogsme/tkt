@@ -54,9 +54,9 @@ type WatchResult struct {
 // hold, auto (a tkt auto loop drives it), locked (another tkt command works
 // on it), forge_lag (the forge still shows an older head), agent_settling
 // (its agent stopped minutes ago, and a person may still use the session),
-// slot (every [auto] max_parallel slot is taken), worktree_gone (its
-// directory or state is gone), round_limit or no_progress (it waits for
-// you), or its next step's reason.
+// slot (every [auto] max_parallel slot is taken), turn (another ticket's
+// merge goes first), worktree_gone (its directory or state is gone),
+// round_limit or no_progress (it waits for you), or its next step's reason.
 type WatchTicket struct {
 	Ticket string `json:"ticket"`
 	Action string `json:"action"`
@@ -109,6 +109,7 @@ const (
 	WatchSlot     = "slot"
 	WatchLaunch   = "launch"
 	WatchGone     = "worktree_gone"
+	WatchTurn     = "turn"
 )
 
 // watchSettle is how long an agent sits idle before tkt watch replaces it
@@ -150,8 +151,9 @@ func (a watchAct) key(head string) string { return a.Kind + ":" + a.Stage + "@" 
 // nobody needs to decide on: it removes a ticket once finish-ticket ends
 // with Status: DONE, syncs a moved base, fixes failing checks, once per head
 // and up to [auto] max_rounds, and carries out the merge order you left with
-// tkt merge. The plan, reviews and findings stay with you and with tkt auto,
-// and a ticket on hold, or one a tkt auto loop drives, is left alone.
+// tkt merge, reviewing the head a sync made for one first. The plan,
+// reviews and findings stay with you and with tkt auto, and a ticket on
+// hold, or one a tkt auto loop drives, is left alone.
 func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 	leave := func(why string) watchAct { return watchAct{Why: why} }
 	pause := func(why string) watchAct { return watchAct{Why: why, Pause: true} }
@@ -162,14 +164,17 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		}
 		return a
 	}
-	fix := func(stage string) watchAct {
-		switch {
-		case m.Rounds >= p.MaxRounds:
-			return pause(StopRoundLimit)
-		case f.Agent != "" && f.Idle > 0 && f.Idle < watchSettle:
+	run := func(stage string) watchAct {
+		if f.Agent != "" && f.Idle > 0 && f.Idle < watchSettle {
 			return leave(WatchSettling)
 		}
 		return act(actRun, stage)
+	}
+	fix := func(stage string) watchAct {
+		if m.Rounds >= p.MaxRounds {
+			return pause(StopRoundLimit)
+		}
+		return run(stage)
 	}
 	switch {
 	case f.Hold:
@@ -198,6 +203,12 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 	case ReasonMergeDue:
 		// You left the order, so no settling: the session goes for the merge.
 		return act(actMerge, "")
+	case ReasonNeedsReview:
+		// A sync moved the head of a ticket you ordered merged: finish-ticket
+		// merges only a head reviewed clean, and the steps carry over.
+		if f.MergeSteps != "" {
+			return run("review")
+		}
 	}
 	return leave(n.Reason)
 }
@@ -227,12 +238,14 @@ func watchPauseText(id, why, last string) string {
 		return "tkt watch ran ci on this head, and the checks still fail; read what the agent said in its tab"
 	case actRun + ":resolve":
 		return "tkt watch ran resolve on this head, and the base still conflicts; read what the agent said in its tab"
+	case actRun + ":review":
+		return "tkt watch ran review on this head for your merge order, and no review cleared it; read what the agent said in its tab"
 	case actSync + ":":
 		return "tkt watch could not merge the base on this head; tkt sync " + id + " says why"
 	case actDone + ":":
 		return "tkt watch could not remove the merged ticket; tkt done " + id + " says why"
 	case actMerge + ":":
-		return "tkt watch sent finish-ticket the merge line on this head, and the pull request is still open; read what the agent said in its tab"
+		return "finish-ticket got the merge line on this head, and the pull request is still open; read what the agent said in its tab"
 	}
 	return "tkt watch took a step on this head that changed nothing"
 }
@@ -388,6 +401,8 @@ type watcher struct {
 	// opened is the workspace tkt watch opened, which it keeps using while
 	// it exists, even before herdr reports a pane of it in the repository.
 	opened string
+	// turn is the ticket whose merge goes now, if any: one goes at a time.
+	turn string
 }
 
 func (w *watcher) writeStatus(err error) {
@@ -531,6 +546,7 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, error) {
 	}
 	out := []WatchTicket{}
 	seen := map[string]bool{}
+	w.turn = c.mergeInFlight(l.agents, "")
 	for _, t := range c.ticketWorktrees(es) {
 		if ctx.Err() != nil {
 			break
@@ -563,10 +579,11 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		return res
 	}
 	f.Hold = f.Hold || ts.st["hold"] != ""
-	// The steps of a merge order ran on its head; a new one drops it.
-	if o := ts.st["merge_head"]; o != "" && f.Head != "" && o != f.Head && !f.ForgeLag && !c.Dry {
+	// The steps of a merge order ran on its head, and hold across clean
+	// merges of the base; a new head of any other kind drops the order.
+	if row.orderVoid && !f.ForgeLag && !c.Dry {
 		c.dropOrder(ts, t.ID, "dropped")
-		c.notify(t.ID, notice{"merge order dropped", "the head moved after you verified it; check the new head once it is reviewed", "request"})
+		c.notify(t.ID, notice{"merge order dropped", "the branch changed beyond a clean merge of the base after you verified it; check the new head once it is reviewed", "request"})
 	}
 	mem := watchMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["watch_last"]}
 	p := WatchPolicy{MaxRounds: c.Cfg.Auto.MaxRounds, DoneAfterMerge: c.Cfg.Watch.DoneAfterMerge}
@@ -575,6 +592,9 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	// ticket.
 	if act.Kind != "" && (c.ticketLocked(t.ID) || c.autoRunning(t.ID)) {
 		act = watchAct{Why: WatchLocked}
+	}
+	if act.Kind == actMerge && w.turn != "" && w.turn != t.ID {
+		act = watchAct{Why: WatchTurn}
 	}
 	res.Action, res.Stage, res.Reason = act.Kind, act.Stage, act.Why
 	if act.Pause {
@@ -609,7 +629,7 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	// Remember the step before taking it, so one that fails is not taken
 	// again on the same head.
 	kv := []string{"watch_last", act.key(f.Head)}
-	if act.Kind == actRun {
+	if act.Kind == actRun && act.Stage != "review" {
 		kv = append(kv, "rounds", strconv.Itoa(mem.Rounds+1))
 	}
 	c.save(ts, kv...)
@@ -643,6 +663,7 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		c.UI.Info("%s: removed it after finish-ticket's Status: DONE", t.ID)
 		c.notify(t.ID, notice{"removed", "finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree", "done"})
 	case actMerge:
+		w.turn = t.ID
 		c.UI.Info("%s: the checks passed, so finish-ticket merges it", t.ID)
 		c.record(history.Event{Ticket: t.ID, Event: history.Watch, Action: actMerge})
 		c.notify(t.ID, notice{"merging", "the checks passed, so a fresh session runs finish-ticket with your merge order", "none"})
@@ -655,8 +676,11 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 var errOrderWaits = errors.New("the merge order waits")
 
 func watchRunText(stage string) string {
-	if stage == "resolve" {
+	switch stage {
+	case "resolve":
 		return "the base merge conflicts; a fresh session resolves it"
+	case "review":
+		return "a clean sync moved the head you ordered merged; a fresh session reviews it, and your steps carry over"
 	}
 	return "the checks fail at the head; a fresh session fixes them"
 }

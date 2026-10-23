@@ -1,6 +1,7 @@
 # While the checks at the head still run, tkt merge leaves a merge order, and
-# tkt watch sends finish-ticket the merge line once they pass. A new head
-# drops an order, since the steps ran on the old one.
+# tkt watch sends finish-ticket the merge line once they pass. The order
+# stands until the pull request merges. A new head that is more than a clean
+# merge of the base drops it, since the steps ran on the old one.
 exec tkt start ACM-12
 realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
 realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
@@ -25,7 +26,7 @@ exec tkt watch --once --json
 envelope '.result.tickets[0] | [.action, .reason]' '["","ci_pending"]'
 
 # Once the checks pass, the next pass sends finish-ticket the merge line,
-# and the order is gone.
+# and the order stands while finish-ticket works.
 jqedit $WORK/prs.json '.[0].statusCheckRollup[0] |= (.status = "COMPLETED" | .conclusion = "SUCCESS")'
 exec tkt ls --no-fetch --json
 envelope '.result.rows[0] | [.phase, .next.reason, .next.text]' '["merging","merge_due","tkt merge ACM-12 --passed 1,2 --head '$H1' --as opencode"]'
@@ -34,20 +35,26 @@ envelope '.result.actions[0].argv | join(" ")' 'tkt merge ACM-12 --passed 1,2 --
 ! exists $FAKE_DIR/prompts
 exec tkt watch --once --json
 envelope '.result.tickets[0] | [.action, .reason]' '["merge","merge_due"]'
-grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed.$' $FAKE_DIR/prompts
+grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed on head '$H1'.$' $FAKE_DIR/prompts
 logged herdr agent start acm-12 --kind opencode
 logged herdr notification show 'ACM-12: merging'
-state $FAKE_WT_ROOT/ACM-12 merge_head ''
+state $FAKE_WT_ROOT/ACM-12 merge_head $H1
 state $FAKE_WT_ROOT/ACM-12 watch_last merge:@$H1
 exec tkt history ACM-12
 stdout 'merge order left, for when the checks pass'
 stdout 'tkt watch carried out the merge order'
 
-# Too late to cancel: the line went out, and --cancel says when.
+# The line went out on this head once, so a pass while finish-ticket stopped
+# without merging waits for you instead of sending it again.
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","no_progress"]'
+
+# --cancel drops the order, which says when the line went out: stopping
+# finish-ticket is up to you.
+exec tkt merge ACM-12 --cancel
+stdout 'dropped the merge order for .*; finish-ticket got the merge line at 20[0-9-]+T[0-9:]+Z, and stopping it is up to you'
 exec tkt merge ACM-12 --cancel --json
 envelope '.result.action' none
-exec tkt merge ACM-12 --cancel
-stdout 'no merge order: finish-ticket got the merge line at 20[0-9-]+T[0-9:]+Z; to stop it, tell its agent'
 
 # finish-ticket stopped without merging, and you order again on the same
 # head: tkt watch forgets the line it sent, and sends it once more.

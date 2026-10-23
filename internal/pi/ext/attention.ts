@@ -85,8 +85,10 @@ function rerun(row: Row, label: (stage: string) => string, description: string):
 	return stage ? [{ label: label(stage), description, do: "run", stage }] : [];
 }
 
-/** The next steps tkt watch takes by itself while it runs. */
+/** The next steps tkt watch takes by itself while it runs. It reviews too,
+ * but only the head a sync made for a merge order. */
 const watchTakes = new Set(["base_moved", "checks_fail", "merge_due"]);
+const watchTakesFor = (row: Row, reason: string) => watchTakes.has(reason) || (reason === "needs_review" && !!row.merge);
 
 /** The next steps of a manual ticket that wait for your go. */
 const nextSteps: Record<string, string> = {
@@ -132,7 +134,7 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 			return byReason(row, reason, item);
 	}
 	const step = nextSteps[reason];
-	if (step && row.agent?.status !== "working" && !row.hold && !(watching && watchTakes.has(reason))) {
+	if (step && row.agent?.status !== "working" && !row.hold && !(watching && watchTakesFor(row, reason))) {
 		return item("next", step, `${id}: ${step}. /next ${id}, or say "continue ${id}".`);
 	}
 	return undefined;

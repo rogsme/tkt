@@ -1,0 +1,89 @@
+# A merge order holds across a clean merge of the base: tkt watch syncs a
+# branch that fell behind, has review-pr review the new head, and sends
+# finish-ticket the merge line, naming the head the steps passed on and the
+# one it merges. The resolution of a conflict drops the order.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-12
+cp $WORK/notes.txt $FAKE_WT_ROOT/ACM-12/notes.txt
+realgit -C $FAKE_WT_ROOT/ACM-12 add notes.txt
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+
+# Another ticket merged after the review, so the branch is behind its base,
+# and finish-ticket would stop with BLOCKED_FOR_SYNC.
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+exec tkt merge ACM-12 --passed all --json
+envelope '.result | [.action, .waits, .verified]' '["ordered","sync","'$H1'"]'
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .merge.head, .merge.steps]' '["base_moved","'$H1'",[1,2]]'
+
+# tkt watch merges the base with no agent, and the order holds at the head
+# it made.
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["sync","base_moved"]'
+gitvar H2 $FAKE_WT_ROOT/ACM-12 HEAD
+realgit -C $WORK/origin.git rev-parse ACM-12
+stdout ^$H2
+jqedit $WORK/prs.json '.[0].headRefOid = $H2'
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .merge.head, .merge.steps]' '["needs_review","'$H1'",[1,2]]'
+state $FAKE_WT_ROOT/ACM-12 merge_head $H1
+
+# finish-ticket merges only a head reviewed clean, so the next pass has
+# review-pr review it, which spends no fix round.
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .stage, .reason]' '["run","review","needs_review"]'
+grep '^Use the review-pr skill to review the current PR.$' $FAKE_DIR/prompts
+logged herdr notification show 'ACM-12: tkt watch runs review'
+state $FAKE_WT_ROOT/ACM-12 rounds ''
+
+# The review clears the new head: the order is due, with the head the
+# steps passed on.
+jqedit $WORK/prs.json '.[0].reviews += [.[0].reviews[0] | .body |= gsub($H1; $H2) | .commit.oid = $H2 | .submittedAt = "2026-01-03T00:00:00Z"]'
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .next.text]' '["merge_due","tkt merge ACM-12 --passed 1,2 --head '$H1'"]'
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["merge","merge_due"]'
+grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed on head '$H1'. The pull request is at '$H2' now, after clean merges of the base.$' $FAKE_DIR/prompts
+
+# A merge whose tree is not git merge-tree's carries a conflict resolution,
+# which the steps never carry over: the order drops, with a notification.
+cp $WORK/conflict.txt $REPO/notes.txt
+realgit -C $REPO add notes.txt
+realgit -C $REPO commit -q -m 'notes from another ticket'
+realgit -C $REPO push -q origin main
+! realgit -C $FAKE_WT_ROOT/ACM-12 pull -q --no-edit origin main
+cp $WORK/resolved.txt $FAKE_WT_ROOT/ACM-12/notes.txt
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q -am 'Merge main into ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H3 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H3'
+exec tkt ls --json
+envelope '.result.rows[0].merge' null
+resetlog
+exec tkt watch --once --json
+logged herdr notification show 'ACM-12: merge order dropped'
+state $FAKE_WT_ROOT/ACM-12 merge_head ''
+exec tkt history ACM-12
+stdout 'merge order dropped by a new head'
+houserules
+
+-- config.toml --
+[review]
+bot_wait = "0s"
+-- notes.txt --
+from ACM-12
+-- conflict.txt --
+from another ticket
+-- resolved.txt --
+from ACM-12 and another ticket
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open http://localhost:3000/login and sign in with a wrong password.\n   Expected: the form shows an error.\n2. Sign out, then press Back.\n   Expected: the login page shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

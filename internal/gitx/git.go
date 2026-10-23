@@ -187,6 +187,49 @@ func (g Git) MergeTree(ctx context.Context, dir, ours, theirs string) (Merge, er
 	return m, nil
 }
 
+// maxCleanMerges bounds the commits CleanMerges reads: a branch synced that
+// often since its steps ran is better verified again.
+const maxCleanMerges = 20
+
+// CleanMerges reports whether head is from, or reached from it by clean
+// merges of the base alone: every commit on the branch after from is a
+// merge commit whose second parent is an ancestor of base, and whose tree
+// is the one git merge-tree computes for its two parents. The branch is
+// the first-parent chain from head back to from; the base's own commits
+// come in through second parents. tkt sync makes such merges, and human
+// verification that passed on from holds at head across them
+// (finish-ticket, rogs-skills 421cfc7).
+func (g Git) CleanMerges(ctx context.Context, dir, from, head, base string) bool {
+	if from == head {
+		return true
+	}
+	if from = g.Rev(ctx, dir, from+"^{commit}"); from == "" {
+		return false
+	}
+	s, ok := g.out(ctx, "-C", dir, "rev-list", "--first-parent", "--parents", "-n", strconv.Itoa(maxCleanMerges+1), from+".."+head)
+	lines := strings.Split(s, "\n")
+	if !ok || s == "" || len(lines) > maxCleanMerges {
+		return false
+	}
+	// Newest first: each merge's first parent is the next line's commit,
+	// and the oldest one's is from.
+	for i, l := range lines {
+		c := strings.Fields(l)
+		next := from
+		if i+1 < len(lines) {
+			next, _, _ = strings.Cut(lines[i+1], " ")
+		}
+		if len(c) != 3 || c[1] != next || !g.IsAncestor(ctx, dir, c[2], base) {
+			return false
+		}
+		m, err := g.MergeTree(ctx, dir, c[1], c[2])
+		if err != nil || !m.Clean() || g.Rev(ctx, dir, c[0]+"^{tree}") != m.Tree {
+			return false
+		}
+	}
+	return true
+}
+
 // Worktree is one entry of git worktree list.
 type Worktree struct {
 	Path   string

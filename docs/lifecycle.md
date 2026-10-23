@@ -195,10 +195,25 @@ When the verdict is `READY_FOR_HUMAN`, or the bot's `CLEAR`, run the numbered st
 `finish-ticket` merges only on your explicit word, so no stage line sends it. Once every step passed, `tkt merge ACM-123 --passed 1-3` sends that word for you, to a fresh session in the ticket's tab:
 
 ```
-Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed.
+Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed on head 3f2a....
 ```
 
-`--passed all` names every step, and `/check` in the tkt agent runs it when you mark the last one passed. Before any session starts, tkt merge refuses a list that leaves a step out, a head the steps did not run on (`--head`), one no review cleared, a branch behind its base, and failing checks; `finish-ticket` checks the rest itself. While the checks at the head still run, it leaves a merge order instead, and `tkt watch` sends the line once they pass; a new head drops the order, since the steps ran on the old one. `tkt merge ACM-123 --cancel` drops an order, or says when the line went out. To waive a step, or to merge after a step failed, tell the agent in the tab yourself.
+`--passed all` names every step, and `/check` in the tkt agent runs it when you mark the last one passed. Before any session starts, tkt merge refuses a list that leaves a step out, a head the steps cannot carry to (`--head`), one no review cleared, a base whose merge conflicts, and failing checks; `finish-ticket` checks the rest itself. When finish-ticket could not merge yet, tkt merge leaves a merge order instead, and `tkt watch` carries it out:
+
+```mermaid
+flowchart LR
+  verified["your steps passed<br/>on head A"] --> behind{"behind the base?"}
+  behind -->|yes| sync["tkt watch merges the base:<br/>head B, a clean merge"]
+  sync --> review["review-pr reviews B"]
+  behind -->|no| green{"checks green,<br/>no other merge running?"}
+  review --> green
+  green -->|yes| line["finish-ticket gets the line:<br/>steps passed on A, now at B"]
+  line --> merged["it checks the merges<br/>between A and B, and merges"]
+```
+
+The steps carry over clean merges of the base: finish-ticket counts a confirmation given on an earlier head when every commit after it is a merge commit whose tree equals what `git merge-tree` gives for its two parents, the merge `tkt sync` makes, and it checks each one itself. The review must still be at the head it merges, so a sync brings a fresh review, which `tkt watch` starts when no review bot does. One merge goes at a time, since a second finish-ticket that checks the base before the first one merges would merge an integration nobody reviewed. So you can verify three tickets, leave three orders, and walk away: each one syncs, gets its review and merges after the one before it.
+
+The order stands until the pull request merges: when finish-ticket stops with `BLOCKED_FOR_SYNC` because another merge moved the base, `tkt watch` syncs again and sends the line on the new head. A new head of any other kind, a fix or the resolution of a conflict, drops the order with a notification, since the steps ran on code it changed. `tkt merge ACM-123 --cancel` drops an order, and says when the line went out. To waive a step, or to merge after a step failed, tell the agent in the tab yourself.
 
 Before it merges, `finish-ticket` requires green CI for the exact head, a `READY_FOR_HUMAN` verdict for that same head and base, no open feedback, and your confirmation of every human step. It then merges, checks that the merge commit's tree equals the reviewed head's, waits for post-merge CI, posts a `## Completion` comment, and moves the ticket to `done`.
 
@@ -206,7 +221,7 @@ Before it merges, `finish-ticket` requires green CI for the exact head, a `READY
 |---|---|
 | `Status: DONE` | Step 9. |
 | `Status: HUMAN_QA_FAILED` | A step failed. The agent records what you saw on the pull request; run `tkt run ACM-123 address`. |
-| `Status: BLOCKED_FOR_SYNC` | The base moved after the review. Even a clean merge would ship an integration nobody reviewed, so run `tkt sync ACM-123` and review again. |
+| `Status: BLOCKED_FOR_SYNC` | The base moved after the review. Even a clean merge would ship an integration nobody reviewed, so the new head needs a review. Your merge order stands: `tkt watch` syncs, has the new head reviewed, and sends the line again, and your steps carry over the clean merge. |
 | `Status: BLOCKED_POST_MERGE` | The merge landed but post-merge CI failed. The ticket stays in `in-review`; look at the base branch's checks. |
 
 ### 9. tkt done cleans up
@@ -253,12 +268,13 @@ flowchart TD
   behind -->|conflict| resolve["resolve in a fresh session"]
   behind -->|no| ci{"checks fail at the head?"}
   ci -->|yes| fix["ci in a fresh session,<br/>once per head, up to max_rounds"]
-  ci -->|no| order{"your merge order<br/>for this head, checks green?"}
-  order -->|yes| merge["tkt merge: finish-ticket<br/>in a fresh session"]
+  ci -->|no| order{"your merge order holds here,<br/>checks green?"}
+  order -->|"yes, reviewed, no other merge running"| merge["tkt merge: finish-ticket<br/>in a fresh session"]
+  order -->|"yes, a sync left it unreviewed"| review["review-pr in a fresh session"]
   order -->|no| leave
 ```
 
-Plans, reviews, findings and human verification stay with you, or with `tkt auto`, and so does the word to merge: watch merges only through the merge order `tkt merge` leaves when you verified a head whose checks still run. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
+Plans, findings and human verification stay with you, or with `tkt auto`, and so do reviews and the word to merge: watch merges only through the merge order `tkt merge` leaves when you verified a head finish-ticket could not merge yet, and it reviews only the head a sync made for such an order. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
 
 You rarely start it yourself: every tkt command in a herdr pane starts one when none runs for the repository, in a session of its own, so it outlives the command and the pane. `[watch] autostart = false`, or `TKT_WATCH=off`, turns that off; `tkt watch --stop` stops it, after the step it is taking; `tkt watch --once --dry-run` says what one pass would do to each ticket. Outside a herdr pane, it finds the workspace whose panes work in the repository, or opens one there before its first step when none has a pane; while herdr is down it waits. `tkt hold ACM-123` keeps it, and `tkt auto`, away from a ticket.
 
@@ -287,8 +303,8 @@ A sync costs a CI run and a review, so tkt syncs a ticket that is behind only at
 |---|---|---|
 | The branch conflicts | The forge reports the pull request as conflicting, or `git merge-tree` finds a conflict | Nothing merges, and conflicts only grow. |
 | A review can't happen | The bot posts `STALE_BASE`, or review-pr stops with `BLOCKED_FOR_SYNC` | review-pr reviews only a head that contains the current base. |
-| You are about to verify | You open `/check` in the tkt agent on a ticket that is behind | Your steps should run on the code that will merge, so `/check` offers to sync first. |
-| A merge is due | A merge order on a ticket that is behind, or finish-ticket stops with `BLOCKED_FOR_SYNC` | finish-ticket merges only when the base has not moved since the review. |
+| You are about to verify | You open `/check` in the tkt agent on a ticket that is behind | `/check` offers to sync first, so your steps run on the code that will merge; verify the head as it is, and the steps carry over the sync your merge order gets. |
+| A merge is due | A merge order on a ticket that is behind, or finish-ticket stops with `BLOCKED_FOR_SYNC` | finish-ticket merges only a head reviewed against the current base; the steps you verified carry over the clean merge. |
 
 A ticket without a pull request waits, since work-ticket merges the base itself right before it pushes, and so does a reviewed ticket that nobody verifies or merges yet. With five tickets in flight, syncing every branch whenever the base moves would cost four CI runs and four reviews per merge; at these moments a merge costs a sync only for the tickets that reach one, usually the next one you merge.
 

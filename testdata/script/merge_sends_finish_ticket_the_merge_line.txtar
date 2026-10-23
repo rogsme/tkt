@@ -1,8 +1,11 @@
 # Once every human verification step passed, tkt merge sends a fresh session
-# finish-ticket's merge line, naming the steps. It refuses what
-# finish-ticket would refuse.
+# finish-ticket's merge line, naming the steps and the head they passed on.
+# It refuses what finish-ticket would refuse, and leaves an order for tkt
+# watch when finish-ticket could not merge yet.
 exec tkt start ACM-12
-realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+cp $WORK/notes.txt $FAKE_WT_ROOT/ACM-12/notes.txt
+realgit -C $FAKE_WT_ROOT/ACM-12 add notes.txt
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q -m 'work on ACM-12'
 realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
 gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
 jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
@@ -40,25 +43,45 @@ envelope '.error.code' merge_head_moved
 resetlog
 exec tkt merge ACM-12 --passed 1-2 --dry-run --json
 envelope '.result | [.action, .steps, .dry_run]' '["merging",[1,2],true]'
-envelope '.result.actions[-1].argv[4]' 'Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed.'
+envelope '.result.actions[-1].argv[4]' 'Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed on head '$H1'.'
 ! exists $FAKE_DIR/prompts
 
+# The order stands while finish-ticket works, so tkt watch can send the
+# line again after a sync, and never twice on one head.
 exec tkt merge ACM-12 --passed 1,2 --head $H1 --json
-envelope '.result | [.action, .steps, .pr, .head]' '["merging",[1,2],7,"'$H1'"]'
+envelope '.result | [.action, .steps, .pr, .head, .verified]' '["merging",[1,2],7,"'$H1'","'$H1'"]'
 envelope '.result.run.stage' merge
-grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed.$' $FAKE_DIR/prompts
+grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed on head '$H1'.$' $FAKE_DIR/prompts
 state $FAKE_WT_ROOT/ACM-12 stage merge
+state $FAKE_WT_ROOT/ACM-12 merge_head $H1
+state $FAKE_WT_ROOT/ACM-12 merge_steps 1,2
+state $FAKE_WT_ROOT/ACM-12 watch_last merge:@$H1
 exec tkt history ACM-12
 stdout 'ran merge'
+exec tkt merge ACM-12 --cancel
 
-# A branch behind its base would stop finish-ticket with BLOCKED_FOR_SYNC.
+# A branch behind its base gets an order: tkt watch merges the base, and
+# the steps carry over that clean merge once a review clears it.
 realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+exec tkt merge ACM-12 --passed all --json
+envelope '.result | [.action, .waits, .verified]' '["ordered","sync","'$H1'"]'
+exec tkt merge ACM-12 --passed all
+stdout 'merges #7 once tkt watch merged origin/main into it, and a review cleared the new head'
+exec tkt merge ACM-12 --cancel
+
+# A base that conflicts needs a resolution, which the steps never carry
+# over, so tkt merge leaves no order.
+cp $WORK/conflict.txt $REPO/notes.txt
+realgit -C $REPO add notes.txt
+realgit -C $REPO commit -q -m 'notes from another ticket'
 realgit -C $REPO push -q origin main
 ! exec tkt merge ACM-12 --passed all --json
 rc 4
-envelope '.error.code' merge_behind_base
+envelope '.error.code' merge_base_conflicts
 envelope '.error.hint' 'tkt sync ACM-12, then verify the new head once it is reviewed'
-realgit -C $REPO reset -q --hard HEAD~1
+state $FAKE_WT_ROOT/ACM-12 merge_head ''
+realgit -C $REPO reset -q --hard HEAD~2
 realgit -C $REPO push -q -f origin main
 
 # Failing checks, and a head no review cleared, are refused too.
@@ -79,6 +102,10 @@ envelope '.error.code' pull_request_merged
 envelope '.error.hint' 'tkt done ACM-12'
 houserules
 
+-- notes.txt --
+from ACM-12
+-- conflict.txt --
+from another ticket
 -- prs.json --
 [{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
   "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],

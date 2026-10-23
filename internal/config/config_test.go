@@ -298,7 +298,10 @@ func TestMergeLineNamesEveryStep(t *testing.T) {
 			t.Errorf("StepsText(%v) = %q, want %q", tc.steps, got, tc.want)
 		}
 	}
-	if got, want := MergeLine([]int{1, 2, 3}), "Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed."; got != want {
+	if got, want := MergeLine([]int{1, 2, 3}, "aaa", "aaa"), "Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed on head aaa."; got != want {
 		t.Errorf("MergeLine = %q, want %q", got, want)
+	}
+	if got, want := MergeLine([]int{1}, "aaa", "bbb"), "Use the finish-ticket skill to merge the PR. Human verification step 1 passed on head aaa. The pull request is at bbb now, after clean merges of the base."; got != want {
+		t.Errorf("MergeLine after a sync = %q, want %q", got, want)
 	}
 }

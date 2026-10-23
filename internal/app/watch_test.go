@@ -70,6 +70,13 @@ func TestWatchStepTable(t *testing.T) {
 		{with(open, func(f *Facts) {
 			f.Verdict, f.AtHead, f.MergeSteps, f.Checks = "READY_FOR_HUMAN", true, "1,2", "pending"
 		}), p, watchMemory{}, leave(ReasonCIPending)},
+		// A clean sync carried the order to a head no review has seen:
+		// review-pr reviews it once, past the round limit, which counts only
+		// fixes. Without an order, reviews stay yours.
+		{with(open, func(f *Facts) { f.BotWait, f.MergeSteps, f.MergeHead = 0, "1,2", "h0" }), p, watchMemory{Rounds: 2}, watchAct{Kind: actRun, Stage: "review", Why: ReasonNeedsReview}},
+		{with(open, func(f *Facts) { f.BotWait, f.MergeSteps, f.MergeHead, f.Idle = 0, "1,2", "h0", time.Minute }), p, watchMemory{}, leave(WatchSettling)},
+		{with(open, func(f *Facts) { f.BotWait, f.MergeSteps, f.MergeHead = 0, "1,2", "h0" }), p, watchMemory{Last: "run:review@h1"}, pause(StopNoProgress)},
+		{with(open, func(f *Facts) { f.BotWait = 0 }), p, watchMemory{}, leave(ReasonNeedsReview)},
 	}
 	for _, tc := range cases {
 		if got := watchStep(NextStep(tc.f), tc.f, tc.p, tc.m); got != tc.want {
@@ -85,6 +92,9 @@ func TestWatchPausesNeedYou(t *testing.T) {
 	}
 	if got := watchPauseText("ACM-1", StopNoProgress, "run:ci@h1"); got != "tkt watch ran ci on this head, and the checks still fail; read what the agent said in its tab" {
 		t.Errorf("pause text: %q", got)
+	}
+	if got := watchPauseText("ACM-1", StopNoProgress, "run:review@h1"); !strings.Contains(got, "ran review on this head for your merge order") {
+		t.Errorf("pause text after a review: %q", got)
 	}
 }
 

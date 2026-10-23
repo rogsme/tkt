@@ -41,10 +41,11 @@ export interface Row {
 	 * run:ci@HEAD; paused says why it waits for you, round_limit or
 	 * no_progress. */
 	watch?: { last: string; paused: string } | null;
-	/** merge is the merge order tkt merge left for the current head while
-	 * its checks ran: tkt watch hands the steps to finish-ticket once they
-	 * pass. */
-	merge?: { head: string; steps: number[]; at: string } | null;
+	/** merge is the merge order tkt merge left once the steps passed on
+	 * head: tkt watch hands them to finish-ticket once the head is synced,
+	 * reviewed and green. It holds across clean merges of the base, and sent
+	 * says when finish-ticket last got the line. */
+	merge?: { head: string; steps: number[]; at: string; sent?: string } | null;
 	phase: string;
 	phase_since: string;
 	started: string;
@@ -101,21 +102,34 @@ export function stepText(did: { action: string; stage?: string }): string {
 }
 
 /** MergeResult is what tkt merge prints: merging (finish-ticket got the
- * merge line), ordered (tkt watch sends it once the checks pass), cancelled,
- * or none, with sent saying when finish-ticket last got the line. */
+ * merge line), ordered (tkt watch sends it once nothing waits: waits says
+ * on what), cancelled, or none, with sent saying when finish-ticket last got
+ * the line. */
 export interface MergeResult {
 	ticket: string;
 	pr: number;
 	head: string;
+	verified?: string;
 	steps: number[];
 	action: "merging" | "ordered" | "cancelled" | "none";
+	waits?: "sync" | "review" | "checks" | "turn" | "";
+	after?: string;
 	sent?: string;
 }
 
 /** mergeText says what tkt merge did, for the chat. */
 export function mergeText(r: MergeResult): string {
-	if (r.action === "ordered") return `${r.ticket} merges once its checks pass: tkt watch sends finish-ticket the merge line then. The board shows it as merges when green.`;
-	if (r.action === "cancelled") return `${r.ticket} has no merge order now.`;
+	if (r.action === "ordered") {
+		const once = {
+			sync: "tkt watch merged its base and a review cleared the new head; your steps carry over the clean merge",
+			review: "a review clears the head a sync made; your steps carry over the clean merge",
+			turn: `${r.after || "the other ticket"} merged first, since one merge goes at a time`,
+			checks: "its checks pass",
+			"": "its checks pass",
+		}[r.waits ?? ""];
+		return `${r.ticket} merges once ${once}: tkt watch sends finish-ticket the merge line then. The board shows it as merges when green.`;
+	}
+	if (r.action === "cancelled") return r.sent ? `${r.ticket} has no merge order now. finish-ticket got the merge line at ${r.sent}; to stop it, tell its agent in the ticket's tab.` : `${r.ticket} has no merge order now.`;
 	if (r.action === "none") return r.sent ? `${r.ticket} has no merge order: finish-ticket got the merge line at ${r.sent}. To stop it, tell its agent in the ticket's tab.` : `${r.ticket} has no merge order.`;
 	return `${r.ticket}: finish-ticket merges pull request #${r.pr} in a fresh session in its tab. Once it ends with Status: DONE, tkt watch removes the ticket, or /done ${r.ticket} does.`;
 }
