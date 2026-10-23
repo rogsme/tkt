@@ -40,10 +40,18 @@ func (l *Log) RecordSpawn(ctx context.Context, c Cmd) {
 	l.write(fmt.Sprintf("%s rc=spawn 0ms %s", TicketFrom(ctx), Display(c.Argv)))
 }
 
+// maxLog is the size past which the log starts over; the older lines stay
+// in one file beside it, ending in .1. A tkt watch logs every minute, for
+// days.
+const maxLog = 10 << 20
+
 func (l *Log) write(line string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.Path != "" {
+		if fi, err := os.Stat(l.Path); err == nil && fi.Size() > maxLog {
+			os.Rename(l.Path, l.Path+".1")
+		}
 		if err := os.MkdirAll(filepath.Dir(l.Path), 0o755); err == nil {
 			if f, err := os.OpenFile(l.Path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
 				fmt.Fprintf(f, "%s %s\n", time.Now().UTC().Format("2006-01-02T15:04:05Z"), line)

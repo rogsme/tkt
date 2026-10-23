@@ -52,3 +52,19 @@ func TestLoggedReplaceNeedsAReplacer(t *testing.T) {
 		t.Error("Replace logged a command it could not run")
 	}
 }
+
+// A log past its size starts over, and keeps the older lines beside it.
+func TestLogStartsOverPastItsSize(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tkt.log")
+	if err := os.WriteFile(path, make([]byte, maxLog+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	(&Log{Path: path}).Record(context.Background(), Cmd{Argv: []string{"git", "fetch"}}, Result{})
+	b, err := os.ReadFile(path)
+	if err != nil || !strings.HasSuffix(string(b), " - rc=0 0ms git fetch\n") || len(b) > 100 {
+		t.Errorf("the new log holds %d bytes: %v", len(b), err)
+	}
+	if fi, err := os.Stat(path + ".1"); err != nil || fi.Size() != maxLog+1 {
+		t.Errorf("the old log: %v", err)
+	}
+}
