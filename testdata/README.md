@@ -77,6 +77,14 @@ After a change to how tkt reads sessions or drives tickets (`show`, `approve`, `
 4. On another ticket, `tkt auto ACM-2 --approve-plan --notify` runs to `READY_FOR_HUMAN`. Check that it waits for CI and for the review bot, and that it stops with a notification when the agent asks a question.
 5. `tkt show ACM-2 --steps` lists the review's human verification steps. After the merge, `tkt done ACM-2` reports the time from start to merge, and `tkt stats` lists it.
 
+After a change to `tkt sync`, `tkt watch` or the tabs' `TMPDIR`, in a scratch GitHub repository with the lifecycle configuration and a pull request for `ACM-1`:
+
+1. Merge another branch into `main` that touches other files, then run `tkt sync ACM-1`. It pushes a merge commit within seconds, starts no agent, and CI and the review bot run on the new head.
+2. Merge a change to the same lines into `main`, then run `tkt sync ACM-1`. A fresh session in the ticket's tab gets the resolve line, resolves the conflict, and pushes one merge.
+3. In the ticket's tab, run `echo $TMPDIR` and `mktemp`: both name `/tmp/tkt-...-ACM-1-...`. `tkt done ACM-1` after the merge removes the directory.
+4. Run `tkt ls` in a herdr pane: it says it started `tkt watch`, `tkt ls --json` shows `watch.running`, and the chat's board heading says `watch on`. Make the checks fail on a new head: within a minute, a fresh session runs ci, and herdr notifies. `tkt watch --stop` stops it.
+5. From a terminal outside herdr, `tkt watch --once --dry-run` finds the workspace from the panes and says what each ticket would get.
+
 After a change to how tkt starts pi, or after `just bump-pi`, build with `just build` and check pi itself:
 
 1. Run `XDG_DATA_HOME=$(mktemp -d) ./tkt agent --dry-run --json`. It unpacks pi under that directory and prints the command line.

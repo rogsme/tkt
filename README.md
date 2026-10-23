@@ -42,7 +42,7 @@ To update an installed tkt to the latest release, run `tkt update`. It makes the
 - [worktrunk](https://worktrunk.dev) (`wt`) 0.68 or newer;
 - Claude Code or OpenCode;
 - the configuration that the `/setup-rogs` skill writes into the project;
-- `gh` for `tkt done` and the pull request columns of `tkt ls`, which support GitHub forges only.
+- `gh` for `tkt done`, `tkt watch` and the pull request columns of `tkt ls`, which support GitHub forges only.
 
 `tkt doctor` checks all of these.
 
