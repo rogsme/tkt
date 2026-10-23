@@ -239,6 +239,7 @@ func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
 	}
 	res := &WatchResult{Repo: c.Repo.Root, Tickets: []WatchTicket{}, DryRun: c.Dry, Actions: []Action{}}
 	lastErr := ""
+	self := binaryStamp()
 	for {
 		if !o.Once {
 			a.UI.ForgetWarnings()
@@ -276,7 +277,27 @@ func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
 			a.UI.Warn("%s is gone, so tkt watch stops", c.Repo.Root)
 			return res, nil
 		}
+		// After tkt update, the next tkt command starts a watch that runs
+		// the new tkt.
+		if self != "" && binaryStamp() != self {
+			a.UI.Info("tkt was replaced, so this tkt watch stops; the next tkt command starts the new one")
+			return res, nil
+		}
 	}
+}
+
+// binaryStamp names the running tkt binary's size and time, or "" when
+// tkt cannot tell.
+func binaryStamp() string {
+	self, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	fi, err := os.Stat(self)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d %d", fi.Size(), fi.ModTime().UnixNano())
 }
 
 // watchLock is the lock one tkt watch per repository holds.
@@ -670,11 +691,16 @@ func (c *Ctx) ensureWatch() {
 }
 
 // watchEnv is the environment tkt watch starts with: this one, without the
-// pane and tab tkt runs in, which are not the watch's.
+// pane and tab tkt runs in, which are not the watch's, and out of a ticket's
+// own TMPDIR, which tkt done removes.
 func watchEnv(env []string) []string {
 	var out []string
 	for _, kv := range env {
-		if !strings.HasPrefix(kv, "HERDR_PANE_ID=") && !strings.HasPrefix(kv, "HERDR_TAB_ID=") {
+		switch {
+		case strings.HasPrefix(kv, "HERDR_PANE_ID="), strings.HasPrefix(kv, "HERDR_TAB_ID="):
+		case strings.HasPrefix(kv, "TMPDIR="):
+			out = append(out, "TMPDIR="+tmpRoot(strings.TrimPrefix(kv, "TMPDIR=")))
+		default:
 			out = append(out, kv)
 		}
 	}

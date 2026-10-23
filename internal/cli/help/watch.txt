@@ -27,7 +27,8 @@ it when none runs, in a session of its own, so it outlives the command and the
 pane; it writes its lines to watch.log in the repository's git directory,
 under tkt/. [watch] autostart = false, or TKT_WATCH=off, turns that off. tkt
 ls --json says whether it runs, in watch.running. tkt watch --stop stops it,
-after the step it is taking. Outside a herdr pane it finds the workspace whose
+after the step it is taking. When tkt update replaces tkt, the watch stops by
+itself, and the next tkt command starts one that runs the new tkt. Outside a herdr pane it finds the workspace whose
 panes work in the repository, and while herdr is down it waits.
 
 --once takes one pass and exits; with --dry-run it says what each ticket would

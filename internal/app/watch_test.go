@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -60,5 +61,13 @@ func TestWatchPausesNeedYou(t *testing.T) {
 	}
 	if got := watchPauseText("ACM-1", StopNoProgress, "run:ci@h1"); got != "tkt watch ran ci on this head, and the checks still fail; read what the agent said in its tab" {
 		t.Errorf("pause text: %q", got)
+	}
+}
+
+func TestWatchEnvLeavesTheTicketBehind(t *testing.T) {
+	got := watchEnv([]string{"HOME=/home/dev", "HERDR_ENV=1", "HERDR_PANE_ID=w1:p12", "HERDR_TAB_ID=w1:t12", "HERDR_WORKSPACE_ID=w1", "TMPDIR=/tmp/tkt-acme-app-ACM-12-123"})
+	want := []string{"HOME=/home/dev", "HERDR_ENV=1", "HERDR_WORKSPACE_ID=w1", "TMPDIR=/tmp"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
