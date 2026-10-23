@@ -174,7 +174,8 @@ func plist(label string, argv []string, dir, path, log, keep string) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	b.WriteString(`<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">` + "\n")
-	b.WriteString("<!-- " + written + " -->\n")
+	// XML comments cannot hold "--", which the flag's name does.
+	b.WriteString("<!-- tkt wrote this file when you installed tkt watch as a service, and writes it again each time. -->\n")
 	b.WriteString(`<plist version="1.0">` + "\n<dict>\n")
 	str := func(k, v string) { fmt.Fprintf(&b, "\t<key>%s</key>\n\t<string>%s</string>\n", k, xmlText(v)) }
 	str("Label", label)

@@ -1,6 +1,8 @@
 package service
 
 import (
+	"encoding/xml"
+	"io"
 	"strings"
 	"testing"
 )
@@ -84,5 +86,18 @@ func TestPlistsRunTheWatchInItsRepository(t *testing.T) {
 	}
 	if got := PlistPath(WatchPlist(Spec{Path: "/a&b"}, "x", "/r", "/l")); got != "/a&b" {
 		t.Errorf("PlistPath = %q", got)
+	}
+	// launchd refuses a plist that is not well-formed XML.
+	for _, doc := range []string{p, h, WatchPlist(Spec{Tkt: "/a<b>&c", Path: "/x"}, "x", "/r", "/l")} {
+		d := xml.NewDecoder(strings.NewReader(doc))
+		for {
+			_, err := d.Token()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatalf("not well-formed XML: %v\n%s", err, doc)
+			}
+		}
 	}
 }
