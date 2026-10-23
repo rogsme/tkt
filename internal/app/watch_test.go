@@ -117,3 +117,18 @@ func TestFindWorkspaceKeepsTheOneItOpened(t *testing.T) {
 		}
 	}
 }
+
+func TestLeaveTicketTmp(t *testing.T) {
+	for in, want := range map[string]string{
+		"/tmp/tkt-acme-app-ACM-12-123":  "/tmp",
+		"/var/tmp/tkt-acme-app-ACM-1-9": "/var/tmp",
+		"/tmp":                          "",
+		"":                              "",
+	} {
+		got := ""
+		LeaveTicketTmp(func(string) string { return in }, func(_, v string) error { got = v; return nil })
+		if got != want {
+			t.Errorf("TMPDIR=%q became %q, want %q", in, got, want)
+		}
+	}
+}

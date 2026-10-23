@@ -14,12 +14,7 @@ import (
 var version string
 
 func main() {
-	// tkt run in a ticket's tab sees that ticket's TMPDIR, which tkt done
-	// removes. The programs tkt starts get the directory above it, so an
-	// OpenCode service tkt starts never keeps one.
-	if d := os.Getenv("TMPDIR"); d != "" && app.TmpRoot(d) != d {
-		os.Setenv("TMPDIR", app.TmpRoot(d))
-	}
+	app.LeaveTicketTmp(os.Getenv, os.Setenv)
 	os.Exit(cli.Main(context.Background(), os.Args[1:], version, cli.IO{
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,

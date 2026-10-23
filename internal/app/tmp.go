@@ -32,9 +32,15 @@ func (c *Ctx) ticketTmp(id string, ts *ticketState) string {
 	return d
 }
 
-// TmpRoot is where ticket directories go for a TMPDIR: dir, or the
-// directory above it when dir is a ticket's own.
-func TmpRoot(dir string) string { return tmpRoot(dir) }
+// LeaveTicketTmp takes the process's TMPDIR out of a ticket's directory: a
+// tkt run in a ticket's tab sees that ticket's, which tkt done removes, and
+// the programs tkt starts, such as an OpenCode service that outlives it,
+// get the directory above it instead.
+func LeaveTicketTmp(getenv func(string) string, setenv func(string, string) error) {
+	if d := getenv("TMPDIR"); d != "" && tmpRoot(d) != d {
+		setenv("TMPDIR", tmpRoot(d))
+	}
+}
 
 // tmpRoot is where ticket directories go: TMPDIR, or /tmp. A tkt command run
 // in a ticket's tab sees that ticket's TMPDIR, which tkt done removes, so it

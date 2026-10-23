@@ -18,6 +18,7 @@ import (
 	"github.com/itchyny/gojq"
 	"github.com/rogpeppe/go-internal/testscript"
 
+	"gitlab.com/rogs/tkt/internal/app"
 	"gitlab.com/rogs/tkt/internal/cli"
 	"gitlab.com/rogs/tkt/internal/fake"
 	"gitlab.com/rogs/tkt/internal/harness"
@@ -46,8 +47,10 @@ func TestMain(m *testing.M) {
 	})
 }
 
-// tktMain runs tkt and records its exit status for the rc command.
+// tktMain runs tkt as main does, and records its exit status for the rc
+// command.
 func tktMain() {
+	app.LeaveTicketTmp(os.Getenv, os.Setenv)
 	code := cli.Main(context.Background(), os.Args[1:], "test", cli.IO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Getenv: os.Getenv})
 	if f := os.Getenv("TKT_RC_FILE"); f != "" {
 		os.WriteFile(f, []byte(strconv.Itoa(code)), 0o644)
