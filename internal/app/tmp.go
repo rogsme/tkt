@@ -32,6 +32,10 @@ func (c *Ctx) ticketTmp(id string, ts *ticketState) string {
 	return d
 }
 
+// TmpRoot is where ticket directories go for a TMPDIR: dir, or the
+// directory above it when dir is a ticket's own.
+func TmpRoot(dir string) string { return tmpRoot(dir) }
+
 // tmpRoot is where ticket directories go: TMPDIR, or /tmp. A tkt command run
 // in a ticket's tab sees that ticket's TMPDIR, which tkt done removes, so it
 // climbs out of it.

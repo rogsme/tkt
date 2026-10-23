@@ -94,7 +94,7 @@
       "path": "start",
       "use": "start [ID | --scratch NAME]",
       "short": "Create the worktree and tab, start an agent and send it the prompt",
-      "long": "tkt start creates or reuses the ticket's worktree through worktrunk, opens a\nherdr tab named after the ticket, starts an agent in build mode (Claude Code\nwith --dangerously-skip-permissions, OpenCode on its Build agent) and sends it\nthe prompt, typically the dispatcher's start-ticket block.\n\nA new branch starts from the base on the remote, such as origin/main: tkt\nfetches it first, so the plan starts from the code the base holds now. When\nthe fetch fails, the branch starts from the local base.\n\nThe ticket's tab gets TMPDIR set to a private directory, such as\n/tmp/tkt-acme-app-ACM-12-123456, so agents of two tickets never write the\nsame temporary file. Every tab tkt opens for the ticket gets the same one,\nand tkt done removes it.\n\nWithout an ID, tkt start takes the first ticket id in the prompt; with both,\nthey must match. Without a prompt, it sends the start stage line. --prompt -\nreads the prompt from stdin, which keeps a long prompt out of your shell\nhistory; --prompt-file reads it from a file.\n\nThe prompt's Model: line, when it has one, picks the preset (tkt help config);\n--as picks one yourself.\n\ntkt start refuses when an agent already runs in the worktree: use tkt run for\na fresh session, or tkt resume to bring back the last one. When the agent stops\nat a startup dialog, answer it in the tab and rerun the same tkt start: it\ncontinues where it stopped.\n\n--scratch NAME starts work that has no ticket. tkt start makes the worktree\nand branch NAME and a tab named NAME, starts the agent and sends it nothing.\nNAME takes letters, digits, '-' and '_', and must not be a ticket id. Other\ntkt commands work on tickets only, so they do not see this worktree; remove\nit with wt remove NAME.",
+      "long": "tkt start creates or reuses the ticket's worktree through worktrunk, opens a\nherdr tab named after the ticket, starts an agent in build mode (Claude Code\nwith --dangerously-skip-permissions, OpenCode on its Build agent) and sends it\nthe prompt, typically the dispatcher's start-ticket block.\n\nA new branch starts from the base on the remote, such as origin/main: tkt\nfetches it first, so the plan starts from the code the base holds now. When\nthe fetch fails, the branch starts from the local base.\n\nThe ticket's tab gets TMPDIR set to a private directory, such as\n/tmp/tkt-acme-app-ACM-12-123456, so agents of two tickets never write the\nsame temporary file. Every tab tkt opens for the ticket gets the same one,\nand tkt done removes it. OpenCode runs its tools in its own service, outside\nthe tab, so its agents get the directory through tkt's plugin (tkt help\nhook).\n\nWithout an ID, tkt start takes the first ticket id in the prompt; with both,\nthey must match. Without a prompt, it sends the start stage line. --prompt -\nreads the prompt from stdin, which keeps a long prompt out of your shell\nhistory; --prompt-file reads it from a file.\n\nThe prompt's Model: line, when it has one, picks the preset (tkt help config);\n--as picks one yourself.\n\ntkt start refuses when an agent already runs in the worktree: use tkt run for\na fresh session, or tkt resume to bring back the last one. When the agent stops\nat a startup dialog, answer it in the tab and rerun the same tkt start: it\ncontinues where it stopped.\n\n--scratch NAME starts work that has no ticket. tkt start makes the worktree\nand branch NAME and a tab named NAME, starts the agent and sends it nothing.\nNAME takes letters, digits, '-' and '_', and must not be a ticket id. Other\ntkt commands work on tickets only, so they do not see this worktree; remove\nit with wt remove NAME.",
       "example": "  xclip -selection clipboard -o | tkt start --prompt -\n  tkt start ACM-12\n  tkt start ACM-12 --prompt-file plan-request.md --as fast\n  tkt start ACM-12 --dry-run\n  tkt start --scratch spike-login --as fast",
       "group": "lifecycle",
       "args": [
@@ -1262,6 +1262,45 @@
             "want": "string"
           }
         ]
+      }
+    },
+    {
+      "path": "hook tmp",
+      "use": "tmp",
+      "short": "Give OpenCode agents their ticket's TMPDIR, and move the /tmp paths they type into it",
+      "long": "tkt hook tmp keeps the temporary files of OpenCode agents apart, one ticket\nfrom another. OpenCode runs every agent's tools in its one background\nservice, so the TMPDIR tkt gives a ticket's tab never reaches them, and two\nagents that write /tmp/pr-body.md overwrite each other. Claude Code needs\nnone of this: it runs its tools in the ticket's tab, under its TMPDIR.\n\ntkt hook tmp --install writes tkt's plugin into OpenCode's global plugins\ndirectory, ~/.config/opencode/plugins/tkt.js, next to the plugins herdr and\nothers install there. OpenCode loads it when its service starts. In a\nticket's worktree, the plugin asks tkt hook tmp about every tool call and\nshell, and\n\n  - gives each shell the ticket's own TMPDIR, the directory tkt start made;\n  - moves a new path under /tmp in the call into that directory:\n    /tmp/notes.md becomes $TMPDIR/notes.md, and later calls find it there;\n  - adds a line to the agent's system prompt that says so, since an agent\n    that does not expect the move fights it.\n\nA path stays when /tmp holds its name already, such as a file you put\nthere, when the name is one other programs own (a hidden name, a tkt-\ndirectory, Claude Code's and OpenCode's own), and when it is a bare /tmp,\nwhich is as often a word as a place. Here-document bodies in a shell\ncommand stay as written, since they are often a file's content, and so do\nthe content and text fields of a tool call. Outside a ticket's worktree the\nplugin changes nothing, except a TMPDIR that names a ticket's directory: a\nservice started in a ticket's tab passes that one to its shells, and tkt\ndone removes it.\n\nWithout --install, tkt hook tmp answers one request from the plugin: JSON\non stdin with the call's directories, its shell's TMPDIR, and its tool\ninput or shell command; --json prints the answer. tkt doctor warns when a\npreset runs OpenCode and the plugin is missing or comes from another tkt.",
+      "example": "  tkt hook tmp --install\n  echo '{\"directories\": [\"'$PWD'\"], \"command\": \"cat > /tmp/pr-body.md\"}' | tkt hook tmp",
+      "group": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "with --install, print the change instead of making it"
+        },
+        {
+          "name": "install",
+          "type": "bool",
+          "default": "false",
+          "usage": "write tkt's plugin into OpenCode's global plugins directory"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "command": "string",
+        "dry_run": "boolean",
+        "input": "object",
+        "installed": "boolean",
+        "plugin": "string",
+        "system": "string",
+        "ticket": "string",
+        "tmpdir": "string"
       }
     },
     {

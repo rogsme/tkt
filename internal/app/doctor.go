@@ -62,7 +62,7 @@ var doctorGroups = []struct {
 	ids   []string
 }{
 	{"Tools", []string{"git", "wt", "herdr", "gh", "pi"}},
-	{"Harnesses", nil},
+	{"Harnesses", []string{"opencode_plugin"}},
 	{"Project", []string{"repository", "lifecycle", "worktrunk_hooks"}},
 	{"Environment", []string{"config", "herdr_env", "services", "log"}},
 }
@@ -72,6 +72,7 @@ var doctorLabels = map[string]string{
 	"wt":              "worktrunk",
 	"herdr_env":       "herdr pane",
 	"worktrunk_hooks": "worktrunk hooks",
+	"opencode_plugin": "opencode plugin",
 }
 
 func doctorGroup(id string) int {
@@ -326,6 +327,7 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 			})
 		}
 	}
+	add(func() Check { return a.pluginCheck(cfg, cfgErr) })
 	add(func() Check {
 		if repo.Root == "" {
 			return Check{ID: "worktrunk_hooks", Status: CheckSkip, Message: "not inside a repository"}

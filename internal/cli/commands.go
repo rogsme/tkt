@@ -234,6 +234,32 @@ func mergeCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func hookCmd(g *globals) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "hook",
+		Short: "Hooks tkt puts into the agents' harnesses",
+		Long:  helpText("hook"),
+		Args:  cobra.NoArgs,
+	}
+	var o app.HookOpts
+	tmp := &cobra.Command{
+		Use:   "tmp",
+		Short: "Give OpenCode agents their ticket's TMPDIR, and move the /tmp paths they type into it",
+		Long:  helpText("hook"),
+		Example: `  tkt hook tmp --install
+  echo '{"directories": ["'$PWD'"], "command": "cat > /tmp/pr-body.md"}' | tkt hook tmp`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().Hook(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	tmp.Flags().BoolVar(&o.Install, "install", false, "write tkt's plugin into OpenCode's global plugins directory")
+	tmp.Flags().BoolVar(&o.Dry, "dry-run", false, "with --install, print the change instead of making it")
+	cmd.AddCommand(tmp)
+	return cmd
+}
+
 func approveCmd(g *globals) *cobra.Command {
 	var o app.ApproveOpts
 	cmd := &cobra.Command{

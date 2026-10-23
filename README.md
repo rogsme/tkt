@@ -87,6 +87,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt stats` | Shows how long tickets took from start to merge, and how long they waited for you. |
 | `tkt history ID...` | Shows what happened to tickets, merged ones too: each event with its time, and the pull request's commits and reviews. |
 | `tkt doctor` | Checks the tools, versions and configuration tkt needs. |
+| `tkt hook tmp --install` | Installs tkt's OpenCode plugin, which gives OpenCode agents their ticket's `TMPDIR` and moves the new `/tmp` paths they type into it. |
 | `tkt schema` | Describes every command, flag, result and error code as JSON. |
 
 A ticket from start to merge, in short:
@@ -184,7 +185,7 @@ The units keep the `PATH` of the shell you run it from, since the agents in herd
 
 ### State and logs
 
-tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. Each ticket's tabs get `TMPDIR` set to a private directory under `/tmp`, which `tkt done` removes too. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. Past 10 MB the log starts over, and the older lines stay in `tkt.log.1`. `-v` prints the same lines as tkt goes.
+tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. Each ticket's tabs get `TMPDIR` set to a private directory under `/tmp`, which `tkt done` removes too. OpenCode runs every agent's tools in its one background service, outside the tab, so OpenCode agents get that directory through tkt's plugin: `tkt hook tmp --install` writes it to `~/.config/opencode/plugins/tkt.js`, and it also moves the new `/tmp` paths they type into it. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. Past 10 MB the log starts over, and the older lines stay in `tkt.log.1`. `-v` prints the same lines as tkt goes.
 
 `tkt watch` writes its lines to `tkt/watch.log` in the repository's git directory, and how its last pass went to `tkt/watch` beside it. Under systemd, its lines go to the journal instead: `journalctl --user -u 'tkt-watch@*'`.
 

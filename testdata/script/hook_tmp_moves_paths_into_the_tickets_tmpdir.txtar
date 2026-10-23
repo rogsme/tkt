@@ -1,0 +1,59 @@
+# tkt hook tmp answers tkt's OpenCode plugin. In a ticket's worktree it
+# hands out the ticket's TMPDIR, and moves the new /tmp paths of a shell
+# command or a tool call there.
+exec tkt start ACM-12
+statevar $FAKE_WT_ROOT/ACM-12 tmpdir TMP
+# systemd-tmpfiles may clean it up; the next call makes it again.
+rm $TMP
+jqedit $WORK/shell.json '.directories = [$FAKE_WT_ROOT + "/ACM-12/src", $FAKE_WT_ROOT + "/ACM-12"]'
+stdin $WORK/shell.json
+exec tkt hook tmp --json
+envelope '.result.ticket' ACM-12
+envelope '.result.tmpdir' $TMP
+envelope '.result.command' 'cat > '$TMP'/acme-tkt-script-body.md && gh pr create --body-file '$TMP'/acme-tkt-script-body.md'
+stdout 'This ticket has its own temporary directory'
+exists $TMP
+
+# A tool call's path moves, and its content stays as written.
+jqedit $WORK/tool.json '.directories = [$FAKE_WT_ROOT + "/ACM-12"]'
+stdin $WORK/tool.json
+exec tkt hook tmp --json
+envelope '.result.input.path' $TMP/acme-tkt-script-notes.md
+envelope '.result.input.content' 'see /tmp/acme-tkt-script-notes.md'
+
+# Outside a ticket's worktree nothing moves, but a TMPDIR that names a
+# ticket's directory goes back to the one above it.
+jqedit $WORK/outside.json '.directories = [$REPO] | .tmpdir = $WORK + "/tkt-acme-app-ACM-9-1"'
+stdin $WORK/outside.json
+exec tkt hook tmp --json
+envelope '.result | [.ticket, .command, .input]' '["","",null]'
+envelope '.result.tmpdir' $WORK
+
+# --install writes the plugin, naming the tkt on PATH, and tkt doctor finds
+# it then.
+env PLUGIN=$HOME/.config/opencode/plugins/tkt.js
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "opencode_plugin") | .status' warn
+exec tkt hook tmp --install --dry-run
+stderr 'dry run: tee '$PLUGIN
+! exists $PLUGIN
+exec tkt hook tmp --install
+stdout '^'$PLUGIN'$'
+grep '^const tkt = ".*/tkt"$' $PLUGIN
+grep 'spawnSync\(tkt, \["hook", "tmp", "--json"\]' $PLUGIN
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "opencode_plugin") | .status' ok
+exec tkt hook tmp --install
+stderr 'is up to date'
+
+# A plugin from another tkt is stale.
+exec sh -c 'sed -i "s|^const tkt = .*|const tkt = \"/opt/old/tkt\"|" "$PLUGIN"'
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "opencode_plugin") | .message' $PLUGIN' is from another tkt'
+
+-- shell.json --
+{"directories": [], "command": "cat > /tmp/acme-tkt-script-body.md && gh pr create --body-file /tmp/acme-tkt-script-body.md"}
+-- tool.json --
+{"directories": [], "tool": "write", "input": {"path": "/tmp/acme-tkt-script-notes.md", "content": "see /tmp/acme-tkt-script-notes.md"}}
+-- outside.json --
+{"directories": [], "command": "cat /tmp/acme-tkt-script-x"}

@@ -156,7 +156,7 @@ a repository with the lifecycle configuration, tkt alone opens it too.`,
 		c.GroupID = "inspect"
 		root.AddCommand(c)
 	}
-	for _, c := range []*cobra.Command{doctorCmd(g), schemaCmd(g), updateCmd(g)} {
+	for _, c := range []*cobra.Command{doctorCmd(g), hookCmd(g), schemaCmd(g), updateCmd(g)} {
 		c.GroupID = "setup"
 		root.AddCommand(c)
 	}

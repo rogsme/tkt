@@ -84,6 +84,13 @@ After a change to `tkt sync`, `tkt watch` or the tabs' `TMPDIR`, in a scratch Gi
 1. Merge another branch into `main` that touches other files, then run `tkt sync ACM-1`. It pushes a merge commit within seconds, starts no agent, and CI and the review bot run on the new head.
 2. Merge a change to the same lines into `main`, then run `tkt sync ACM-1`. A fresh session in the ticket's tab gets the resolve line, resolves the conflict, and pushes one merge.
 3. In the ticket's tab, run `echo $TMPDIR` and `mktemp`: both name `/tmp/tkt-...-ACM-1-...`. `tkt done ACM-1` after the merge removes the directory.
+
+After a change to `tkt hook tmp` or its plugin, with a preset that runs OpenCode:
+
+1. Run `tkt hook tmp --install`, then `opencode service restart` while no agent works. `tkt doctor` says the plugin is in place.
+2. Start an OpenCode ticket, and ask its agent to run `echo $TMPDIR` and to write `/tmp/acme-check.md` with its write tool, then to `cat /tmp/acme-check.md` in its shell. `$TMPDIR` names the ticket's directory, the file lands there, the `cat` finds it, and nothing named `acme-check.md` appears in `/tmp`. The agent mentions the move as expected rather than trying to undo it.
+3. Put a file in `/tmp` yourself and ask the agent to read it: it reads the real one.
+4. In an OpenCode session outside any ticket, `echo $TMPDIR` shows the service's own, and nothing moves.
 4. Run `tkt ls` in a herdr pane: it says it started `tkt watch`, `tkt ls --json` shows `watch.running`, and the chat's board heading says `watch on`. Make the checks fail on a new head: within a minute, a fresh session runs ci, and herdr notifies. `tkt watch --stop` stops it.
 5. From a terminal outside herdr, `tkt watch --once --dry-run` finds the workspace from the panes and says what each ticket would get.
 
