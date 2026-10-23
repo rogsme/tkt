@@ -6,10 +6,10 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, isViewportTUI, type TUI, VStack } from "@earendil-works/pi-tui";
-import { type Attention, attentionOf, sound, unblockedOf } from "./attention.ts";
+import { type Attention, attentionOf, sound, suggestedOf, unblockedOf } from "./attention.ts";
 import type { BoardState } from "./board.ts";
 import { Jobs, type Job } from "./jobs.ts";
-import { keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf, type Unblocked, type UpdateResult, updateNotice } from "./model.ts";
+import { keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf, type SuggestResult, type Unblocked, type UpdateResult, updateNotice } from "./model.ts";
 import { hud } from "./ui.ts";
 
 /** pollMs is how often the board reads tkt ls while nothing else wakes it. */
@@ -33,6 +33,9 @@ export class Hub {
 	rows: Row[] = [];
 	/** unblocked lists the tickets merges unblocked, which wait for a start. */
 	unblocked: Unblocked[] = [];
+	/** picks is the last suggest-tickets run's picks, until you start them
+	 * or set them aside. */
+	picks?: { result: SuggestResult; at: number };
 	key = "";
 	/** items is what needs you now: one per ticket from tkt ls, and the
 	 * failed jobs. */
@@ -233,6 +236,10 @@ export class Hub {
 			const a = unblockedOf(u);
 			if (!this.jobs.inFlight(u.ticket) && !this.dismissed.has(a.key)) items.push(a);
 		}
+		if (this.picks) {
+			const a = suggestedOf(this.picks.result, this.picks.at);
+			if (!this.dismissed.has(a.key)) items.push(a);
+		}
 		this.items = [...items, ...this.failed.map((f) => f.item)];
 		for (const a of this.items) {
 			if (!this.announced.has(a.key)) this.announce(a);
@@ -370,6 +377,13 @@ export class Hub {
 
 	row(id: string): Row | undefined {
 		return this.rows.find((r) => r.ticket === id);
+	}
+
+	/** suggested keeps a suggest-tickets run's picks for the board, or drops
+	 * them. */
+	suggested(r?: SuggestResult): void {
+		this.picks = r ? { result: r, at: Date.now() } : undefined;
+		this.update();
 	}
 
 	/** dismiss sets an item aside until its ticket's situation changes. */

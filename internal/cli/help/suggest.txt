@@ -1,0 +1,27 @@
+tkt suggest has the suggest-tickets skill pick the next tickets to start,
+ones that can run side by side. It opens a suggest tab at the repository's
+root, or reuses it, and starts a fresh session there that gets the line
+
+  Use the suggest-tickets skill to suggest the next 3 tickets to start, ones
+  that can run side by side.
+
+suggest-tickets only reads. It lists the ready tickets, keeps the ones
+whose blockers are all done, and ranks them by how many tickets wait on
+each, then by priority. It drops one that would collide with work in
+flight, judged from the files each in-flight branch changes, or with
+another pick, and with model routing on it takes at most one heavy ticket.
+It reports what waits on you first, then the picks and what it left out,
+and ends with a line such as
+
+  Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)
+
+COUNT is how many to pick, 3 by default. The session runs on the [suggest]
+preset (tkt help config), or the default preset; --as picks another, such as
+a cheap one, since the run only reads.
+
+--wait waits for the run to end, at most --timeout, and reads the picks:
+each comes with the tkt start command for it, on the first preset that
+serves the model its Model routing names. When suggest-tickets asks a
+question, the wait ends and you answer it in the tab. The tkt agent's
+/suggest does this and offers to start the picks by hand, in auto, or in
+auto after you approve each plan.

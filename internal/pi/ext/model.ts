@@ -126,6 +126,24 @@ export interface MergeResult {
 	sent?: string;
 }
 
+/** SuggestResult is what tkt suggest --wait prints: the agent's state when
+ * the wait ended, and once suggest-tickets finished, its report and picks,
+ * each with the preset its model needs ("" for the default). */
+export interface SuggestResult {
+	count: number;
+	pane: string;
+	status: string;
+	last_status: string;
+	report: string;
+	picks: { ticket: string; model: string; preset: string }[];
+}
+
+/** picksText names the picks for a sentence, each with its model. */
+export function picksText(r: SuggestResult): string {
+	const each = r.picks.map((p) => (p.model ? `${p.ticket} (${p.model})` : p.ticket));
+	return each.length < 2 ? each.join("") : `${each.slice(0, -1).join(", ")} and ${each[each.length - 1]}`;
+}
+
 /** mergeText says what tkt merge did, for the chat. */
 export function mergeText(r: MergeResult): string {
 	if (r.action === "ordered") {

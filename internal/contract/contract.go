@@ -8,6 +8,7 @@ package contract
 import (
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Version is the configuration contract version tkt reads, as defined in
@@ -50,6 +51,9 @@ const (
 	// StatusDone ends a finish-ticket run that merged the pull request,
 	// saw post-merge CI pass and moved the ticket to done.
 	StatusDone = "DONE"
+	// StatusTicketsSuggested ends a suggest-tickets run, after its
+	// Suggested: line.
+	StatusTicketsSuggested = "TICKETS_SUGGESTED"
 )
 
 // StatusLineRE finds a status line on an agent's screen.
@@ -84,8 +88,39 @@ var UnblockedRE = regexp.MustCompile(`(?m)^Unblocked: (.*)$`)
 var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`)
 
 // Skills names the lifecycle skills tkt's built-in stage lines, and the
-// lines tkt approve and tkt merge send, ask for.
-var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr", "finish-ticket"}
+// lines tkt approve, tkt merge and tkt suggest send, ask for.
+var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr", "finish-ticket", "suggest-tickets"}
+
+// SuggestedRE finds the line suggest-tickets ends its report with, before
+// Status: TICKETS_SUGGESTED: the picks in order, each with its Model:
+// value in parentheses when model routing is on, or none.
+var SuggestedRE = regexp.MustCompile(`(?m)^Suggested: (.*)$`)
+
+var suggestionRE = regexp.MustCompile("^`?([A-Za-z0-9-]+)`?\\s*(?:\\(([^)]*)\\))?$")
+
+// Suggestion is a pick on suggest-tickets' Suggested: line: the ticket, and
+// the Model: value its Model routing names, or "" without model routing.
+type Suggestion struct {
+	Ticket string
+	Model  string
+}
+
+// Suggestions reads the picks from the last Suggested: line in text, in
+// order. id says which words are ticket ids, so none names nothing.
+func Suggestions(text string, id *regexp.Regexp) []Suggestion {
+	out := []Suggestion{}
+	m := SuggestedRE.FindAllStringSubmatch(text, -1)
+	if len(m) == 0 {
+		return out
+	}
+	for part := range strings.SplitSeq(m[len(m)-1][1], ",") {
+		p := suggestionRE.FindStringSubmatch(strings.TrimSpace(part))
+		if p != nil && id.MatchString(p[1]) {
+			out = append(out, Suggestion{Ticket: p[1], Model: strings.TrimSpace(p[2])})
+		}
+	}
+	return out
+}
 
 // CleanMergeRule is how review-pr's rule about a review brief across clean
 // base merges begins. tkt sync relies on it: it pushes such merges with no

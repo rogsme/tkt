@@ -1,0 +1,65 @@
+# tkt suggest has suggest-tickets pick the next tickets to start, in a
+# suggest tab at the repository's root, on the [suggest] preset. With
+# --wait, it reads the picks from the Suggested: line, each on the preset
+# that serves its model.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+
+exec tkt suggest 2 --dry-run --json
+envelope '.result | [.count, .preset, .dry_run]' '[2,"cheap",true]'
+envelope '.result.actions[0].argv | join(" ")' 'herdr tab create --workspace w1 --cwd '$REPO' --label suggest (cheap) --no-focus'
+! exists $FAKE_DIR/prompts
+
+exec tkt suggest 2 --json
+envelope '.result | [.count, .preset, .harness, .picks]' '[2,"cheap","claude",[]]'
+grep '^Use the suggest-tickets skill to suggest the next 2 tickets to start, ones that can run side by side.$' $FAKE_DIR/prompts
+logged herdr agent start suggest-app --kind claude
+jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label == "suggest (cheap)") | .label]' '["suggest (cheap)"]'
+
+# The next run reuses the tab, once its agent is idle, and waits for the
+# picks: the default preset serves frontier, and cheap the small model.
+cp $WORK/screen.txt $FAKE_DIR/screen
+resetlog
+exec tkt suggest --wait --json
+envelope '.result | [.count, .last_status]' '[3,"TICKETS_SUGGESTED"]'
+envelope '[.result.picks[] | .ticket + ":" + .model + ":" + .preset]' '["ACM-14:frontier:","ACM-21:acme-small-2:cheap"]'
+envelope '.result.report | test("Suggested: ACM-14")' true
+! logged herdr tab create
+grep '^Use the suggest-tickets skill to suggest the next 3 tickets to start, ones that can run side by side.$' $FAKE_DIR/prompts
+exec tkt suggest --wait
+stdout '^ACM-14  tkt start ACM-14$'
+stdout '^ACM-21  tkt start ACM-21 --as cheap$'
+
+# A run still at work keeps its tab.
+jqedit $FAKE_DIR/herdr.json '(.agents[] | select(.name == "suggest-app") | .agent_status) = "working"'
+! exec tkt suggest --json
+rc 4
+envelope '.error.code' agent_busy
+
+# --as picks another preset, and the count stays within reason.
+! exec tkt suggest 11 --json
+rc 2
+envelope '.error.code' usage
+! exec tkt suggest --as nope --json
+envelope '.error.code' unknown_preset
+houserules
+
+-- config.toml --
+[presets.claude]
+harness = "claude"
+serves = ["frontier"]
+
+[presets.cheap]
+harness = "claude"
+model = "haiku"
+serves = ["acme-small-2"]
+
+[suggest]
+as = "cheap"
+-- screen.txt --
+Waiting on you: ACM-9 is in review.
+1. ACM-14 Add the audit log (P1), unblocks ACM-15 and ACM-16.
+2. ACM-21 Fix the date format (P2).
+Not yet: ACM-30 collides with ACM-9.
+Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)
+Status: TICKETS_SUGGESTED

@@ -284,6 +284,20 @@ func TestWatchSettings(t *testing.T) {
 	}
 }
 
+func TestSuggestSettings(t *testing.T) {
+	c, err := Load(dirWith(t, map[string]string{FileName: "[presets.claude]\nharness = \"claude\"\n\n[presets.cheap]\nharness = \"claude\"\nmodel = \"haiku\"\n\n[suggest]\nas = \"cheap\"\n"}))
+	if err != nil || c.Suggest.As != "cheap" {
+		t.Fatalf("[suggest] as: %+v, %v", c.Suggest, err)
+	}
+	// A preset the file does not define is a mistake, caught at load.
+	if _, err := Load(dirWith(t, map[string]string{FileName: "[suggest]\nas = \"fast\"\n"})); code(err) != apperr.ConfigInvalid {
+		t.Errorf("an unknown [suggest] preset: %v", err)
+	}
+	if got := SuggestLine(1); got != "Use the suggest-tickets skill to suggest the next ticket to start." {
+		t.Errorf("SuggestLine(1) = %q", got)
+	}
+}
+
 func TestMergeLineNamesEveryStep(t *testing.T) {
 	for _, tc := range []struct {
 		steps []int

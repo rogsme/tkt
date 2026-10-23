@@ -107,6 +107,21 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerTool({
+		name: "tkt_suggest",
+		label: "tkt suggest",
+		description:
+			"Queue suggest-tickets, which reads the tracker and the work in flight, then picks the next tickets to start, ones that can run side by side. It returns before the picks; the board shows them, and /inbox starts them. count is how many to pick, 3 unless the user names a number. as picks the preset suggest-tickets runs on.",
+		parameters: Type.Object({
+			count: Type.Optional(Type.Integer({ minimum: 1, maximum: 10, description: "How many tickets to pick; 3 unless the user names a number" })),
+			as: preset,
+		}),
+		executionMode: "sequential",
+		async execute(_id, p) {
+			return text(act.suggest(hub, p.count ?? 3, p.as ?? ""));
+		},
+	});
+
+	pi.registerTool({
 		name: "tkt_approve",
 		label: "tkt approve",
 		description: "Approve a ticket's plan in its own session, so work-ticket begins. then auto hands the ticket to tkt auto after the approval.",

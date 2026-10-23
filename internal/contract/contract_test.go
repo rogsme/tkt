@@ -67,7 +67,8 @@ func TestReviewSummariesCarryVerdicts(t *testing.T) {
 func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	registry := read(t, "status-lines.md")
 	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked, contract.StatusSetupRequired,
-		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone} {
+		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone,
+		contract.StatusTicketsSuggested} {
 		if !strings.Contains(registry, "`Status: "+s+"`") {
 			t.Errorf("Status: %s is not in the registry", s)
 		}
@@ -100,7 +101,7 @@ func TestStageLinesNameRegisteredSkills(t *testing.T) {
 		}
 	}
 	named := regexp.MustCompile(`the ([a-z]+(?:-[a-z]+)+) skill`)
-	lines := map[string]string{"approve": config.ApproveLine, "merge": config.MergeLine([]int{1}, "aaa", "aaa")}
+	lines := map[string]string{"approve": config.ApproveLine, "merge": config.MergeLine([]int{1}, "aaa", "aaa"), "suggest": config.SuggestLine(3)}
 	for stage, line := range config.BuiltinStages {
 		lines[stage] = line
 	}
@@ -259,5 +260,33 @@ func TestUnblockedLineNamesTheTicketsAMergeFreed(t *testing.T) {
 		if got := c.IDs(m[1]); !slices.Equal(got, want) {
 			t.Errorf("%q: %v, want %v", text, got, want)
 		}
+	}
+}
+
+func TestSuggestedLineNamesThePicks(t *testing.T) {
+	report := read(t, "suggest-tickets-report.md")
+	if !strings.HasSuffix(strings.TrimSpace(report), "End with `Status: "+contract.StatusTicketsSuggested+"`.") {
+		t.Fatalf("suggest-tickets no longer ends with Status: %s:\n%s", contract.StatusTicketsSuggested, report)
+	}
+	id := regexp.MustCompile(`^ACM-[1-9][0-9]*$`)
+	// Each form the report gives, as tkt suggest reads it.
+	for _, tc := range []struct {
+		line string
+		want []contract.Suggestion
+	}{
+		{"`Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)`", []contract.Suggestion{{"ACM-14", "frontier"}, {"ACM-21", "acme-small-2"}}},
+		{"`Suggested: ACM-14, ACM-21`", []contract.Suggestion{{"ACM-14", ""}, {"ACM-21", ""}}},
+		{"`Suggested: none`", []contract.Suggestion{}},
+	} {
+		if !strings.Contains(report, tc.line) {
+			t.Errorf("the report no longer gives %s", tc.line)
+			continue
+		}
+		if got := contract.Suggestions(strings.Trim(tc.line, "`")+"\nStatus: "+contract.StatusTicketsSuggested, id); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: %v, want %v", tc.line, got, tc.want)
+		}
+	}
+	if !strings.Contains(config.SuggestLine(3), "the suggest-tickets skill") {
+		t.Errorf("the suggest line %q does not name the skill", config.SuggestLine(3))
 	}
 }

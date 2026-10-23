@@ -39,10 +39,11 @@ tkt reads no skill files at run time. It depends on these lines from gitlab.com/
 - the configuration markers and the `## Forge` and `- Ticket ids:` lines that `/setup-rogs` writes;
 - the status lines in that repository's CLAUDE.md registry;
 - review-pr's `Verdict:` and `Reviewed head:` lines, and the numbered steps under `## Human verification` in its ready summary;
-- the skill names in the built-in stage lines and in the lines `tkt approve` and `tkt merge` send;
+- the skill names in the built-in stage lines and in the lines `tkt approve`, `tkt merge` and `tkt suggest` send;
 - finish-ticket's rules that it merges only on the user's explicit word, with every human verification step confirmed, and stops with `BLOCKED_FOR_SYNC` when the base moved after the review, which the line `tkt merge` sends, and its refusals, rely on; and that a confirmation counts for the head it names and carries over clean merges of the base, which the line's heads and a merge order across `tkt sync` rely on;
 - review-pr's rule that a clean merge of the base keeps the pull request's review brief current, which `tkt sync` relies on when it pushes such a merge itself;
 - finish-ticket's `Unblocked:` line, right before `Status: DONE`, which `tkt done` reads to name the tickets a merge unblocked;
+- suggest-tickets's `Suggested:` line, before `Status: TICKETS_SUGGESTED`, which `tkt suggest --wait` reads for the picks and their models;
 - start-ticket's `## Unattended runs` section, which keys on the word "unattended" in the line `tkt auto --approve-plan` adds to the start line.
 
 `internal/contract` pins them, and `internal/contract/testdata/SOURCES.md` records where each fixture comes from. When the skills change one of them, update the fixture and the code in one commit that cites the skills commit. `contract.Version` changes only when the contract's version does.

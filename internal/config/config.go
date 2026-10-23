@@ -50,6 +50,14 @@ type Config struct {
 	Board         Board
 	Agent         Agent
 	Watch         Watch
+	Suggest       Suggest
+}
+
+// Suggest holds the [suggest] settings for tkt suggest.
+type Suggest struct {
+	// As is the preset suggest-tickets runs on, such as a cheap one; empty
+	// means the default preset.
+	As string
 }
 
 // Watch holds tkt watch's settings.
@@ -144,6 +152,16 @@ func StepsText(steps []int) string {
 		return "steps " + strings.Join(n[:len(n)-1], ", ") + " and " + n[len(n)-1]
 	}
 	return "steps"
+}
+
+// SuggestLine is what tkt suggest sends a fresh session at the repository's
+// root: suggest-tickets picks the next tickets to start, ones that can run
+// side by side.
+func SuggestLine(n int) string {
+	if n == 1 {
+		return "Use the suggest-tickets skill to suggest the next ticket to start."
+	}
+	return "Use the suggest-tickets skill to suggest the next " + strconv.Itoa(n) + " tickets to start, ones that can run side by side."
 }
 
 // UnattendedLine follows the start line when tkt auto approves the plan
