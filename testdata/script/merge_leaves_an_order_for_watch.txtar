@@ -1,0 +1,71 @@
+# While the checks at the head still run, tkt merge leaves a merge order, and
+# tkt watch sends finish-ticket the merge line once they pass. A new head
+# drops an order, since the steps ran on the old one.
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+resetlog
+
+exec tkt merge ACM-12 --passed all --json
+envelope '.result | [.action, .steps]' '["ordered",[1,2]]'
+stderr 'no tkt watch runs for'
+! logged herdr agent start
+state $FAKE_WT_ROOT/ACM-12 merge_head $H1
+state $FAKE_WT_ROOT/ACM-12 merge_steps 1,2
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .next.reason, .merge.steps]' '["ci","ci_pending",[1,2]]'
+
+# A pass while CI runs leaves it.
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","ci_pending"]'
+
+# Once the checks pass, the next pass sends finish-ticket the merge line,
+# and the order is gone.
+jqedit $WORK/prs.json '.[0].statusCheckRollup[0] |= (.status = "COMPLETED" | .conclusion = "SUCCESS")'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .next.reason, .next.text]' '["merging","merge_due","tkt merge ACM-12 --passed 1,2 --head '$H1'"]'
+exec tkt watch --once --dry-run --json
+envelope '.result.actions[0].argv | join(" ")' 'tkt merge ACM-12 --passed 1,2 --head '$H1
+! exists $FAKE_DIR/prompts
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["merge","merge_due"]'
+grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed.$' $FAKE_DIR/prompts
+logged herdr notification show 'ACM-12: merging'
+state $FAKE_WT_ROOT/ACM-12 merge_head ''
+state $FAKE_WT_ROOT/ACM-12 watch_last merge:@$H1
+exec tkt history ACM-12
+stdout 'merge order left, for when the checks pass'
+stdout 'tkt watch carried out the merge order'
+
+# A new head drops the next order, with a notification.
+jqedit $WORK/prs.json '.[0].statusCheckRollup[0] |= (.status = "IN_PROGRESS" | .conclusion = "")'
+exec tkt merge ACM-12 --passed 1-2
+stdout 'merges #7 once its checks pass'
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'one more change'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H2 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H2'
+resetlog
+exec tkt watch --once --json
+logged herdr notification show 'ACM-12: merge order dropped'
+state $FAKE_WT_ROOT/ACM-12 merge_head ''
+exec tkt history ACM-12
+stdout 'merge order dropped by a new head'
+
+# --cancel takes an order back.
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+realgit -C $FAKE_WT_ROOT/ACM-12 reset -q --hard $H1
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q -f origin ACM-12
+exec tkt merge ACM-12 --passed all
+exec tkt merge ACM-12 --cancel --json
+envelope '.result.action' cancelled
+state $FAKE_WT_ROOT/ACM-12 merge_head ''
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "IN_PROGRESS", "conclusion": ""}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open http://localhost:3000/login and sign in with a wrong password.\n   Expected: the form shows an error.\n2. Sign out, then press Back.\n   Expected: the login page shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

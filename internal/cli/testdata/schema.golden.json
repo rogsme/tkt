@@ -420,7 +420,7 @@
       "path": "watch",
       "use": "watch",
       "short": "Keep the repository's tickets moving: sync moved bases, fix failing checks, remove finished tickets",
-      "long": "tkt watch keeps a repository's tickets moving, every ticket and not only the\nones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads\nevery ticket with a fixed number of gh calls, and takes at most one step per\nticket, from the same rules as tkt ls:\n\n  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,\n    unless [watch] done_after_merge = false;\n  - the base moved at a moment a sync is due (a conflict, the bot's\n    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base\n    itself, as tkt sync does, with no agent, and runs resolve on a conflict;\n  - the checks fail at the head: it runs ci in a fresh session, once per\n    head.\n\nEverything else waits for you or for tkt auto: plans, reviews, findings,\nhuman verification and the merge. It leaves alone a ticket on hold (tkt\nhold), one a tkt auto loop drives, one another tkt command works on, one\nwhose agent works or asks a question, and one whose worktree directory is\ngone. It replaces an agent with a fresh session only after the agent sat\nidle for five minutes, since a person may still use that session, and it\nwaits while the forge still shows an older head than the branch has. A step\nit would repeat on the same head, or a fix run past [auto] max_rounds, waits\nfor you instead: tkt ls shows the ticket as needs_you, with watch.paused\nsaying why, and herdr notifies once.\n\nIts agent runs take the [auto] max_parallel slots tkt auto uses. It records\neach step in the history, and shows a herdr notification for each agent run,\nfailure and removal; a clean sync stays quiet. A sync that fails, such as\nwhile the network is down, is tried again at the next pass, with one\nnotification for each head and reason.\n\nOne tkt watch runs per repository. Every tkt command in a herdr pane starts\nit when none runs, in a session of its own, so it outlives the command and the\npane; it writes its lines to watch.log in the repository's git directory,\nunder tkt/. It waits a minute between two starts, so a watch that exits at\nonce is not started again by every command. [watch] autostart = false, or\nTKT_WATCH=off, turns that off. tkt ls --json says whether it runs, in\nwatch.running, and watch.error says why its last pass failed. tkt watch\n--stop stops it, after the step it is taking; a second SIGTERM stops it at\nonce. When tkt update replaces tkt, the watch stops by itself, and the next\ntkt command starts one that runs the new tkt.\n\nOutside a herdr pane it finds the workspace whose panes work in the\nrepository. When none has a pane there, it opens one before its first step,\nsince every step works in herdr. While herdr is down it waits.\n\n--install keeps it running while no terminal is open: it writes systemd user\nunits, or launchd agents on macOS, for herdr's server and for this\nrepository's tkt watch, with this shell's PATH, since the agents in herdr's\npanes inherit herdr's. It enables both, starts herdr's unless herdr already\nruns, and asks before loginctl enable-linger starts them at boot; --yes\nanswers yes. tkt commands then start the unit rather than a watch of their\nown, and --stop stops the unit. --uninstall removes this repository's unit;\nherdr's stays. tkt doctor checks that they run and that their PATH finds the\ntools and harnesses.\n\n--once takes one pass and exits; with --dry-run it says what each ticket would\nget, and changes nothing. --install and --uninstall take --dry-run too.",
+      "long": "tkt watch keeps a repository's tickets moving, every ticket and not only the\nones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads\nevery ticket with a fixed number of gh calls, and takes at most one step per\nticket, from the same rules as tkt ls:\n\n  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,\n    unless [watch] done_after_merge = false;\n  - the base moved at a moment a sync is due (a conflict, the bot's\n    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base\n    itself, as tkt sync does, with no agent, and runs resolve on a conflict;\n  - the checks fail at the head: it runs ci in a fresh session, once per\n    head;\n  - a merge order from tkt merge is for the head, and its checks passed: it\n    sends finish-ticket the merge line in a fresh session. A new head drops\n    the order, with a notification, and a base that moved gets a sync first.\n\nEverything else waits for you or for tkt auto: plans, reviews, findings,\nhuman verification and the word to merge. It leaves alone a ticket on hold (tkt\nhold), one a tkt auto loop drives, one another tkt command works on, one\nwhose agent works or asks a question, and one whose worktree directory is\ngone. It replaces an agent with a fresh session only after the agent sat\nidle for five minutes, since a person may still use that session, and it\nwaits while the forge still shows an older head than the branch has. A step\nit would repeat on the same head, or a fix run past [auto] max_rounds, waits\nfor you instead: tkt ls shows the ticket as needs_you, with watch.paused\nsaying why, and herdr notifies once.\n\nIts agent runs take the [auto] max_parallel slots tkt auto uses. It records\neach step in the history, and shows a herdr notification for each agent run,\nfailure and removal; a clean sync stays quiet. A sync that fails, such as\nwhile the network is down, is tried again at the next pass, with one\nnotification for each head and reason.\n\nOne tkt watch runs per repository. Every tkt command in a herdr pane starts\nit when none runs, in a session of its own, so it outlives the command and the\npane; it writes its lines to watch.log in the repository's git directory,\nunder tkt/. It waits a minute between two starts, so a watch that exits at\nonce is not started again by every command. [watch] autostart = false, or\nTKT_WATCH=off, turns that off. tkt ls --json says whether it runs, in\nwatch.running, and watch.error says why its last pass failed. tkt watch\n--stop stops it, after the step it is taking; a second SIGTERM stops it at\nonce. When tkt update replaces tkt, the watch stops by itself, and the next\ntkt command starts one that runs the new tkt.\n\nOutside a herdr pane it finds the workspace whose panes work in the\nrepository. When none has a pane there, it opens one before its first step,\nsince every step works in herdr. While herdr is down it waits.\n\n--install keeps it running while no terminal is open: it writes systemd user\nunits, or launchd agents on macOS, for herdr's server and for this\nrepository's tkt watch, with this shell's PATH, since the agents in herdr's\npanes inherit herdr's. It enables both, starts herdr's unless herdr already\nruns, and asks before loginctl enable-linger starts them at boot; --yes\nanswers yes. tkt commands then start the unit rather than a watch of their\nown, and --stop stops the unit. --uninstall removes this repository's unit;\nherdr's stays. tkt doctor checks that they run and that their PATH finds the\ntools and harnesses.\n\n--once takes one pass and exits; with --dry-run it says what each ticket would\nget, and changes nothing. --install and --uninstall take --dry-run too.",
       "example": "  tkt watch\n  tkt watch --once --dry-run\n  tkt watch --stop\n  tkt watch --install\n  tkt watch --uninstall",
       "group": "lifecycle",
       "args": [],
@@ -687,6 +687,94 @@
       }
     },
     {
+      "path": "merge",
+      "use": "merge ID --passed STEPS",
+      "short": "Have finish-ticket merge a verified ticket, now or once its checks pass",
+      "long": "tkt merge hands a ticket whose human verification passed to finish-ticket.\nIt sends a fresh session in the ticket's tab the line\n\n  Use the finish-ticket skill to merge the PR. Human verification steps 1\n  to 3 passed.\n\nfinish-ticket then checks CI, the review and the feedback at the exact\nhead, merges, waits for post-merge CI, completes the ticket in the tracker,\nand ends with Status: DONE. tkt watch removes the ticket after that.\n\n--passed names the steps that passed: numbers and ranges such as 1-3 or\n1,2,4, or all. finish-ticket merges only when every step passed, so tkt\nmerge refuses a list that leaves one out; to waive a step, tell the agent\nin the ticket's tab yourself. --head names the head the steps ran on, and\ntkt merge refuses once the pull request moved past it. It also refuses a\nhead no review cleared, a branch behind its base (finish-ticket would stop\nwith BLOCKED_FOR_SYNC; sync, then verify the new head), and failing\nchecks.\n\nWhile the checks at the head still run, tkt merge leaves a merge order\ninstead, and tkt watch sends the line once they pass. tkt ls shows the\norder in the merge field, and the tkt agent's board as merges when green. A\nnew head drops it, with a notification, since the steps ran on the old one;\na base that moves meanwhile gets a sync first, which makes a new head too.\n--cancel drops the order.",
+      "example": "  tkt merge ACM-12 --passed 1-3\n  tkt merge ACM-12 --passed all --head a1b2c3d\n  tkt merge ACM-12 --cancel",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        },
+        {
+          "name": "STEPS",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "as",
+          "type": "string",
+          "default": "",
+          "usage": "run finish-ticket on PRESET instead of the ticket's"
+        },
+        {
+          "name": "cancel",
+          "type": "bool",
+          "default": "false",
+          "usage": "drop the ticket's merge order"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "head",
+          "type": "string",
+          "default": "",
+          "usage": "the head the steps ran on; tkt merge refuses once the pull request moved past it"
+        },
+        {
+          "name": "passed",
+          "type": "string",
+          "default": "",
+          "usage": "the human verification steps that passed: numbers and ranges such as 1-3 or 1,2,4, or all"
+        }
+      ],
+      "result": {
+        "action": "string",
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "dry_run": "boolean",
+        "head": "string",
+        "pr": "integer",
+        "run": {
+          "fields": {
+            "actions": [
+              {
+                "argv": "array of string",
+                "display": "string"
+              }
+            ],
+            "agent": "string",
+            "dry_run": "boolean",
+            "harness": "string",
+            "pane": "string",
+            "preset": "string",
+            "replaced_session": "string",
+            "resent": "boolean",
+            "session": "string",
+            "stage": "string",
+            "tab": "string",
+            "ticket": "string"
+          },
+          "nullable": true
+        },
+        "steps": "array of integer",
+        "ticket": "string"
+      }
+    },
+    {
       "path": "resume",
       "use": "resume ID",
       "short": "Relaunch the ticket's newest session when no agent runs for it",
@@ -866,6 +954,14 @@
             "idle_since": "string",
             "last_status": "string",
             "launch": "string",
+            "merge": {
+              "fields": {
+                "at": "string",
+                "head": "string",
+                "steps": "array of integer"
+              },
+              "nullable": true
+            },
             "next": {
               "argv": "array of string",
               "kind": "string",
@@ -1483,6 +1579,11 @@
       "summary": "the command needs --yes when stdin is not a terminal"
     },
     {
+      "code": "steps_incomplete",
+      "exit": 2,
+      "summary": "tkt merge --passed does not name every human verification step, and finish-ticket merges only when all passed"
+    },
+    {
       "code": "cancelled",
       "exit": 2,
       "summary": "the answer to a confirmation was no"
@@ -1741,6 +1842,21 @@
       "code": "watch_running",
       "exit": 4,
       "summary": "a tkt watch already runs for the repository, or did not stop when asked"
+    },
+    {
+      "code": "merge_head_moved",
+      "exit": 4,
+      "summary": "the pull request's head moved since the human verification steps ran on it"
+    },
+    {
+      "code": "merge_behind_base",
+      "exit": 4,
+      "summary": "the branch is behind its base, so finish-ticket would not merge it: sync, then verify the new head"
+    },
+    {
+      "code": "merge_checks_fail",
+      "exit": 4,
+      "summary": "the checks fail at the pull request's head"
     },
     {
       "code": "wt_failed",

@@ -54,6 +54,16 @@ func TestWatchStepTable(t *testing.T) {
 		{with(failing, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), p, watchMemory{}, leave(ReasonFindings)},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), p, watchMemory{}, leave(ReasonBotClear)},
 		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL", Behind: -1}, p, watchMemory{}, leave(ReasonPlanAwaitsApproval)},
+		// A merge order you left goes ahead without settling, once per head;
+		// on a branch behind its base, the sync comes first.
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.MergeSteps, f.Idle = "READY_FOR_HUMAN", true, "1,2", time.Minute
+		}), p, watchMemory{}, watchAct{Kind: actMerge, Why: ReasonMergeDue}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.MergeSteps = "READY_FOR_HUMAN", true, "1,2" }), p, watchMemory{Last: "merge:@h1"}, pause(StopNoProgress)},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.MergeSteps, f.Behind = "READY_FOR_HUMAN", true, "1,2", 2 }), p, watchMemory{}, watchAct{Kind: actSync, Why: ReasonBaseMoved}},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.MergeSteps, f.Checks = "READY_FOR_HUMAN", true, "1,2", "pending"
+		}), p, watchMemory{}, leave(ReasonCIPending)},
 	}
 	for _, tc := range cases {
 		if got := watchStep(NextStep(tc.f), tc.f, tc.p, tc.m); got != tc.want {

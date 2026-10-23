@@ -78,6 +78,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt watch` | Keeps every ticket moving: syncs a moved base, runs ci once per head when the checks fail, and removes a ticket after finish-ticket's `Status: DONE`. tkt commands start it by themselves; `--install` runs it, and herdr's server, as services that start at boot. |
 | `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first), `resolve`, `ci`, `verify` or `start`. `sync`, the old name of `address`, still works and warns. |
 | `tkt sync ID` | Merges the base into the ticket's branch: itself, with no agent, when the merge is clean; through a fresh session that only resolves, on a conflict. |
+| `tkt merge ID --passed STEPS` | Once the human verification steps passed, sends finish-ticket the word to merge in a fresh session; while the checks still run, leaves a merge order that `tkt watch` carries out once they pass. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
 | `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees. `--all` checks every ticket worktree. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
@@ -94,7 +95,7 @@ A ticket from start to merge, in short:
 2. Read the plan with `tkt show ACM-12`, then `tkt approve ACM-12`.
 3. When the agent reports `Status: READY_FOR_REVIEW`, run `tkt run ACM-12 review`.
 4. Act on the verdict with `address`, or on a moved base with `tkt sync ACM-12`, and review again.
-5. Verify, merge in the tab, then run `tkt done ACM-12`.
+5. Verify, then `tkt merge ACM-12 --passed all`: finish-ticket merges, and `tkt watch` removes the ticket after its `Status: DONE`.
 
 For work with no ticket, `tkt start --scratch spike-login` makes the worktree, branch and tab `spike-login` and starts the agent without sending it anything. The other commands work on tickets only, so remove that worktree with `wt remove spike-login`.
 

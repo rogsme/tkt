@@ -9,10 +9,13 @@ ticket, from the same rules as tkt ls:
     STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base
     itself, as tkt sync does, with no agent, and runs resolve on a conflict;
   - the checks fail at the head: it runs ci in a fresh session, once per
-    head.
+    head;
+  - a merge order from tkt merge is for the head, and its checks passed: it
+    sends finish-ticket the merge line in a fresh session. A new head drops
+    the order, with a notification, and a base that moved gets a sync first.
 
 Everything else waits for you or for tkt auto: plans, reviews, findings,
-human verification and the merge. It leaves alone a ticket on hold (tkt
+human verification and the word to merge. It leaves alone a ticket on hold (tkt
 hold), one a tkt auto loop drives, one another tkt command works on, one
 whose agent works or asks a question, and one whose worktree directory is
 gone. It replaces an agent with a fresh session only after the agent sat

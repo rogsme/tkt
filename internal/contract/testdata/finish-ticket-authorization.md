@@ -1,0 +1,7 @@
+description: "Merge the current branch's reviewed pull request and complete its ticket or bundle, only after explicit merge authorization and confirmed human verification: require exact-head CI, a final independent review verdict for the same head and base, and no open feedback; then verify the merge and post-merge CI and move every ticket to done. Use only when the user explicitly says \"merge the PR\", \"finish the ticket\" or \"ship this\"."
+
+1. Require an explicit instruction from the user to merge this pull request. A green check or a reviewer's verdict is not merge authorization.
+
+- Every numbered human step explicitly confirmed as passed by the user, or explicitly waived by the user with a reason.
+
+Fetch the base and require its SHA to equal the base SHA in the final verdict. When the base moved at all after the review, stop with `Status: BLOCKED_FOR_SYNC`: even a clean merge would produce an integration nobody reviewed. Never re-sync, re-verify or re-review from this skill, even when the gap looks mechanical; `address-pr-review` brings the branch up to date, and a fresh review follows.

@@ -177,7 +177,7 @@ func syncCmd(g *globals) *cobra.Command {
 		Example: `  tkt sync ACM-12
   tkt sync ACM-12 --dry-run
   tkt sync ACM-12 --no-agent --json`,
-		SuggestFor:        []string{"merge", "update", "rebase"},
+		SuggestFor:        []string{"update", "rebase"},
 		ValidArgsFunction: g.completeTickets(false),
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) != 1 {
@@ -195,6 +195,42 @@ func syncCmd(g *globals) *cobra.Command {
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
 	cmd.Flags().BoolVar(&o.NoAgent, "no-agent", false, "stop at a conflict instead of starting a session to resolve it")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
+	return cmd
+}
+
+func mergeCmd(g *globals) *cobra.Command {
+	var o app.MergeOpts
+	cmd := &cobra.Command{
+		Use:   "merge ID --passed STEPS",
+		Short: "Have finish-ticket merge a verified ticket, now or once its checks pass",
+		Long:  helpText("merge"),
+		Example: `  tkt merge ACM-12 --passed 1-3
+  tkt merge ACM-12 --passed all --head a1b2c3d
+  tkt merge ACM-12 --cancel`,
+		SuggestFor:        []string{"ship", "finish"},
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case len(args) != 1:
+				return usage("usage: tkt merge ID --passed STEPS")
+			case !cmd.Flags().Changed("passed") && !o.Cancel:
+				return usage("tkt merge needs --passed: the human verification steps that passed, such as 1-3, or all")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Merge(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.Passed, "passed", "", "the human verification steps that passed: numbers and ranges such as 1-3 or 1,2,4, or all")
+	cmd.Flags().StringVar(&o.Head, "head", "", "the head the steps ran on; tkt merge refuses once the pull request moved past it")
+	cmd.Flags().StringVar(&o.As, "as", "", "run finish-ticket on PRESET instead of the ticket's")
+	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
+	cmd.Flags().BoolVar(&o.Cancel, "cancel", false, "drop the ticket's merge order")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
+	cmd.MarkFlagsMutuallyExclusive("passed", "cancel")
 	return cmd
 }
 

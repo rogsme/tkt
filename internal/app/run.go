@@ -25,6 +25,9 @@ type RunOpts struct {
 	Pane   string
 	Force  bool
 	Dry    bool
+	// line is a line another command sends under Stage, as tkt merge sends
+	// finish-ticket's under merge.
+	line string
 }
 
 // RunResult is what tkt run did.
@@ -67,7 +70,10 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 		return nil, err
 	}
 	c.ticket(id)
-	if !o.Prompt.Set {
+	switch {
+	case o.line != "":
+		text = o.line
+	case !o.Prompt.Set:
 		if text, err = c.stageLine(o.Stage, id); err != nil {
 			return nil, err
 		}

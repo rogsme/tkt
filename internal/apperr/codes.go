@@ -39,6 +39,7 @@ const (
 	PromptInvalid        Code = "prompt_invalid"
 	PromptFileUnreadable Code = "prompt_file_unreadable"
 	ConfirmationRequired Code = "confirmation_required"
+	StepsIncomplete      Code = "steps_incomplete"
 	Cancelled            Code = "cancelled"
 
 	ToolMissing            Code = "tool_missing"
@@ -93,6 +94,9 @@ const (
 	UnpushedCommits     Code = "unpushed_commits"
 	SyncConflict        Code = "sync_conflict"
 	WatchRunning        Code = "watch_running"
+	MergeHeadMoved      Code = "merge_head_moved"
+	MergeBehindBase     Code = "merge_behind_base"
+	MergeChecksFail     Code = "merge_checks_fail"
 
 	WtFailed          Code = "wt_failed"
 	WtSwitchFailed    Code = "wt_switch_failed"
@@ -136,6 +140,7 @@ var Registry = []Info{
 	{PromptInvalid, ExitUsage, "the prompt holds a NUL byte"},
 	{PromptFileUnreadable, ExitUsage, "the prompt file cannot be read"},
 	{ConfirmationRequired, ExitUsage, "the command needs --yes when stdin is not a terminal"},
+	{StepsIncomplete, ExitUsage, "tkt merge --passed does not name every human verification step, and finish-ticket merges only when all passed"},
 	{Cancelled, ExitUsage, "the answer to a confirmation was no"},
 
 	{ToolMissing, ExitEnvironment, "a required program is not installed"},
@@ -190,6 +195,9 @@ var Registry = []Info{
 	{UnpushedCommits, ExitState, "the ticket's branch has commits that are not on the remote"},
 	{SyncConflict, ExitState, "merging the base conflicts, and --no-agent kept tkt sync from starting a session to resolve it"},
 	{WatchRunning, ExitState, "a tkt watch already runs for the repository, or did not stop when asked"},
+	{MergeHeadMoved, ExitState, "the pull request's head moved since the human verification steps ran on it"},
+	{MergeBehindBase, ExitState, "the branch is behind its base, so finish-ticket would not merge it: sync, then verify the new head"},
+	{MergeChecksFail, ExitState, "the checks fail at the pull request's head"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},

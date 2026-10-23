@@ -12,9 +12,12 @@ Each fixture copies text that another project produces, so a change there shows 
 | `start-ticket-unattended.md` | gitlab.com/rogs/skills `skills/lifecycle/start-ticket/SKILL.md`, the `## Unattended runs` section | `619ef65` |
 | `review-pr-clean-merge.md` | gitlab.com/rogs/skills `skills/lifecycle/review-pr/SKILL.md`, the paragraph on a brief pinned to an earlier head, under `## 3. Review the complete change` | `30cf6a6` |
 | `resolving-merge-conflicts.md` | gitlab.com/rogs/skills `skills/engineering/resolving-merge-conflicts/SKILL.md`, whole | `b502691` |
+| `finish-ticket-authorization.md` | gitlab.com/rogs/skills `skills/lifecycle/finish-ticket/SKILL.md`: the description, the first rule of `## 1. Verify authorization and context`, the rule on human steps under `## 2. Verify the merge packet`, and the paragraph on a base that moved | `aee3190` |
 | `automated-review.txt` | the forge's automated reviewer, not a skill: its review summary line | none |
 
 `config.ApproveLine`, the line tkt approve sends, relies on work-ticket's trigger: the skill runs "when the user approves the plan and says ... execute the plan" (gitlab.com/rogs/skills `skills/lifecycle/work-ticket/SKILL.md`, `33d185b`).
+
+`config.MergeLine`, the line tkt merge sends a fresh session, relies on `finish-ticket-authorization.md`: the skill runs only when the user explicitly says "merge the PR", requires every numbered human step confirmed as passed, so the line names them all, and stops with `BLOCKED_FOR_SYNC` when the base moved after the review, so tkt merge refuses a branch that is behind its base.
 
 `config.UnattendedLine`, which `tkt auto --approve-plan` adds to the start line, relies on that `## Unattended runs` section: start-ticket reads the word "unattended" in its request, skips the browser presentation, and asks every open question through the harness's question tool (gitlab.com/rogs/skills, `619ef65`, merged in `b6f9d9c`).
 

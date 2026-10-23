@@ -84,6 +84,16 @@ type RowWatch struct {
 	Paused string `json:"paused"`
 }
 
+// RowMerge is a merge order: tkt merge left it because the checks at Head
+// had not passed yet, and tkt watch sends finish-ticket the merge line,
+// naming Steps as passed, once they do. A new head drops it, since the
+// steps ran on the old one.
+type RowMerge struct {
+	Head  string `json:"head"`
+	Steps []int  `json:"steps"`
+	At    string `json:"at"`
+}
+
 // ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
 // for a free slot before it starts the ticket.
 const ReasonAwaitingSlot = "awaiting_slot"
@@ -114,6 +124,8 @@ type Row struct {
 	// alone (tkt hold).
 	Hold  bool      `json:"hold"`
 	Watch *RowWatch `json:"watch"`
+	// Merge is the ticket's merge order for its current head, or null.
+	Merge *RowMerge `json:"merge"`
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
 	PhaseSince string `json:"phase_since"`
@@ -586,6 +598,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		row.BaseMerge = c.probeBaseMerge(rctx, t.Path, row.PR.Head, l.baseRef)
 	}
 	row.Watch = &RowWatch{Last: st["watch_last"]}
+	if h := st["merge_head"]; h != "" && row.PR != nil && row.PR.State == "OPEN" && row.PR.Head == h {
+		row.Merge = &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), At: st["merge_at"]}
+	}
 	if p := st["watch_pause"]; p != "" && row.PR != nil && st["watch_head"] == row.PR.Head && c.watchRunning() {
 		row.Watch.Paused = p
 	}

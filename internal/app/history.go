@@ -166,8 +166,18 @@ func (e HistoryEvent) line() string {
 			return "tkt watch waits for you: " + e.Stop
 		case e.Stop == "failed":
 			return "tkt watch could not " + strings.TrimSpace(e.Action+" "+e.Stage)
+		case e.Action == actMerge:
+			return "tkt watch carried out the merge order"
 		}
 		return "tkt watch ran " + e.Stage
+	case history.Merge:
+		switch e.Action {
+		case MergeOrdered:
+			return "merge order left, for when the checks pass"
+		case "dropped":
+			return "merge order dropped by a new head"
+		}
+		return "merge order cancelled"
 	}
 	return e.Event
 }

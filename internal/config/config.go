@@ -5,6 +5,7 @@ package config
 import (
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -110,6 +111,33 @@ const (
 // ApproveLine is what tkt approve sends to the planning session. It is not a
 // stage: tkt run starts a fresh session, and the plan lives in this one.
 const ApproveLine = "The plan is approved. Use the work-ticket skill to execute it."
+
+// MergeLine is what tkt merge sends a fresh session once the human
+// verification steps passed: finish-ticket's explicit word to merge, with
+// every step it requires confirmed.
+func MergeLine(steps []int) string {
+	return "Use the finish-ticket skill to merge the PR. Human verification " + StepsText(steps) + " passed."
+}
+
+// StepsText names steps for people: step 2, steps 1 and 2, steps 1 to 3,
+// steps 1, 2 and 4.
+func StepsText(steps []int) string {
+	n := make([]string, len(steps))
+	run := len(steps) > 2
+	for i, s := range steps {
+		n[i] = strconv.Itoa(s)
+		run = run && (i == 0 || s == steps[i-1]+1)
+	}
+	switch {
+	case len(n) == 1:
+		return "step " + n[0]
+	case run:
+		return "steps " + n[0] + " to " + n[len(n)-1]
+	case len(n) > 1:
+		return "steps " + strings.Join(n[:len(n)-1], ", ") + " and " + n[len(n)-1]
+	}
+	return "steps"
+}
 
 // UnattendedLine follows the start line when tkt auto approves the plan
 // itself. start-ticket then skips the browser presentation and asks every

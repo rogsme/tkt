@@ -39,7 +39,8 @@ tkt reads no skill files at run time. It depends on these lines from gitlab.com/
 - the configuration markers and the `## Forge` and `- Ticket ids:` lines that `/setup-rogs` writes;
 - the status lines in that repository's CLAUDE.md registry;
 - review-pr's `Verdict:` and `Reviewed head:` lines, and the numbered steps under `## Human verification` in its ready summary;
-- the skill names in the built-in stage lines and in the line `tkt approve` sends;
+- the skill names in the built-in stage lines and in the lines `tkt approve` and `tkt merge` send;
+- finish-ticket's rules that it merges only on the user's explicit word, with every human verification step confirmed, and stops with `BLOCKED_FOR_SYNC` when the base moved after the review, which the line `tkt merge` sends, and its refusals, rely on;
 - review-pr's rule that a clean merge of the base keeps the pull request's review brief current, which `tkt sync` relies on when it pushes such a merge itself;
 - start-ticket's `## Unattended runs` section, which keys on the word "unattended" in the line `tkt auto --approve-plan` adds to the start line.
 

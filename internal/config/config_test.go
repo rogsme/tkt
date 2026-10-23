@@ -283,3 +283,22 @@ func TestWatchSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeLineNamesEveryStep(t *testing.T) {
+	for _, tc := range []struct {
+		steps []int
+		want  string
+	}{
+		{[]int{1}, "step 1"},
+		{[]int{1, 2}, "steps 1 and 2"},
+		{[]int{1, 2, 3}, "steps 1 to 3"},
+		{[]int{1, 2, 4}, "steps 1, 2 and 4"},
+	} {
+		if got := StepsText(tc.steps); got != tc.want {
+			t.Errorf("StepsText(%v) = %q, want %q", tc.steps, got, tc.want)
+		}
+	}
+	if got, want := MergeLine([]int{1, 2, 3}), "Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed."; got != want {
+		t.Errorf("MergeLine = %q, want %q", got, want)
+	}
+}

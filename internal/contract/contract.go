@@ -78,9 +78,9 @@ const (
 // READY_FOR_HUMAN summary and holds the numbered procedure a person runs.
 var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`)
 
-// Skills names the lifecycle skills tkt's built-in stage lines, and the line
-// tkt approve sends, ask for.
-var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr"}
+// Skills names the lifecycle skills tkt's built-in stage lines, and the
+// lines tkt approve and tkt merge send, ask for.
+var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr", "finish-ticket"}
 
 // CleanMergeRule is how review-pr's rule about a review brief across clean
 // base merges begins. tkt sync relies on it: it pushes such merges with no

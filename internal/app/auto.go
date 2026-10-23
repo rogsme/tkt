@@ -270,6 +270,10 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 		return act(actRun, "review")
 	case ReasonReviewClear, ReasonBotClear:
 		return stop(StopReadyForHuman)
+	case ReasonMergeDue:
+		// The merge order is yours, and tkt watch carries it out once the
+		// loop is gone: tkt auto never merges.
+		return stop(StopReadyForHuman)
 	}
 	return pause(StopUnknown)
 }
