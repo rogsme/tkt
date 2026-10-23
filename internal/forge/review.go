@@ -191,12 +191,14 @@ func BodyVerification(p PR) *Procedure {
 	return &Procedure{Head: p.HeadRefOid, Section: section, Steps: steps}
 }
 
-var stepRE = regexp.MustCompile(`^ {0,3}(\d+)[.)][ \t]+(.*)$`)
+var stepRE = regexp.MustCompile(`^( {0,3})(\d+)[.)][ \t]+(.*)$`)
 
 // ParseProcedure reads the Human verification section of a review body: the
 // text up to the next level-two heading, and its numbered steps. A step's
-// indented or wrapped lines belong to it; a blank line followed by text that
-// is neither indented nor numbered, such as a cleanup paragraph, ends it.
+// indented or wrapped lines belong to it, and so does a numbered list
+// indented to its text, as Markdown nests one; a blank line followed by
+// text that is neither indented nor numbered, such as a cleanup paragraph,
+// ends it.
 func ParseProcedure(body string) (section string, steps []Step, ok bool) {
 	loc := contract.HumanVerificationRE.FindStringIndex(body)
 	if loc == nil {
@@ -212,11 +214,14 @@ func ParseProcedure(body string) (section string, steps []Step, ok bool) {
 	}
 	section = strings.TrimSpace(strings.Join(lines, "\n"))
 	blank := false
+	// col is where the last step's text starts; a numbered line indented
+	// that far is a list inside it.
+	col := 0
 	for _, l := range lines {
-		if m := stepRE.FindStringSubmatch(l); m != nil {
-			n, _ := strconv.Atoi(m[1])
-			steps = append(steps, Step{N: n, Text: strings.TrimSpace(m[2])})
-			blank = false
+		if m := stepRE.FindStringSubmatchIndex(l); m != nil && (len(steps) == 0 || m[3]-m[2] < col) {
+			n, _ := strconv.Atoi(l[m[4]:m[5]])
+			steps = append(steps, Step{N: n, Text: strings.TrimSpace(l[m[6]:m[7]])})
+			col, blank = m[6], false
 			continue
 		}
 		if strings.TrimSpace(l) == "" {

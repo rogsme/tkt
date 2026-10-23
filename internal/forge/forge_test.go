@@ -67,3 +67,21 @@ func TestMine(t *testing.T) {
 		t.Errorf("got %+v", got)
 	}
 }
+
+// A numbered list indented to a step's text is that step's, as Markdown
+// nests it, so a procedure's steps never repeat.
+func TestParseProcedureNestsSubSteps(t *testing.T) {
+	body := "## Human verification\n\n1. Open the login page.\n2. Sign in:\n   1. Type the name.\n   2. Press Enter.\n3. Check the banner.\n  4. Two spaces in is still a step.\n"
+	_, steps, ok := ParseProcedure(body)
+	if !ok || len(steps) != 4 {
+		t.Fatalf("steps: %+v", steps)
+	}
+	for i, n := range []int{1, 2, 3, 4} {
+		if steps[i].N != n {
+			t.Errorf("step %d is numbered %d", i, steps[i].N)
+		}
+	}
+	if steps[1].Text != "Sign in:\n1. Type the name.\n2. Press Enter." {
+		t.Errorf("step 2: %q", steps[1].Text)
+	}
+}
