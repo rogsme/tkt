@@ -42,6 +42,7 @@ export function suggest(hub: Hub, count: number, as = ""): string {
 			if (!env.ok || !env.result) return;
 			const r = env.result as SuggestResult;
 			if (r.status === "blocked") return hub.post(`suggest-tickets asks a question in its tab (pane ${r.pane}); answer it there, then /suggest again.`);
+			if (r.last_status !== "TICKETS_SUGGESTED") return hub.post(`suggest-tickets stopped with Status: ${r.last_status || "none"}; its tab (pane ${r.pane}) says why${r.last_status === "SETUP_REQUIRED" ? ", such as /setup-rogs to run first" : ""}.`);
 			if (r.picks.length === 0) return hub.post("suggest-tickets found nothing to start now: every ready ticket is blocked, or collides with work in flight.");
 			hub.suggested(r);
 			hub.post(`suggest-tickets picked ${picksText(r)}. /inbox starts them, each on the preset its model needs.`);

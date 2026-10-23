@@ -30,6 +30,22 @@ exec tkt suggest --wait
 stdout '^ACM-14  tkt start ACM-14$'
 stdout '^ACM-21  tkt start ACM-21 --as cheap$'
 
+# A run that stops early, such as on a configuration without list-ready,
+# says so.
+cp $WORK/setup.txt $FAKE_DIR/screen
+exec tkt suggest --wait
+stdout '^suggest-tickets stopped with Status: SETUP_REQUIRED; read why in pane '
+cp $WORK/screen.txt $FAKE_DIR/screen
+
+# herdr numbers panes again when its server restarts, so a kept pane id
+# that now names another pane, here tkt's own, never gets the agent.
+jqedit $FAKE_DIR/herdr.json '.agents |= map(select(.name != "suggest-app"))'
+cp $WORK/stale.state $REPO/.git/tkt/suggest
+resetlog
+exec tkt suggest --json
+logged herdr tab create --workspace w1 --cwd $REPO --label 'suggest (cheap)' --no-focus
+envelope '.result.pane != "w1:p1"' true
+
 # A run still at work keeps its tab.
 jqedit $FAKE_DIR/herdr.json '(.agents[] | select(.name == "suggest-app") | .agent_status) = "working"'
 ! exec tkt suggest --json
@@ -56,6 +72,14 @@ serves = ["acme-small-2"]
 
 [suggest]
 as = "cheap"
+-- setup.txt --
+rogs-skills is not configured for suggest-tickets in this repository.
+Missing: docs/agents/issue-tracker.md: ### list-ready
+Run /setup-rogs here, then run /suggest-tickets again.
+Status: SETUP_REQUIRED
+-- stale.state --
+pane=w1:p1
+tab=w1:t1
 -- screen.txt --
 Waiting on you: ACM-9 is in review.
 1. ACM-14 Add the audit log (P1), unblocks ACM-15 and ACM-16.

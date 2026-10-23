@@ -62,8 +62,10 @@ func (r *SuggestResult) Text(w io.Writer) {
 	switch {
 	case r.Status == herdr.Blocked:
 		fmt.Fprintf(w, "suggest-tickets asks a question in pane %s; answer it there\n", r.Pane)
-	case r.LastStatus != "" && len(r.Picks) == 0:
-		fmt.Fprintf(w, "suggest-tickets picked nothing to start (Status: %s); tkt show is in pane %s\n", r.LastStatus, r.Pane)
+	case r.Status != "" && r.LastStatus != contract.StatusTicketsSuggested:
+		fmt.Fprintf(w, "suggest-tickets stopped with Status: %s; read why in pane %s\n", or(r.LastStatus, "none"), r.Pane)
+	case r.Status != "" && len(r.Picks) == 0:
+		fmt.Fprintf(w, "suggest-tickets found nothing to start now; its report is in pane %s\n", r.Pane)
 	case len(r.Picks) > 0:
 		for _, p := range r.Picks {
 			fmt.Fprintf(w, "%s  %s\n", p.Ticket, startCommand(p))
@@ -125,7 +127,9 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 	}
 	ts := &ticketState{path: suggestStatePath(c.Repo.Common), st: state.Read(suggestStatePath(c.Repo.Common))}
 	res := &SuggestResult{Count: o.Count, Preset: preset.Name, Harness: h, Picks: []SuggestPick{}, DryRun: c.Dry, Actions: []Action{}}
-	res.Tab, res.Pane, err = c.suggestPane(ts, preset)
+	// herdr names agents across every repository it serves.
+	name := prompt.AgentName(suggestLock + "-" + filepath.Base(c.Repo.Root))
+	res.Tab, res.Pane, err = c.suggestPane(ts, preset, name)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +140,6 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 	res.Session = sid
 	c.save(ts, "tab", res.Tab, "pane", res.Pane, "preset", preset.Name, "harness", h, "session", sid, "status", "launching",
 		"started", c.Now().UTC().Format(history.TimeFormat))
-	// herdr names agents across every repository it serves.
-	name := prompt.AgentName(suggestLock + "-" + filepath.Base(c.Repo.Root))
 	switch out, err := c.Agent.Launch(c.Ctx, res.Pane, name, h, harness.LaunchArgs(h, harness.New, sid, preset, c.Repo.Root)); out {
 	case agent.NotReady:
 		c.save(ts, "status", "not_ready")
@@ -164,29 +166,52 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 	return res, c.waitSuggest(res, ts, o.Timeout)
 }
 
-// suggestPane finds the pane for suggest-tickets: the suggest tab's, with
-// its idle agent gone, or a new suggest tab at the repository's root.
-func (c *Ctx) suggestPane(ts *ticketState, preset config.Preset) (tab, pane string, err error) {
-	pane = ts.st["pane"]
-	if pane != "" && c.H.PaneExists(c.Ctx, pane) {
-		p, err := c.H.PaneGet(c.Ctx, pane)
-		if err != nil {
-			return "", "", herdrErr(err)
+// suggestPane finds the pane for suggest-tickets: the one its agent, found
+// by name, runs in, or the suggest tab's while it is still that tab, at the
+// repository's root, with a shell in it; else a new suggest tab there. herdr
+// numbers panes again when its server restarts, so a kept pane id counts
+// only after those checks. An idle agent there exits first.
+func (c *Ctx) suggestPane(ts *ticketState, preset config.Preset, name string) (tab, pane string, err error) {
+	agents, err := c.H.Agents(c.Ctx)
+	if err != nil {
+		return "", "", herdrErr(err)
+	}
+	var p herdr.Pane
+	at := func(id string) (bool, error) {
+		if id == "" || id == c.Getenv("HERDR_PANE_ID") || !c.H.PaneExists(c.Ctx, id) {
+			return false, nil
 		}
-		switch old, ok := c.H.AgentOnPane(c.Ctx, pane); {
-		case ok && (old.Status == herdr.Working || old.Status == herdr.Blocked):
-			return "", "", apperr.New(apperr.AgentBusy, "suggest-tickets is %s in pane %s; let it finish, or answer it there", old.Status, pane).
-				WithHint("check pane %s", pane).With("pane", pane).With("status", old.Status)
-		case ok:
-			if !c.Agent.Exit(c.Ctx, pane) {
-				return "", "", apperr.New(apperr.AgentExitFailed, "the agent in pane %s did not exit; nothing was sent", pane).
-					WithHint("check pane %s, close the agent there, then rerun tkt suggest", pane)
-			}
-		case !c.Dry && !c.H.PaneIsShell(c.Ctx, pane):
-			return "", "", apperr.New(apperr.PaneBusy, "pane %s is not at a shell prompt", pane).
-				WithHint("finish what runs in pane %s, then rerun tkt suggest", pane)
+		if p, err = c.H.PaneGet(c.Ctx, id); err != nil {
+			return false, herdrErr(err)
 		}
-		return p.TabID, pane, nil
+		return p.Cwd == c.Repo.Root, nil
+	}
+	for _, ag := range agents {
+		if ag.NameOr("") != name {
+			continue
+		}
+		ok, err := at(ag.PaneID)
+		switch {
+		case err != nil:
+			return "", "", err
+		case !ok:
+			return "", "", apperr.New(apperr.PaneBusy, "the agent %s runs in pane %s, outside %s; close it, then rerun tkt suggest", name, ag.PaneID, c.Repo.Root).
+				WithHint("check pane %s", ag.PaneID)
+		case ag.Status == herdr.Working || ag.Status == herdr.Blocked:
+			return "", "", apperr.New(apperr.AgentBusy, "suggest-tickets is %s in pane %s; let it finish, or answer it there", ag.Status, ag.PaneID).
+				WithHint("check pane %s", ag.PaneID).With("pane", ag.PaneID).With("status", ag.Status)
+		case !c.Agent.Exit(c.Ctx, ag.PaneID):
+			return "", "", apperr.New(apperr.AgentExitFailed, "the agent in pane %s did not exit; nothing was sent", ag.PaneID).
+				WithHint("check pane %s, close the agent there, then rerun tkt suggest", ag.PaneID)
+		}
+		return p.TabID, ag.PaneID, nil
+	}
+	ok, err := at(ts.st["pane"])
+	if err != nil {
+		return "", "", err
+	}
+	if ok && p.TabID == ts.st["tab"] && (c.Dry || c.H.PaneIsShell(c.Ctx, p.PaneID)) {
+		return p.TabID, p.PaneID, nil
 	}
 	label := suggestLock
 	if preset.Name != c.Cfg.Default().Name {
