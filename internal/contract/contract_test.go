@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -231,5 +232,32 @@ func TestStepsCarryOverCleanMerges(t *testing.T) {
 	}
 	if a, b := def(skill), def(read(t, "review-pr-clean-merge.md")); a == "" || a != b {
 		t.Errorf("finish-ticket and review-pr define a clean merge differently:\n%s\n%s", a, b)
+	}
+}
+
+func TestUnblockedLineNamesTheTicketsAMergeFreed(t *testing.T) {
+	skill := read(t, "finish-ticket-unblocked.md")
+	// The report names them on one line, right before the status line.
+	i, j := strings.Index(skill, "`Unblocked: ACM-15, ACM-16`"), strings.Index(skill, "`Status: "+contract.StatusDone+"`")
+	if i < 0 || j < i || !strings.Contains(skill, "`Unblocked: none`") {
+		t.Fatalf("finish-ticket's report no longer ends with an Unblocked line:\n%s", skill)
+	}
+	if !strings.Contains(skill, "it is unblocked when every one of them is now `done`") {
+		t.Errorf("finish-ticket no longer names only tickets whose blockers are all done")
+	}
+	c := lifecycle.Config{RE: regexp.MustCompile(`^ACM-[1-9][0-9]*$`)}
+	for text, want := range map[string][]string{
+		"Merged.\nUnblocked: ACM-15, ACM-16\nStatus: DONE": {"ACM-15", "ACM-16"},
+		"Unblocked: none\nStatus: DONE":                    {},
+		"Unblocked: `ACM-15` (2 blockers done)":            {"ACM-15"},
+	} {
+		m := contract.UnblockedRE.FindStringSubmatch(text)
+		if m == nil {
+			t.Errorf("%q: no Unblocked line", text)
+			continue
+		}
+		if got := c.IDs(m[1]); !slices.Equal(got, want) {
+			t.Errorf("%q: %v, want %v", text, got, want)
+		}
 	}
 }

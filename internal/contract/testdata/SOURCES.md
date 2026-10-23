@@ -13,6 +13,7 @@ Each fixture copies text that another project produces, so a change there shows 
 | `review-pr-clean-merge.md` | gitlab.com/rogs/skills `skills/lifecycle/review-pr/SKILL.md`, the paragraph on a brief pinned to an earlier head, under `## 3. Review the complete change` | `0e90433` |
 | `resolving-merge-conflicts.md` | gitlab.com/rogs/skills `skills/engineering/resolving-merge-conflicts/SKILL.md`, whole | `b502691` |
 | `finish-ticket-authorization.md` | gitlab.com/rogs/skills `skills/lifecycle/finish-ticket/SKILL.md`: the description, the first rule of `## 1. Verify authorization and context`, the rule on human steps under `## 2. Verify the merge packet`, the paragraph on confirmations across clean merges, and the paragraph on a base that moved | `0e90433` |
+| `finish-ticket-unblocked.md` | gitlab.com/rogs/skills `skills/lifecycle/finish-ticket/SKILL.md`: the paragraph on what the merge unblocked, under `## 4. Complete the tickets`, and the report under `## 5. Report` | `cb500cd` |
 | `automated-review.txt` | the forge's automated reviewer, not a skill: its review summary line | none |
 
 `config.ApproveLine`, the line tkt approve sends, relies on work-ticket's trigger: the skill runs "when the user approves the plan and says ... execute the plan" (gitlab.com/rogs/skills `skills/lifecycle/work-ticket/SKILL.md`, `33d185b`).
@@ -26,3 +27,5 @@ The built-in `sync` stage sends the same line as `address`: address-pr-review me
 The built-in `resolve` stage, which `tkt sync` starts when the base merge conflicts, names `resolving-merge-conflicts`. The line relies on what the fixture says: the skill takes over a merge another party started, keeps it a merge, asks about a hunk that decides product behavior, and concludes with `git commit --no-edit`.
 
 `tkt sync` pushes a clean base merge without touching the pull request's Review brief. It relies on review-pr's rule in `review-pr-clean-merge.md`: a brief pinned to an earlier head stays current when every commit after it is a merge commit whose second parent is on the base and whose tree equals what `git merge-tree --write-tree` prints for its parents, which is the merge `tkt sync` makes and checks before it pushes.
+
+`tkt done` reads finish-ticket's `Unblocked:` line from the last turn of the ticket's session before it closes the tabs: the line `finish-ticket-unblocked.md` shows, right before `Status: DONE`, naming the tickets whose blockers are all done now, or `none`. `contract.UnblockedRE` finds it, and tkt takes only whole ticket ids from it, so `none` names nothing.

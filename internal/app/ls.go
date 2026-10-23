@@ -155,13 +155,14 @@ type Sources struct {
 	Fetch string `json:"fetch"`
 }
 
-// LsResult is tkt ls's table, and whether tkt watch keeps the tickets
-// moving.
+// LsResult is tkt ls's table, whether tkt watch keeps the tickets moving,
+// and the tickets merges unblocked that have no worktree yet.
 type LsResult struct {
-	Sources Sources     `json:"sources"`
-	Watch   WatchStatus `json:"watch"`
-	Rows    []Row       `json:"rows"`
-	now     time.Time
+	Sources   Sources     `json:"sources"`
+	Watch     WatchStatus `json:"watch"`
+	Rows      []Row       `json:"rows"`
+	Unblocked []Unblocked `json:"unblocked"`
+	now       time.Time
 }
 
 // lsHeader names the columns of tkt ls. TIME is how long the ticket has been
@@ -169,20 +170,33 @@ type LsResult struct {
 var lsHeader = []string{"TICKET", "PHASE", "TIME", "AGENT", "PR", "CHECKS", "REVIEW", "AUTO", "NEXT"}
 
 func (r *LsResult) Text(w io.Writer) {
-	if len(r.Rows) == 0 {
+	if len(r.Rows) > 0 {
+		var rows [][]string
+		for _, row := range r.Rows {
+			rows = append(rows, r.cells(row, r.now))
+		}
+		output.Table(w, lsHeader, rows)
+	}
+	r.unblockedText(w)
+}
+
+// unblockedText names the tickets merges unblocked, which wait for a start.
+func (r *LsResult) unblockedText(w io.Writer) {
+	if len(r.Unblocked) == 0 {
 		return
 	}
-	var rows [][]string
-	for _, row := range r.Rows {
-		rows = append(rows, r.cells(row, r.now))
+	ids := make([]string, len(r.Unblocked))
+	for i, u := range r.Unblocked {
+		ids[i] = u.Ticket
 	}
-	output.Table(w, lsHeader, rows)
+	fmt.Fprintf(w, "unblocked by a merge, with no worktree yet: %s; tkt start %s starts one\n", idsText(ids), ids[0])
 }
 
 // Pretty is tkt ls on a terminal: the same columns, with the phase colored
 // by who acts next and the empty cells faint.
 func (r *LsResult) Pretty(w io.Writer, _ string, width int) {
 	if len(r.Rows) == 0 {
+		r.unblockedText(w)
 		return
 	}
 	var (
@@ -248,6 +262,7 @@ func (r *LsResult) Pretty(w io.Writer, _ string, width int) {
 		fmt.Fprintln(w, line+next)
 	}
 	fmt.Fprintln(w)
+	r.unblockedText(w)
 }
 
 // phaseStyle colors a phase by who acts next: you, nobody (it is done or
@@ -391,7 +406,10 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	if lookErr != nil {
 		return nil, lookErr
 	}
-	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, now: a.Now()}
+	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, Unblocked: []Unblocked{}, now: a.Now()}
+	if len(want) == 0 {
+		res.Unblocked = c.unblocked(entries)
+	}
 	if res.Sources.Fetch == "failed" {
 		a.UI.Warn("git fetch failed; showing the last fetched state")
 	}

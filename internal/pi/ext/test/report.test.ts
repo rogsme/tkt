@@ -88,7 +88,7 @@ test("historyText words what tkt watch and tkt merge did", () => {
 		{ at: "2026-01-01T05:00:00Z", event: "watch", action: "merge" },
 	];
 	const text = historyText({ repo: "r", forge: "ok", tickets: [{ ticket: "ACM-12", timeline: null, events, pull_requests: [] }] }, false);
-	for (const want of ["put on hold", "merged the base, with no agent", "tkt watch ran ci", "merge order left, for when the checks pass", "tkt watch carried out the merge order"]) {
+	for (const want of ["put on hold", "merged the base, with no agent", "tkt watch ran ci", "merge order left, for when finish-ticket can merge", "tkt watch carried out the merge order"]) {
 		assert.match(text, new RegExp(`^- 2026-01-01 0\\d:00 ${want}$`, "m"), want);
 	}
 });

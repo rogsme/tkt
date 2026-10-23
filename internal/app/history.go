@@ -50,6 +50,8 @@ type HistoryEvent struct {
 	Action string `json:"action,omitempty"`
 	Stop   string `json:"stop,omitempty"`
 	PR     int    `json:"pr,omitempty"`
+	// Unblocked lists the tickets finish-ticket said the merge unblocked.
+	Unblocked []string `json:"unblocked,omitempty"`
 }
 
 // PRHistory is a pull request of the ticket's branch.
@@ -173,11 +175,15 @@ func (e HistoryEvent) line() string {
 	case history.Merge:
 		switch e.Action {
 		case MergeOrdered:
-			return "merge order left, for when the checks pass"
+			return "merge order left, for when finish-ticket can merge"
 		case "dropped":
 			return "merge order dropped by a new head"
 		}
 		return "merge order cancelled"
+	case history.Done:
+		if len(e.Unblocked) > 0 {
+			return "removed; the merge unblocked " + idsText(e.Unblocked)
+		}
 	}
 	return e.Event
 }
@@ -233,7 +239,7 @@ func (a *App) History(ctx context.Context, o HistoryOpts) (*HistoryResult, error
 		th := TicketHistory{Ticket: id, Events: []HistoryEvent{}, PullRequests: []PRHistory{}}
 		for _, e := range events {
 			if e.Repo == res.Repo && e.Ticket == id {
-				th.Events = append(th.Events, HistoryEvent{At: e.At, Event: e.Event, Phase: e.Phase, From: e.From, Stage: e.Stage, Action: e.Action, Stop: e.Stop, PR: e.PR})
+				th.Events = append(th.Events, HistoryEvent{At: e.At, Event: e.Event, Phase: e.Phase, From: e.From, Stage: e.Stage, Action: e.Action, Stop: e.Stop, PR: e.PR, Unblocked: e.Unblocked})
 			}
 		}
 		sort.SliceStable(th.Events, func(i, j int) bool { return th.Events[i].At < th.Events[j].At })

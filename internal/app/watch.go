@@ -633,7 +633,8 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		kv = append(kv, "rounds", strconv.Itoa(mem.Rounds+1))
 	}
 	c.save(ts, kv...)
-	if err := w.do(ctx, a, act, t.ID, ts); err != nil {
+	done, err := w.do(ctx, a, act, t.ID, ts)
+	if err != nil {
 		if errors.Is(err, errOrderWaits) {
 			c.save(ts, "watch_last", mem.Last)
 			res.Action, res.Reason = "", ReasonCIPending
@@ -661,7 +662,11 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		c.UI.Info("%s: synced with the base, with no agent", t.ID)
 	case actDone:
 		c.UI.Info("%s: removed it after finish-ticket's Status: DONE", t.ID)
-		c.notify(t.ID, notice{"removed", "finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree", "done"})
+		body := "finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree"
+		if done != nil && len(done.Tickets) > 0 && len(done.Tickets[0].Unblocked) > 0 {
+			body += "; the merge unblocked " + idsText(done.Tickets[0].Unblocked)
+		}
+		c.notify(t.ID, notice{"removed", body, "done"})
 	case actMerge:
 		w.turn = t.ID
 		c.UI.Info("%s: the checks passed, so finish-ticket merges it", t.ID)
@@ -685,31 +690,31 @@ func watchRunText(stage string) string {
 	return "the checks fail at the head; a fresh session fixes them"
 }
 
-// do takes a step. It finishes the step even when tkt watch is asked to
-// stop meanwhile, so it never leaves a merge half done.
-func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *ticketState) error {
+// do takes a step, and returns what tkt done did when it took that. It
+// finishes the step even when tkt watch is asked to stop meanwhile, so it
+// never leaves a merge half done.
+func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *ticketState) (*DoneResult, error) {
 	ctx = context.WithoutCancel(ctx)
 	switch act.Kind {
 	case actDone:
-		_, err := a.Done(ctx, DoneOpts{IDs: []string{id}})
-		return err
+		return a.Done(ctx, DoneOpts{IDs: []string{id}})
 	case actMerge:
 		r, err := a.Merge(ctx, MergeOpts{ID: id, Passed: ts.st["merge_steps"], Head: ts.st["merge_head"], As: ts.st["merge_as"], order: true})
 		if err == nil && r.Action != MergeMerging {
-			return errOrderWaits
+			return nil, errOrderWaits
 		}
-		return err
+		return nil, err
 	case actSync:
 		_, err := a.Sync(ctx, SyncOpts{ID: id, NoAgent: true})
 		// The base moved again since the look, and now conflicts: the next
 		// pass sees the conflict and runs resolve.
 		if err != nil && apperr.As(err).Code == apperr.SyncConflict {
-			return nil
+			return nil, nil
 		}
-		return err
+		return nil, err
 	}
 	_, err := a.Run(ctx, RunOpts{ID: id, Stage: act.Stage})
-	return err
+	return nil, err
 }
 
 // failed reports a step that failed: once for each step, head and reason,

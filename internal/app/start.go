@@ -182,6 +182,7 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		if !scratch && st["started"] == "" {
 			c.save(ts, "started", c.Now().UTC().Format(history.TimeFormat))
 			c.record(history.Event{Ticket: id, Event: history.Started})
+			c.forgetUnblocked(id)
 		}
 		if !c.Dry {
 			c.Agent.WaitPaneFree(c.Ctx, pane, 40)

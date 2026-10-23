@@ -6,10 +6,10 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, isViewportTUI, type TUI, VStack } from "@earendil-works/pi-tui";
-import { type Attention, attentionOf, sound } from "./attention.ts";
+import { type Attention, attentionOf, sound, unblockedOf } from "./attention.ts";
 import type { BoardState } from "./board.ts";
 import { Jobs, type Job } from "./jobs.ts";
-import { keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf, type UpdateResult, updateNotice } from "./model.ts";
+import { keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf, type Unblocked, type UpdateResult, updateNotice } from "./model.ts";
 import { hud } from "./ui.ts";
 
 /** pollMs is how often the board reads tkt ls while nothing else wakes it. */
@@ -31,6 +31,8 @@ export class Hub {
 	readonly repo = basename(process.cwd());
 	readonly herdr = process.env.HERDR_ENV === "1";
 	rows: Row[] = [];
+	/** unblocked lists the tickets merges unblocked, which wait for a start. */
+	unblocked: Unblocked[] = [];
 	key = "";
 	/** items is what needs you now: one per ticket from tkt ls, and the
 	 * failed jobs. */
@@ -208,6 +210,7 @@ export class Hub {
 		const rows = rowsOf(env);
 		if (!rows || this.stopped) return;
 		this.rows = rows;
+		this.unblocked = (env.ok ? env.result?.unblocked : undefined) ?? [];
 		const w = env.ok ? env.result?.watch : undefined;
 		if (w) this.watching = !w.running ? "off" : w.error ? "failing" : "on";
 		this.key = keyOf(rows.map((r) => r.ticket)) || this.key;
@@ -225,6 +228,10 @@ export class Hub {
 			// A watch whose passes fail takes no step, so the steps wait for you.
 			const a = attentionOf(row, this.jobs.inFlight(row.ticket), this.watching === "on");
 			if (a && !this.dismissed.has(a.key)) items.push(a);
+		}
+		for (const u of this.unblocked) {
+			const a = unblockedOf(u);
+			if (!this.jobs.inFlight(u.ticket) && !this.dismissed.has(a.key)) items.push(a);
 		}
 		this.items = [...items, ...this.failed.map((f) => f.item)];
 		for (const a of this.items) {

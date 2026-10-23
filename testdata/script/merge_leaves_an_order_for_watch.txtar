@@ -41,7 +41,7 @@ logged herdr notification show 'ACM-12: merging'
 state $FAKE_WT_ROOT/ACM-12 merge_head $H1
 state $FAKE_WT_ROOT/ACM-12 watch_last merge:@$H1
 exec tkt history ACM-12
-stdout 'merge order left, for when the checks pass'
+stdout 'merge order left, for when finish-ticket can merge'
 stdout 'tkt watch carried out the merge order'
 
 # The line went out on this head once, so a pass while finish-ticket stopped

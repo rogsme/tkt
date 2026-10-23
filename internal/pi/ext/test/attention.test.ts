@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { attentionOf, choicesOf, sound } from "../attention.ts";
+import { attentionOf, choicesOf, sound, unblockedOf } from "../attention.ts";
 import { row } from "./fixtures.ts";
 
 const working = { pane_id: "p", name: "a", harness: "claude", status: "working" };
@@ -157,4 +157,22 @@ test("a due merge order is tkt watch's, and yours while it does not run", () => 
 	const a = attentionOf(due, false, false);
 	assert.equal(a?.kind, "next");
 	assert.match(a?.text ?? "", /merge order is due\. \/next ACM-12/);
+});
+
+test("a ticket a merge unblocked offers its starts", () => {
+	const a = unblockedOf({ ticket: "ACM-15", by: "ACM-12", at: "2026-01-02T00:00:00Z" });
+	assert.equal(a.kind, "unblocked");
+	assert.match(a.text, /^ACM-15 is unblocked: ACM-12 merged/);
+	assert.deepEqual(
+		choicesOf(a).map((c) => c.do),
+		["start", "start_auto", "start_after_plan", "dismiss"],
+	);
+	assert.equal(sound(a), "done");
+});
+
+test("tkt watch reviews the head a sync made for a merge order", () => {
+	const next = { kind: "command", reason: "needs_review", argv: ["tkt", "run", "ACM-12", "review"], text: "tkt run ACM-12 review" };
+	const merge = { head: "abc", steps: [1], at: "2026-01-02T00:00:00Z" };
+	assert.equal(attentionOf(row({ phase: "waiting_review", next, merge }), false, true), undefined);
+	assert.equal(attentionOf(row({ phase: "waiting_review", next }), false, true)?.kind, "next");
 });

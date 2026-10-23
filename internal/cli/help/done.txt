@@ -17,3 +17,9 @@ supports GitHub forges only.
 
 It records the merge in the history, so tkt stats can say how long the ticket
 took from tkt start to the merge.
+
+finish-ticket ends its report with an Unblocked: line, right before Status:
+DONE: the tickets whose blockers are all done now that this one merged.
+tkt done reads it from the ticket's session before it closes the tabs, and
+names them. tkt ls lists each one, and the tkt agent's board offers to
+start it, until tkt start starts it or a week passes.

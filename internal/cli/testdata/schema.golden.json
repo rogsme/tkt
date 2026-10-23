@@ -836,7 +836,7 @@
       "path": "done",
       "use": "done [ID...]",
       "short": "Close a merged ticket's tabs and remove its worktree",
-      "long": "tkt done closes the ticket's tabs and removes its worktree, and the private\ntemporary directory its tabs had as TMPDIR, once its pull request is merged.\nworktrunk deletes the branch when it is merged into the base; after a squash\nmerge the branch stays.\n\nIt keeps the worktree, and says why, when:\n  - the pull request is still open, or no merged pull request has the branch;\n  - the worktree has uncommitted changes;\n  - the branch tip is neither the merged head nor in the base;\n  - an agent in the worktree works or waits for an answer;\n  - tkt runs inside the worktree or in the ticket's own tab;\n  - a pane outside the ticket's tabs, or the OpenCode service, works in it.\n\n--all checks every ticket worktree and asks before removing them; pass --yes\nwhen stdin is not a terminal. It reads pull requests through gh, so it\nsupports GitHub forges only.\n\nIt records the merge in the history, so tkt stats can say how long the ticket\ntook from tkt start to the merge.",
+      "long": "tkt done closes the ticket's tabs and removes its worktree, and the private\ntemporary directory its tabs had as TMPDIR, once its pull request is merged.\nworktrunk deletes the branch when it is merged into the base; after a squash\nmerge the branch stays.\n\nIt keeps the worktree, and says why, when:\n  - the pull request is still open, or no merged pull request has the branch;\n  - the worktree has uncommitted changes;\n  - the branch tip is neither the merged head nor in the base;\n  - an agent in the worktree works or waits for an answer;\n  - tkt runs inside the worktree or in the ticket's own tab;\n  - a pane outside the ticket's tabs, or the OpenCode service, works in it.\n\n--all checks every ticket worktree and asks before removing them; pass --yes\nwhen stdin is not a terminal. It reads pull requests through gh, so it\nsupports GitHub forges only.\n\nIt records the merge in the history, so tkt stats can say how long the ticket\ntook from tkt start to the merge.\n\nfinish-ticket ends its report with an Unblocked: line, right before Status:\nDONE: the tickets whose blockers are all done now that this one merged.\ntkt done reads it from the ticket's session before it closes the tabs, and\nnames them. tkt ls lists each one, and the tkt agent's board offers to\nstart it, until tkt start starts it or a week passes.",
       "example": "  tkt done ACM-12\n  tkt done ACM-12 --dry-run\n  tkt done --all --yes",
       "group": "lifecycle",
       "args": [
@@ -884,7 +884,8 @@
             "path": "string",
             "reasons": "array of string",
             "started": "string",
-            "ticket": "string"
+            "ticket": "string",
+            "unblocked": "array of string"
           }
         ]
       }
@@ -1016,6 +1017,13 @@
           "forge": "string",
           "herdr": "string"
         },
+        "unblocked": [
+          {
+            "at": "string",
+            "by": "string",
+            "ticket": "string"
+          }
+        ],
         "watch": {
           "error": "string",
           "last_pass": "string",
@@ -1187,7 +1195,8 @@
                 "phase": "string",
                 "pr": "integer",
                 "stage": "string",
-                "stop": "string"
+                "stop": "string",
+                "unblocked": "array of string"
               }
             ],
             "pull_requests": [

@@ -114,10 +114,11 @@ export async function hold(hub: Hub, id: string, on: boolean): Promise<string> {
 export async function done(hub: Hub, id: string): Promise<string> {
 	const env = await hub.run({ ticket: id, label: "done", args: ["done", id], quiet: true });
 	if (!env.ok) return failure(id, env);
-	const t = (env.result as { tickets?: { outcome: string; elapsed_s: number }[] } | undefined)?.tickets?.[0];
+	const t = (env.result as { tickets?: { outcome: string; elapsed_s: number; unblocked?: string[] }[] } | undefined)?.tickets?.[0];
 	if (t?.outcome !== "removed") return `${id}: tkt done did not remove it (${t?.outcome ?? "no result"}).`;
 	const took = t.elapsed_s > 0 ? ` It took ${duration(t.elapsed_s)} from start to merge.` : "";
-	return `${id} is done: its tabs are closed and its worktree is removed.${took}`;
+	const freed = t.unblocked?.length ? ` The merge unblocked ${t.unblocked.join(", ")}: /inbox offers to start ${t.unblocked.length === 1 ? "it" : "them"}.` : "";
+	return `${id} is done: its tabs are closed and its worktree is removed.${took}${freed}`;
 }
 
 function duration(s: number): string {
@@ -345,6 +346,12 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 			return stage(hub, id, c.stage!);
 		case "resume":
 			return resume(hub, id);
+		case "start":
+			return start(hub, [id], "manual");
+		case "start_auto":
+			return start(hub, [id], "auto");
+		case "start_after_plan":
+			return start(hub, [id], "auto_after_plan");
 	}
 	return undefined;
 }

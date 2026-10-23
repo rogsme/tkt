@@ -53,11 +53,20 @@ export interface Row {
 	stale: boolean;
 }
 
+/** Unblocked is a ticket a merge unblocked that has no worktree yet: by is
+ * the merged ticket whose finish-ticket named it. */
+export interface Unblocked {
+	ticket: string;
+	by: string;
+	at: string;
+}
+
 export interface LsResult {
 	sources: { herdr: string; forge: string; fetch: string };
 	/** watch says whether tkt watch keeps the repository's tickets moving. */
 	watch?: { running: boolean; last_pass: string; error: string };
 	rows: Row[];
+	unblocked?: Unblocked[];
 }
 
 /** rowsOf takes tkt ls's rows from a result, or from the partial result an

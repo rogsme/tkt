@@ -74,6 +74,11 @@ const (
 	VerdictReadyForHuman    = "READY_FOR_HUMAN"
 )
 
+// UnblockedRE finds the line finish-ticket's report gives right before
+// Status: DONE: the tickets the merge unblocked, whose blockers are all
+// done now, or none.
+var UnblockedRE = regexp.MustCompile(`(?m)^Unblocked: (.*)$`)
+
 // HumanVerificationRE finds the section that follows review-pr's
 // READY_FOR_HUMAN summary and holds the numbered procedure a person runs.
 var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`)
