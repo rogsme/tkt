@@ -97,6 +97,7 @@ const (
 	MergeHeadMoved      Code = "merge_head_moved"
 	MergeBehindBase     Code = "merge_behind_base"
 	MergeChecksFail     Code = "merge_checks_fail"
+	PullRequestMerged   Code = "pull_request_merged"
 
 	WtFailed          Code = "wt_failed"
 	WtSwitchFailed    Code = "wt_switch_failed"
@@ -198,6 +199,7 @@ var Registry = []Info{
 	{MergeHeadMoved, ExitState, "the pull request's head moved since the human verification steps ran on it"},
 	{MergeBehindBase, ExitState, "the branch is behind its base, so finish-ticket would not merge it: sync, then verify the new head"},
 	{MergeChecksFail, ExitState, "the checks fail at the pull request's head"},
+	{PullRequestMerged, ExitState, "the ticket's pull request is merged already"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},

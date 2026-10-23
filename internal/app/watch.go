@@ -642,9 +642,9 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	return res
 }
 
-// errOrderWaits says the checks at a merge order's head run again, so the
-// order waits for them.
-var errOrderWaits = errors.New("the merge order waits for the checks")
+// errOrderWaits says a merge order is not due after all: the checks at its
+// head run again, or someone cancelled it meanwhile.
+var errOrderWaits = errors.New("the merge order waits")
 
 func watchRunText(stage string) string {
 	if stage == "resolve" {
@@ -662,7 +662,7 @@ func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *t
 		_, err := a.Done(ctx, DoneOpts{IDs: []string{id}})
 		return err
 	case actMerge:
-		r, err := a.Merge(ctx, MergeOpts{ID: id, Passed: ts.st["merge_steps"], Head: ts.st["merge_head"]})
+		r, err := a.Merge(ctx, MergeOpts{ID: id, Passed: ts.st["merge_steps"], Head: ts.st["merge_head"], As: ts.st["merge_as"], order: true})
 		if err == nil && r.Action != MergeMerging {
 			return errOrderWaits
 		}

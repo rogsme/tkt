@@ -17,6 +17,20 @@ envelope '.error.message' '--passed names step 1, but the pull request''s proced
 rc 2
 envelope '.error.code' usage
 
+# A procedure that numbers two steps 1 still names steps 1 and 2.
+jqedit $WORK/prs.json '.[0].reviews[0].body |= sub("2\\. Sign out"; "1. Sign out")'
+exec tkt merge ACM-12 --passed 1 --dry-run --json
+envelope '.result | [.action, .steps]' '["merging",[1]]'
+jqedit $WORK/prs.json '.[0].reviews[0].body |= sub("1\\. Sign out"; "2. Sign out")'
+
+# Only the review bot cleared the head: finish-ticket asks for review-pr's
+# READY_FOR_HUMAN, so tkt merge warns before it goes on.
+cp $WORK/prs.json $WORK/ready.json
+jqedit $WORK/prs.json '.[0].body = .[0].reviews[0].body | .[0].reviews = [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** · head `x` · reviewed against ACM-12", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": $H1}}]'
+exec tkt merge ACM-12 --passed all --dry-run
+stderr 'only the review bot cleared ACM-12''s head; finish-ticket asks for a review that says READY_FOR_HUMAN'
+cp $WORK/ready.json $WORK/prs.json
+
 # The steps ran on another head.
 ! exec tkt merge ACM-12 --passed all --head 1234567 --json
 rc 4
@@ -56,6 +70,13 @@ jqedit $WORK/prs.json '.[0].reviews = []'
 ! exec tkt merge ACM-12 --passed all --json
 rc 4
 envelope '.error.code' no_verification_steps
+
+# A merged pull request is tkt done's.
+jqedit $WORK/prs.json '.[0].state = "MERGED"'
+! exec tkt merge ACM-12 --passed all --json
+rc 4
+envelope '.error.code' pull_request_merged
+envelope '.error.hint' 'tkt done ACM-12'
 houserules
 
 -- prs.json --

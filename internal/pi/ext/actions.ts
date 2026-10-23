@@ -159,6 +159,8 @@ export async function next(hub: Hub, id: string): Promise<string> {
 			return `${id}'s plan waits for your approval: /show ${id}, then /approve ${id}.`;
 		case "ready_for_human":
 			return `${id} is ready for human verification: /check ${id}.`;
+		case "merge_ordered":
+			return `${id}'s merge order is due: tkt watch sends finish-ticket the merge line.`;
 		case "merged":
 			return `${id} is merged: /done ${id} removes it.`;
 		case "needs_you":
@@ -267,6 +269,9 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	// finish-ticket merges only when every step passed, or you waived it
 	// with a reason, which only you can give.
 	if (t.skip > 0) return `${id}: ${t.pass} passed and ${t.skip} skipped. finish-ticket merges only when each step passed or you waived it with a reason: tell its agent in the tab which steps passed and why you skip the others.`;
+	// tkt merge refuses a head that moved since the steps ran, which it can
+	// check only against the head they ran on.
+	if (!head) return `${id}: every step passed, but the board has no head for its pull request yet. /check ${id} again in a moment to merge it.`;
 	const pending = hub.row(id)?.checks?.state === "pending";
 	const go = await ask(ctx, `${id}: every step passed. Merge it?`, [
 		pending

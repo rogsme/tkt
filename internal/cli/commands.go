@@ -201,7 +201,7 @@ func syncCmd(g *globals) *cobra.Command {
 func mergeCmd(g *globals) *cobra.Command {
 	var o app.MergeOpts
 	cmd := &cobra.Command{
-		Use:   "merge ID --passed STEPS",
+		Use:   "merge ID",
 		Short: "Have finish-ticket merge a verified ticket, now or once its checks pass",
 		Long:  helpText("merge"),
 		Example: `  tkt merge ACM-12 --passed 1-3

@@ -82,21 +82,24 @@ func stepText(s AutoStep) string {
 }
 
 // The ways tkt auto stops, and the reasons it pauses for a person. A loop
-// ends only at ready_for_human, merged, closed or stopped. For the others it
+// ends only at ready_for_human, merge_ordered, merged, closed or stopped. For the others it
 // notifies once, waits, and goes on when the ticket moves, such as after you
 // answer the agent's question in its tab.
 const (
 	StopReadyForHuman = "ready_for_human"
-	StopMerged        = "merged"
-	StopClosed        = "closed"
-	StopStopped       = "stopped"
-	StopNeedsYou      = "needs_you"
-	StopPlan          = "plan_awaits_approval"
-	StopAgentMissing  = "agent_missing"
-	StopBotSilent     = "bot_silent"
-	StopRoundLimit    = "round_limit"
-	StopNoProgress    = "no_progress"
-	StopUnknown       = "unknown"
+	// StopMergeOrdered ends a loop whose ticket has a merge order that is
+	// due: tkt watch carries it out, since tkt auto never merges.
+	StopMergeOrdered = "merge_ordered"
+	StopMerged       = "merged"
+	StopClosed       = "closed"
+	StopStopped      = "stopped"
+	StopNeedsYou     = "needs_you"
+	StopPlan         = "plan_awaits_approval"
+	StopAgentMissing = "agent_missing"
+	StopBotSilent    = "bot_silent"
+	StopRoundLimit   = "round_limit"
+	StopNoProgress   = "no_progress"
+	StopUnknown      = "unknown"
 	// StopHold pauses a loop while the ticket is on hold. You put it there,
 	// so the loop does not notify.
 	StopHold = "hold"
@@ -110,6 +113,8 @@ func stopHint(stop, id string) string {
 	switch stop {
 	case StopReadyForHuman:
 		return "run the human verification steps (tkt show " + id + " --steps), merge, then tkt done " + id
+	case StopMergeOrdered:
+		return "tkt watch sends finish-ticket the merge line your order holds"
 	case StopMerged:
 		return "tkt done " + id
 	case StopClosed:
@@ -273,7 +278,7 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 	case ReasonMergeDue:
 		// The merge order is yours, and tkt watch carries it out once the
 		// loop is gone: tkt auto never merges.
-		return stop(StopReadyForHuman)
+		return stop(StopMergeOrdered)
 	}
 	return pause(StopUnknown)
 }
@@ -566,7 +571,7 @@ func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 	}
 	res.Actions = append(append([]Action{}, c.Plan...), w.actions...)
 	switch res.Stop {
-	case "", StopReadyForHuman, StopMerged, StopStopped:
+	case "", StopReadyForHuman, StopMergeOrdered, StopMerged, StopStopped:
 		return res, nil
 	}
 	if o.Once {
@@ -794,6 +799,8 @@ func autoNotice(stop, id string) notice {
 	switch stop {
 	case StopReadyForHuman:
 		return notice{"ready for you", "the review says READY_FOR_HUMAN; run the human verification steps", "done"}
+	case StopMergeOrdered:
+		return notice{"merge order due", "the checks passed, so tkt watch sends finish-ticket your merge line", "none"}
 	case StopMerged, StopStopped:
 		return notice{stop, stopHint(stop, id), "done"}
 	}

@@ -12,14 +12,24 @@ and ends with Status: DONE. tkt watch removes the ticket after that.
 1,2,4, or all. finish-ticket merges only when every step passed, so tkt
 merge refuses a list that leaves one out; to waive a step, tell the agent
 in the ticket's tab yourself. --head names the head the steps ran on, and
-tkt merge refuses once the pull request moved past it. It also refuses a
-head no review cleared, a branch behind its base (finish-ticket would stop
-with BLOCKED_FOR_SYNC; sync, then verify the new head), and failing
-checks.
+tkt merge refuses once the pull request moved past it. Before any session
+starts, it also refuses a head no review cleared, a branch behind its base
+(finish-ticket would stop with BLOCKED_FOR_SYNC; sync, then verify the new
+head) and failing checks. finish-ticket checks the rest itself, such as a
+review that says READY_FOR_HUMAN at the head: when only the review bot
+cleared it, tkt merge warns that finish-ticket stops with Status: BLOCKED
+without one.
 
 While the checks at the head still run, tkt merge leaves a merge order
-instead, and tkt watch sends the line once they pass. tkt ls shows the
-order in the merge field, and the tkt agent's board as merges when green. A
-new head drops it, with a notification, since the steps ran on the old one;
-a base that moves meanwhile gets a sync first, which makes a new head too.
---cancel drops the order.
+instead, and tkt watch sends the line once they pass, on the --as preset
+if you named one. tkt ls shows the order in the merge field, and the tkt
+agent's board as merges when green. A new head drops it, with a
+notification, since the steps ran on the old one; a base that moves
+meanwhile gets a sync first, which makes a new head too. An order on a
+head whose line went out once already, as after finish-ticket stopped,
+sends it again.
+
+--cancel drops the order. tkt merge holds the ticket's lock until the line
+is sent, so --cancel either drops the order before or finds the line sent:
+it then says when, and stopping finish-ticket is up to you, in the
+ticket's tab.

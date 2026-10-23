@@ -77,4 +77,5 @@ test("mergeText says what tkt merge did", () => {
 	assert.match(mergeText({ ...r, action: "merging" }), /^ACM-12: finish-ticket merges pull request #7 in a fresh session/);
 	assert.match(mergeText({ ...r, action: "ordered" }), /^ACM-12 merges once its checks pass/);
 	assert.equal(mergeText({ ...r, action: "cancelled" }), "ACM-12 has no merge order now.");
+	assert.match(mergeText({ ...r, action: "none", sent: "2026-01-01T00:00:00Z" }), /finish-ticket got the merge line at 2026-01-01T00:00:00Z/);
 });

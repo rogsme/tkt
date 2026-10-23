@@ -74,7 +74,8 @@ func human(reason, text string) Next {
 // the forge still shows an older head than the branch has, as right after
 // a push, and Idle how long the agent has sat idle; tkt auto and tkt watch
 // read both, from a look with probe. MergeSteps holds the steps of a merge
-// order for the head, such as 1,2,3, or "" without one.
+// order for the head, such as 1,2,3, or "" without one, and MergeAs the
+// preset it names.
 type Facts struct {
 	ID          string
 	PRState     string
@@ -98,6 +99,7 @@ type Facts struct {
 	AutoWait    string
 	AutoPause   string
 	MergeSteps  string
+	MergeAs     string
 	BotWait     time.Duration
 	Waited      time.Duration
 }
@@ -142,7 +144,11 @@ func NextStep(f Facts) Next {
 	case f.Checks == "fail":
 		return command(ReasonChecksFail, "tkt", "run", id, "ci")
 	case f.MergeSteps != "" && f.AtHead && (f.Verdict == contract.VerdictClear || f.Verdict == contract.VerdictReadyForHuman):
-		return command(ReasonMergeDue, "tkt", "merge", id, "--passed", f.MergeSteps, "--head", f.Head)
+		argv := []string{"tkt", "merge", id, "--passed", f.MergeSteps, "--head", f.Head}
+		if f.MergeAs != "" {
+			argv = append(argv, "--as", f.MergeAs)
+		}
+		return command(ReasonMergeDue, argv...)
 	case f.AtHead && f.Verdict == contract.VerdictClear:
 		return command(ReasonBotClear, "tkt", "run", id, "verify")
 	case f.AtHead && f.Verdict == contract.VerdictReadyForHuman:
@@ -262,7 +268,7 @@ func factsFor(r Row) Facts {
 		f.WatchPause = r.Watch.Paused
 	}
 	if r.Merge != nil {
-		f.MergeSteps = stepList(r.Merge.Steps)
+		f.MergeSteps, f.MergeAs = stepList(r.Merge.Steps), r.Merge.As
 	}
 	return f
 }

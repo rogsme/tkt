@@ -53,27 +53,32 @@ func (r *RunResult) Text(w io.Writer) {
 // Run replaces the ticket's idle agent with a fresh session and sends it a
 // stage line or a prompt.
 func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
-	text := ""
 	if o.Prompt.Set {
-		var err error
-		if text, err = prompt.Read(o.Prompt, a.Stdin, a.StdinTTY, a.UI); err != nil {
+		text, err := prompt.Read(o.Prompt, a.Stdin, a.StdinTTY, a.UI)
+		if err != nil {
 			return nil, err
 		}
+		o.line = text
 	}
 	c, err := a.begin(ctx, o.Dry, o.Force)
 	if err != nil {
 		return nil, err
 	}
 	defer c.release()
+	return c.run(o)
+}
+
+// run is tkt run within a command that may hold the ticket's lock already,
+// as tkt merge does, so no other command gets in between.
+func (c *Ctx) run(o RunOpts) (*RunResult, error) {
+	a := c.App
 	id, err := c.LC.NormalizeID(o.ID)
 	if err != nil {
 		return nil, err
 	}
 	c.ticket(id)
-	switch {
-	case o.line != "":
-		text = o.line
-	case !o.Prompt.Set:
+	text := o.line
+	if text == "" {
 		if text, err = c.stageLine(o.Stage, id); err != nil {
 			return nil, err
 		}

@@ -91,7 +91,9 @@ type RowWatch struct {
 type RowMerge struct {
 	Head  string `json:"head"`
 	Steps []int  `json:"steps"`
-	At    string `json:"at"`
+	// As is the preset finish-ticket runs on, or "" for the ticket's own.
+	As string `json:"as"`
+	At string `json:"at"`
 }
 
 // ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
@@ -599,7 +601,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	row.Watch = &RowWatch{Last: st["watch_last"]}
 	if h := st["merge_head"]; h != "" && row.PR != nil && row.PR.State == "OPEN" && row.PR.Head == h {
-		row.Merge = &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), At: st["merge_at"]}
+		row.Merge = &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], At: st["merge_at"]}
 	}
 	if p := st["watch_pause"]; p != "" && row.PR != nil && st["watch_head"] == row.PR.Head && c.watchRunning() {
 		row.Watch.Paused = p

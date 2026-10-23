@@ -25,17 +25,23 @@ type MergeOpts struct {
 	As     string
 	Cancel bool
 	Dry    bool
+	// order marks tkt watch carrying out the ticket's merge order: it
+	// merges only while that order stands.
+	order bool
 }
 
 // MergeResult is what tkt merge did. Action is merging (a fresh session got
 // finish-ticket's merge line, Run), ordered (the checks at Head had not
-// passed yet, so tkt watch sends the line once they do), or cancelled.
+// passed yet, so tkt watch sends the line once they do), cancelled (an
+// order was dropped), or none (no order to drop, or to carry out). Sent is
+// when finish-ticket last got the merge line for the ticket, if ever.
 type MergeResult struct {
 	Ticket  string     `json:"ticket"`
 	PR      int        `json:"pr"`
 	Head    string     `json:"head"`
 	Steps   []int      `json:"steps"`
 	Action  string     `json:"action"`
+	Sent    string     `json:"sent"`
 	Run     *RunResult `json:"run"`
 	DryRun  bool       `json:"dry_run"`
 	Actions []Action   `json:"actions"`
@@ -46,6 +52,7 @@ const (
 	MergeMerging   = "merging"
 	MergeOrdered   = "ordered"
 	MergeCancelled = "cancelled"
+	MergeNone      = "none"
 )
 
 func (r *MergeResult) Text(w io.Writer) {
@@ -61,6 +68,10 @@ func (r *MergeResult) Text(w io.Writer) {
 	case r.Action == MergeOrdered:
 		fmt.Fprintf(w, "%s  merges %s once its checks pass at %s; tkt watch sends finish-ticket the merge line then\n", r.Ticket, forge.Ref(r.PR), short(r.Head))
 	case r.Action == MergeCancelled:
+		fmt.Fprintf(w, "%s  dropped the merge order for %s\n", r.Ticket, short(r.Head))
+	case r.Sent != "":
+		fmt.Fprintf(w, "%s  no merge order: finish-ticket got the merge line at %s; to stop it, tell its agent in the ticket's tab\n", r.Ticket, r.Sent)
+	default:
 		fmt.Fprintf(w, "%s  no merge order\n", r.Ticket)
 	}
 }
@@ -69,10 +80,12 @@ func (r *MergeResult) Text(w io.Writer) {
 // it sends the merge line, naming every step as passed, to a fresh session
 // in the ticket's tab. While the checks at the head still run, it leaves a
 // merge order instead, which tkt watch carries out once they pass; a new
-// head drops the order, since the steps ran on the old one. It refuses
-// what finish-ticket would refuse: a head the steps did not run on, one
-// with no clean review, a branch behind its base, failing checks, or steps
-// that did not all pass.
+// head drops the order, since the steps ran on the old one. Before any
+// session starts, it refuses steps that did not all pass, a head the steps
+// did not run on, one no review cleared, a branch behind its base and
+// failing checks; finish-ticket checks the rest. It holds the ticket's lock
+// until the line is sent, so a --cancel either drops the order first or
+// finds the line sent.
 func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	c, err := a.begin(ctx, o.Dry, false)
 	if err != nil {
@@ -106,13 +119,20 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	res := &MergeResult{Ticket: id, Steps: []int{}, DryRun: c.Dry, Actions: []Action{}}
-	if o.Cancel {
-		res.Head, res.Steps = ts.st["merge_head"], parseStepList(ts.st["merge_steps"])
-		if res.Head != "" {
-			c.dropOrder(ts, id, "cancelled")
-		}
+	res := &MergeResult{Ticket: id, Steps: []int{}, Sent: ts.st["merge_sent"], DryRun: c.Dry, Actions: []Action{}}
+	res.Head = ts.st["merge_head"]
+	switch {
+	case o.Cancel && res.Head == "":
+		res.Action = MergeNone
+		return res, nil
+	case o.Cancel:
+		res.Steps = parseStepList(ts.st["merge_steps"])
+		c.dropOrder(ts, id, MergeCancelled)
 		res.Action = MergeCancelled
+		return res, nil
+	case o.order && (res.Head != o.Head || ts.st["merge_steps"] != o.Passed || ts.st["merge_as"] != o.As):
+		// Cancelled, or replaced, since tkt watch read it.
+		res.Action = MergeNone
 		return res, nil
 	}
 	// Read the ticket as tkt ls does, after a fetch, so the base it compares
@@ -128,12 +148,11 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		return nil, apperr.New(apperr.ForgeQueryFailed, "tkt merge cannot read %s's pull request", id)
 	}
 	row, f := c.row(c.Ctx, l, ticketWorktree{ID: id, Path: path})
-	if row.PR == nil || row.PR.State != "OPEN" {
-		e := apperr.New(apperr.NoVerification, "%s has no open pull request", id).WithHint("tkt ls %s", id)
-		if row.PR != nil && row.PR.State == "MERGED" {
-			e = apperr.New(apperr.NoVerification, "%s's pull request %s is merged already", id, forge.Ref(row.PR.Number)).WithHint("tkt done %s", id)
-		}
-		return nil, e
+	switch {
+	case row.PR != nil && row.PR.State == "MERGED":
+		return nil, apperr.New(apperr.PullRequestMerged, "%s's pull request %s is merged already", id, forge.Ref(row.PR.Number)).WithHint("tkt done %s", id)
+	case row.PR == nil || row.PR.State != "OPEN":
+		return nil, apperr.New(apperr.NoVerification, "%s has no open pull request", id).WithHint("tkt ls %s", id)
 	}
 	res.PR, res.Head = row.PR.Number, row.PR.Head
 	if o.Head != "" && !strings.HasPrefix(res.Head, o.Head) {
@@ -144,14 +163,20 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		return nil, apperr.New(apperr.NoVerification, "no review clears %s's head %s: finish-ticket merges only a head reviewed clean", id, short(res.Head)).
 			WithHint("tkt ls %s", id)
 	}
+	if f.Verdict == contract.VerdictClear {
+		c.UI.Warn("only the review bot cleared %s's head; finish-ticket asks for a review that says %s at the head, and stops with Status: %s without one", id, contract.VerdictReadyForHuman, contract.StatusBlocked)
+	}
 	proc, err := c.verification(id)
 	if err != nil {
 		return nil, err
 	}
-	want := make([]int, len(proc.Steps))
-	for i, s := range proc.Steps {
-		want[i] = s.N
+	var want []int
+	for _, s := range proc.Steps {
+		if !slices.Contains(want, s.N) {
+			want = append(want, s.N)
+		}
 	}
+	slices.Sort(want)
 	got, err := parsePassed(o.Passed, want)
 	if err != nil {
 		return nil, err
@@ -170,24 +195,41 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	case "fail":
 		return nil, apperr.New(apperr.MergeChecksFail, "the checks fail at %s's head %s", id, short(res.Head)).WithHint("tkt run %s ci", id)
 	case "pending":
-		c.save(ts, "merge_head", res.Head, "merge_steps", stepList(got), "merge_at", c.Now().UTC().Format(history.TimeFormat))
+		if o.order {
+			res.Action = MergeOrdered
+			return res, nil
+		}
+		// A new order is a new word from you: tkt watch forgets that it
+		// sent one on this head already.
+		kv := []string{"merge_head", res.Head, "merge_steps", stepList(got), "merge_as", o.As, "merge_at", c.Now().UTC().Format(history.TimeFormat)}
+		if strings.HasPrefix(ts.st["watch_last"], actMerge+":") {
+			kv = append(kv, "watch_last", "", "watch_pause", "", "watch_head", "")
+		}
+		c.save(ts, kv...)
 		c.record(history.Event{Ticket: id, Event: history.Merge, Action: MergeOrdered, PR: res.PR})
 		res.Action, res.Actions = MergeOrdered, append(res.Actions, c.Plan...)
 		if !c.Dry && !c.watchRunning() {
-			c.UI.Warn("no tkt watch runs for %s, so nothing carries the order out yet; tkt watch, or any tkt command in a herdr pane, starts one", c.Repo.Root)
+			how := "the next tkt command in a herdr pane starts one"
+			if !c.Cfg.Watch.Autostart || c.Getenv("TKT_WATCH") == "off" {
+				how = "start one with tkt watch, or tkt watch --install"
+			}
+			c.UI.Warn("no tkt watch runs for %s, so nothing carries the order out yet; %s", c.Repo.Root, how)
 		}
 		return res, nil
 	}
-	// tkt run takes the ticket's lock itself.
-	c.release()
-	run, err := a.Run(ctx, RunOpts{ID: id, Stage: "merge", As: o.As, Dry: o.Dry, line: config.MergeLine(got)})
+	// The lock stays held, so the order cannot change while the line goes
+	// out, and a --cancel after it finds the line sent.
+	run, err := c.run(RunOpts{ID: id, Stage: "merge", As: o.As, Dry: o.Dry, line: config.MergeLine(got)})
 	if err != nil {
 		return nil, err
 	}
+	sent := c.Now().UTC().Format(history.TimeFormat)
+	kv := []string{"merge_sent", sent}
 	if ts.st["merge_head"] != "" {
-		c.save(ts, "merge_head", "", "merge_steps", "", "merge_at", "")
+		kv = append(kv, "merge_head", "", "merge_steps", "", "merge_as", "", "merge_at", "")
 	}
-	res.Action, res.Run = MergeMerging, run
+	c.save(ts, kv...)
+	res.Action, res.Run, res.Sent = MergeMerging, run, sent
 	res.Actions = append(res.Actions, run.Actions...)
 	return res, nil
 }
@@ -195,7 +237,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 // dropOrder forgets a ticket's merge order and records why: cancelled by
 // tkt merge --cancel, or dropped by a new head.
 func (c *Ctx) dropOrder(ts *ticketState, id, why string) {
-	c.save(ts, "merge_head", "", "merge_steps", "", "merge_at", "")
+	c.save(ts, "merge_head", "", "merge_steps", "", "merge_as", "", "merge_at", "")
 	c.record(history.Event{Ticket: id, Event: history.Merge, Action: why})
 }
 
