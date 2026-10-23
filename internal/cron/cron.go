@@ -148,11 +148,22 @@ func value(s string, f field) (int, error) {
 // String returns the schedule as written.
 func (s Schedule) String() string { return s.src }
 
-// horizon bounds the search for a slot: a schedule that parsed fires at
+// horizonDays bounds the search for a slot: a schedule that parsed fires at
 // least once in five years, February 29 included.
-const horizon = 5 * 366 * 24 * time.Hour
+const horizonDays = 5 * 366
 
 func has(bits uint64, v int) bool { return bits&(1<<v) != 0 }
+
+// values lists the numbers a field's bits hold, in order.
+func values(bits uint64, max int) []int {
+	var out []int
+	for v := 0; v <= max; v++ {
+		if has(bits, v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
 
 // day reports whether the schedule fires on t's day: on its day of the
 // month and its weekday, or, when both fields name days, on either.
@@ -164,32 +175,45 @@ func (s Schedule) day(t time.Time) bool {
 	return dom || dow
 }
 
+// slots returns the moments the schedule fires on the date of day, in its
+// location. A wall time the clocks repeat in autumn fires once, as time.Date
+// names it. One they skip in spring fires as they jump: time.Date puts it
+// before the gap, so it moves to the first minute after.
+func (s Schedule) slots(day time.Time) []time.Time {
+	if !has(s.month, int(day.Month())) || !s.day(day) {
+		return nil
+	}
+	y, m, d := day.Date()
+	var out []time.Time
+	for _, h := range values(s.hour, 23) {
+		for _, min := range values(s.minute, 59) {
+			c := time.Date(y, m, d, h, min, 0, 0, day.Location())
+			if c.Hour() != h || c.Minute() != min {
+				want := fmt.Sprintf("%04d%02d%02d%02d%02d", y, m, d, h, min)
+				for c.Format("200601021504") < want {
+					c = c.Add(time.Minute)
+				}
+			}
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // Next returns the first slot after t, in t's location, or the zero time
 // when the schedule has none within five years.
 func (s Schedule) Next(t time.Time) time.Time {
-	loc := t.Location()
-	t = t.Truncate(time.Minute).Add(time.Minute)
-	end := t.Add(horizon)
-	for t.Before(end) {
-		y, m, d := t.Date()
-		next := t.Add(time.Minute)
-		switch {
-		case !has(s.month, int(m)):
-			next = time.Date(y, m+1, 1, 0, 0, 0, 0, loc)
-		case !s.day(t):
-			next = time.Date(y, m, d+1, 0, 0, 0, 0, loc)
-		case !has(s.hour, t.Hour()):
-			next = time.Date(y, m, d, t.Hour()+1, 0, 0, 0, loc)
-		case !has(s.minute, t.Minute()):
-		default:
-			return t
+	y, m, d := t.Date()
+	for i := 0; i <= horizonDays; i++ {
+		var best time.Time
+		for _, c := range s.slots(time.Date(y, m, d+i, 0, 0, 0, 0, t.Location())) {
+			if c.After(t) && (best.IsZero() || c.Before(best)) {
+				best = c
+			}
 		}
-		// Around a change of clocks, a wall time can name an earlier
-		// moment; a minute's step always moves on.
-		if !next.After(t) {
-			next = t.Add(time.Minute)
+		if !best.IsZero() {
+			return best
 		}
-		t = next
 	}
 	return time.Time{}
 }
@@ -197,27 +221,17 @@ func (s Schedule) Next(t time.Time) time.Time {
 // Prev returns the last slot at or before t, in t's location, or the zero
 // time when the schedule has none within five years.
 func (s Schedule) Prev(t time.Time) time.Time {
-	loc := t.Location()
-	t = t.Truncate(time.Minute)
-	end := t.Add(-horizon)
-	for t.After(end) {
-		y, m, d := t.Date()
-		prev := t.Add(-time.Minute)
-		switch {
-		case !has(s.month, int(m)):
-			prev = time.Date(y, m, 1, 0, 0, 0, 0, loc).Add(-time.Minute)
-		case !s.day(t):
-			prev = time.Date(y, m, d, 0, 0, 0, 0, loc).Add(-time.Minute)
-		case !has(s.hour, t.Hour()):
-			prev = time.Date(y, m, d, t.Hour(), 0, 0, 0, loc).Add(-time.Minute)
-		case !has(s.minute, t.Minute()):
-		default:
-			return t
+	y, m, d := t.Date()
+	for i := 0; i <= horizonDays; i++ {
+		var best time.Time
+		for _, c := range s.slots(time.Date(y, m, d-i, 0, 0, 0, 0, t.Location())) {
+			if !c.After(t) && (best.IsZero() || c.After(best)) {
+				best = c
+			}
 		}
-		if !prev.Before(t) {
-			prev = t.Add(-time.Minute)
+		if !best.IsZero() {
+			return best
 		}
-		t = prev
 	}
 	return time.Time{}
 }

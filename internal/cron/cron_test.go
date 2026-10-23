@@ -87,27 +87,37 @@ func TestSlotsKeepLocalTime(t *testing.T) {
 	}
 }
 
-func TestStepsAcrossChangesOfClocks(t *testing.T) {
+func TestChangesOfClocks(t *testing.T) {
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		t.Skip("no time zone database")
 	}
+	// On 2026-11-01 the clocks go back from 02:00 to 01:00, so 01:30 comes
+	// twice: the slot fires once.
 	s, _ := Parse("30 1 * * *")
-	// On 2026-11-01 the clocks go back from 02:00 to 01:00.
-	from := time.Date(2026, 10, 31, 12, 0, 0, 0, loc)
-	next := s.Next(from)
-	if next.Day() != 1 || next.Hour() != 1 || next.Minute() != 30 {
-		t.Errorf("Next = %v", next)
+	first := s.Next(time.Date(2026, 10, 31, 12, 0, 0, 0, loc))
+	if first.Day() != 1 || first.Hour() != 1 || first.Minute() != 30 {
+		t.Fatalf("Next = %v", first)
 	}
-	if again := s.Next(next); !again.After(next) {
-		t.Errorf("Next(%v) = %v, which does not move on", next, again)
+	if again := s.Next(first); again.Day() != 2 {
+		t.Errorf("Next(%v) = %v, the same slot again", first, again)
 	}
-	// On 2026-03-08 the clocks go forward from 02:00 to 03:00.
+	if late := s.Prev(time.Date(2026, 11, 1, 3, 0, 0, 0, loc)); !late.Equal(first) {
+		t.Errorf("Prev after the change = %v, want %v", late, first)
+	}
+	// On 2026-03-08 they go forward from 02:00 to 03:00, so 02:30 never
+	// comes: the slot fires as the clocks jump, and a weekly one keeps its
+	// week.
 	s, _ = Parse("30 2 * * *")
-	if got := s.Next(time.Date(2026, 3, 7, 12, 0, 0, 0, loc)); got.IsZero() {
-		t.Errorf("Next found no slot across the change")
+	jump := s.Next(time.Date(2026, 3, 8, 0, 0, 0, 0, loc))
+	if jump.Day() != 8 || jump.Hour() != 3 {
+		t.Errorf("Next on the day of the change = %v", jump)
 	}
-	if got := s.Prev(time.Date(2026, 3, 9, 12, 0, 0, 0, loc)); got.IsZero() {
-		t.Errorf("Prev found no slot across the change")
+	if got := s.Prev(time.Date(2026, 3, 8, 12, 0, 0, 0, loc)); !got.Equal(jump) {
+		t.Errorf("Prev on the day of the change = %v, want %v", got, jump)
+	}
+	weekly, _ := Parse("30 2 * * 0")
+	if got := weekly.Next(time.Date(2026, 3, 7, 12, 0, 0, 0, loc)); got.Day() != 8 {
+		t.Errorf("the weekly slot moved to %v", got)
 	}
 }
