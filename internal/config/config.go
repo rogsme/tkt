@@ -168,6 +168,13 @@ func SuggestLine(n int) string {
 	return "Use the suggest-tickets skill to suggest the next " + strconv.Itoa(n) + " tickets to start, ones that can run side by side."
 }
 
+// SuggestRequestLine is what tkt suggest sends in place of SuggestLine for a
+// request in your own words, such as five tickets tagged feedback:
+// suggest-tickets reads the count and any constraint from the request.
+func SuggestRequestLine(request string) string {
+	return "Use the suggest-tickets skill for this request: " + request
+}
+
 // UnattendedLine follows the start line when tkt auto approves the plan
 // itself. start-ticket then skips the browser presentation and asks every
 // open question with the harness's question tool, which stops the loop.
@@ -276,11 +283,8 @@ func (c Config) StageLine(stage, id string, vars ...string) (string, error) {
 	return strings.NewReplacer(pairs...).Replace(t), nil
 }
 
-// TabLabel names a ticket's tab: the bare id for the default preset,
-// otherwise "ID (preset)".
+// TabLabel names a ticket's tab "ID (preset)", so the tab says what runs
+// in it, the default preset too.
 func (c Config) TabLabel(id, preset string) string {
-	if preset == c.Default().Name {
-		return id
-	}
 	return id + " (" + preset + ")"
 }

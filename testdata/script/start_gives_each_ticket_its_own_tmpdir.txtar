@@ -6,7 +6,7 @@ statevar $FAKE_WT_ROOT/ACM-12 tmpdir TMP
 exists $TMP
 exec echo $TMP
 stdout '/tkt-acme-app-ACM-12-[0-9]+$'
-logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label ACM-12 --env TMPDIR=$TMP --no-focus
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label 'ACM-12 (claude)' --env TMPDIR=$TMP --no-focus
 jqeq $FAKE_DIR/herdr.json '.panes[] | select(.pane_id == "w1:p10") | .env' '["TMPDIR='$TMP'"]'
 
 exec tkt start ACM-13
@@ -19,7 +19,7 @@ realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
 jqedit $FAKE_DIR/herdr.json '.agents |= map(select(.pane_id != "w1:p10")) | .tabs |= map(select(.tab_id != "w1:t10")) | .panes |= map(select(.pane_id != "w1:p10"))'
 resetlog
 exec tkt run ACM-12 address
-logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label ACM-12 --env TMPDIR=$TMP --no-focus
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label 'ACM-12 (claude)' --env TMPDIR=$TMP --no-focus
 
 # tkt done removes the merged ticket's directory, and only that one.
 realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12

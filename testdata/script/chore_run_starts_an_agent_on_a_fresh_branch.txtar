@@ -22,7 +22,7 @@ exec tkt chore run deps
 stdout '^deps  deps-run  '$FAKE_WT_ROOT'/deps-run  tab w1:t10  agent deps-run \(claude, claude\)$'
 logged git -C $REPO fetch --quiet origin main
 logged wt -C $REPO switch --create deps-run --base origin/main --no-cd --format json
-logcontains '--label deps-run --env TMPDIR='
+logcontains '--label deps-run\ \(claude\) --env TMPDIR='
 logged herdr agent start deps-run --kind claude
 state $FAKE_WT_ROOT/deps-run chore deps
 state $FAKE_WT_ROOT/deps-run stage chore

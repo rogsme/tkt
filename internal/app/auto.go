@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/lock"
+	"gitlab.com/rogs/tkt/internal/runner"
 )
 
 // AutoOpts are tkt auto's arguments. MaxRounds below 0 and Poll of 0 take
@@ -339,8 +341,27 @@ type autoWorld interface {
 	// before it sets an agent to work, or, with on false, that it no
 	// longer does.
 	waitIncident(on bool, hold string)
+	// replaced says that tkt's binary changed since the loop began, as
+	// after tkt update, and that the loop holds no slot, so it can restart
+	// on the new tkt.
+	replaced() bool
 	now() time.Time
 }
+
+// autoCarry is what a loop knows beyond the ticket's state: the pause it
+// notified about, the step that failed and that it takes again, and whether
+// it waits for an incident. A loop that restarts on a new tkt hands it to
+// the next one, which then notifies nothing twice.
+type autoCarry struct {
+	PausedOn string `json:"paused_on,omitempty"`
+	Retry    string `json:"retry,omitempty"`
+	Incident bool   `json:"incident,omitempty"`
+}
+
+// errRestart ends a loop whose tkt was replaced, with what it hands over.
+type errRestart struct{ carry autoCarry }
+
+func (errRestart) Error() string { return "tkt was replaced" }
 
 // errStep is a step that cannot happen for now, such as a sync while the
 // worktree holds changes. The loop takes it again at its next look; stop,
@@ -362,15 +383,20 @@ func (e errForge) Unwrap() error { return e.error }
 const maxForgeFailures = 5
 
 // autoLoop drives the ticket until it stops, or takes one step with once.
-func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem autoMemory, poll time.Duration, once, dry bool) (*AutoResult, error) {
+// carry is what the loop before it handed over. When tkt was replaced, it
+// ends with an errRestart between two looks.
+func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem autoMemory, carry autoCarry, poll time.Duration, once, dry bool) (*AutoResult, error) {
 	res := &AutoResult{Ticket: id, Steps: []AutoStep{}, DryRun: dry}
 	fails := 0
 	// pausedOn is the pause the loop notified about; retry is a step that
 	// failed and that the loop takes again; incident says it waits for one
 	// to end.
-	pausedOn, retry, incident := "", "", false
+	pausedOn, retry, incident := carry.PausedOn, carry.Retry, carry.Incident
 	defer w.dropSlot()
 	for {
+		if !once && w.replaced() {
+			return res, errRestart{autoCarry{PausedOn: pausedOn, Retry: retry, Incident: incident}}
+		}
 		v, err := w.look(ctx, false)
 		var fe errForge
 		if errors.As(err, &fe) && !once && fails+1 < maxForgeFailures {
@@ -518,7 +544,66 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 // --approve-plan, waits for CI and the review bot, merges a moved base
 // itself when the merge is clean, and runs review, address, resolve and ci
 // in fresh sessions. It never merges the pull request.
+//
+// A loop whose tkt was replaced, as by tkt update, restarts on the new one
+// between two looks: it lets go of its locks and replaces its process with
+// the same command, handing over what it knows in TKT_AUTO_CARRY.
 func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
+	carry := takeAutoCarry(a.Getenv)
+	self := ""
+	if !o.Once && !o.Stop {
+		self = binaryStamp()
+	}
+	for {
+		res, err := a.auto(ctx, o, carry, self)
+		var rs errRestart
+		if !errors.As(err, &rs) {
+			return res, err
+		}
+		err = a.restartAuto(ctx, o.ID, rs.carry)
+		// Only a failed restart gets here: the old tkt drives on.
+		a.UI.Warn("tkt auto %s cannot restart on the new tkt, so it goes on with this one: %v", o.ID, err)
+		carry, self = rs.carry, ""
+	}
+}
+
+// autoCarryEnv holds what a restarting loop hands to the next one, as JSON.
+const autoCarryEnv = "TKT_AUTO_CARRY"
+
+// takeAutoCarry reads what the loop before this one handed over, and takes
+// it out of the environment, so nothing tkt starts inherits it.
+func takeAutoCarry(getenv func(string) string) autoCarry {
+	var carry autoCarry
+	if v := getenv(autoCarryEnv); v != "" {
+		json.Unmarshal([]byte(v), &carry)
+		os.Unsetenv(autoCarryEnv)
+	}
+	return carry
+}
+
+// restartAuto replaces tkt's process with the same command on the tkt that
+// now sits where this one was. It returns only when that fails.
+func (a *App) restartAuto(ctx context.Context, id string, carry autoCarry) error {
+	rep, ok := a.R.(runner.Replacer)
+	if !ok {
+		return errors.New("this tkt cannot replace itself")
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(carry)
+	if err != nil {
+		return err
+	}
+	a.UI.Info("tkt was replaced, so tkt auto %s restarts on the new tkt", id)
+	argv := append([]string{self}, os.Args[1:]...)
+	return rep.Replace(runner.WithTicket(ctx, id), runner.Cmd{Argv: argv}, append(os.Environ(), autoCarryEnv+"="+string(b)))
+}
+
+// auto runs one loop, on the binary whose stamp is self, or "" to stay on
+// it whatever happens.
+func (a *App) auto(ctx context.Context, o AutoOpts, carry autoCarry, self string) (*AutoResult, error) {
 	if o.Dry && !o.Once {
 		return nil, apperr.New(apperr.Usage, "--dry-run needs --once: a dry run takes one step").WithHint("tkt auto %s --once --dry-run", o.ID)
 	}
@@ -586,7 +671,7 @@ func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 	if o.ApprovePlan {
 		mode = autoPlan
 	}
-	w := &ctxWorld{c: c, id: id, path: path, mode: mode, as: o.As, notify: o.Notify, once: o.Once}
+	w := &ctxWorld{c: c, id: id, path: path, mode: mode, as: o.As, notify: o.Notify, once: o.Once, self: self}
 	defer w.unqueue()
 	var mem autoMemory
 	if ts != nil {
@@ -595,11 +680,16 @@ func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 		}
 		mem = autoMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["auto_last"]}
 		if !o.Once {
-			c.save(ts, "auto", mode, "auto_stop", "", "auto_pause", "")
+			// A loop that restarted keeps the pause it notified about.
+			if carry.PausedOn != "" {
+				c.save(ts, "auto", mode, "auto_stop", "")
+			} else {
+				c.save(ts, "auto", mode, "auto_stop", "", "auto_pause", "")
+			}
 			w.labelTab(true)
 		}
 	}
-	res, err := autoLoop(c.Ctx, w, id, p, mem, poll, o.Once, c.Dry)
+	res, err := autoLoop(c.Ctx, w, id, p, mem, carry, poll, o.Once, c.Dry)
 	if err != nil {
 		if c.Ctx.Err() != nil {
 			return nil, c.Ctx.Err()
@@ -631,9 +721,20 @@ type ctxWorld struct {
 	actions []Action
 	slot    *os.File
 	queued  string
+	// self is the stamp of the binary the loop began on, or "" when it
+	// never restarts.
+	self string
 }
 
 func (w *ctxWorld) now() time.Time { return w.c.Now() }
+
+func (w *ctxWorld) replaced() bool {
+	if w.self == "" || w.slot != nil {
+		return false
+	}
+	now := binaryStamp()
+	return now != "" && now != w.self
+}
 
 func (w *ctxWorld) look(ctx context.Context, fetch bool) (autoView, error) {
 	c := w.c
@@ -792,8 +893,9 @@ func (w *ctxWorld) resumed() {
 	w.remember(w.memoryNow(), "auto_pause", "", "auto_why", "", "auto_note", "")
 }
 
-// autoTabLabel marks a tab label for a ticket in auto: ACM-12 (auto), or
-// ACM-12 (fast, auto) for a preset's label.
+// autoTabLabel marks a tab label for a ticket in auto: ACM-12 (claude,
+// auto). A label without a preset, as older tkt gave the default one's
+// tabs, becomes ACM-12 (auto).
 func autoTabLabel(label string) string {
 	if strings.HasSuffix(label, ")") {
 		return strings.TrimSuffix(label, ")") + ", auto)"

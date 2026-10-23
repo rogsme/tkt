@@ -15,3 +15,8 @@ checkout prints a version such as v0.2.1-0.20261019212235-569e7a5572c4, which
 counts as newer than v0.2.0. --check reports what tkt update would do and
 changes nothing. When tkt runs through a symlink, tkt update
 replaces the file the link points to.
+
+Running loops move to the new tkt by themselves: every tkt auto loop
+restarts on it at its next look, and tkt watch stops so that its service, or
+the next tkt command, starts the new one. The tkt agent's chat runs the old
+tkt until you reopen it.

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
@@ -238,24 +239,25 @@ func mergeCmd(g *globals) *cobra.Command {
 func suggestCmd(g *globals) *cobra.Command {
 	var o app.SuggestOpts
 	cmd := &cobra.Command{
-		Use:   "suggest [COUNT]",
-		Short: "Have suggest-tickets pick the next tickets to start, ones that can run side by side",
+		Use:   "suggest [COUNT | REQUEST...]",
+		Short: "Ask a fresh agent in the suggest tab which tickets to start next",
 		Long:  helpText("suggest"),
 		Example: `  tkt suggest
-  tkt suggest 2 --wait
-  tkt suggest --as fast --wait --timeout 15m --json`,
+  tkt suggest 5
+  tkt suggest five tickets tagged feedback that can run side by side
+  tkt suggest 'tickets for the fast preset' --as fast --json`,
 		SuggestFor: []string{"next", "pick", "dispatch"},
 		Args: func(_ *cobra.Command, args []string) error {
-			switch {
-			case len(args) > 1:
-				return usage("usage: tkt suggest [COUNT]")
-			case len(args) == 1:
-				n, err := strconv.Atoi(args[0])
-				if err != nil {
-					return usage("COUNT is a number of tickets, such as 3, not %q", args[0])
+			if len(args) == 1 {
+				if n, err := strconv.Atoi(args[0]); err == nil {
+					if n == 0 {
+						return usage("tkt suggest picks 1 to 10 tickets, not 0")
+					}
+					o.Count = n
+					return nil
 				}
-				o.Count = n
 			}
+			o.Request = strings.Join(args, " ")
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -263,10 +265,8 @@ func suggestCmd(g *globals) *cobra.Command {
 			return show(g, cmd, res, res == nil, err)
 		},
 	}
-	cmd.Flags().StringVar(&o.As, "as", "", "run suggest-tickets on PRESET instead of the [suggest] one")
+	cmd.Flags().StringVar(&o.As, "as", "", "run the agent on PRESET instead of the [suggest] one")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
-	cmd.Flags().BoolVar(&o.Wait, "wait", false, "wait for the picks, and print the tkt start command for each")
-	cmd.Flags().DurationVar(&o.Timeout, "timeout", 0, "with --wait, give up after DURATION, such as 15m (default: wait without limit)")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	return cmd
 }

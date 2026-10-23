@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -188,6 +189,7 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"statevar":    cmdStateVar,
 	"waitstate":   cmdWaitState,
 	"waitfile":    cmdWaitFile,
+	"waitgrep":    cmdWaitGrep,
 	"mkprompt":    cmdMkPrompt,
 	"realgit":     cmdRealGit,
 	"touchat":     cmdTouchAt,
@@ -389,6 +391,23 @@ func cmdWaitFile(ts *testscript.TestScript, neg bool, args []string) {
 		}
 	}
 	ts.Fatalf("%s did not appear in 30s", f)
+}
+
+// waitgrep PATTERN FILE: wait up to 30 seconds for FILE to hold a match
+// for PATTERN, such as a line tkt logs from a loop in the background.
+func cmdWaitGrep(ts *testscript.TestScript, neg bool, args []string) {
+	if len(args) != 2 || neg {
+		ts.Fatalf("usage: waitgrep PATTERN FILE")
+	}
+	re, err := regexp.Compile(args[0])
+	ts.Check(err)
+	f := ts.MkAbs(args[1])
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if b, err := os.ReadFile(f); err == nil && re.Match(b) {
+			return
+		}
+	}
+	ts.Fatalf("%s did not match %q in 30s", f, args[0])
 }
 
 // statevar DIR KEY VAR: set VAR to the state's KEY.

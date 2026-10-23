@@ -3,9 +3,9 @@
 // answers /inbox offers for it. Items are worked out again on every read, so
 // an item goes away as soon as its ticket moves on.
 
-import { picksText, type Row, type SuggestResult, type Unblocked } from "./model.ts";
+import { type Row, type Unblocked } from "./model.ts";
 
-export type AttentionKind = "plan" | "question" | "blocked" | "check" | "ready" | "merged" | "next" | "paused" | "stalled" | "failed" | "unblocked" | "suggested" | "chore";
+export type AttentionKind = "plan" | "question" | "blocked" | "check" | "ready" | "merged" | "next" | "paused" | "stalled" | "failed" | "unblocked" | "chore";
 
 export interface Attention {
 	/** key is the same while the ticket stays in the same situation, so a
@@ -33,7 +33,7 @@ export interface Attention {
 export interface Choice {
 	label: string;
 	description?: string;
-	do: "approve" | "approve_auto" | "show" | "reply" | "peek" | "dismiss" | "check" | "next" | "done" | "auto_on" | "auto_off" | "run" | "resume" | "start" | "start_auto" | "start_after_plan" | "start_picks" | "start_picks_auto" | "start_picks_after_plan";
+	do: "approve" | "approve_auto" | "show" | "reply" | "peek" | "dismiss" | "check" | "next" | "done" | "auto_on" | "auto_off" | "run" | "resume" | "start" | "start_auto" | "start_after_plan";
 	stage?: string;
 }
 
@@ -73,12 +73,6 @@ const usual: Record<AttentionKind, Choice[]> = {
 		{ label: "Start it", description: "tkt start opens its tab, and start-ticket plans it.", do: "start" },
 		{ label: "Start it in auto", description: "tkt auto approves the plan too, and drives it until it is reviewed clean.", do: "start_auto" },
 		{ label: "Start it in auto after the plan", description: "You approve the plan; tkt auto drives it from there.", do: "start_after_plan" },
-		dismiss,
-	],
-	suggested: [
-		{ label: "Start them", description: "Each starts in its own tab, on the preset its model needs, and stops at its plan.", do: "start_picks" },
-		{ label: "Start them in auto", description: "tkt auto approves each plan too, and drives each one until it is reviewed clean.", do: "start_picks_auto" },
-		{ label: "Start them in auto after the plan", description: "You approve each plan; tkt auto drives each one from there.", do: "start_picks_after_plan" },
 		dismiss,
 	],
 };
@@ -267,14 +261,7 @@ export function unblockedOf(u: Unblocked): Attention {
 	return { key: `unblocked|${u.ticket}|${u.by}`, ticket: u.ticket, kind: "unblocked", title: "unblocked", text, byAuto: false };
 }
 
-/** suggestedOf offers to start the tickets suggest-tickets picked, at a
- * time in ms that tells one run's picks from the next's. */
-export function suggestedOf(r: SuggestResult, at: number): Attention {
-	const text = `suggest-tickets picked ${picksText(r)}, which can run side by side. /inbox starts them, each on the preset its model needs.`;
-	return { key: `suggested|${r.picks.map((p) => p.ticket).join(",")}|${at}`, ticket: "suggest", kind: "suggested", title: "picks ready", text, byAuto: false };
-}
-
 /** sound picks the herdr notification sound for an item. */
 export function sound(a: Attention): "done" | "request" {
-	return a.kind === "ready" || a.kind === "merged" || a.kind === "unblocked" || a.kind === "suggested" || a.kind === "chore" ? "done" : "request";
+	return a.kind === "ready" || a.kind === "merged" || a.kind === "unblocked" || a.kind === "chore" ? "done" : "request";
 }

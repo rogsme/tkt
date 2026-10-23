@@ -1,7 +1,6 @@
 # tkt suggest has suggest-tickets pick the next tickets to start, in a
-# suggest tab at the repository's root, on the [suggest] preset. With
-# --wait, it reads the picks from the Suggested: line, each on the preset
-# that serves its model.
+# suggest tab at the repository's root, on the [suggest] preset. It reads
+# nothing the agent says: the picks stay in the tab for you.
 mkdir $HOME/.config/tkt
 cp $WORK/config.toml $HOME/.config/tkt/config.toml
 
@@ -11,31 +10,28 @@ envelope '.result.actions[0].argv | join(" ")' 'herdr tab create --workspace w1 
 ! exists $FAKE_DIR/prompts
 
 exec tkt suggest 2 --json
-envelope '.result | [.count, .preset, .harness, .picks]' '[2,"cheap","claude",[]]'
+envelope '.result | [.count, .preset, .harness]' '[2,"cheap","claude"]'
 grep '^Use the suggest-tickets skill to suggest the next 2 tickets to start, ones that can run side by side.$' $FAKE_DIR/prompts
 logged herdr agent start suggest-app --kind claude
 jqeq $FAKE_DIR/herdr.json '[.tabs[] | select(.label == "suggest (cheap)") | .label]' '["suggest (cheap)"]'
 
-# The next run reuses the tab, once its agent is idle, and waits for the
-# picks: the default preset serves frontier, and cheap the small model.
-cp $WORK/screen.txt $FAKE_DIR/screen
+# The next run reuses the tab once its agent is idle, and returns as soon
+# as the agent has the line, without waiting for the picks.
 resetlog
-exec tkt suggest --wait --json
-envelope '.result | [.count, .last_status]' '[3,"TICKETS_SUGGESTED"]'
-envelope '[.result.picks[] | .ticket + ":" + .model + ":" + .preset]' '["ACM-14:frontier:","ACM-21:acme-small-2:cheap"]'
-envelope '.result.report | test("Suggested: ACM-14")' true
+exec tkt suggest
+stdout '^suggest-tickets picks 3 in pane w1:p[0-9]+ \(cheap, claude\); read its picks there$'
 ! logged herdr tab create
+! logged herdr agent wait
 grep '^Use the suggest-tickets skill to suggest the next 3 tickets to start, ones that can run side by side.$' $FAKE_DIR/prompts
-exec tkt suggest --wait
-stdout '^ACM-14  tkt start ACM-14$'
-stdout '^ACM-21  tkt start ACM-21 --as cheap$'
 
-# A run that stops early, such as on a configuration without list-ready,
-# says so.
-cp $WORK/setup.txt $FAKE_DIR/screen
-exec tkt suggest --wait
-stdout '^suggest-tickets stopped with Status: SETUP_REQUIRED; read why in pane '
-cp $WORK/screen.txt $FAKE_DIR/screen
+# Words other than a count are a request for suggest-tickets, such as
+# tickets with a tag.
+resetlog
+exec tkt suggest five tickets tagged feedback --json
+envelope '.result | [.count, .prompt]' '[0,"Use the suggest-tickets skill for this request: five tickets tagged feedback"]'
+grep '^Use the suggest-tickets skill for this request: five tickets tagged feedback$' $FAKE_DIR/prompts
+exec tkt suggest 'tickets for the fast preset'
+stdout '^suggest-tickets has your request in pane w1:p[0-9]+ \(cheap, claude\); read its picks there$'
 
 # herdr numbers panes again when its server restarts, so a kept pane id
 # that now names another pane, here tkt's own, never gets the agent.
@@ -56,6 +52,8 @@ envelope '.error.code' agent_busy
 ! exec tkt suggest 11 --json
 rc 2
 envelope '.error.code' usage
+! exec tkt suggest 0 --json
+rc 2
 ! exec tkt suggest --as nope --json
 envelope '.error.code' unknown_preset
 houserules
@@ -72,18 +70,6 @@ serves = ["acme-small-2"]
 
 [suggest]
 as = "cheap"
--- setup.txt --
-rogs-skills is not configured for suggest-tickets in this repository.
-Missing: docs/agents/issue-tracker.md: ### list-ready
-Run /setup-rogs here, then run /suggest-tickets again.
-Status: SETUP_REQUIRED
 -- stale.state --
 pane=w1:p1
 tab=w1:t1
--- screen.txt --
-Waiting on you: ACM-9 is in review.
-1. ACM-14 Add the audit log (P1), unblocks ACM-15 and ACM-16.
-2. ACM-21 Fix the date format (P2).
-Not yet: ACM-30 collides with ACM-9.
-Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)
-Status: TICKETS_SUGGESTED

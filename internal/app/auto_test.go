@@ -105,6 +105,8 @@ type simWorld struct {
 	// loop starts and stops waiting for one to end.
 	hold      string
 	incidents []bool
+	// replaceAt is the look before which tkt is replaced, or 0 for never.
+	replaceAt int
 }
 
 const simPoll = 30 * time.Second
@@ -178,6 +180,8 @@ func (w *simWorld) dropSlot()                               { w.slot = false }
 func (w *simWorld) waitIncident(on bool, _ string)          { w.incidents = append(w.incidents, on) }
 func (w *simWorld) now() time.Time                          { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
 
+func (w *simWorld) replaced() bool { return w.replaceAt > 0 && w.looks >= w.replaceAt-1 && !w.slot }
+
 func (w *simWorld) holdSlot(context.Context) (bool, error) {
 	if !w.slot {
 		w.slot = true
@@ -218,7 +222,7 @@ func TestAutoLoopDrivesToReadyForHuman(t *testing.T) {
 			verdict("CLEAR"),                   // the bot clears h2
 		},
 	}
-	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true, MaxRounds: 5}, autoMemory{}, simPoll, false, false)
+	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true, MaxRounds: 5}, autoMemory{}, autoCarry{}, simPoll, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +257,7 @@ func TestAutoLoopWaitsOutAnIncident(t *testing.T) {
 		func(f *Facts) { f.Checks = "ok" }, // CI passes on the fix
 		verdict("CLEAR"),
 	}
-	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, false, false)
+	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, autoCarry{}, simPoll, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,21 +270,21 @@ func TestAutoLoopWaitsOutAnIncident(t *testing.T) {
 
 	// --once says what it waits for, and why.
 	w = &simWorld{f: Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "fail", Head: "h1", Behind: -1}, started: true, hold: "GitHub: Actions major outage"}
-	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, true, false)
+	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, autoCarry{}, simPoll, true, false)
 	if err != nil || res.Did != nil || res.Wait != WaitIncident || res.Hold != "GitHub: Actions major outage" || len(w.acts) != 0 || len(w.incidents) != 0 {
 		t.Errorf("once: %+v %v, acts %v", res, err, w.acts)
 	}
 
 	// A clean sync needs no agent, so it goes on during the incident.
 	w = &simWorld{f: Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "ok", Head: "h1", Behind: 2, Verdict: "STALE_BASE", AtHead: true, BaseMerge: "clean", BotWait: time.Hour}, started: true, hold: "GitHub: Actions major outage"}
-	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, true, false)
+	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, autoCarry{}, simPoll, true, false)
 	if err != nil || res.Did == nil || res.Did.Action != actSync || !slices.Equal(w.acts, []string{"sync"}) {
 		t.Errorf("sync: %+v %v, acts %v", res, err, w.acts)
 	}
 
 	// A ticket that has not started waits to start.
 	w = &simWorld{f: Facts{ID: "ACM-2", Behind: -1}, hold: "GitHub: Actions major outage"}
-	res, err = autoLoop(context.Background(), w, "ACM-2", AutoPolicy{}, autoMemory{}, simPoll, true, false)
+	res, err = autoLoop(context.Background(), w, "ACM-2", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, true, false)
 	if err != nil || res.Wait != WaitIncident || len(w.acts) != 0 {
 		t.Errorf("start: %+v %v, acts %v", res, err, w.acts)
 	}
@@ -292,7 +296,7 @@ func TestAutoLoopReviewsWithoutABot(t *testing.T) {
 		started: true, wanted: true,
 		turns: []func(*Facts){verdict("READY_FOR_HUMAN")},
 	}
-	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, false, false)
+	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, autoCarry{}, simPoll, false, false)
 	if err != nil || res.Stop != StopReadyForHuman || !slices.Equal(w.acts, []string{"run:review"}) {
 		t.Errorf("%+v %v %v", res, err, w.acts)
 	}
@@ -308,7 +312,7 @@ func TestAutoLoopPausesForYou(t *testing.T) {
 				func(f *Facts) { f.PRState = "MERGED" }, // merged
 			},
 			turns: []func(*Facts){idle("AWAITING_APPROVAL")}}
-		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, simPoll, false, false)
+		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, autoCarry{}, simPoll, false, false)
 		if err == nil || !slices.Equal(w.pauses, []string{StopNeedsYou}) {
 			t.Fatalf("%+v %v pauses %v", res, err, w.pauses)
 		}
@@ -322,7 +326,7 @@ func TestAutoLoopPausesForYou(t *testing.T) {
 			func(*Facts) {},
 			func(f *Facts) { f.Agent, f.Stage = "working", "work" }, // you approved it
 		}, turns: []func(*Facts){pushed("h1")}}
-		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, false, false)
+		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, false, false)
 		if err == nil || !slices.Equal(w.pauses, []string{StopPlan}) || len(w.acts) != 0 {
 			t.Errorf("%v pauses %v acts %v", err, w.pauses, w.acts)
 		}
@@ -332,14 +336,14 @@ func TestAutoLoopPausesForYou(t *testing.T) {
 			started: true, wanted: true, turns: []func(*Facts){pushed("h2")}, polls: []func(*Facts){
 				func(f *Facts) { f.Checks = "ok" }, verdict("FINDINGS"),
 			}}
-		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 1}, autoMemory{}, simPoll, false, false)
+		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 1}, autoMemory{}, autoCarry{}, simPoll, false, false)
 		if err == nil || !slices.Equal(w.pauses, []string{StopRoundLimit}) || !slices.Equal(w.acts, []string{"run:address"}) || w.slot {
 			t.Errorf("%v pauses %v acts %v slot %v", err, w.pauses, w.acts, w.slot)
 		}
 	})
 	t.Run("the decision changed before acting", func(t *testing.T) {
 		w := &simWorld{f: plan, started: true, wanted: true, flip: func(f *Facts) { f.Agent = "blocked" }}
-		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, simPoll, false, false)
+		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, autoCarry{}, simPoll, false, false)
 		if err == nil || !slices.Equal(w.pauses, []string{StopNeedsYou}) || len(w.acts) != 0 {
 			t.Errorf("%v pauses %v acts %v", err, w.pauses, w.acts)
 		}
@@ -350,7 +354,7 @@ func TestAutoLoopStops(t *testing.T) {
 	merged := Facts{ID: "ACM-1", PRState: "MERGED", Agent: "idle", Behind: -1}
 	t.Run("stopped", func(t *testing.T) {
 		w := &simWorld{f: merged, started: true}
-		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, false, false)
+		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, false, false)
 		if err != nil || res.Stop != StopStopped {
 			t.Errorf("%+v %v", res, err)
 		}
@@ -360,7 +364,7 @@ func TestAutoLoopStops(t *testing.T) {
 		for i := range w.polls {
 			w.polls[i] = func(*Facts) {}
 		}
-		if res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, false, false); err != nil || res.Stop != StopMerged {
+		if res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, false, false); err != nil || res.Stop != StopMerged {
 			t.Errorf("%+v %v", res, err)
 		}
 	})
@@ -370,7 +374,7 @@ func TestAutoLoopStops(t *testing.T) {
 			w.polls[i] = func(*Facts) {}
 		}
 		var fe errForge
-		if _, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, false, false); !errors.As(err, &fe) {
+		if _, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, false, false); !errors.As(err, &fe) {
 			t.Errorf("error: %v", err)
 		}
 	})
@@ -378,17 +382,17 @@ func TestAutoLoopStops(t *testing.T) {
 
 func TestAutoLoopOnce(t *testing.T) {
 	w := &simWorld{f: Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL", Behind: -1}, started: true}
-	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, simPoll, true, false)
+	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{ApprovePlan: true}, autoMemory{}, autoCarry{}, simPoll, true, false)
 	if err != nil || res.Did == nil || res.Did.Action != actApprove || !slices.Equal(w.acts, []string{"approve"}) || w.slots != 0 {
 		t.Errorf("approve: %+v %v", res, err)
 	}
 	w = &simWorld{f: Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "pending", Behind: -1}, started: true}
-	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, true, false)
+	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, true, false)
 	if err != nil || res.Did != nil || res.Wait != ReasonCIPending || len(w.stops) != 0 {
 		t.Errorf("wait: %+v %v", res, err)
 	}
 	w = &simWorld{f: Facts{ID: "ACM-1", Agent: "blocked", Behind: -1}, started: true}
-	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, simPoll, true, false)
+	res, err = autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, true, false)
 	if err != nil || res.Stop != StopNeedsYou || len(w.stops) != 0 || len(w.pauses) != 0 {
 		t.Errorf("pause: %+v %v", res, err)
 	}
@@ -470,7 +474,7 @@ func TestAutoLoopRetriesASyncThatFails(t *testing.T) {
 			func(f *Facts) { f.PRState = "MERGED" }, // and it merges
 		},
 	}
-	_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, false, false)
+	_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, autoCarry{}, simPoll, false, false)
 	if err != nil && !strings.Contains(err.Error(), "the script has no poll left") {
 		t.Fatal(err)
 	}
@@ -479,7 +483,49 @@ func TestAutoLoopRetriesASyncThatFails(t *testing.T) {
 	}
 	// One step that tkt auto --once cannot take reports why.
 	w = &simWorld{f: Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "ok", Head: "h1", Behind: 2, Verdict: "STALE_BASE", AtHead: true}, started: true, failSync: 1}
-	if _, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, true, false); err == nil || !strings.Contains(err.Error(), "uncommitted changes") {
+	if _, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, autoCarry{}, simPoll, true, false); err == nil || !strings.Contains(err.Error(), "uncommitted changes") {
 		t.Errorf("--once: %v", err)
 	}
+}
+
+func TestAutoLoopRestartsOnANewTkt(t *testing.T) {
+	asking := Facts{ID: "ACM-1", Agent: "blocked", Stage: "start", Behind: -1}
+	t.Run("a pause carries over without a second notification", func(t *testing.T) {
+		w := &simWorld{f: asking, started: true, wanted: true, replaceAt: 2, polls: []func(*Facts){func(*Facts) {}}}
+		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, false, false)
+		var rs errRestart
+		if !errors.As(err, &rs) || rs.carry.PausedOn == "" || !slices.Equal(w.pauses, []string{StopNeedsYou}) {
+			t.Fatalf("%v carry %+v pauses %v", err, rs.carry, w.pauses)
+		}
+		// The new loop sees the same question, notifies nothing, and goes on
+		// once you answered.
+		next := &simWorld{f: asking, started: true, wanted: true, polls: []func(*Facts){
+			func(*Facts) {},
+			func(f *Facts) { f.PRState = "MERGED" },
+		}}
+		if _, err := autoLoop(context.Background(), next, "ACM-1", AutoPolicy{}, autoMemory{}, rs.carry, simPoll, false, false); err != nil {
+			t.Fatal(err)
+		}
+		if len(next.pauses) != 0 || next.resumes != 1 || !slices.Equal(next.stops, []string{StopMerged}) {
+			t.Errorf("pauses %v resumes %d stops %v", next.pauses, next.resumes, next.stops)
+		}
+	})
+	t.Run("not while its agent holds a slot", func(t *testing.T) {
+		// tkt is replaced once the loop has started the ticket.
+		w := &simWorld{f: Facts{ID: "ACM-1", Behind: -1}, wanted: true, replaceAt: 2,
+			turns: []func(*Facts){idle("AWAITING_APPROVAL")}, polls: []func(*Facts){func(*Facts) {}}}
+		_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, false, false)
+		var rs errRestart
+		// It starts the ticket, waits out the agent, and restarts only once
+		// the plan pauses it and the slot is free.
+		if !errors.As(err, &rs) || !slices.Equal(w.acts, []string{"start"}) || !slices.Equal(w.pauses, []string{StopPlan}) {
+			t.Errorf("%v acts %v pauses %v", err, w.acts, w.pauses)
+		}
+	})
+	t.Run("never with --once", func(t *testing.T) {
+		w := &simWorld{f: asking, started: true, replaceAt: 1}
+		if res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, true, false); err != nil || res.Stop != StopNeedsYou {
+			t.Errorf("%+v %v", res, err)
+		}
+	})
 }

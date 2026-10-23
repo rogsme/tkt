@@ -106,7 +106,7 @@ ACM-121: the agent asks a question. /peek ACM-121 shows it; answer in its tab. t
   4. Later
 ```
 
-Peek opens the agent's live screen, read again every two seconds. ACM-121 adds a CSV export of orders, and its agent asks which column order to use: the orders table's, or the one finance's import sheet expects, with the date first. A question in the agent's dialog takes its answer in the agent's tab, so you press Esc, switch to the herdr tab `ACM-121 (auto)` and pick the date first. The agent works again, the tkt auto loop goes on by itself, and the item leaves the board.
+Peek opens the agent's live screen, read again every two seconds. ACM-121 adds a CSV export of orders, and its agent asks which column order to use: the orders table's, or the one finance's import sheet expects, with the date first. A question in the agent's dialog takes its answer in the agent's tab, so you press Esc, switch to the herdr tab `ACM-121 (claude, auto)` and pick the date first. The agent works again, the tkt auto loop goes on by itself, and the item leaves the board.
 
 Peeking ends the walk, so you take the rest one at a time. ACM-127 retries failed webhook deliveries, and you drive it by hand. The review bot found that its retry loop sleeps inside the request handler. You say:
 
@@ -140,17 +140,23 @@ Three tickets are in flight. To pick what comes next, ask:
 what should I work on next?
 ```
 
-The chat queues suggest-tickets in a suggest tab at the repository's root, on `fast`, as `/suggest 3` would. It reads the tracker and the branches in flight, and changes nothing. A few minutes later the board shows one item, `suggest picks ready`, and the chat says:
+The chat queues suggest-tickets in a suggest tab at the repository's root, on `fast`, as `/suggest 3` would. It reads the tracker and the branches in flight, and changes nothing. The chat never sees the picks; they stay in the suggest tab. A few minutes later that tab ends its report with:
 
 ```
-suggest-tickets picked ACM-131 (frontier), ACM-130 (small) and ACM-133 (small). /inbox starts them, each on the preset its model needs.
+Suggested: ACM-131 (frontier), ACM-130 (small), ACM-133 (small)
 ```
 
-Its tab has the whole report, with what it left out and why: ACM-129 changes the same export code as ACM-121, so the two would collide. `/inbox` offers to start the picks by hand, in full auto, or in auto after the plan, and you pick auto after the plan. ACM-131 starts on `claude` and the other two on `fast`, each in its own tab, such as `ACM-130 (fast, auto)`.
+The report also says what it left out and why: ACM-129 changes the same export code as ACM-121, so the two would collide. You ask the agent there why ACM-133 beats ACM-128, agree with it, and go back to the chat:
+
+```
+start ACM-131 in auto after the plan, and ACM-130 and ACM-133 the same on fast
+```
+
+ACM-131 starts on `claude` and the other two on `fast`, each in its own tab, named after the ticket and its preset: `ACM-131 (claude, auto)`, `ACM-130 (fast, auto)`.
 
 Five tickets now run in tkt auto loops, but `[auto] max_parallel` caps the agents tkt auto and tkt watch put to work, not the loops. A loop takes a slot to start a ticket, approve a plan or run a stage, and gives it up while it waits for CI, the review bot or you. ACM-124's planning agent holds one slot and two of the picks take the others, so ACM-133 waits in the queued phase until a plan is ready. ACM-121's agent, which your answer set working, and ACM-127's address session hold no slot, since you started them.
 
-From a terminal, `tkt suggest 3 --wait` runs the same skill and prints a `tkt start` command for each pick, on the preset its model needs.
+From a terminal, `tkt suggest 3` opens the same tab and returns at once. A narrower ask works the same way: "get me two tickets tagged bug" in the chat, `/suggest two tickets tagged bug`, or `tkt suggest two tickets tagged bug` hands those words to suggest-tickets as its request, which picks only tickets with that label. `/suggest` alone asks what to look for, and a number there is a count.
 
 ## 09:40 Read the plans
 
@@ -377,7 +383,7 @@ The chat answers from ACM-121's history: the bot's formula finding on three head
 
 ACM-133 stays on hold, its plan waiting, until the data team answers.
 
-Last, `/update` checks the new release, asks you to confirm, installs v0.6.1 with `tkt update`, and offers to quit, since the chat runs the old tkt until you reopen it. You quit, and the chat prints the command that resumes it, `tkt agent --session ID`. tkt watch stops when its binary changes, and its unit starts it again on the new one. Nothing waited for the chat: ACM-125's tkt auto loop and tkt watch go on overnight and notify through herdr, and tomorrow `tkt agent --continue` picks up this conversation.
+Last, `/update` checks the new release, asks you to confirm, installs v0.6.1 with `tkt update`, and offers to quit, since the chat runs the old tkt until you reopen it. You quit, and the chat prints the command that resumes it, `tkt agent --session ID`. Nothing waited for the chat, and nothing else needs you: tkt watch stops when its binary changes, and its unit starts it again on the new one, and ACM-125's tkt auto loop restarts on the new tkt at its next look. Both go on overnight and notify through herdr. Tomorrow `tkt agent --continue` picks up this conversation, and `/version` there says the chat runs v0.6.1.
 
 ## What the board can ask of you
 
@@ -403,7 +409,6 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `sync failed` | tkt sync cannot merge the base for now, such as with uncommitted changes in the worktree. | Fix what it names; tkt auto tries again at each look. |
 | `auto paused` | tkt auto paused for another reason, such as an agent in a state tkt does not know. | `/peek ID` shows its screen. |
 | `unblocked` | A merge freed a ticket that has no worktree yet. | `/start ID`, or a start in auto from `/inbox`. |
-| `picks ready` | suggest-tickets picked tickets that can run side by side. | `/inbox` starts them. |
 | `ready to merge`, `review found something` | A chore's pull request is ready, or its review found something. | Merge it on the forge, or tell its agent what to fix. |
 | `nothing to change`, `closed` | A chore's run found nothing, or you closed its pull request, and no tkt watch removed it. | `/done ID`. |
 | `start failed`, `sync failed` and the like | A step the chat queued failed. | `/inbox` says why. |
@@ -412,7 +417,7 @@ Every item on the board names its ticket and the command that acts on it, and `/
 
 The chat fits most of the day. Use it when several tickets are in flight and you want to hear from a ticket only when it needs you, when you want a ticket's state or history told in words, and when you want a step taken without looking up its flags. Slash commands take the same actions with no model call in between. Plain words cover the rest, such as ranges ("start ACM-140 to ACM-142 in auto with fast") and questions about how a ticket went.
 
-Every action in the chat is a tkt command underneath, so a terminal can always take the same step. `/approve ID` is `tkt approve ID`, and `/approve ID auto` also starts `tkt auto ID`. `/send` is `tkt send --steer`, and text queued until the agent stops is `tkt send --wait`. `/hold` is `tkt hold`, `/sync` is `tkt sync`, `/chores` is `tkt chores` and `tkt chore run`, and `/update` is `tkt update`. `/auto ID on` runs `tkt auto ID`, `/auto ID full` adds `--approve-plan`, `/auto ID off` is `tkt auto ID --stop`, and `/start ID as fast` is `tkt start ID --as fast`. Reach for a terminal:
+Every action in the chat is a tkt command underneath, so a terminal can always take the same step. `/approve ID` is `tkt approve ID`, and `/approve ID auto` also starts `tkt auto ID`. `/send` is `tkt send --steer`, and text queued until the agent stops is `tkt send --wait`. `/hold` is `tkt hold`, `/sync` is `tkt sync`, `/chores` is `tkt chores` and `tkt chore run`, `/suggest` is `tkt suggest` with the same words, and `/update` is `tkt update`. `/version` has no terminal twin: `tkt --version` names the tkt on disk, which a chat opened before an update no longer runs. `/auto ID on` runs `tkt auto ID`, `/auto ID full` adds `--approve-plan`, `/auto ID off` is `tkt auto ID --stop`, and `/start ID as fast` is `tkt start ID --as fast`. Reach for a terminal:
 
 - to set up, stop and check the tools, with `tkt doctor`, `tkt watch --install`, `--stop` and `--uninstall`, `tkt hook tmp --install` and `tkt completion`;
 - for the steps the chat does not take, such as `tkt merge ID --cancel`, a start-ticket block with its `Model:` line piped in from the clipboard (`xclip -selection clipboard -o | tkt start --prompt -`, or `--prompt-file` for a file), work with no ticket (`tkt start --scratch spike-pdf`, removed later with `wt remove spike-pdf`), and `tkt done --all` after a time without tkt watch;

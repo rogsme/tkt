@@ -224,7 +224,7 @@ func TestStageLinesAndOverrides(t *testing.T) {
 
 func TestTabLabel(t *testing.T) {
 	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}))
-	if got := c.TabLabel("ACM-1", "claude"); got != "ACM-1" {
+	if got := c.TabLabel("ACM-1", "claude"); got != "ACM-1 (claude)" {
 		t.Errorf("default preset: %q", got)
 	}
 	if got := c.TabLabel("ACM-1", "fast"); got != "ACM-1 (fast)" {
@@ -295,6 +295,9 @@ func TestSuggestSettings(t *testing.T) {
 	}
 	if got := SuggestLine(1); got != "Use the suggest-tickets skill to suggest the next ticket to start." {
 		t.Errorf("SuggestLine(1) = %q", got)
+	}
+	if got := SuggestRequestLine("five tickets tagged feedback"); got != "Use the suggest-tickets skill for this request: five tickets tagged feedback" {
+		t.Errorf("SuggestRequestLine = %q", got)
 	}
 }
 

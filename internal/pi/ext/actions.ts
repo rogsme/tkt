@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, picksText, stepText, type SuggestResult, type UpdateResult } from "./model.ts";
+import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, stepText, type SuggestResult, type UpdateResult, versionText } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
@@ -30,26 +30,27 @@ export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 	return `Queued: ${list} starting${on}. The board shows each plan when it is ready.`;
 }
 
-/** suggest has suggest-tickets pick the next tickets to start, in the
- * background and reading only. Its picks come back as an item on the
- * board, which /inbox starts, each on the preset its model needs. */
-export function suggest(hub: Hub, count: number, as = ""): string {
+/** suggest opens a suggest tab where suggest-tickets picks the tickets to
+ * start: the ones request asks for, or a count, 3 by default. tkt reads
+ * none of the answer: you read it in the tab, talk it over with the agent,
+ * and start the tickets you want. */
+export function suggest(hub: Hub, request: string, as = ""): string {
+	const ask = request.trim();
+	const count = /^\d+$/.test(ask) ? Number(ask) : ask ? 0 : 3;
 	hub.add({
 		ticket: "suggest",
 		label: "suggest",
-		args: ["suggest", String(count), "--wait", ...(as ? ["--as", as] : [])],
+		args: ["suggest", ...(ask ? [ask] : []), ...(as ? ["--as", as] : [])],
 		then: (env) => {
 			if (!env.ok || !env.result) return;
 			const r = env.result as SuggestResult;
-			if (r.status === "blocked") return hub.post(`suggest-tickets asks a question in its tab (pane ${r.pane}); answer it there, then /suggest again.`);
-			if (r.last_status !== "TICKETS_SUGGESTED") return hub.post(`suggest-tickets stopped with Status: ${r.last_status || "none"}; its tab (pane ${r.pane}) says why${r.last_status === "SETUP_REQUIRED" ? ", such as /setup-rogs to run first" : ""}.`);
-			if (r.picks.length === 0) return hub.post("suggest-tickets found nothing to start now: every ready ticket is blocked, or collides with work in flight.");
-			hub.suggested(r);
-			hub.post(`suggest-tickets picked ${picksText(r)}. /inbox starts them, each on the preset its model needs.`);
+			if (count === 0) return hub.post(`suggest-tickets has your request in the suggest tab (pane ${r.pane}). Read its picks there, and /start the ones you want.`);
+			hub.post(`suggest-tickets is picking in the suggest tab (pane ${r.pane}). Read its picks there, and /start the ones you want.`);
 		},
 	});
+	if (count === 0) return "Queued: suggest-tickets gets your request in a suggest tab, reading only. Its picks show in that tab, not here.";
 	const n = `${count} ticket${count === 1 ? "" : "s"}`;
-	return `Queued: suggest-tickets picks ${n} in a suggest tab, reading only. The board shows the picks when it is done.`;
+	return `Queued: suggest-tickets picks ${n} in a suggest tab, reading only. Its picks show in that tab, not here.`;
 }
 
 /** chores lists the repository's chores with their next run. */
@@ -64,17 +65,6 @@ export async function chores(hub: Hub): Promise<string> {
 export function choreRun(hub: Hub, name: string): string {
 	hub.add({ ticket: `chore ${name}`, label: "chore", args: ["chore", "run", name] });
 	return `Queued: a run of chore ${name} in its own tab. The board shows it once it starts.`;
-}
-
-/** startPicks starts the tickets suggest-tickets picked, each on the preset
- * its model needs, and takes the picks off the board. */
-export function startPicks(hub: Hub, mode: Mode): string {
-	const r = hub.picks?.result;
-	if (!r) return "There are no picks to start; /suggest asks suggest-tickets again.";
-	for (const p of r.picks) start(hub, [p.ticket], mode, p.preset);
-	hub.suggested(undefined);
-	const how = mode === "auto" ? " in full auto" : mode === "auto_after_plan" ? " in auto after the plan" : "";
-	return `Queued: ${picksText(r)} starting${how}, each on the preset its model needs. The board shows each plan when it is ready.`;
 }
 
 /** approve sends the approval and waits for tkt's answer. With then auto,
@@ -414,14 +404,17 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 			return start(hub, [id], "auto");
 		case "start_after_plan":
 			return start(hub, [id], "auto_after_plan");
-		case "start_picks":
-			return startPicks(hub, "manual");
-		case "start_picks_auto":
-			return startPicks(hub, "auto");
-		case "start_picks_after_plan":
-			return startPicks(hub, "auto_after_plan");
 	}
 	return undefined;
+}
+
+/** version says which tkt and pi this chat runs, and whether the tkt it
+ * calls is another one now. The chat runs the tkt that started it, so only
+ * what tkt agent set then says which; the binary may have changed since. */
+export async function version(hub: Hub): Promise<string> {
+	const r = await hub.pi.exec(hub.bin, ["--version"], { cwd: hub.cwd });
+	const installed = /^tkt version (\S+)/m.exec(r.stdout)?.[1] ?? "";
+	return versionText(process.env.TKT_VERSION ?? "", process.env.TKT_PI_VERSION ?? "", installed, hub.bin);
 }
 
 /** update installs a newer tkt with tkt update, after you confirm. The
@@ -437,7 +430,7 @@ export async function update(hub: Hub, ctx: ExtensionContext): Promise<void> {
 		hub.render();
 		return hub.post(`tkt ${r.from} is up to date.`);
 	}
-	if (!(await ctx.ui.confirm(`Update tkt from ${r.from} to ${r.to}?`, "This chat runs the old tkt until you reopen it. Tickets in tkt auto finish their loops on the old tkt."))) return;
+	if (!(await ctx.ui.confirm(`Update tkt from ${r.from} to ${r.to}?`, "This chat runs the old tkt until you reopen it. tkt auto loops and tkt watch move to the new tkt by themselves."))) return;
 	ctx.ui.setStatus("tkt-update", `tkt: downloading ${r.to}`);
 	const env = await hub.tkt<UpdateResult>(["update", r.to]).finally(() => ctx.ui.setStatus("tkt-update", undefined));
 	if (!env.ok) return hub.post(`tkt update failed: ${reasonOf(env)}`);

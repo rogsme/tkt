@@ -3,4 +3,4 @@ jqedit $FAKE_DIR/herdr.json '.tabs += [{tab_id: "w1:t2", workspace_id: "w1", lab
 mkprompt $WORK/p.txt ACM-12
 stdin $WORK/p.txt
 exec tkt start ACM-12 --prompt -
-logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label ACM-12
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-12 --label 'ACM-12 (claude)'

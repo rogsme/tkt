@@ -104,14 +104,9 @@ A ticket starts in the tracker, in the state the configuration maps to `new`, or
 
 tkt plays no part here. It needs only the id.
 
-To pick which ready tickets to start, run `tkt suggest 3`, or `/suggest 3` in the tkt agent. A fresh session in a suggest tab at the repository's root runs `suggest-tickets`, which only reads: it keeps the ready tickets whose blockers are all done, ranks them by how many tickets wait on each and then by priority, and drops one that would collide with work in flight, judged from the files each in-flight branch changes, or with another pick. With model routing on, a batch gets at most one heavy ticket. It lists what waits on you first, then ends with the picks:
+To pick which ready tickets to start, run `tkt suggest 3`, or `/suggest 3` in the tkt agent. To narrow the picks, put your own words after it, such as `tkt suggest five tickets tagged feedback`: tkt sends them as suggest-tickets' request, which sets the count and narrows the candidates by a label, an area or a model. Either way, a fresh session in a suggest tab at the repository's root runs `suggest-tickets`, which only reads: it keeps the ready tickets whose blockers are all done, ranks them by how many tickets wait on each and then by priority, and drops one that would collide with work in flight, judged from the files each in-flight branch changes, or with another pick. With model routing on, a batch gets at most one heavy ticket. It lists what waits on you first, then the picks, each with the model it runs on when model routing is on, and what it left out and why.
 
-```
-Suggested: ACM-123 (frontier), ACM-130 (acme-small-2)
-Status: TICKETS_SUGGESTED
-```
-
-`tkt suggest --wait` prints the `tkt start` command for each, on the first preset that serves its model; the tkt agent's board shows the picks, and `/inbox` starts them by hand, in full auto, or in auto after you approve each plan. `[suggest] as` in `config.toml` names a cheap preset for the run.
+tkt reads none of the answer. It stays in the suggest tab: read it there, ask its agent about it, and start the tickets you want with `tkt start`, or `/start` in the tkt agent, adding `--as` for a ticket whose model another preset serves. `[suggest] as` in `config.toml` names a cheap preset for the run.
 
 ### 2. tkt start creates the workspace
 
@@ -133,7 +128,7 @@ sequenceDiagram
   tkt->>tkt: git fetch origin main
   tkt->>wt: wt switch --create ACM-123 --base origin/main
   wt->>wt: create the worktree, run pre-start hooks
-  tkt->>herdr: open a tab named ACM-123
+  tkt->>herdr: open a tab named ACM-123 (claude)
   tkt->>herdr: herdr agent start, in build mode
   herdr->>agent: launch Claude Code or OpenCode
   tkt->>herdr: herdr agent prompt with the start line
@@ -268,7 +263,7 @@ Status: DONE
 | No bot review after `[review] bot_wait` (15 minutes) | Pauses for you. With no bot (`bot_wait = "0s"`) it runs `tkt run ACM-123 review` instead. |
 | A status page reports an incident (see [tkt watch keeps the tickets moving](#tkt-watch-keeps-the-tickets-moving)) | Waits: it starts, approves and runs nothing, and spends no round, until the incident ends. A sync goes on. |
 
-Where a person decides, it pauses rather than ends: when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. It notifies once, shows the ticket as paused, and goes on by itself when the ticket moves, such as after you answer the agent in its tab. While it drives a ticket, the tab reads `ACM-123 (auto)`. `tkt hold ACM-123` pauses the loop until `tkt hold ACM-123 --off`, without a notification, for a ticket you want to park or drive by hand. At most `[auto] max_parallel` tkt auto agents (3) work at once in a repository; a loop gives up its slot while it waits for CI, the bot or you, and the others wait, queued.
+Where a person decides, it pauses rather than ends: when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. It notifies once, shows the ticket as paused, and goes on by itself when the ticket moves, such as after you answer the agent in its tab. While it drives a ticket, the tab reads `ACM-123 (claude, auto)`. After `tkt update`, a loop restarts on the new tkt at its next look, once its agent stops working, and keeps the pause it notified about. `tkt hold ACM-123` pauses the loop until `tkt hold ACM-123 --off`, without a notification, for a ticket you want to park or drive by hand. At most `[auto] max_parallel` tkt auto agents (3) work at once in a repository; a loop gives up its slot while it waits for CI, the bot or you, and the others wait, queued.
 
 `tkt agent` opens a chat that does all of this for many tickets at once: you say "start ACM-123 in auto", get the prompt back, and hear from it only when a ticket needs you.
 

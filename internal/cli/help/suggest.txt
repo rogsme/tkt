@@ -1,6 +1,15 @@
-tkt suggest has the suggest-tickets skill pick the next tickets to start,
-ones that can run side by side. It opens a suggest tab at the repository's
-root, or reuses it, and starts a fresh session there that gets the line
+tkt suggest has the suggest-tickets skill pick the next tickets to start.
+It opens a suggest tab at the repository's root, or reuses it, starts a
+fresh session there, and sends it what you ask, after the skill's name:
+
+  tkt suggest five tickets tagged feedback
+  -> Use the suggest-tickets skill for this request: five tickets tagged
+     feedback
+
+suggest-tickets takes the number your request names, and narrows the
+candidates by what else it says, such as a label, an area or a model. With
+no words, or only a count, tkt sends the suggest line for that many tickets,
+3 by default:
 
   Use the suggest-tickets skill to suggest the next 3 tickets to start, ones
   that can run side by side.
@@ -15,13 +24,11 @@ and ends with a line such as
 
   Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)
 
-COUNT is how many to pick, 3 by default. The session runs on the [suggest]
-preset (tkt help config), or the default preset; --as picks another, such as
-a cheap one, since the run only reads.
+The session runs on the [suggest] preset (tkt help config), or the default
+preset; --as picks another, such as a cheap one.
 
---wait waits for the run to end, at most --timeout, and reads the picks:
-each comes with the tkt start command for it, on the first preset that
-serves the model its Model routing names. When suggest-tickets asks a
-question, the wait ends and you answer it in the tab. The tkt agent's
-/suggest does this and offers to start the picks by hand, in auto, or in
-auto after you approve each plan.
+tkt suggest returns once the agent has the prompt, and reads nothing it
+says. The answer stays in the tab: read it there, ask the agent about it,
+and start the tickets you want with tkt start, adding --as PRESET for a
+ticket whose model another preset serves. The tkt agent's /suggest opens
+the same tab.

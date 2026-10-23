@@ -50,13 +50,21 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerCommand("suggest", {
-		description: "Have suggest-tickets pick tickets that can run side by side, then start them from /inbox: /suggest [N] [as PRESET]",
+		description: "Have suggest-tickets pick tickets to start in the suggest tab: /suggest [N | what you want] [as PRESET], or /suggest alone to type it",
 		handler: async (args, ctx) => {
 			const words = args.trim().split(/\s+/).filter(Boolean);
-			const as = preset(words);
-			const n = Number(words.find((w) => /^\d+$/.test(w)) ?? "3");
-			if (n < 1 || n > 10) return ctx.ui.notify("usage: /suggest [1 to 10] [as PRESET]", "warning");
-			say(act.suggest(hub, n, as));
+			// Only the last two words name a preset, so a request may say "as".
+			const n = words.length;
+			const as = n >= 2 && (words[n - 2] === "as" || words[n - 2] === "--as") ? words.splice(n - 2, 2)[1] : "";
+			let request = words.join(" ");
+			// Without words, you type the request; a number there is a count too.
+			if (!request) {
+				if (!ctx.hasUI) return ctx.ui.notify("usage: /suggest [1 to 10 | what you want] [as PRESET]", "warning");
+				request = (await ctx.ui.input("What should suggest-tickets look for?", "five tickets tagged feedback, or a number"))?.trim() ?? "";
+				if (!request) return ctx.ui.notify("Nothing sent to suggest-tickets.", "info");
+			}
+			if (/^\d+$/.test(request) && (Number(request) < 1 || Number(request) > 10)) return ctx.ui.notify("usage: /suggest [1 to 10 | what you want] [as PRESET]", "warning");
+			say(act.suggest(hub, request, as));
 		},
 	});
 
@@ -220,6 +228,11 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		description: "How long tickets took from start to merge: /stats [ACM-12 ...]",
 		getArgumentCompletions: ids,
 		handler: async (args) => say(await act.stats(hub, hub.idsIn(args))),
+	});
+
+	pi.registerCommand("version", {
+		description: "Say which tkt and pi this chat runs, and whether a newer tkt is installed",
+		handler: async () => say(await act.version(hub)),
 	});
 
 	pi.registerCommand("update", {

@@ -1,7 +1,8 @@
 Each step is one command you run or one answer you give in the ticket's tab.
 tkt ls shows where every ticket stands and suggests the next step. tkt
-suggest 3 --wait picks ready tickets that can run side by side, with the tkt
-start command for each.
+suggest 3 opens a tab where suggest-tickets picks ready tickets that can run
+side by side, and tkt suggest followed by your own words asks for anything
+else; you read the answer there and start the tickets you want.
 
 1. Start the ticket: xclip -selection clipboard -o | tkt start --prompt -
    with its start-ticket block on the clipboard, or tkt start ACM-12 to send

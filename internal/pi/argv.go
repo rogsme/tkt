@@ -67,22 +67,34 @@ func Argv(bin, extDir string, o Launch) []string {
 // the user's sessions or at another pi's package files.
 var dropped = []string{"PI_CODING_AGENT_SESSION_DIR", "PI_PACKAGE_DIR"}
 
+// Host is the tkt that starts pi: the directory for pi's settings, logins
+// and sessions, the tkt binary, and the versions of tkt and of pi.
+type Host struct {
+	AgentDir  string
+	Bin       string
+	Version   string
+	PiVersion string
+}
+
 // EnvVars are the variables tkt sets for pi, as KEY=VALUE: pi keeps its
-// settings, logins and sessions in agentDir, asks no server for updates or
-// telemetry, and finds tkt at tktBin.
-func EnvVars(agentDir, tktBin string) []string {
+// settings, logins and sessions in AgentDir, asks no server for updates or
+// telemetry, and finds tkt at Bin. The versions tell the extension what it
+// runs on, which the binary at Bin no longer says once tkt is replaced.
+func EnvVars(h Host) []string {
 	return []string{
-		"PI_CODING_AGENT_DIR=" + agentDir,
+		"PI_CODING_AGENT_DIR=" + h.AgentDir,
 		"PI_SKIP_VERSION_CHECK=1",
 		"PI_TELEMETRY=0",
-		"TKT_BIN=" + tktBin,
+		"TKT_BIN=" + h.Bin,
+		"TKT_VERSION=" + h.Version,
+		"TKT_PI_VERSION=" + h.PiVersion,
 	}
 }
 
 // Env returns base with EnvVars in place of any values base had for them,
 // and without the variables in dropped.
-func Env(base []string, agentDir, tktBin string) []string {
-	set := EnvVars(agentDir, tktBin)
+func Env(base []string, h Host) []string {
+	set := EnvVars(h)
 	keys := slices.Clone(dropped)
 	for _, kv := range set {
 		k, _, _ := strings.Cut(kv, "=")

@@ -3,13 +3,15 @@
 `tkt` runs the mechanical steps around the [rogs-skills](https://gitlab.com/rogs/skills) ticket lifecycle from a [herdr](https://herdr.dev) pane. For each ticket it:
 
 - creates the ticket's worktree;
-- opens a tab named after the ticket;
+- opens a tab named after the ticket and its preset, such as `ACM-12 (claude)`;
 - starts Claude Code or OpenCode in that tab;
 - hands the agent its prompt.
 
 Each command is one step you take, and `tkt ls` suggests the next one. `tkt watch`, which tkt starts by itself, takes the upkeep steps for every ticket: it merges a moved base when a sync is due, fixes failing checks once per head, and removes a ticket once finish-ticket merged it. It also runs the chores you schedule, such as a weekly dependency upgrade, and holds its agents back, and `tkt auto`'s, while a service they depend on reports an incident. When you want, `tkt auto` takes all the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
 
 People and programs both drive tkt. Every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
+
+To see how it all fits in a working day, read [`docs/day-in-the-life.md`](docs/day-in-the-life.md): one Thursday with several tickets in flight, mostly in the tkt agent's chat, and when the terminal does better.
 
 ## Install
 
@@ -33,7 +35,7 @@ With Go 1.26 or newer (this build lacks the pi that `tkt agent` runs; see [The t
 go install gitlab.com/rogs/tkt@latest
 ```
 
-To update an installed tkt to the latest release, run `tkt update`. It makes the same checksum check as the install script, runs the new binary once, and only then replaces the old one. `tkt update --check` reports without changing anything, and `tkt update vX.Y.Z` installs a given release, prereleases included. A development build, whose `tkt --version` prints `dev` or a `dev-` version, has no release to compare, so `tkt update` replaces it only with `--force`.
+To update an installed tkt to the latest release, run `tkt update`. It makes the same checksum check as the install script, runs the new binary once, and only then replaces the old one. Running `tkt auto` loops and `tkt watch` move to the new tkt by themselves. `tkt update --check` reports without changing anything, and `tkt update vX.Y.Z` installs a given release, prereleases included. A development build, whose `tkt --version` prints `dev` or a `dev-` version, has no release to compare, so `tkt update` replaces it only with `--force`.
 
 ### Requirements
 
@@ -70,7 +72,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | Command | What it does |
 |---|---|
 | `tkt agent` | Opens the tkt agent, a chat in your pane that drives your tickets. |
-| `tkt suggest [N]` | Has suggest-tickets pick the next N tickets to start, ones that can run side by side, in a suggest tab at the repository's root; `--wait` prints the `tkt start` command for each, on the preset its model needs. |
+| `tkt suggest [N \| REQUEST]` | Has suggest-tickets pick the next tickets to start, in a suggest tab at the repository's root: the ones a request asks for, such as `tkt suggest five tickets tagged feedback`, or N tickets that can run side by side, 3 by default. The picks stay in that tab, for you to read and start. |
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
 | `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan; `--steer` types it in while the agent works, and `--wait` queues it until the agent stops. |
@@ -134,7 +136,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 
 | Command | What it does |
 |---|---|
-| `/suggest [N] [as PRESET]` | Has suggest-tickets pick tickets that can run side by side; the board shows the picks, and `/inbox` starts them by hand, in full auto, or in auto after the plan, each on the preset its model needs. |
+| `/suggest [N \| REQUEST] [as PRESET]` | Does what `tkt suggest` does; `/suggest` alone asks you to type the request. You read the picks in the suggest tab and `/start` the ones you want. |
 | `/start ID... [auto \| after-plan] [as PRESET]` | Starts tickets: by hand, in full auto, or in auto once you approve the plan, on a preset you name. |
 | `/approve ID [auto]` | Approves the plan; with `auto`, `tkt auto` takes over. |
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |
@@ -147,6 +149,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/chores [run NAME]` | The repository's chores with their next run; `run NAME` starts a run now. |
 | `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |
+| `/version` | Says which tkt and pi the chat runs, and whether the tkt on disk is another one now. |
 | `/update` | Installs a newer tkt, then offers to quit. Reopen the chat with the `tkt agent --session ID` it prints to run the new tkt. The board names a newer release when the chat finds one. |
 
 Without an `[agent]` model, pi starts on its own default: in `/model`, press Ctrl+S on a model to make it the default for new chats. An `[agent]` table in `config.toml` picks the model and loads more pi extensions, such as one that adds a model provider:

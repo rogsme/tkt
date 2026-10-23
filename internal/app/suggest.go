@@ -6,12 +6,10 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"gitlab.com/rogs/tkt/internal/agent"
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/config"
-	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/harness"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
@@ -19,69 +17,38 @@ import (
 	"gitlab.com/rogs/tkt/internal/state"
 )
 
-// SuggestOpts are tkt suggest's arguments: how many tickets to suggest, the
-// preset suggest-tickets runs on, and whether to wait for its picks, at most
-// Timeout.
+// SuggestOpts are tkt suggest's arguments: what to ask suggest-tickets,
+// either Request in your own words or Count tickets, and the preset it runs
+// on.
 type SuggestOpts struct {
 	Count   int
+	Request string
 	As      string
-	Wait    bool
-	Timeout time.Duration
 	Dry     bool
 }
 
-// SuggestPick is a ticket suggest-tickets picked. Model is the Model: value
-// its Model routing names, or "" without model routing, and Preset the
-// first preset that serves it, for tkt start --as; "" means the default.
-type SuggestPick struct {
-	Ticket string `json:"ticket"`
-	Model  string `json:"model"`
-	Preset string `json:"preset"`
-}
-
 // SuggestResult is what tkt suggest did: the session it started in the
-// suggest tab at the repository's root. With --wait, Status is the agent's
-// state when the wait ended, and once it finished, LastStatus, Report (what
-// it said) and Picks come from its last turn.
+// suggest tab at the repository's root, and the prompt it sent. The answer
+// stays in that tab, for you to read and talk over with the agent. Count is
+// 0 for a request.
 type SuggestResult struct {
-	Count      int           `json:"count"`
-	Tab        string        `json:"tab"`
-	Pane       string        `json:"pane"`
-	Preset     string        `json:"preset"`
-	Harness    string        `json:"harness"`
-	Session    string        `json:"session"`
-	Status     string        `json:"status"`
-	LastStatus string        `json:"last_status"`
-	Report     string        `json:"report"`
-	Picks      []SuggestPick `json:"picks"`
-	DryRun     bool          `json:"dry_run"`
-	Actions    []Action      `json:"actions"`
+	Count   int      `json:"count"`
+	Prompt  string   `json:"prompt"`
+	Tab     string   `json:"tab"`
+	Pane    string   `json:"pane"`
+	Preset  string   `json:"preset"`
+	Harness string   `json:"harness"`
+	Session string   `json:"session"`
+	DryRun  bool     `json:"dry_run"`
+	Actions []Action `json:"actions"`
 }
 
 func (r *SuggestResult) Text(w io.Writer) {
-	switch {
-	case r.Status == herdr.Blocked:
-		fmt.Fprintf(w, "suggest-tickets asks a question in pane %s; answer it there\n", r.Pane)
-	case r.Status != "" && r.LastStatus != contract.StatusTicketsSuggested:
-		fmt.Fprintf(w, "suggest-tickets stopped with Status: %s; read why in pane %s\n", or(r.LastStatus, "none"), r.Pane)
-	case r.Status != "" && len(r.Picks) == 0:
-		fmt.Fprintf(w, "suggest-tickets found nothing to start now; its report is in pane %s\n", r.Pane)
-	case len(r.Picks) > 0:
-		for _, p := range r.Picks {
-			fmt.Fprintf(w, "%s  %s\n", p.Ticket, startCommand(p))
-		}
-	default:
-		fmt.Fprintf(w, "suggest-tickets picks %d in pane %s (%s, %s)\n", r.Count, r.Pane, r.Preset, r.Harness)
+	if r.Count == 0 {
+		fmt.Fprintf(w, "suggest-tickets has your request in pane %s (%s, %s); read its picks there\n", r.Pane, r.Preset, r.Harness)
+		return
 	}
-}
-
-// startCommand is the tkt start command for a pick, on the preset its
-// model needs.
-func startCommand(p SuggestPick) string {
-	if p.Preset == "" {
-		return "tkt start " + p.Ticket
-	}
-	return "tkt start " + p.Ticket + " --as " + p.Preset
+	fmt.Fprintf(w, "suggest-tickets picks %d in pane %s (%s, %s); read its picks there\n", r.Count, r.Pane, r.Preset, r.Harness)
 }
 
 // suggestLock is the lock one tkt suggest per repository holds.
@@ -91,18 +58,23 @@ const suggestLock = "suggest"
 // session, next to tkt watch's in the repository's git directory.
 func suggestStatePath(common string) string { return filepath.Join(common, "tkt", "suggest") }
 
-// Suggest has suggest-tickets pick the next tickets to start, ones that can
-// run side by side: it starts a fresh session in the suggest tab at the
-// repository's root, on the [suggest] preset, and sends the suggest line.
-// suggest-tickets only reads. With Wait, it waits for the agent and reads
-// the picks from its Suggested: line, each with the preset that serves the
-// model its Model routing names.
+// Suggest starts a fresh session in the suggest tab at the repository's
+// root, on the [suggest] preset, and has suggest-tickets pick the next
+// tickets to start: those your request asks for, or without one, Count
+// tickets that can run side by side. tkt reads none of the answer: it is
+// yours to weigh in the tab.
 func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error) {
-	if o.Count == 0 {
-		o.Count = 3
-	}
-	if o.Count < 1 || o.Count > 10 {
-		return nil, apperr.New(apperr.Usage, "tkt suggest picks 1 to 10 tickets, not %d", o.Count).WithHint("tkt suggest 3")
+	line := ""
+	if r := strings.TrimSpace(o.Request); r != "" {
+		line, o.Count = config.SuggestRequestLine(r), 0
+	} else {
+		if o.Count == 0 {
+			o.Count = 3
+		}
+		if o.Count < 1 || o.Count > 10 {
+			return nil, apperr.New(apperr.Usage, "tkt suggest picks 1 to 10 tickets, not %d", o.Count).WithHint("tkt suggest 3")
+		}
+		line = config.SuggestLine(o.Count)
 	}
 	c, err := a.begin(ctx, o.Dry, false)
 	if err != nil {
@@ -126,7 +98,7 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 		return nil, err
 	}
 	ts := &ticketState{path: suggestStatePath(c.Repo.Common), st: state.Read(suggestStatePath(c.Repo.Common))}
-	res := &SuggestResult{Count: o.Count, Preset: preset.Name, Harness: h, Picks: []SuggestPick{}, DryRun: c.Dry, Actions: []Action{}}
+	res := &SuggestResult{Count: o.Count, Prompt: line, Preset: preset.Name, Harness: h, DryRun: c.Dry, Actions: []Action{}}
 	// herdr names agents across every repository it serves.
 	name := prompt.AgentName(suggestLock + "-" + filepath.Base(c.Repo.Root))
 	res.Tab, res.Pane, err = c.suggestPane(ts, preset, name)
@@ -149,7 +121,7 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 	case agent.Failed:
 		return nil, apperr.New(apperr.AgentLaunchFailed, "%s", err.Error())
 	}
-	switch out, _, err := c.Agent.Deliver(c.Ctx, res.Pane, config.SuggestLine(o.Count), h, sid, c.Repo.Root); out {
+	switch out, _, err := c.Agent.Deliver(c.Ctx, res.Pane, line, h, sid, c.Repo.Root); out {
 	case agent.Uncertain:
 		c.save(ts, "status", "prompt_uncertain")
 		return nil, c.screenErr(apperr.New(apperr.PromptUncertain,
@@ -160,10 +132,7 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 	}
 	c.save(ts, "status", "submitted")
 	res.Actions = append(res.Actions, c.Plan...)
-	if !o.Wait || c.Dry {
-		return res, nil
-	}
-	return res, c.waitSuggest(res, ts, o.Timeout)
+	return res, nil
 }
 
 // suggestPane finds the pane for suggest-tickets: the one its agent, found
@@ -213,10 +182,7 @@ func (c *Ctx) suggestPane(ts *ticketState, preset config.Preset, name string) (t
 	if ok && p.TabID == ts.st["tab"] && (c.Dry || c.H.PaneIsShell(c.Ctx, p.PaneID)) {
 		return p.TabID, p.PaneID, nil
 	}
-	label := suggestLock
-	if preset.Name != c.Cfg.Default().Name {
-		label += " (" + preset.Name + ")"
-	}
+	label := c.Cfg.TabLabel(suggestLock, preset.Name)
 	ws := c.Getenv("HERDR_WORKSPACE_ID")
 	if c.Dry {
 		c.Would(herdr.TabCreateArgv(ws, c.Repo.Root, label))
@@ -228,55 +194,4 @@ func (c *Ctx) suggestPane(ts *ticketState, preset config.Preset, name string) (t
 	}
 	c.Agent.WaitPaneFree(c.Ctx, pane, 40)
 	return tab, pane, nil
-}
-
-// waitSuggest waits for suggest-tickets to finish or ask, and reads its
-// picks once it finished.
-func (c *Ctx) waitSuggest(res *SuggestResult, ts *ticketState, timeout time.Duration) error {
-	wctx := c.Ctx
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		wctx, cancel = context.WithTimeout(c.Ctx, timeout+5*time.Second)
-		defer cancel()
-	}
-	status, err := c.H.Wait(wctx, res.Pane, []string{herdr.Idle, herdr.Blocked, herdr.Done}, timeout.Milliseconds())
-	switch herdr.CodeOf(err) {
-	case "":
-		if err != nil {
-			return herdrErr(err)
-		}
-	case "timeout":
-		return apperr.New(apperr.WaitTimeout, "suggest-tickets did not finish within %s", timeout).
-			WithHint("check pane %s", res.Pane).With("pane", res.Pane)
-	case "agent_not_found":
-		return apperr.New(apperr.AgentMissing, "the agent in pane %s is gone", res.Pane).WithHint("tkt suggest")
-	default:
-		return herdrErr(err)
-	}
-	res.Status = status
-	if status == herdr.Blocked {
-		return nil
-	}
-	ag, _ := c.H.AgentOnPane(c.Ctx, res.Pane)
-	turn, _ := c.lastTurn(c.Ctx, &ag, ts.st, c.Repo.Root)
-	res.LastStatus, res.Report = agent.LastStatus(turn.All), strings.TrimSpace(or(turn.Final, turn.All))
-	res.Picks = c.suggested(turn.All)
-	return nil
-}
-
-// suggested reads the picks from suggest-tickets' Suggested: line, such as
-// "Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)", each with the
-// first preset other than the default that serves its Model: value.
-func (c *Ctx) suggested(text string) []SuggestPick {
-	out := []SuggestPick{}
-	for _, s := range contract.Suggestions(text, c.LC.RE) {
-		pick := SuggestPick{Ticket: s.Ticket, Model: s.Model}
-		if pick.Model != "" {
-			if pr, err := c.Cfg.Pick("", "Model: "+pick.Model, false); err == nil && pr.Name != c.Cfg.Default().Name {
-				pick.Preset = pr.Name
-			}
-		}
-		out = append(out, pick)
-	}
-	return out
 }

@@ -22,14 +22,16 @@ Ask how a ticket went, merged ones too: "how did ACM-12 go?", "what failed
 in ACM-12 and ACM-13?". The chat reads tkt history: each step with its time,
 and the pull request's commits and reviews with the review bot's findings.
 
-The same actions work without the model as slash commands: /suggest (tickets
-to start next, which /inbox starts), /start (add "as PRESET" for a preset),
-/approve, /next, /auto, /hold, /sync, /send, /show,
+The same actions work without the model as slash commands: /suggest (a
+suggest tab where suggest-tickets picks tickets to start next; add what you
+want, such as /suggest five tickets tagged feedback, or type it when /suggest
+alone asks), /start (add "as
+PRESET" for a preset), /approve, /next, /auto, /hold, /sync, /send, /show,
 /peek (the agent's live screen), /check (the human verification checklist,
 which offers to sync a ticket that is behind first), /done, /inbox (what needs
 you, with fixed answers), /board (every ticket in columns), /chores (the
-repository's chores; /chores run NAME starts a run now), /history, /stats
-and /update. A tool that changes a ticket your message did
+repository's chores; /chores run NAME starts a run now), /history, /stats,
+/version and /update. A tool that changes a ticket your message did
 not name asks first, and removing a ticket always asks. Text for a working
 agent goes in at once, and the agent reads it at its next step; text for an
 agent that asks a question waits until you answer it in its tab.
@@ -38,6 +40,8 @@ The chat checks for a newer tkt release when it opens and every six hours,
 and names it under the board. /update installs it with tkt update, then offers
 to quit: the chat runs the old tkt until you reopen it with the command it
 prints. A development build gets no notice, and /update does not replace it.
+/version says which tkt and pi the chat runs, and whether the tkt on disk is
+another one now, as after tkt update or a new build.
 
 Tickets in auto run in tkt auto loops that outlive the chat, so they keep
 moving, and notify you, after you close it. A loop that pauses for you goes on
