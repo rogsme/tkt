@@ -128,7 +128,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerCommand("check", {
-		description: "Walk a ticket's human verification steps: /check ACM-12",
+		description: "Walk a ticket's human verification steps, and merge once they pass: /check ACM-12",
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const id = one(args, ctx, "/check ACM-12");

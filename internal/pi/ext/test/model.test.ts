@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ago, expandIds, keyFromTracker, keyOf, mentions, normalizeId, rowsOf, stampText, updateNotice, stepText } from "../model.ts";
+import { ago, expandIds, keyFromTracker, keyOf, mentions, mergeText, normalizeId, rowsOf, stampText, updateNotice, stepText } from "../model.ts";
 import { row } from "./fixtures.ts";
 
 test("normalizeId", () => {
@@ -70,4 +70,11 @@ test("stepText says what tkt auto's step does", () => {
 	assert.equal(stepText({ action: "sync" }), "merging the base");
 	assert.equal(stepText({ action: "run", stage: "ci" }), "running ci");
 	assert.equal(stepText({ action: "approve" }), "approving the plan");
+});
+
+test("mergeText says what tkt merge did", () => {
+	const r = { ticket: "ACM-12", pr: 7, head: "abc", steps: [1, 2] };
+	assert.match(mergeText({ ...r, action: "merging" }), /^ACM-12: finish-ticket merges pull request #7 in a fresh session/);
+	assert.match(mergeText({ ...r, action: "ordered" }), /^ACM-12 merges once its checks pass/);
+	assert.equal(mergeText({ ...r, action: "cancelled" }), "ACM-12 has no merge order now.");
 });

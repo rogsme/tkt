@@ -86,7 +86,7 @@ function rerun(row: Row, label: (stage: string) => string, description: string):
 }
 
 /** The next steps tkt watch takes by itself while it runs. */
-const watchTakes = new Set(["base_moved", "checks_fail"]);
+const watchTakes = new Set(["base_moved", "checks_fail", "merge_due"]);
 
 /** The next steps of a manual ticket that wait for your go. */
 const nextSteps: Record<string, string> = {
@@ -95,6 +95,7 @@ const nextSteps: Record<string, string> = {
 	base_moved: "the base moved; tkt sync merges it",
 	checks_fail: "the checks fail",
 	qa_failed: "human verification failed",
+	merge_due: "the checks passed, and its merge order is due",
 };
 
 /** attentionOf says whether a ticket needs you now. It says nothing while a
@@ -213,7 +214,7 @@ function planText(id: string): string {
 
 function readyText(row: Row): string {
 	const pr = row.pr ? ` Pull request #${row.pr.number}` : " The pull request";
-	return `${row.ticket}:${pr} is ready for human verification. /check ${row.ticket} walks the steps; merge when they pass.`;
+	return `${row.ticket}:${pr} is ready for human verification. /check ${row.ticket} walks the steps, and merges once they all pass.`;
 }
 
 /** sound picks the herdr notification sound for an item. */

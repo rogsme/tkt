@@ -122,7 +122,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/sync ID` | Merges the base into a ticket's branch, as `tkt sync` does. `/check` offers it first when the ticket is behind its base. |
 | `/hold ID [off]` | Puts a ticket on hold, so `tkt watch` and `tkt auto` leave it alone, or takes it off hold. |
 | `/send ID TEXT`, `/show ID`, `/peek ID` | Talks to the ticket's agent, prints its last message, or watches its live screen. |
-| `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. |
+| `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. Once every step passed, it merges with `tkt merge`: now, or once CI is green. |
 | `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
 | `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |

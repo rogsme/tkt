@@ -150,3 +150,11 @@ test("a tkt auto loop whose sync keeps failing says why", () => {
 	assert.equal(a?.title, "sync failed");
 	assert.match(a?.text ?? "", /cannot merge the base: ACM-12 has uncommitted changes\. tkt auto tries again/);
 });
+
+test("a due merge order is tkt watch's, and yours while it does not run", () => {
+	const due = row({ phase: "merging", next: { kind: "command", reason: "merge_due", argv: ["tkt", "merge", "ACM-12", "--passed", "1,2", "--head", "abc"], text: "tkt merge ACM-12 --passed 1,2 --head abc" } });
+	assert.equal(attentionOf(due, false, true), undefined);
+	const a = attentionOf(due, false, false);
+	assert.equal(a?.kind, "next");
+	assert.match(a?.text ?? "", /merge order is due\. \/next ACM-12/);
+});
