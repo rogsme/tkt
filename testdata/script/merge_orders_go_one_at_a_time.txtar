@@ -1,0 +1,58 @@
+# One merge goes at a time: while a finish-ticket that got the merge line
+# works and its pull request is open, the other orders wait their turn, and
+# so does tkt merge. A second finish-ticket that checks the base before the
+# first one merges would merge an integration nobody reviewed.
+exec tkt start ACM-1
+exec tkt start ACM-2
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-2 commit -q --allow-empty -m 'ACM-2 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-2 push -q origin ACM-2
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+gitvar H2 $FAKE_WT_ROOT/ACM-2 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) | gsub("H2"; $H2) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+
+# Both are verified while their checks run, so both leave an order.
+exec tkt merge ACM-1 --passed all
+exec tkt merge ACM-2 --passed all
+jqedit $WORK/prs.json 'map(.statusCheckRollup[0] |= (.status = "COMPLETED" | .conclusion = "SUCCESS"))'
+
+# Both are due: one pass sends one merge line, and the other waits, as a
+# dry run says first.
+exec tkt watch --once --dry-run --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1:merge:merge_due","ACM-2::turn"]'
+resetlog
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1:merge:merge_due","ACM-2::turn"]'
+logged herdr agent start acm-1
+! logged herdr agent start acm-2
+
+# While ACM-1's finish-ticket works on its open pull request, ACM-2 keeps
+# waiting, and tkt merge leaves an order instead of sending the line.
+jqedit $FAKE_DIR/herdr.json '(.agents[] | select(.name == "acm-1") | .agent_status) = "working"'
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::agent_working","ACM-2::turn"]'
+exec tkt merge ACM-2 --passed all --json
+envelope '.result | [.action, .waits, .after]' '["ordered","turn","ACM-1"]'
+exec tkt merge ACM-2 --passed all
+stdout 'ACM-2  merges #2 once ACM-1 went first'
+
+# Once ACM-1's pull request merged, its finish-ticket only waits for the
+# checks after the merge, and ACM-2 goes.
+jqedit $WORK/prs.json '.[0].state = "MERGED"'
+resetlog
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::merged","ACM-2:merge:merge_due"]'
+logged herdr agent start acm-2
+houserules
+
+-- prs.json --
+[
+  {"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "IN_PROGRESS", "conclusion": ""}],
+   "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]},
+  {"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "H2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "IN_PROGRESS", "conclusion": ""}],
+   "reviews": [{"body": "Reviewed head: H2\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the sign-up page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H2"}}]}
+]

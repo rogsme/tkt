@@ -1,0 +1,45 @@
+# The merge line went out, and finish-ticket stopped with BLOCKED_FOR_SYNC:
+# another merge moved the base. The order stands, so tkt watch syncs the
+# branch, has the new head reviewed, and sends the line again, once.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-12
+cp $WORK/notes.txt $FAKE_WT_ROOT/ACM-12/notes.txt
+realgit -C $FAKE_WT_ROOT/ACM-12 add notes.txt
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+exec tkt merge ACM-12 --passed all --json
+envelope '.result.action' merging
+
+env 'FAKE_HERDR_SCREEN=The base moved after the review. Status: BLOCKED_FOR_SYNC'
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["sync","base_moved"]'
+gitvar H2 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H2'
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .stage, .reason]' '["run","review","needs_review"]'
+jqedit $WORK/prs.json '.[0].reviews += [.[0].reviews[0] | .body |= gsub($H1; $H2) | .commit.oid = $H2 | .submittedAt = "2026-01-03T00:00:00Z"]'
+env 'FAKE_HERDR_SCREEN=Status: READY_FOR_HUMAN'
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["merge","merge_due"]'
+grep 'passed on head '$H1'. The pull request is at '$H2' now, after clean merges of the base.$' $FAKE_DIR/prompts
+# Never twice on one head.
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","no_progress"]'
+houserules
+
+-- config.toml --
+[review]
+bot_wait = "0s"
+-- notes.txt --
+from ACM-12
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open http://localhost:3000/login and sign in with a wrong password.\n   Expected: the form shows an error.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

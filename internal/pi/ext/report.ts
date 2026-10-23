@@ -56,6 +56,8 @@ export interface HistoryEvent {
 	action?: string;
 	stop?: string;
 	pr?: number;
+	/** unblocked lists the tickets finish-ticket said a merge unblocked. */
+	unblocked?: string[];
 }
 
 export interface HistoryPR {
@@ -141,9 +143,11 @@ function eventText(e: HistoryEvent): string {
 			if (e.action === "merge") return "tkt watch carried out the merge order";
 			return `tkt watch ran ${e.stage}`;
 		case "merge":
-			if (e.action === "ordered") return "merge order left, for when the checks pass";
+			if (e.action === "ordered") return "merge order left, for when finish-ticket can merge";
 			if (e.action === "dropped") return "merge order dropped by a new head";
 			return "merge order cancelled";
+		case "done":
+			if (e.unblocked?.length) return `removed; the merge unblocked ${e.unblocked.join(", ")}`;
 	}
 	return e.event;
 }

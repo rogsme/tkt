@@ -19,6 +19,7 @@ import (
 
 	"gitlab.com/rogs/tkt/internal/agent"
 	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/forge"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
@@ -84,16 +85,20 @@ type RowWatch struct {
 	Paused string `json:"paused"`
 }
 
-// RowMerge is a merge order: tkt merge left it because the checks at Head
-// had not passed yet, and tkt watch sends finish-ticket the merge line,
-// naming Steps as passed, once they do. A new head drops it, since the
-// steps ran on the old one.
+// RowMerge is a merge order: the human verification steps passed on Head,
+// and tkt watch sends finish-ticket the merge line, naming Steps as passed,
+// once the checks pass and a review clears the pull request's head. The
+// order holds across clean merges of the base, which tkt sync makes, and
+// stands until the pull request merges; a new head of any other kind drops
+// it, since the steps ran on code it changed. Sent is when the line last
+// went out.
 type RowMerge struct {
 	Head  string `json:"head"`
 	Steps []int  `json:"steps"`
 	// As is the preset finish-ticket runs on, or "" for the ticket's own.
-	As string `json:"as"`
-	At string `json:"at"`
+	As   string `json:"as"`
+	At   string `json:"at"`
+	Sent string `json:"sent"`
 }
 
 // ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
@@ -126,8 +131,15 @@ type Row struct {
 	// alone (tkt hold).
 	Hold  bool      `json:"hold"`
 	Watch *RowWatch `json:"watch"`
-	// Merge is the ticket's merge order for its current head, or null.
+	// Merge is the ticket's merge order when it holds at the pull request's
+	// head, or null.
 	Merge *RowMerge `json:"merge"`
+	// orderVoid says why the ticket's merge order on orderHead no longer
+	// holds, so tkt watch drops it, or is ""; reviewReady says review-pr's
+	// READY_FOR_HUMAN summary is at the head, which finish-ticket merges on.
+	orderVoid   string
+	orderHead   string
+	reviewReady bool
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
 	PhaseSince string `json:"phase_since"`
@@ -147,13 +159,14 @@ type Sources struct {
 	Fetch string `json:"fetch"`
 }
 
-// LsResult is tkt ls's table, and whether tkt watch keeps the tickets
-// moving.
+// LsResult is tkt ls's table, whether tkt watch keeps the tickets moving,
+// and the tickets merges unblocked that have no worktree yet.
 type LsResult struct {
-	Sources Sources     `json:"sources"`
-	Watch   WatchStatus `json:"watch"`
-	Rows    []Row       `json:"rows"`
-	now     time.Time
+	Sources   Sources     `json:"sources"`
+	Watch     WatchStatus `json:"watch"`
+	Rows      []Row       `json:"rows"`
+	Unblocked []Unblocked `json:"unblocked"`
+	now       time.Time
 }
 
 // lsHeader names the columns of tkt ls. TIME is how long the ticket has been
@@ -161,20 +174,33 @@ type LsResult struct {
 var lsHeader = []string{"TICKET", "PHASE", "TIME", "AGENT", "PR", "CHECKS", "REVIEW", "AUTO", "NEXT"}
 
 func (r *LsResult) Text(w io.Writer) {
-	if len(r.Rows) == 0 {
+	if len(r.Rows) > 0 {
+		var rows [][]string
+		for _, row := range r.Rows {
+			rows = append(rows, r.cells(row, r.now))
+		}
+		output.Table(w, lsHeader, rows)
+	}
+	r.unblockedText(w)
+}
+
+// unblockedText names the tickets merges unblocked, which wait for a start.
+func (r *LsResult) unblockedText(w io.Writer) {
+	if len(r.Unblocked) == 0 {
 		return
 	}
-	var rows [][]string
-	for _, row := range r.Rows {
-		rows = append(rows, r.cells(row, r.now))
+	ids := make([]string, len(r.Unblocked))
+	for i, u := range r.Unblocked {
+		ids[i] = u.Ticket
 	}
-	output.Table(w, lsHeader, rows)
+	fmt.Fprintf(w, "unblocked by a merge, with no worktree yet: %s; tkt start %s starts one\n", idsText(ids), ids[0])
 }
 
 // Pretty is tkt ls on a terminal: the same columns, with the phase colored
 // by who acts next and the empty cells faint.
 func (r *LsResult) Pretty(w io.Writer, _ string, width int) {
 	if len(r.Rows) == 0 {
+		r.unblockedText(w)
 		return
 	}
 	var (
@@ -240,6 +266,7 @@ func (r *LsResult) Pretty(w io.Writer, _ string, width int) {
 		fmt.Fprintln(w, line+next)
 	}
 	fmt.Fprintln(w)
+	r.unblockedText(w)
 }
 
 // phaseStyle colors a phase by who acts next: you, nobody (it is done or
@@ -383,7 +410,10 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	if lookErr != nil {
 		return nil, lookErr
 	}
-	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, now: a.Now()}
+	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, Unblocked: []Unblocked{}, now: a.Now()}
+	if len(want) == 0 {
+		res.Unblocked = c.unblocked(entries)
+	}
 	if res.Sources.Fetch == "failed" {
 		a.UI.Warn("git fetch failed; showing the last fetched state")
 	}
@@ -587,6 +617,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			checks, verdict := forge.Summarize(p), forge.LatestVerdict(p)
 			row.PR = &RowPR{Number: p.Number, State: "OPEN", Mergeable: p.Mergeable, Head: p.HeadRefOid}
 			row.Checks, row.Review = &checks, verdict
+			row.reviewReady = forge.HumanVerification(p) != nil
 		} else if p, ok := closedPR(l.gh.Mine(l.all, t.ID)); ok {
 			row.PR = &RowPR{Number: p.Number, State: p.State}
 		}
@@ -600,9 +631,12 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		row.BaseMerge = c.probeBaseMerge(rctx, t.Path, row.PR.Head, l.baseRef)
 	}
 	row.Watch = &RowWatch{Last: st["watch_last"]}
-	if h := st["merge_head"]; h != "" && row.PR != nil && row.PR.State == "OPEN" && row.PR.Head == h {
-		row.Merge = &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], At: st["merge_at"]}
+	base := ""
+	if l.hasBase {
+		base = l.baseRef
 	}
+	row.Merge, row.orderVoid = c.mergeOrder(rctx, t.Path, st, row.PR, base, row.LastStatus)
+	row.orderHead = st["merge_head"]
 	if p := st["watch_pause"]; p != "" && row.PR != nil && st["watch_head"] == row.PR.Head && c.watchRunning() {
 		row.Watch.Paused = p
 	}
@@ -637,6 +671,48 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		}
 	}
 	return row, f
+}
+
+// The reasons a merge order stops holding.
+const (
+	voidHead     = "head"
+	voidQAFailed = "qa_failed"
+	voidSession  = "session"
+)
+
+// mergeOrder reads the ticket's merge order, when it holds at the pull
+// request's head: the head its steps passed on, or one that clean merges of
+// the base reached from there. void says why the order no longer holds: a
+// head this worktree knows came by more than clean merges, finish-ticket
+// said a step failed, or another kind of session took the ticket over after
+// the line went out. A head it has not fetched yet, a base it lacks, or git
+// failing says nothing either way. last is the agent's last status.
+func (c *Ctx) mergeOrder(ctx context.Context, path string, st state.State, pr *RowPR, base, last string) (o *RowMerge, void string) {
+	h := st["merge_head"]
+	if h == "" || pr == nil || pr.State != "OPEN" || pr.Head == "" {
+		return nil, ""
+	}
+	switch stage := st["stage"]; {
+	case stage == "merge" && last == contract.StatusHumanQAFailed:
+		return nil, voidQAFailed
+	case st["merge_sent"] != "" && stage != "merge" && stage != "review":
+		return nil, voidSession
+	}
+	if pr.Head != h {
+		if base == "" {
+			return nil, ""
+		}
+		clean, err := c.Git.CleanMerges(ctx, path, h, pr.Head, base)
+		switch {
+		case err != nil:
+			return nil, ""
+		case !clean && c.Git.Rev(ctx, path, pr.Head+"^{commit}") != "":
+			return nil, voidHead
+		case !clean:
+			return nil, ""
+		}
+	}
+	return &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], At: st["merge_at"], Sent: st["merge_sent"]}, ""
 }
 
 // probeBaseMerge tries merging the base into the pull request's head, or

@@ -1,0 +1,63 @@
+# finish-ticket names the tickets a merge unblocked right before Status:
+# DONE. tkt done reads the line from the ticket's session before it closes
+# the tabs, and tkt ls lists each one until it starts or merges.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $WT push -q origin ACM-12
+realgit -C $REPO merge -q --no-ff -m 'Merge ACM-12' ACM-12
+realgit -C $REPO push -q origin main
+env FAKE_GH_PRS=$WORK/prs.json
+# ACM-16 is in flight already.
+exec tkt start ACM-16
+cp $WORK/screen.txt $FAKE_DIR/screen
+
+# Only whole ticket ids count, and never the ticket itself.
+exec tkt done ACM-12 --dry-run --json
+envelope '.result.tickets[0].unblocked' '["ACM-15","ACM-16"]'
+! exists $REPO/.git/tkt/unblocked
+
+exec tkt done ACM-12
+stdout 'ACM-12  the merge unblocked ACM-15 and ACM-16; tkt start ACM-15 starts one'
+exec tkt history ACM-12
+stdout 'removed; the merge unblocked ACM-15 and ACM-16'
+# ACM-16 has a worktree, so only ACM-15 waits for a start.
+exec tkt ls --json
+envelope '[.result.unblocked[] | .ticket + ":" + .by]' '["ACM-15:ACM-12"]'
+exec tkt ls
+stdout 'unblocked by a merge, with no worktree yet: ACM-15; tkt start ACM-15 starts one'
+
+# Once ACM-16 merges, tkt done takes it off the list for good.
+rm $FAKE_DIR/screen
+realgit -C $FAKE_WT_ROOT/ACM-16 commit -q --allow-empty -m 'work on ACM-16'
+realgit -C $FAKE_WT_ROOT/ACM-16 push -q origin ACM-16
+realgit -C $REPO merge -q --no-ff -m 'Merge ACM-16' ACM-16
+realgit -C $REPO push -q origin main
+jqedit $WORK/prs.json '. + [.[0] | .number = 9 | .headRefName = "ACM-16"]'
+exec tkt done ACM-16
+exec tkt ls --json
+envelope '[.result.unblocked[] | .ticket]' '["ACM-15"]'
+
+# Starting one stops listing it.
+exec tkt start ACM-15
+exec tkt ls --json
+envelope '.result.unblocked' '[]'
+
+# A report that names none leaves nothing to start.
+exec tkt start ACM-13
+realgit -C $FAKE_WT_ROOT/ACM-13 commit -q --allow-empty -m 'work on ACM-13'
+realgit -C $FAKE_WT_ROOT/ACM-13 push -q origin ACM-13
+realgit -C $REPO merge -q --no-ff -m 'Merge ACM-13' ACM-13
+realgit -C $REPO push -q origin main
+jqedit $WORK/prs.json '. + [.[0] | .number = 8 | .headRefName = "ACM-13"]'
+env 'FAKE_HERDR_SCREEN=Unblocked: none'
+exec tkt done ACM-13 --json
+envelope '.result.tickets[0].unblocked' '[]'
+houserules
+
+-- screen.txt --
+Merged #7, and post-merge CI passed.
+Unblocked: ACM-15, ACM-16, ACM-12, 4
+Status: DONE
+-- prs.json --
+[{"number": 7, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

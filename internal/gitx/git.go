@@ -187,6 +187,75 @@ func (g Git) MergeTree(ctx context.Context, dir, ours, theirs string) (Merge, er
 	return m, nil
 }
 
+// maxCleanMerges bounds the commits CleanMerges reads: a branch synced that
+// often since its steps ran is better verified again.
+const maxCleanMerges = 20
+
+// CleanMerges reports whether head is from, or reached from it by clean
+// merges of the base alone: every commit on the branch after from is a
+// merge commit whose second parent is an ancestor of base, and whose tree
+// is the one git merge-tree computes for its two parents. The branch is
+// the first-parent chain from head back to from; the base's own commits
+// come in through second parents. tkt sync makes such merges, and human
+// verification that passed on from holds at head across them
+// (finish-ticket, rogs-skills 421cfc7 and 05d27d5). An error says git
+// could not tell, which is not the same as a commit of another kind.
+func (g Git) CleanMerges(ctx context.Context, dir, from, head, base string) (bool, error) {
+	if from == head {
+		return true, nil
+	}
+	fail := func(what string, r runner.Result) (bool, error) {
+		return false, apperr.New(apperr.GitFailed, "git %s failed in %s: %s", what, dir, runner.Head(strings.TrimSpace(r.ErrText()), 200))
+	}
+	r := g.run(ctx, 0, "-C", dir, "rev-parse", "--quiet", "--verify", from+"^{commit}")
+	if !r.OK() {
+		// A head this repository does not have cannot reach this one.
+		return false, nil
+	}
+	from = strings.TrimSpace(r.Out())
+	r = g.run(ctx, 0, "-C", dir, "rev-list", "--first-parent", "--parents", "-n", strconv.Itoa(maxCleanMerges+1), from+".."+head)
+	if !r.OK() {
+		return fail("rev-list", r)
+	}
+	s := strings.TrimRight(r.Out(), "\n")
+	lines := strings.Split(s, "\n")
+	if s == "" || len(lines) > maxCleanMerges {
+		return false, nil
+	}
+	// Newest first: each merge's first parent is the next line's commit,
+	// and the oldest one's is from.
+	for i, l := range lines {
+		c := strings.Fields(l)
+		next := from
+		if i+1 < len(lines) {
+			next, _, _ = strings.Cut(lines[i+1], " ")
+		}
+		if len(c) != 3 || c[1] != next {
+			return false, nil
+		}
+		// merge-base --is-ancestor exits 1 for no, and more on an error.
+		switch r := g.run(ctx, 0, "-C", dir, "merge-base", "--is-ancestor", c[2], base); r.Code {
+		case 0:
+		case 1:
+			return false, nil
+		default:
+			return fail("merge-base", r)
+		}
+		m, err := g.MergeTree(ctx, dir, c[1], c[2])
+		if err != nil {
+			return false, err
+		}
+		tree := g.run(ctx, 0, "-C", dir, "rev-parse", "--verify", c[0]+"^{tree}")
+		if !tree.OK() {
+			return fail("rev-parse", tree)
+		}
+		if !m.Clean() || strings.TrimSpace(tree.Out()) != m.Tree {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 // Worktree is one entry of git worktree list.
 type Worktree struct {
 	Path   string

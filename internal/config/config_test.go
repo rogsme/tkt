@@ -284,6 +284,20 @@ func TestWatchSettings(t *testing.T) {
 	}
 }
 
+func TestSuggestSettings(t *testing.T) {
+	c, err := Load(dirWith(t, map[string]string{FileName: "[presets.claude]\nharness = \"claude\"\n\n[presets.cheap]\nharness = \"claude\"\nmodel = \"haiku\"\n\n[suggest]\nas = \"cheap\"\n"}))
+	if err != nil || c.Suggest.As != "cheap" {
+		t.Fatalf("[suggest] as: %+v, %v", c.Suggest, err)
+	}
+	// A preset the file does not define is a mistake, caught at load.
+	if _, err := Load(dirWith(t, map[string]string{FileName: "[suggest]\nas = \"fast\"\n"})); code(err) != apperr.ConfigInvalid {
+		t.Errorf("an unknown [suggest] preset: %v", err)
+	}
+	if got := SuggestLine(1); got != "Use the suggest-tickets skill to suggest the next ticket to start." {
+		t.Errorf("SuggestLine(1) = %q", got)
+	}
+}
+
 func TestMergeLineNamesEveryStep(t *testing.T) {
 	for _, tc := range []struct {
 		steps []int
@@ -298,7 +312,10 @@ func TestMergeLineNamesEveryStep(t *testing.T) {
 			t.Errorf("StepsText(%v) = %q, want %q", tc.steps, got, tc.want)
 		}
 	}
-	if got, want := MergeLine([]int{1, 2, 3}), "Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed."; got != want {
+	if got, want := MergeLine([]int{1, 2, 3}, "aaa", "aaa"), "Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed on head aaa."; got != want {
 		t.Errorf("MergeLine = %q, want %q", got, want)
+	}
+	if got, want := MergeLine([]int{1}, "aaa", "bbb"), "Use the finish-ticket skill to merge the PR. Human verification step 1 passed on head aaa. The pull request is at bbb now, after clean merges of the base."; got != want {
+		t.Errorf("MergeLine after a sync = %q, want %q", got, want)
 	}
 }

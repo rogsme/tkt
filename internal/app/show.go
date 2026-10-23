@@ -111,6 +111,13 @@ func (a *App) Show(ctx context.Context, o ShowOpts) (*ShowResult, error) {
 // showSteps reads the human verification steps from the review at the open
 // pull request's head.
 func (c *Ctx) showSteps(id string, res *ShowResult) error {
+	return c.stepsAt(id, "", res)
+}
+
+// stepsAt reads the human verification steps for head, or for the open
+// pull request's head when head is "": review-pr's, or the pull request
+// body's after the review bot's CLEAR.
+func (c *Ctx) stepsAt(id, head string, res *ShowResult) error {
 	if err := c.LC.RequireGitHub("show --steps"); err != nil {
 		return err
 	}
@@ -128,7 +135,7 @@ func (c *Ctx) showSteps(id string, res *ShowResult) error {
 			continue
 		}
 		res.PR = p.Number
-		if proc := forge.HumanVerification(p); proc != nil {
+		if proc := forge.HumanVerificationAt(p, or(head, p.HeadRefOid)); proc != nil {
 			res.Procedure, res.Steps, res.Source = proc.Section, proc.Steps, "review"
 			return nil
 		}

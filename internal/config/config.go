@@ -50,6 +50,14 @@ type Config struct {
 	Board         Board
 	Agent         Agent
 	Watch         Watch
+	Suggest       Suggest
+}
+
+// Suggest holds the [suggest] settings for tkt suggest.
+type Suggest struct {
+	// As is the preset suggest-tickets runs on, such as a cheap one; empty
+	// means the default preset.
+	As string
 }
 
 // Watch holds tkt watch's settings.
@@ -113,10 +121,17 @@ const (
 const ApproveLine = "The plan is approved. Use the work-ticket skill to execute it."
 
 // MergeLine is what tkt merge sends a fresh session once the human
-// verification steps passed: finish-ticket's explicit word to merge, with
-// every step it requires confirmed.
-func MergeLine(steps []int) string {
-	return "Use the finish-ticket skill to merge the PR. Human verification " + StepsText(steps) + " passed."
+// verification steps passed on the head verified: finish-ticket's explicit
+// word to merge, with every step it requires confirmed on a head it can
+// check. When the pull request moved past that head by clean merges of the
+// base, the line names its head too; finish-ticket counts the steps there
+// once it checked the merges itself (rogs-skills 421cfc7).
+func MergeLine(steps []int, verified, head string) string {
+	line := "Use the finish-ticket skill to merge the PR. Human verification " + StepsText(steps) + " passed on head " + verified + "."
+	if head != verified {
+		line += " The pull request is at " + head + " now, after clean merges of the base."
+	}
+	return line
 }
 
 // StepsText names steps for people: step 2, steps 1 and 2, steps 1 to 3,
@@ -137,6 +152,16 @@ func StepsText(steps []int) string {
 		return "steps " + strings.Join(n[:len(n)-1], ", ") + " and " + n[len(n)-1]
 	}
 	return "steps"
+}
+
+// SuggestLine is what tkt suggest sends a fresh session at the repository's
+// root: suggest-tickets picks the next tickets to start, ones that can run
+// side by side.
+func SuggestLine(n int) string {
+	if n == 1 {
+		return "Use the suggest-tickets skill to suggest the next ticket to start."
+	}
+	return "Use the suggest-tickets skill to suggest the next " + strconv.Itoa(n) + " tickets to start, ones that can run side by side."
 }
 
 // UnattendedLine follows the start line when tkt auto approves the plan

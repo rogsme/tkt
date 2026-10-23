@@ -48,8 +48,16 @@ func TestNextStepTable(t *testing.T) {
 		// is due once the checks pass at a head reviewed clean.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "wait for CI", "wait", ReasonCIPending},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2", Behind: 1}, "tkt sync ACM-1", "command", ReasonBaseMoved},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "tkt merge ACM-1 --passed 1,2 --head h1", "command", ReasonMergeDue},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "none", Verdict: "CLEAR", AtHead: true, Head: "h1", MergeSteps: "1"}, "tkt merge ACM-1 --passed 1 --head h1", "command", ReasonMergeDue},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h1", MergeSteps: "1,2", MergeHead: "h1"}, "tkt merge ACM-1 --passed 1,2 --head h1", "command", ReasonMergeDue},
+		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone, so a head
+		// only the bot cleared gets that review first; one that has it is
+		// due, whichever review came last.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "none", Verdict: "CLEAR", AtHead: true, Head: "h1", MergeSteps: "1", MergeHead: "h1"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "none", Verdict: "CLEAR", AtHead: true, ReviewReady: true, Head: "h1", MergeSteps: "1", MergeHead: "h1"}, "tkt merge ACM-1 --passed 1 --head h1", "command", ReasonMergeDue},
+		// An order that a clean sync carried to h2 names the head the steps
+		// passed on, and waits for a review of the new head first.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h2", MergeSteps: "1,2", MergeHead: "h1"}, "tkt merge ACM-1 --passed 1,2 --head h1", "command", ReasonMergeDue},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", Head: "h2", MergeSteps: "1,2", MergeHead: "h1"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "tkt run ACM-1 ci", "command", ReasonChecksFail},
 		{Facts{PRState: "OPEN", Agent: "working", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "wait (agent working)", "wait", ReasonAgentWorking},
 	}

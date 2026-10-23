@@ -2,32 +2,43 @@ tkt merge hands a ticket whose human verification passed to finish-ticket.
 It sends a fresh session in the ticket's tab the line
 
   Use the finish-ticket skill to merge the PR. Human verification steps 1
-  to 3 passed.
+  to 3 passed on head HEAD.
 
 finish-ticket then checks CI, the review and the feedback at the exact
-head, merges, waits for post-merge CI, completes the ticket in the tracker,
-and ends with Status: DONE. tkt watch removes the ticket after that.
+head, merges, moves the ticket to done in the tracker, waits for
+post-merge CI, and ends with Status: DONE. tkt watch removes the ticket
+after that.
 
 --passed names the steps that passed: numbers and ranges such as 1-3 or
 1,2,4, or all. finish-ticket merges only when every step passed, so tkt
 merge refuses a list that leaves one out; to waive a step, tell the agent
-in the ticket's tab yourself. --head names the head the steps ran on, and
-tkt merge refuses once the pull request moved past it. Before any session
-starts, it also refuses a head no review cleared, a branch behind its base
-(finish-ticket would stop with BLOCKED_FOR_SYNC; sync, then verify the new
-head) and failing checks. finish-ticket checks the rest itself, such as a
-review that says READY_FOR_HUMAN at the head: when only the review bot
-cleared it, tkt merge warns that finish-ticket stops with Status: BLOCKED
-without one.
+in the ticket's tab yourself. --head names the head the steps ran on. The
+steps hold across clean merges of the base, the ones tkt sync makes, so tkt
+merge refuses only a head that changed beyond them. Before any session
+starts, it also refuses a base whose merge conflicts (the steps never carry
+over a resolution: sync, then verify the new head), a head no review
+cleared that no sync made, and failing checks at a head it would merge as
+it is.
+finish-ticket checks the rest itself.
 
-While the checks at the head still run, tkt merge leaves a merge order
-instead, and tkt watch sends the line once they pass, on the --as preset
-if you named one. tkt ls shows the order in the merge field, and the tkt
-agent's board as merges when green. A new head drops it, with a
-notification, since the steps ran on the old one; a base that moves
-meanwhile gets a sync first, which makes a new head too. An order on a
-head whose line went out once already, as after finish-ticket stopped,
-sends it again.
+When finish-ticket could not merge yet, tkt merge leaves a merge order
+instead, on the --as preset if you named one, and tkt watch carries it out.
+A branch behind its base gets a clean sync first. finish-ticket merges on
+review-pr's READY_FOR_HUMAN at the head, so a head a sync made, or one only
+the review bot cleared, waits for review-pr, which tkt watch runs. The order
+also waits for running checks, and for another ticket's merge, since one
+goes at a time: a turn lock covers the moment from tkt merge's check to its
+line. The line then names the head the steps passed on
+and the one to merge, and finish-ticket checks the merges between them
+itself. tkt ls shows the order in the merge field, and the tkt agent's
+board as merges when green.
+
+The order stands until the pull request merges. When finish-ticket stops
+with BLOCKED_FOR_SYNC because another merge moved the base, tkt watch syncs
+again and sends the line on the new head; on one head it sends the line
+once. A new head of any other kind, such as a fix or the resolution of a
+conflict, drops the order, with a notification, since the steps ran on code
+it changed.
 
 --cancel drops the order. tkt merge holds the ticket's lock until the line
 is sent, so --cancel either drops the order before or finds the line sent:

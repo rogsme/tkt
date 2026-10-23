@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -66,7 +67,8 @@ func TestReviewSummariesCarryVerdicts(t *testing.T) {
 func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	registry := read(t, "status-lines.md")
 	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked, contract.StatusSetupRequired,
-		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone} {
+		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone,
+		contract.StatusTicketsSuggested} {
 		if !strings.Contains(registry, "`Status: "+s+"`") {
 			t.Errorf("Status: %s is not in the registry", s)
 		}
@@ -99,7 +101,7 @@ func TestStageLinesNameRegisteredSkills(t *testing.T) {
 		}
 	}
 	named := regexp.MustCompile(`the ([a-z]+(?:-[a-z]+)+) skill`)
-	lines := map[string]string{"approve": config.ApproveLine, "merge": config.MergeLine([]int{1})}
+	lines := map[string]string{"approve": config.ApproveLine, "merge": config.MergeLine([]int{1}, "aaa", "aaa"), "suggest": config.SuggestLine(3)}
 	for stage, line := range config.BuiltinStages {
 		lines[stage] = line
 	}
@@ -167,7 +169,7 @@ func TestCleanMergesKeepTheReviewBrief(t *testing.T) {
 	}
 	// tkt sync makes exactly this merge: its second parent is the base, and
 	// it checks the merge's tree against git merge-tree before it pushes.
-	for _, want := range []string{"second parent is an ancestor of the base", "`git merge-tree --write-tree <merge>^1 <merge>^2`", "check each one yourself"} {
+	for _, want := range []string{"second parent is an ancestor of the base", "`git merge-tree --write-tree <merge>^1 <merge>^2`", "`git rev-list --first-parent <that head>..<the current head>`", "check each one yourself"} {
 		if !strings.Contains(rule, want) {
 			t.Errorf("review-pr's clean-merge rule no longer says %q", want)
 		}
@@ -176,7 +178,8 @@ func TestCleanMergesKeepTheReviewBrief(t *testing.T) {
 
 func TestMergeLineIsFinishTicketsExplicitWord(t *testing.T) {
 	skill := read(t, "finish-ticket-authorization.md")
-	line := config.MergeLine([]int{1, 2, 3})
+	head := strings.Repeat("a1", 20)
+	line := config.MergeLine([]int{1, 2, 3}, head, head)
 	// The skill runs only on the user's explicit word, which the line says.
 	if !strings.Contains(skill, `Use only when the user explicitly says \"merge the PR\"`) {
 		t.Fatalf("finish-ticket no longer runs on \"merge the PR\":\n%s", skill)
@@ -196,5 +199,99 @@ func TestMergeLineIsFinishTicketsExplicitWord(t *testing.T) {
 	// checks first.
 	if !strings.Contains(skill, "When the base moved at all after the review, stop with `Status: "+contract.StatusBlockedForSync+"`") {
 		t.Errorf("finish-ticket no longer stops on a moved base:\n%s", skill)
+	}
+}
+
+func TestStepsCarryOverCleanMerges(t *testing.T) {
+	skill := read(t, "finish-ticket-authorization.md")
+	if !strings.Contains(skill, "\n"+contract.CarryOverRule) {
+		t.Fatalf("finish-ticket's carry-over rule changed:\n%s", skill)
+	}
+	// A confirmation counts for the head it names, which the line does, and
+	// carries over the clean merges tkt sync makes, which gitx.CleanMerges
+	// checks before tkt merge names the pull request's head too.
+	for _, want := range []string{"A confirmation given on an earlier head still counts when every commit after that head is a clean merge of the base", "voids the confirmations given before it"} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("finish-ticket no longer says %q", want)
+		}
+	}
+	verified, head := strings.Repeat("a1", 20), strings.Repeat("b2", 20)
+	if line := config.MergeLine([]int{1}, verified, verified); !strings.Contains(line, "passed on head "+verified+".") {
+		t.Errorf("the merge line %q does not name the head the steps passed on", line)
+	}
+	if line := config.MergeLine([]int{1}, verified, head); !strings.Contains(line, "passed on head "+verified+".") || !strings.Contains(line, head+" now, after clean merges of the base") {
+		t.Errorf("the merge line %q does not name both heads", line)
+	}
+	// review-pr and finish-ticket define a clean merge in the same words.
+	def := func(s string) string {
+		i := strings.Index(s, "a merge commit whose second parent")
+		j := strings.Index(s, "through each merge's second parent.")
+		if i < 0 || j < i {
+			return ""
+		}
+		return strings.ReplaceAll(s[i:j], "; check each one yourself", "")
+	}
+	if a, b := def(skill), def(read(t, "review-pr-clean-merge.md")); a == "" || a != b {
+		t.Errorf("finish-ticket and review-pr define a clean merge differently:\n%s\n%s", a, b)
+	}
+}
+
+func TestUnblockedLineNamesTheTicketsAMergeFreed(t *testing.T) {
+	skill := read(t, "finish-ticket-unblocked.md")
+	// The report names them on one line, right before the status line.
+	i, j := strings.Index(skill, "`Unblocked: ACM-15, ACM-16`"), strings.Index(skill, "`Status: "+contract.StatusDone+"`")
+	if i < 0 || j < i || !strings.Contains(skill, "`Unblocked: none`") {
+		t.Fatalf("finish-ticket's report no longer ends with an Unblocked line:\n%s", skill)
+	}
+	if !strings.Contains(skill, "it is unblocked when every one of them is now `done`") {
+		t.Errorf("finish-ticket no longer names only tickets whose blockers are all done")
+	}
+	c := lifecycle.Config{RE: regexp.MustCompile(`^ACM-[1-9][0-9]*$`)}
+	for text, want := range map[string][]string{
+		"Merged.\nUnblocked: ACM-15, ACM-16\nStatus: DONE": {"ACM-15", "ACM-16"},
+		"Unblocked: none\nStatus: DONE":                    {},
+		"Unblocked: `ACM-15` (2 blockers done)":            {"ACM-15"},
+	} {
+		m := contract.UnblockedRE.FindStringSubmatch(text)
+		if m == nil {
+			t.Errorf("%q: no Unblocked line", text)
+			continue
+		}
+		if got := c.IDs(m[1]); !slices.Equal(got, want) {
+			t.Errorf("%q: %v, want %v", text, got, want)
+		}
+	}
+}
+
+func TestSuggestedLineNamesThePicks(t *testing.T) {
+	report := read(t, "suggest-tickets-report.md")
+	if !strings.HasSuffix(strings.TrimSpace(report), "End with `Status: "+contract.StatusTicketsSuggested+"`.") {
+		t.Fatalf("suggest-tickets no longer ends with Status: %s:\n%s", contract.StatusTicketsSuggested, report)
+	}
+	id := regexp.MustCompile(`^ACM-[1-9][0-9]*$`)
+	// Each form the report gives, as tkt suggest reads it.
+	for _, tc := range []struct {
+		line string
+		want []contract.Suggestion
+	}{
+		{"`Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)`", []contract.Suggestion{{"ACM-14", "frontier"}, {"ACM-21", "acme-small-2"}}},
+		{"`Suggested: ACM-14, ACM-21`", []contract.Suggestion{{"ACM-14", ""}, {"ACM-21", ""}}},
+		{"`Suggested: none`", []contract.Suggestion{}},
+	} {
+		if !strings.Contains(report, tc.line) {
+			t.Errorf("the report no longer gives %s", tc.line)
+			continue
+		}
+		if got := contract.Suggestions(strings.Trim(tc.line, "`")+"\nStatus: "+contract.StatusTicketsSuggested, id); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: %v, want %v", tc.line, got, tc.want)
+		}
+	}
+	// A model the line words with a condition still names its pick.
+	got := contract.Suggestions("Suggested: ACM-14 (acme-small-2, frontier if the schema changes), `ACM-21` (frontier), ACM-x", id)
+	if want := []contract.Suggestion{{"ACM-14", "acme-small-2"}, {"ACM-21", "frontier"}}; !slices.Equal(got, want) {
+		t.Errorf("a model with a condition: %v, want %v", got, want)
+	}
+	if !strings.Contains(config.SuggestLine(3), "the suggest-tickets skill") {
+		t.Errorf("the suggest line %q does not name the skill", config.SuggestLine(3))
 	}
 }

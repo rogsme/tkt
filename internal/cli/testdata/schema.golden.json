@@ -35,7 +35,7 @@
       "path": "agent",
       "use": "agent [-- PI_FLAGS...]",
       "short": "Open the tkt agent, a chat that drives your tickets",
-      "long": "tkt agent opens a chat in this pane about the repository's tickets. It runs\npi, a coding agent that release builds of tkt carry inside them (MIT licensed,\nhttps://github.com/earendil-works/pi), with only tkt's own extension. Running\ntkt with no arguments opens it too, when you type it at a terminal in a herdr\npane inside a repository with the lifecycle configuration.\n\nSay what you want in plain words: \"start ACM-12\", \"run ACM-13 to ACM-15 in\nauto with sol\", \"I approved the plan for ACM-12, continue\", \"ACM-12 is merged,\nremove it\". Starting tickets and stages runs in the background and the prompt\ncomes back at once, so you can start the next ticket while the first one\nplans. A board pinned to the top of the chat shows every ticket, and on top\nwhat needs you: a plan to approve, a question from its agent, a pull request\nready for human verification, or a tkt auto loop that paused for you. The chat\nscrolls below the board, so it covers nothing. An item leaves the board as\nsoon as its ticket moves on, and the chat stays free of them. Each new one\nalso shows a herdr notification. /board hide and /board show put the board\naway and back.\n\nAsk how a ticket went, merged ones too: \"how did ACM-12 go?\", \"what failed\nin ACM-12 and ACM-13?\". The chat reads tkt history: each step with its time,\nand the pull request's commits and reviews with the review bot's findings.\n\nThe same actions work without the model as slash commands: /start (add \"as\nPRESET\" for a preset), /approve, /next, /auto, /hold, /sync, /send, /show,\n/peek (the agent's live screen), /check (the human verification checklist,\nwhich offers to sync a ticket that is behind first), /done, /inbox (what needs\nyou, with fixed answers), /board (every ticket in columns), /history, /stats\nand /update. A tool that changes a ticket your message did\nnot name asks first, and removing a ticket always asks. Text for a busy agent\nwaits in a queue and goes in when the agent stops.\n\nThe chat checks for a newer tkt release when it opens and every six hours,\nand names it under the board. /update installs it with tkt update, then offers\nto quit: the chat runs the old tkt until you reopen it with the command it\nprints. A development build gets no notice, and /update does not replace it.\n\nTickets in auto run in tkt auto loops that outlive the chat, so they keep\nmoving, and notify you, after you close it. A loop that pauses for you goes on\nby itself once you act, such as answering the agent in its tab. tkt agent also\nstarts tkt watch for the repository when none runs, which takes the upkeep\nsteps for every ticket: it syncs a moved base, fixes failing checks once per\nhead, and removes a ticket once finish-ticket merged it. The board's heading\nsays watch on or watch off.\n\nThe chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:\nnot your extensions, skills, prompt templates or themes, and not the project's\nAGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in\n${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with\n/login inside the chat.\n\nThe chat brings two themes of its own, tkt-dark and tkt-light, and picks the\none that suits the terminal's background. Overlays such as /board and /peek\ndraw on a panel of their own, so they read well on a transparent terminal. A\ntheme you pick in /settings wins from then on.\n\npi runs in the repository's root, where it keeps the sessions, so --continue\npicks up the last chat about this repository from any of its worktrees. When\nyou quit, the chat prints the command that resumes it: tkt agent --session\nID. Flags after -- go to pi as they are, such as tkt agent -- --thinking high;\npi --help lists them.\n\nIn config.toml, an [agent] table picks the model and loads more pi extensions,\nsuch as one that adds a model provider (tkt help config). --model overrides the\nmodel for one run. Without [agent] model, pi starts on its own default: in\n/model, press Ctrl+S on a model to make it the default for new chats.\n\ntkt unpacks the bundled pi the first time, under\n${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary\ninstead; tkt doctor shows which pi tkt agent runs.\n\ntkt agent replaces itself with pi, so it needs a terminal and prints no result.\n--dry-run prints how it would start pi, and with --json the exact command line\nand environment.",
+      "long": "tkt agent opens a chat in this pane about the repository's tickets. It runs\npi, a coding agent that release builds of tkt carry inside them (MIT licensed,\nhttps://github.com/earendil-works/pi), with only tkt's own extension. Running\ntkt with no arguments opens it too, when you type it at a terminal in a herdr\npane inside a repository with the lifecycle configuration.\n\nSay what you want in plain words: \"start ACM-12\", \"run ACM-13 to ACM-15 in\nauto with sol\", \"I approved the plan for ACM-12, continue\", \"ACM-12 is merged,\nremove it\". Starting tickets and stages runs in the background and the prompt\ncomes back at once, so you can start the next ticket while the first one\nplans. A board pinned to the top of the chat shows every ticket, and on top\nwhat needs you: a plan to approve, a question from its agent, a pull request\nready for human verification, or a tkt auto loop that paused for you. The chat\nscrolls below the board, so it covers nothing. An item leaves the board as\nsoon as its ticket moves on, and the chat stays free of them. Each new one\nalso shows a herdr notification. /board hide and /board show put the board\naway and back.\n\nAsk how a ticket went, merged ones too: \"how did ACM-12 go?\", \"what failed\nin ACM-12 and ACM-13?\". The chat reads tkt history: each step with its time,\nand the pull request's commits and reviews with the review bot's findings.\n\nThe same actions work without the model as slash commands: /suggest (tickets\nto start next, which /inbox starts), /start (add \"as PRESET\" for a preset),\n/approve, /next, /auto, /hold, /sync, /send, /show,\n/peek (the agent's live screen), /check (the human verification checklist,\nwhich offers to sync a ticket that is behind first), /done, /inbox (what needs\nyou, with fixed answers), /board (every ticket in columns), /history, /stats\nand /update. A tool that changes a ticket your message did\nnot name asks first, and removing a ticket always asks. Text for a busy agent\nwaits in a queue and goes in when the agent stops.\n\nThe chat checks for a newer tkt release when it opens and every six hours,\nand names it under the board. /update installs it with tkt update, then offers\nto quit: the chat runs the old tkt until you reopen it with the command it\nprints. A development build gets no notice, and /update does not replace it.\n\nTickets in auto run in tkt auto loops that outlive the chat, so they keep\nmoving, and notify you, after you close it. A loop that pauses for you goes on\nby itself once you act, such as answering the agent in its tab. tkt agent also\nstarts tkt watch for the repository when none runs, which takes the upkeep\nsteps for every ticket: it syncs a moved base, fixes failing checks once per\nhead, and removes a ticket once finish-ticket merged it. The board's heading\nsays watch on or watch off.\n\nThe chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:\nnot your extensions, skills, prompt templates or themes, and not the project's\nAGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in\n${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with\n/login inside the chat.\n\nThe chat brings two themes of its own, tkt-dark and tkt-light, and picks the\none that suits the terminal's background. Overlays such as /board and /peek\ndraw on a panel of their own, so they read well on a transparent terminal. A\ntheme you pick in /settings wins from then on.\n\npi runs in the repository's root, where it keeps the sessions, so --continue\npicks up the last chat about this repository from any of its worktrees. When\nyou quit, the chat prints the command that resumes it: tkt agent --session\nID. Flags after -- go to pi as they are, such as tkt agent -- --thinking high;\npi --help lists them.\n\nIn config.toml, an [agent] table picks the model and loads more pi extensions,\nsuch as one that adds a model provider (tkt help config). --model overrides the\nmodel for one run. Without [agent] model, pi starts on its own default: in\n/model, press Ctrl+S on a model to make it the default for new chats.\n\ntkt unpacks the bundled pi the first time, under\n${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary\ninstead; tkt doctor shows which pi tkt agent runs.\n\ntkt agent replaces itself with pi, so it needs a terminal and prints no result.\n--dry-run prints how it would start pi, and with --json the exact command line\nand environment.",
       "example": "  tkt agent\n  tkt agent --continue\n  tkt agent --session 01a15a4d\n  tkt agent --model acme/large\n  tkt agent -- --thinking high\n  tkt agent --dry-run --json",
       "group": "lifecycle",
       "args": [
@@ -89,6 +89,48 @@
         "source": "string",
         "version": "string"
       }
+    },
+    {
+      "path": "suggest",
+      "use": "suggest [COUNT]",
+      "short": "Have suggest-tickets pick the next tickets to start, ones that can run side by side",
+      "long": "tkt suggest has the suggest-tickets skill pick the next tickets to start,\nones that can run side by side. It opens a suggest tab at the repository's\nroot, or reuses it, and starts a fresh session there that gets the line\n\n  Use the suggest-tickets skill to suggest the next 3 tickets to start, ones\n  that can run side by side.\n\nsuggest-tickets only reads. It lists the ready tickets, keeps the ones\nwhose blockers are all done, and ranks them by how many tickets wait on\neach, then by priority. It drops one that would collide with work in\nflight, judged from the files each in-flight branch changes, or with\nanother pick, and with model routing on it takes at most one heavy ticket.\nIt reports what waits on you first, then the picks and what it left out,\nand ends with a line such as\n\n  Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)\n\nCOUNT is how many to pick, 3 by default. The session runs on the [suggest]\npreset (tkt help config), or the default preset; --as picks another, such as\na cheap one, since the run only reads.\n\n--wait waits for the run to end, at most --timeout, and reads the picks:\neach comes with the tkt start command for it, on the first preset that\nserves the model its Model routing names. When suggest-tickets asks a\nquestion, the wait ends and you answer it in the tab. The tkt agent's\n/suggest does this and offers to start the picks by hand, in auto, or in\nauto after you approve each plan.",
+      "example": "  tkt suggest\n  tkt suggest 2 --wait\n  tkt suggest --as fast --wait --timeout 15m --json",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "COUNT",
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "as",
+          "type": "string",
+          "default": "",
+          "usage": "run suggest-tickets on PRESET instead of the [suggest] one"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "timeout",
+          "type": "duration",
+          "default": "0s",
+          "usage": "with --wait, give up after DURATION, such as 15m (default: wait without limit)"
+        },
+        {
+          "name": "wait",
+          "type": "bool",
+          "default": "false",
+          "usage": "wait for the picks, and print the tkt start command for each"
+        }
+      ],
+      "result": null
     },
     {
       "path": "start",
@@ -420,7 +462,7 @@
       "path": "watch",
       "use": "watch",
       "short": "Keep the repository's tickets moving: sync moved bases, fix failing checks, remove finished tickets",
-      "long": "tkt watch keeps a repository's tickets moving, every ticket and not only the\nones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads\nevery ticket with a fixed number of gh calls, and takes at most one step per\nticket, from the same rules as tkt ls:\n\n  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,\n    unless [watch] done_after_merge = false;\n  - the base moved at a moment a sync is due (a conflict, the bot's\n    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base\n    itself, as tkt sync does, with no agent, and runs resolve on a conflict;\n  - the checks fail at the head: it runs ci in a fresh session, once per\n    head;\n  - a merge order from tkt merge is for the head, and its checks passed: it\n    sends finish-ticket the merge line in a fresh session. A new head drops\n    the order, with a notification, and a base that moved gets a sync first.\n\nEverything else waits for you or for tkt auto: plans, reviews, findings,\nhuman verification and the word to merge. It leaves alone a ticket on hold (tkt\nhold), one a tkt auto loop drives, one another tkt command works on, one\nwhose agent works or asks a question, and one whose worktree directory is\ngone. It replaces an agent with a fresh session only after the agent sat\nidle for five minutes, since a person may still use that session, and it\nwaits while the forge still shows an older head than the branch has. A step\nit would repeat on the same head, or a fix run past [auto] max_rounds, waits\nfor you instead: tkt ls shows the ticket as needs_you, with watch.paused\nsaying why, and herdr notifies once.\n\nIts agent runs take the [auto] max_parallel slots tkt auto uses. It records\neach step in the history, and shows a herdr notification for each agent run,\nfailure and removal; a clean sync stays quiet. A sync that fails, such as\nwhile the network is down, is tried again at the next pass, with one\nnotification for each head and reason.\n\nOne tkt watch runs per repository. Every tkt command in a herdr pane starts\nit when none runs, in a session of its own, so it outlives the command and the\npane; it writes its lines to watch.log in the repository's git directory,\nunder tkt/. It waits a minute between two starts, so a watch that exits at\nonce is not started again by every command. [watch] autostart = false, or\nTKT_WATCH=off, turns that off. tkt ls --json says whether it runs, in\nwatch.running, and watch.error says why its last pass failed. tkt watch\n--stop stops it, after the step it is taking; a second SIGTERM stops it at\nonce. When tkt update replaces tkt, the watch stops by itself, and the next\ntkt command starts one that runs the new tkt.\n\nOutside a herdr pane it finds the workspace whose panes work in the\nrepository. When none has a pane there, it opens one before its first step,\nsince every step works in herdr. While herdr is down it waits.\n\n--install keeps it running while no terminal is open: it writes systemd user\nunits, or launchd agents on macOS, for herdr's server and for this\nrepository's tkt watch, with this shell's PATH, since the agents in herdr's\npanes inherit herdr's. It asks before loginctl enable-linger, which keeps\nthe units running past your last session and starts them at boot; --yes\nanswers yes, and without a terminal the answer is no. Without linger,\nsystemd stops the units when your last session ends, so herdr's unit stays\noff, since it would take every agent with it, and tkt watch runs from login\nto logout. With linger, herdr's unit goes on, and starts unless herdr\nalready runs. tkt commands then start the unit rather than a watch of their\nown, and --stop stops the unit, which signals tkt watch alone, so it\nfinishes the step it took. --uninstall removes this repository's unit;\nherdr's stays. tkt doctor checks that they run and that their PATH finds the\ntools and harnesses.\n\n--once takes one pass and exits; with --dry-run it says what each ticket would\nget, and changes nothing. --install and --uninstall take --dry-run too.",
+      "long": "tkt watch keeps a repository's tickets moving, every ticket and not only the\nones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads\nevery ticket with a fixed number of gh calls, and takes at most one step per\nticket, from the same rules as tkt ls:\n\n  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,\n    unless [watch] done_after_merge = false;\n  - the base moved at a moment a sync is due (a conflict, the bot's\n    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base\n    itself, as tkt sync does, with no agent, and runs resolve on a conflict;\n  - the checks fail at the head: it runs ci in a fresh session, once per\n    head;\n  - a merge order from tkt merge holds at the head, its checks passed and\n    review-pr's READY_FOR_HUMAN is at the head: it sends finish-ticket the\n    merge line in a fresh session, for one ticket at a time. A base that\n    moved gets a sync first, and the order holds across that clean merge.\n    A head review-pr has not cleared, such as one a sync made or one only\n    the review bot cleared, gets review-pr in a fresh session. A new head\n    of any other kind, a failed human verification step, or another\n    session taking the ticket over after the line went out drops the\n    order, with a notification.\n\nEverything else waits for you or for tkt auto: plans, the other reviews,\nfindings, human verification and the word to merge. It leaves alone a ticket on hold (tkt\nhold), one a tkt auto loop drives, one another tkt command works on, one\nwhose agent works or asks a question, and one whose worktree directory is\ngone. It replaces an agent with a fresh session only after the agent sat\nidle for five minutes, since a person may still use that session, and it\nwaits while the forge still shows an older head than the branch has. A step\nit would repeat on the same head, or a fix run past [auto] max_rounds, waits\nfor you instead: tkt ls shows the ticket as needs_you, with watch.paused\nsaying why, and herdr notifies once.\n\nIts agent runs take the [auto] max_parallel slots tkt auto uses. It records\neach step in the history, and shows a herdr notification for each agent run,\nfailure and removal; a clean sync stays quiet. A sync that fails, such as\nwhile the network is down, is tried again at the next pass, with one\nnotification for each head and reason.\n\nOne tkt watch runs per repository. Every tkt command in a herdr pane starts\nit when none runs, in a session of its own, so it outlives the command and the\npane; it writes its lines to watch.log in the repository's git directory,\nunder tkt/. It waits a minute between two starts, so a watch that exits at\nonce is not started again by every command. [watch] autostart = false, or\nTKT_WATCH=off, turns that off. tkt ls --json says whether it runs, in\nwatch.running, and watch.error says why its last pass failed. tkt watch\n--stop stops it, after the step it is taking; a second SIGTERM stops it at\nonce. When tkt update replaces tkt, the watch stops by itself, and the next\ntkt command starts one that runs the new tkt.\n\nOutside a herdr pane it finds the workspace whose panes work in the\nrepository. When none has a pane there, it opens one before its first step,\nsince every step works in herdr. While herdr is down it waits.\n\n--install keeps it running while no terminal is open: it writes systemd user\nunits, or launchd agents on macOS, for herdr's server and for this\nrepository's tkt watch, with this shell's PATH, since the agents in herdr's\npanes inherit herdr's. It asks before loginctl enable-linger, which keeps\nthe units running past your last session and starts them at boot; --yes\nanswers yes, and without a terminal the answer is no. Without linger,\nsystemd stops the units when your last session ends, so herdr's unit stays\noff, since it would take every agent with it, and tkt watch runs from login\nto logout. With linger, herdr's unit goes on, and starts unless herdr\nalready runs. tkt commands then start the unit rather than a watch of their\nown, and --stop stops the unit, which signals tkt watch alone, so it\nfinishes the step it took. --uninstall removes this repository's unit;\nherdr's stays. tkt doctor checks that they run and that their PATH finds the\ntools and harnesses.\n\n--once takes one pass and exits; with --dry-run it says what each ticket would\nget, and changes nothing. --install and --uninstall take --dry-run too.",
       "example": "  tkt watch\n  tkt watch --once --dry-run\n  tkt watch --stop\n  tkt watch --install\n  tkt watch --uninstall",
       "group": "lifecycle",
       "args": [],
@@ -690,7 +732,7 @@
       "path": "merge",
       "use": "merge ID",
       "short": "Have finish-ticket merge a verified ticket, now or once its checks pass",
-      "long": "tkt merge hands a ticket whose human verification passed to finish-ticket.\nIt sends a fresh session in the ticket's tab the line\n\n  Use the finish-ticket skill to merge the PR. Human verification steps 1\n  to 3 passed.\n\nfinish-ticket then checks CI, the review and the feedback at the exact\nhead, merges, waits for post-merge CI, completes the ticket in the tracker,\nand ends with Status: DONE. tkt watch removes the ticket after that.\n\n--passed names the steps that passed: numbers and ranges such as 1-3 or\n1,2,4, or all. finish-ticket merges only when every step passed, so tkt\nmerge refuses a list that leaves one out; to waive a step, tell the agent\nin the ticket's tab yourself. --head names the head the steps ran on, and\ntkt merge refuses once the pull request moved past it. Before any session\nstarts, it also refuses a head no review cleared, a branch behind its base\n(finish-ticket would stop with BLOCKED_FOR_SYNC; sync, then verify the new\nhead) and failing checks. finish-ticket checks the rest itself, such as a\nreview that says READY_FOR_HUMAN at the head: when only the review bot\ncleared it, tkt merge warns that finish-ticket stops with Status: BLOCKED\nwithout one.\n\nWhile the checks at the head still run, tkt merge leaves a merge order\ninstead, and tkt watch sends the line once they pass, on the --as preset\nif you named one. tkt ls shows the order in the merge field, and the tkt\nagent's board as merges when green. A new head drops it, with a\nnotification, since the steps ran on the old one; a base that moves\nmeanwhile gets a sync first, which makes a new head too. An order on a\nhead whose line went out once already, as after finish-ticket stopped,\nsends it again.\n\n--cancel drops the order. tkt merge holds the ticket's lock until the line\nis sent, so --cancel either drops the order before or finds the line sent:\nit then says when, and stopping finish-ticket is up to you, in the\nticket's tab.",
+      "long": "tkt merge hands a ticket whose human verification passed to finish-ticket.\nIt sends a fresh session in the ticket's tab the line\n\n  Use the finish-ticket skill to merge the PR. Human verification steps 1\n  to 3 passed on head HEAD.\n\nfinish-ticket then checks CI, the review and the feedback at the exact\nhead, merges, moves the ticket to done in the tracker, waits for\npost-merge CI, and ends with Status: DONE. tkt watch removes the ticket\nafter that.\n\n--passed names the steps that passed: numbers and ranges such as 1-3 or\n1,2,4, or all. finish-ticket merges only when every step passed, so tkt\nmerge refuses a list that leaves one out; to waive a step, tell the agent\nin the ticket's tab yourself. --head names the head the steps ran on. The\nsteps hold across clean merges of the base, the ones tkt sync makes, so tkt\nmerge refuses only a head that changed beyond them. Before any session\nstarts, it also refuses a base whose merge conflicts (the steps never carry\nover a resolution: sync, then verify the new head), a head no review\ncleared that no sync made, and failing checks at a head it would merge as\nit is.\nfinish-ticket checks the rest itself.\n\nWhen finish-ticket could not merge yet, tkt merge leaves a merge order\ninstead, on the --as preset if you named one, and tkt watch carries it out.\nA branch behind its base gets a clean sync first. finish-ticket merges on\nreview-pr's READY_FOR_HUMAN at the head, so a head a sync made, or one only\nthe review bot cleared, waits for review-pr, which tkt watch runs. The order\nalso waits for running checks, and for another ticket's merge, since one\ngoes at a time: a turn lock covers the moment from tkt merge's check to its\nline. The line then names the head the steps passed on\nand the one to merge, and finish-ticket checks the merges between them\nitself. tkt ls shows the order in the merge field, and the tkt agent's\nboard as merges when green.\n\nThe order stands until the pull request merges. When finish-ticket stops\nwith BLOCKED_FOR_SYNC because another merge moved the base, tkt watch syncs\nagain and sends the line on the new head; on one head it sends the line\nonce. A new head of any other kind, such as a fix or the resolution of a\nconflict, drops the order, with a notification, since the steps ran on code\nit changed.\n\n--cancel drops the order. tkt merge holds the ticket's lock until the line\nis sent, so --cancel either drops the order before or finds the line sent:\nit then says when, and stopping finish-ticket is up to you, in the\nticket's tab.",
       "example": "  tkt merge ACM-12 --passed 1-3\n  tkt merge ACM-12 --passed all --head a1b2c3d\n  tkt merge ACM-12 --cancel",
       "group": "lifecycle",
       "args": [
@@ -740,6 +782,7 @@
             "display": "string"
           }
         ],
+        "after": "string",
         "dry_run": "boolean",
         "head": "string",
         "pr": "integer",
@@ -767,7 +810,9 @@
         },
         "sent": "string",
         "steps": "array of integer",
-        "ticket": "string"
+        "ticket": "string",
+        "verified": "string",
+        "waits": "string"
       }
     },
     {
@@ -833,7 +878,7 @@
       "path": "done",
       "use": "done [ID...]",
       "short": "Close a merged ticket's tabs and remove its worktree",
-      "long": "tkt done closes the ticket's tabs and removes its worktree, and the private\ntemporary directory its tabs had as TMPDIR, once its pull request is merged.\nworktrunk deletes the branch when it is merged into the base; after a squash\nmerge the branch stays.\n\nIt keeps the worktree, and says why, when:\n  - the pull request is still open, or no merged pull request has the branch;\n  - the worktree has uncommitted changes;\n  - the branch tip is neither the merged head nor in the base;\n  - an agent in the worktree works or waits for an answer;\n  - tkt runs inside the worktree or in the ticket's own tab;\n  - a pane outside the ticket's tabs, or the OpenCode service, works in it.\n\n--all checks every ticket worktree and asks before removing them; pass --yes\nwhen stdin is not a terminal. It reads pull requests through gh, so it\nsupports GitHub forges only.\n\nIt records the merge in the history, so tkt stats can say how long the ticket\ntook from tkt start to the merge.",
+      "long": "tkt done closes the ticket's tabs and removes its worktree, and the private\ntemporary directory its tabs had as TMPDIR, once its pull request is merged.\nworktrunk deletes the branch when it is merged into the base; after a squash\nmerge the branch stays.\n\nIt keeps the worktree, and says why, when:\n  - the pull request is still open, or no merged pull request has the branch;\n  - the worktree has uncommitted changes;\n  - the branch tip is neither the merged head nor in the base;\n  - an agent in the worktree works or waits for an answer;\n  - tkt runs inside the worktree or in the ticket's own tab;\n  - a pane outside the ticket's tabs, or the OpenCode service, works in it.\n\n--all checks every ticket worktree and asks before removing them; pass --yes\nwhen stdin is not a terminal. It reads pull requests through gh, so it\nsupports GitHub forges only.\n\nIt records the merge in the history, so tkt stats can say how long the ticket\ntook from tkt start to the merge.\n\nfinish-ticket ends its report with an Unblocked: line, right before Status:\nDONE: the tickets whose blockers are all done now that this one merged.\ntkt done reads it from the ticket's session before it closes the tabs, and\nnames them. tkt ls lists each one, and the tkt agent's board offers to\nstart it, until tkt start starts it or a week passes.",
       "example": "  tkt done ACM-12\n  tkt done ACM-12 --dry-run\n  tkt done --all --yes",
       "group": "lifecycle",
       "args": [
@@ -881,7 +926,8 @@
             "path": "string",
             "reasons": "array of string",
             "started": "string",
-            "ticket": "string"
+            "ticket": "string",
+            "unblocked": "array of string"
           }
         ]
       }
@@ -955,6 +1001,7 @@
                 "as": "string",
                 "at": "string",
                 "head": "string",
+                "sent": "string",
                 "steps": "array of integer"
               },
               "nullable": true
@@ -1012,6 +1059,13 @@
           "forge": "string",
           "herdr": "string"
         },
+        "unblocked": [
+          {
+            "at": "string",
+            "by": "string",
+            "ticket": "string"
+          }
+        ],
         "watch": {
           "error": "string",
           "last_pass": "string",
@@ -1183,7 +1237,8 @@
                 "phase": "string",
                 "pr": "integer",
                 "stage": "string",
-                "stop": "string"
+                "stop": "string",
+                "unblocked": "array of string"
               }
             ],
             "pull_requests": [
@@ -1882,12 +1937,12 @@
     {
       "code": "merge_head_moved",
       "exit": 4,
-      "summary": "the pull request's head moved since the human verification steps ran on it"
+      "summary": "the pull request changed beyond clean merges of the base since the human verification steps ran on it"
     },
     {
-      "code": "merge_behind_base",
+      "code": "merge_base_conflicts",
       "exit": 4,
-      "summary": "the branch is behind its base, so finish-ticket would not merge it: sync, then verify the new head"
+      "summary": "merging the base into the branch conflicts, and human verification never carries over the resolution: sync, then verify the new head"
     },
     {
       "code": "merge_checks_fail",

@@ -70,6 +70,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | Command | What it does |
 |---|---|
 | `tkt agent` | Opens the tkt agent, a chat in your pane that drives your tickets. |
+| `tkt suggest [N]` | Has suggest-tickets pick the next N tickets to start, ones that can run side by side, in a suggest tab at the repository's root; `--wait` prints the `tkt start` command for each, on the preset its model needs. |
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
 | `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan; `--steer` types it in while the agent works, and `--wait` queues it until the agent stops. |
@@ -78,9 +79,9 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt watch` | Keeps every ticket moving: syncs a moved base, runs ci once per head when the checks fail, and removes a ticket after finish-ticket's `Status: DONE`. tkt commands start it by themselves; `--install` runs it, and herdr's server, as services that start at boot. |
 | `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first), `resolve`, `ci`, `verify` or `start`. `sync`, the old name of `address`, still works and warns. |
 | `tkt sync ID` | Merges the base into the ticket's branch: itself, with no agent, when the merge is clean; through a fresh session that only resolves, on a conflict. |
-| `tkt merge ID --passed STEPS` | Once the human verification steps passed, sends finish-ticket the word to merge in a fresh session; while the checks still run, leaves a merge order that `tkt watch` carries out once they pass. |
+| `tkt merge ID --passed STEPS` | Once the human verification steps passed, sends finish-ticket the word to merge in a fresh session, naming the head they passed on. When finish-ticket could not merge yet, leaves a merge order that `tkt watch` carries out: it syncs a clean base, has the new head reviewed, waits for green checks, and merges one ticket at a time. The steps carry over clean merges of the base, so a verified batch merges while you are away. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
-| `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees. `--all` checks every ticket worktree. |
+| `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees, and names the tickets each merge unblocked, which `tkt ls` lists and the tkt agent offers to start. `--all` checks every ticket worktree. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
 | `tkt show ID` | Prints the agent's last message, such as the plan; `--screen` its live screen; `--steps` the human verification steps. |
 | `tkt wait ID` | Blocks until the ticket's agent needs you or has finished. |
@@ -116,14 +117,15 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 
 | Command | What it does |
 |---|---|
+| `/suggest [N] [as PRESET]` | Has suggest-tickets pick tickets that can run side by side; the board shows the picks, and `/inbox` starts them by hand, in full auto, or in auto after the plan, each on the preset its model needs. |
 | `/start ID... [auto \| after-plan] [as PRESET]` | Starts tickets: by hand, in full auto, or in auto once you approve the plan, on a preset you name. |
 | `/approve ID [auto]` | Approves the plan; with `auto`, `tkt auto` takes over. |
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |
 | `/auto ID on \| off \| full` | Turns `tkt auto` on or off for a ticket. |
-| `/sync ID` | Merges the base into a ticket's branch, as `tkt sync` does. `/check` offers it first when the ticket is behind its base. |
+| `/sync ID` | Merges the base into a ticket's branch, as `tkt sync` does. `/check` offers it first when the ticket is behind its base; your steps carry over a clean sync either way. |
 | `/hold ID [off]` | Puts a ticket on hold, so `tkt watch` and `tkt auto` leave it alone, or takes it off hold. |
 | `/send ID TEXT`, `/show ID`, `/peek ID` | Talks to the ticket's agent, prints its last message, or watches its live screen. |
-| `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. Once every step passed, it merges with `tkt merge`: now, or once CI is green. |
+| `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. Once every step passed, it merges with `tkt merge`: now, or with a merge order that `tkt watch` carries out once the head is synced, reviewed and green. |
 | `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
 | `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |

@@ -59,6 +59,8 @@ const hints: Record<AttentionKind, (id: string) => string> = {
 	paused: (id) => `/show ${id}`,
 	stalled: (id) => `/auto ${id} on`,
 	failed: () => "/inbox",
+	unblocked: (id) => `/start ${id}`,
+	suggested: () => "/inbox",
 };
 
 /** footer is the line under the board: the commands for it, and first,

@@ -56,6 +56,8 @@ type Event struct {
 	MergedAt string `json:"merged_at,omitempty"`
 	// OpenedAt is when the pull request was opened.
 	OpenedAt string `json:"opened_at,omitempty"`
+	// Unblocked lists the tickets finish-ticket said a merge unblocked.
+	Unblocked []string `json:"unblocked,omitempty"`
 }
 
 // Path returns the history file: next to tkt's command log.

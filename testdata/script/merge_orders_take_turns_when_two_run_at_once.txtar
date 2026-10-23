@@ -1,0 +1,34 @@
+# Two tkt merges that run side by side, as two /check jobs in the chat do,
+# send one merge line between them: the turn lock covers the moment from one
+# merge's check to its line, and the other leaves an order that waits.
+exec tkt start ACM-1
+exec tkt start ACM-2
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-2 commit -q --allow-empty -m 'ACM-2 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-2 push -q origin ACM-2
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+gitvar H2 $FAKE_WT_ROOT/ACM-2 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) | gsub("H2"; $H2) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+# A prompt sets the agent working, as finish-ticket would be.
+env FAKE_HERDR_TURNS=$WORK/turns.json
+
+exec tkt merge ACM-1 --passed all --json &
+exec tkt merge ACM-2 --passed all --json &
+wait
+grep -count=1 '^Use the finish-ticket skill to merge the PR' $FAKE_DIR/prompts
+stdout '"action":"merging"'
+stdout '"action":"ordered".*"waits":"turn"'
+
+-- turns.json --
+[]
+-- prs.json --
+[
+  {"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]},
+  {"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "H2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"body": "Reviewed head: H2\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the sign-up page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H2"}}]}
+]

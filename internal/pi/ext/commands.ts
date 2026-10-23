@@ -49,6 +49,17 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		},
 	});
 
+	pi.registerCommand("suggest", {
+		description: "Have suggest-tickets pick tickets that can run side by side, then start them from /inbox: /suggest [N] [as PRESET]",
+		handler: async (args, ctx) => {
+			const words = args.trim().split(/\s+/).filter(Boolean);
+			const as = preset(words);
+			const n = Number(words.find((w) => /^\d+$/.test(w)) ?? "3");
+			if (n < 1 || n > 10) return ctx.ui.notify("usage: /suggest [1 to 10] [as PRESET]", "warning");
+			say(act.suggest(hub, n, as));
+		},
+	});
+
 	pi.registerCommand("approve", {
 		description: "Approve a ticket's plan: /approve ACM-12 [auto]",
 		getArgumentCompletions: ids,

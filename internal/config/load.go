@@ -56,6 +56,9 @@ type fileTOML struct {
 		DoneAfterMerge *bool  `toml:"done_after_merge"`
 		Autostart      *bool  `toml:"autostart"`
 	} `toml:"watch"`
+	Suggest *struct {
+		As string `toml:"as"`
+	} `toml:"suggest"`
 }
 
 // Load reads the settings from dir, tkt's configuration directory. Without
@@ -137,8 +140,8 @@ func parseTOML(c *Config, path, src string) error {
 	return parseSettings(c, path, f)
 }
 
-// parseSettings reads the [auto], [review], [board], [agent] and [watch]
-// tables.
+// parseSettings reads the [auto], [review], [board], [agent], [watch] and
+// [suggest] tables.
 func parseSettings(c *Config, path string, f fileTOML) error {
 	bad := func(key, rule string) error {
 		return apperr.New(apperr.ConfigInvalid, "%s: %s %s", path, key, rule)
@@ -196,6 +199,12 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 		if w.Autostart != nil {
 			c.Watch.Autostart = *w.Autostart
 		}
+	}
+	if s := f.Suggest; s != nil && s.As != "" {
+		if !c.Has(s.As) {
+			return bad("[suggest] as", fmt.Sprintf("names preset '%s', which the presets do not define", s.As))
+		}
+		c.Suggest.As = s.As
 	}
 	c.Agent.Model = f.Agent.Model
 	for _, p := range f.Agent.Extensions {

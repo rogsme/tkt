@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
@@ -56,6 +57,19 @@ func (c Config) FirstID(text string) string {
 		}
 	}
 	return ""
+}
+
+// IDs returns every ticket id in text, in order and once each. Unlike
+// NormalizeID, it takes no bare number: in an agent's line, a number is
+// rarely a ticket.
+func (c Config) IDs(text string) []string {
+	out := []string{}
+	for _, tok := range idToken.FindAllString(text, -1) {
+		if c.RE.MatchString(tok) && !slices.Contains(out, tok) {
+			out = append(out, tok)
+		}
+	}
+	return out
 }
 
 // IsTicketWorktree reports whether a worktree belongs to a ticket: its branch

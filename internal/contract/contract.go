@@ -8,6 +8,7 @@ package contract
 import (
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Version is the configuration contract version tkt reads, as defined in
@@ -50,6 +51,9 @@ const (
 	// StatusDone ends a finish-ticket run that merged the pull request,
 	// saw post-merge CI pass and moved the ticket to done.
 	StatusDone = "DONE"
+	// StatusTicketsSuggested ends a suggest-tickets run, after its
+	// Suggested: line.
+	StatusTicketsSuggested = "TICKETS_SUGGESTED"
 )
 
 // StatusLineRE finds a status line on an agent's screen.
@@ -74,18 +78,81 @@ const (
 	VerdictReadyForHuman    = "READY_FOR_HUMAN"
 )
 
+// UnblockedRE finds the line finish-ticket's report gives right before
+// Status: DONE: the tickets the merge unblocked, whose blockers are all
+// done now, or none.
+var UnblockedRE = regexp.MustCompile(`(?m)^Unblocked: (.*)$`)
+
 // HumanVerificationRE finds the section that follows review-pr's
 // READY_FOR_HUMAN summary and holds the numbered procedure a person runs.
 var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`)
 
 // Skills names the lifecycle skills tkt's built-in stage lines, and the
-// lines tkt approve and tkt merge send, ask for.
-var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr", "finish-ticket"}
+// lines tkt approve, tkt merge and tkt suggest send, ask for.
+var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr", "finish-ticket", "suggest-tickets"}
+
+// SuggestedRE finds the line suggest-tickets ends its report with, before
+// Status: TICKETS_SUGGESTED: the picks in order, each with its Model:
+// value in parentheses when model routing is on, or none.
+var SuggestedRE = regexp.MustCompile(`(?m)^Suggested: (.*)$`)
+
+var suggestionRE = regexp.MustCompile("^`?([A-Za-z0-9-]+)`?\\s*(?:\\((.*)\\))?$")
+
+// Suggestion is a pick on suggest-tickets' Suggested: line: the ticket, and
+// the Model: value its Model routing names, or "" without model routing.
+type Suggestion struct {
+	Ticket string
+	Model  string
+}
+
+// Suggestions reads the picks from the last Suggested: line in text, in
+// order. id says which words are ticket ids, so none names nothing. The
+// line splits at the commas outside parentheses, and a model counts by its
+// first word, the model id, so a condition after it costs no pick.
+func Suggestions(text string, id *regexp.Regexp) []Suggestion {
+	out := []Suggestion{}
+	m := SuggestedRE.FindAllStringSubmatch(text, -1)
+	if len(m) == 0 {
+		return out
+	}
+	line := m[len(m)-1][1]
+	var parts []string
+	depth, from := 0, 0
+	for i, r := range line {
+		switch {
+		case r == '(':
+			depth++
+		case r == ')' && depth > 0:
+			depth--
+		case r == ',' && depth == 0:
+			parts, from = append(parts, line[from:i]), i+1
+		}
+	}
+	for _, part := range append(parts, line[from:]) {
+		p := suggestionRE.FindStringSubmatch(strings.TrimSpace(part))
+		if p == nil || !id.MatchString(p[1]) {
+			continue
+		}
+		model := strings.FieldsFunc(p[2], func(r rune) bool { return r == ' ' || r == ',' || r == '`' })
+		s := Suggestion{Ticket: p[1]}
+		if len(model) > 0 {
+			s.Model = model[0]
+		}
+		out = append(out, s)
+	}
+	return out
+}
 
 // CleanMergeRule is how review-pr's rule about a review brief across clean
 // base merges begins. tkt sync relies on it: it pushes such merges with no
 // agent, and leaves the brief as it was.
 const CleanMergeRule = "A brief pinned to an earlier head stays current when every commit after that head is a clean merge of the base"
+
+// CarryOverRule is how finish-ticket's rule about human verification across
+// clean base merges begins. tkt merge relies on it: the merge line names the
+// head the steps passed on, and a merge order holds across the clean merges
+// tkt sync makes.
+const CarryOverRule = "A confirmation counts for the head it names"
 
 // ResolveSkill is the engineering skill the resolve stage line asks for. It
 // resolves a merge that stopped on conflicts, keeps it a merge, and asks the

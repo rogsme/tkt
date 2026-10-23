@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strconv"
 
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
@@ -231,6 +232,42 @@ func mergeCmd(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Cancel, "cancel", false, "drop the ticket's merge order")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	cmd.MarkFlagsMutuallyExclusive("passed", "cancel")
+	return cmd
+}
+
+func suggestCmd(g *globals) *cobra.Command {
+	var o app.SuggestOpts
+	cmd := &cobra.Command{
+		Use:   "suggest [COUNT]",
+		Short: "Have suggest-tickets pick the next tickets to start, ones that can run side by side",
+		Long:  helpText("suggest"),
+		Example: `  tkt suggest
+  tkt suggest 2 --wait
+  tkt suggest --as fast --wait --timeout 15m --json`,
+		SuggestFor: []string{"next", "pick", "dispatch"},
+		Args: func(_ *cobra.Command, args []string) error {
+			switch {
+			case len(args) > 1:
+				return usage("usage: tkt suggest [COUNT]")
+			case len(args) == 1:
+				n, err := strconv.Atoi(args[0])
+				if err != nil {
+					return usage("COUNT is a number of tickets, such as 3, not %q", args[0])
+				}
+				o.Count = n
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			res, err := g.app().Suggest(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.As, "as", "", "run suggest-tickets on PRESET instead of the [suggest] one")
+	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
+	cmd.Flags().BoolVar(&o.Wait, "wait", false, "wait for the picks, and print the tkt start command for each")
+	cmd.Flags().DurationVar(&o.Timeout, "timeout", 0, "with --wait, give up after DURATION, such as 15m (default: wait without limit)")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	return cmd
 }
 

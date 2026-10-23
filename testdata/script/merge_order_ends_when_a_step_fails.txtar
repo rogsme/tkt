@@ -1,0 +1,50 @@
+# A merge order stands until the pull request merges, so finish-ticket can
+# go again after a sync. When finish-ticket says a human verification step
+# failed, or another kind of session takes the ticket over after the line
+# went out, the order drops: the steps no longer say what passed.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+exec tkt merge ACM-12 --passed all --json
+envelope '.result.action' merging
+
+# finish-ticket records that step 1 failed. The base moves too, and tkt
+# watch drops the order instead of syncing for it.
+env 'FAKE_HERDR_SCREEN=Step 1 failed: the form shows no error. Status: HUMAN_QA_FAILED'
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .merge]' '["qa_failed",null]'
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","qa_failed"]'
+logged herdr notification show 'ACM-12: merge order dropped' --body 'finish-ticket says a human verification step failed; check the head again once the failure is answered' --sound request
+state $FAKE_WT_ROOT/ACM-12 merge_head ''
+realgit -C $REPO reset -q --hard HEAD~1
+realgit -C $REPO push -q -f origin main
+
+# A new order on the same head, and the line goes out again; then an
+# address run takes the ticket over, which voids it as well, with no watch
+# to see the status in between.
+env FAKE_HERDR_SCREEN=
+exec tkt merge ACM-12 --passed all --json
+envelope '.result.action' merging
+exec tkt run ACM-12 address
+exec tkt ls --json
+envelope '.result.rows[0].merge' null
+exec tkt watch --once --json
+logged herdr notification show 'ACM-12: merge order dropped' --body 'another session took the ticket over after finish-ticket got the merge line; check the head again once it is reviewed' --sound request
+houserules
+
+-- config.toml --
+[review]
+bot_wait = "0s"
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open http://localhost:3000/login and sign in with a wrong password.\n   Expected: the form shows an error.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

@@ -76,6 +76,9 @@ test("mergeText says what tkt merge did", () => {
 	const r = { ticket: "ACM-12", pr: 7, head: "abc", steps: [1, 2] };
 	assert.match(mergeText({ ...r, action: "merging" }), /^ACM-12: finish-ticket merges pull request #7 in a fresh session/);
 	assert.match(mergeText({ ...r, action: "ordered" }), /^ACM-12 merges once its checks pass/);
+	assert.match(mergeText({ ...r, action: "ordered", waits: "sync" }), /^ACM-12 merges once tkt watch merged its base and a review cleared the new head; your steps carry over/);
+	assert.match(mergeText({ ...r, action: "ordered", waits: "turn", after: "ACM-11" }), /^ACM-12 merges once ACM-11 merged first/);
+	assert.match(mergeText({ ...r, action: "cancelled", sent: "2026-01-01T00:00:00Z" }), /no merge order now\. finish-ticket got the merge line at 2026-01-01T00:00:00Z/);
 	assert.equal(mergeText({ ...r, action: "cancelled" }), "ACM-12 has no merge order now.");
 	assert.match(mergeText({ ...r, action: "none", sent: "2026-01-01T00:00:00Z" }), /finish-ticket got the merge line at 2026-01-01T00:00:00Z/);
 });

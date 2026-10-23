@@ -10,12 +10,18 @@ ticket, from the same rules as tkt ls:
     itself, as tkt sync does, with no agent, and runs resolve on a conflict;
   - the checks fail at the head: it runs ci in a fresh session, once per
     head;
-  - a merge order from tkt merge is for the head, and its checks passed: it
-    sends finish-ticket the merge line in a fresh session. A new head drops
-    the order, with a notification, and a base that moved gets a sync first.
+  - a merge order from tkt merge holds at the head, its checks passed and
+    review-pr's READY_FOR_HUMAN is at the head: it sends finish-ticket the
+    merge line in a fresh session, for one ticket at a time. A base that
+    moved gets a sync first, and the order holds across that clean merge.
+    A head review-pr has not cleared, such as one a sync made or one only
+    the review bot cleared, gets review-pr in a fresh session. A new head
+    of any other kind, a failed human verification step, or another
+    session taking the ticket over after the line went out drops the
+    order, with a notification.
 
-Everything else waits for you or for tkt auto: plans, reviews, findings,
-human verification and the word to merge. It leaves alone a ticket on hold (tkt
+Everything else waits for you or for tkt auto: plans, the other reviews,
+findings, human verification and the word to merge. It leaves alone a ticket on hold (tkt
 hold), one a tkt auto loop drives, one another tkt command works on, one
 whose agent works or asks a question, and one whose worktree directory is
 gone. It replaces an agent with a fresh session only after the agent sat

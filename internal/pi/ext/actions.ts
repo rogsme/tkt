@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import { type Envelope, type MergeResult, mergeText, stepText, type UpdateResult } from "./model.ts";
+import { type Envelope, type MergeResult, mergeText, picksText, stepText, type SuggestResult, type UpdateResult } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
@@ -28,6 +28,39 @@ export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 			return `Queued: ${list} starting${on} in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket.`;
 	}
 	return `Queued: ${list} starting${on}. The board shows each plan when it is ready.`;
+}
+
+/** suggest has suggest-tickets pick the next tickets to start, in the
+ * background and reading only. Its picks come back as an item on the
+ * board, which /inbox starts, each on the preset its model needs. */
+export function suggest(hub: Hub, count: number, as = ""): string {
+	hub.add({
+		ticket: "suggest",
+		label: "suggest",
+		args: ["suggest", String(count), "--wait", ...(as ? ["--as", as] : [])],
+		then: (env) => {
+			if (!env.ok || !env.result) return;
+			const r = env.result as SuggestResult;
+			if (r.status === "blocked") return hub.post(`suggest-tickets asks a question in its tab (pane ${r.pane}); answer it there, then /suggest again.`);
+			if (r.last_status !== "TICKETS_SUGGESTED") return hub.post(`suggest-tickets stopped with Status: ${r.last_status || "none"}; its tab (pane ${r.pane}) says why${r.last_status === "SETUP_REQUIRED" ? ", such as /setup-rogs to run first" : ""}.`);
+			if (r.picks.length === 0) return hub.post("suggest-tickets found nothing to start now: every ready ticket is blocked, or collides with work in flight.");
+			hub.suggested(r);
+			hub.post(`suggest-tickets picked ${picksText(r)}. /inbox starts them, each on the preset its model needs.`);
+		},
+	});
+	const n = `${count} ticket${count === 1 ? "" : "s"}`;
+	return `Queued: suggest-tickets picks ${n} in a suggest tab, reading only. The board shows the picks when it is done.`;
+}
+
+/** startPicks starts the tickets suggest-tickets picked, each on the preset
+ * its model needs, and takes the picks off the board. */
+export function startPicks(hub: Hub, mode: Mode): string {
+	const r = hub.picks?.result;
+	if (!r) return "There are no picks to start; /suggest asks suggest-tickets again.";
+	for (const p of r.picks) start(hub, [p.ticket], mode, p.preset);
+	hub.suggested(undefined);
+	const how = mode === "auto" ? " in full auto" : mode === "auto_after_plan" ? " in auto after the plan" : "";
+	return `Queued: ${picksText(r)} starting${how}, each on the preset its model needs. The board shows each plan when it is ready.`;
 }
 
 /** approve sends the approval and waits for tkt's answer. With then auto,
@@ -114,10 +147,11 @@ export async function hold(hub: Hub, id: string, on: boolean): Promise<string> {
 export async function done(hub: Hub, id: string): Promise<string> {
 	const env = await hub.run({ ticket: id, label: "done", args: ["done", id], quiet: true });
 	if (!env.ok) return failure(id, env);
-	const t = (env.result as { tickets?: { outcome: string; elapsed_s: number }[] } | undefined)?.tickets?.[0];
+	const t = (env.result as { tickets?: { outcome: string; elapsed_s: number; unblocked?: string[] }[] } | undefined)?.tickets?.[0];
 	if (t?.outcome !== "removed") return `${id}: tkt done did not remove it (${t?.outcome ?? "no result"}).`;
 	const took = t.elapsed_s > 0 ? ` It took ${duration(t.elapsed_s)} from start to merge.` : "";
-	return `${id} is done: its tabs are closed and its worktree is removed.${took}`;
+	const freed = t.unblocked?.length ? ` The merge unblocked ${t.unblocked.join(", ")}: /inbox offers to start ${t.unblocked.length === 1 ? "it" : "them"}.` : "";
+	return `${id} is done: its tabs are closed and its worktree is removed.${took}${freed}`;
 }
 
 function duration(s: number): string {
@@ -226,13 +260,14 @@ export function restoreMarks(entries: { type: string; customType?: string; data?
 /** check walks the human verification steps: verify first if you want,
  * then the checklist, then a fix session for a failed step. */
 export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promise<string> {
-	// Your steps should run on the code that will merge.
+	// Your steps can run on the code that will merge, or carry over the
+	// clean sync a merge order gets.
 	const behind = hub.row(id)?.behind ?? 0;
 	if (behind > 0) {
 		const n = `${behind} commit${behind === 1 ? "" : "s"}`;
 		const a = await ask(ctx, `${id} is ${n} behind its base. Sync it first?`, [
 			{ label: "Sync first", description: "tkt sync merges the base; the new head gets a review, then /check again." },
-			{ label: "Verify this head anyway" },
+			{ label: "Verify this head", description: "Your steps carry over a clean sync: tkt watch syncs it after you merge, and has the new head reviewed." },
 		], false);
 		if (!a) return "Closed.";
 		if (a.answer.startsWith("Sync")) return `${sync(hub, id)} /check ${id} again once the new head is reviewed.`;
@@ -274,9 +309,11 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	if (!head) return `${id}: every step passed, but the board has no head for its pull request yet. /check ${id} again in a moment to merge it.`;
 	const pending = hub.row(id)?.checks?.state === "pending";
 	const go = await ask(ctx, `${id}: every step passed. Merge it?`, [
-		pending
-			? { label: "Merge once CI is green", description: "tkt merge leaves an order, and tkt watch sends finish-ticket the merge line once the checks pass." }
-			: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab." },
+		behind > 0
+			? { label: "Merge once synced", description: "tkt merge leaves an order: tkt watch merges the base, has the new head reviewed, and sends finish-ticket the merge line once the checks pass." }
+			: pending
+				? { label: "Merge once CI is green", description: "tkt merge leaves an order, and tkt watch sends finish-ticket the merge line once the checks pass." }
+				: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab, or leaves an order while another ticket merges." },
 		{ label: "Not yet" },
 	], false);
 	if (!go?.answer.startsWith("Merge")) return `${id}: every step passed. /check ${id} merges it when you are ready.`;
@@ -342,6 +379,18 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 			return stage(hub, id, c.stage!);
 		case "resume":
 			return resume(hub, id);
+		case "start":
+			return start(hub, [id], "manual");
+		case "start_auto":
+			return start(hub, [id], "auto");
+		case "start_after_plan":
+			return start(hub, [id], "auto_after_plan");
+		case "start_picks":
+			return startPicks(hub, "manual");
+		case "start_picks_auto":
+			return startPicks(hub, "auto");
+		case "start_picks_after_plan":
+			return startPicks(hub, "auto_after_plan");
 	}
 	return undefined;
 }

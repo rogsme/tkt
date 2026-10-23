@@ -53,6 +53,12 @@ watch. These are the defaults:
                         # Status: DONE
   autostart = true      # let tkt commands in a herdr pane start tkt watch
 
+A [suggest] table names the preset tkt suggest runs suggest-tickets on, such
+as a cheap one; without it, the default preset runs it:
+
+  [suggest]
+  as = "fast"
+
 An [agent] table sets up tkt agent's chat. model is a pi model pattern, such as
 provider/id; leave it out for pi's default. extensions lists more pi extension
 files to load, as absolute paths or paths that start with ~/:

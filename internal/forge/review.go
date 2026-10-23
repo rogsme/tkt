@@ -157,6 +157,12 @@ type Procedure struct {
 // HumanVerification returns the procedure in the newest review that says
 // READY_FOR_HUMAN about the pull request's current head, or nil.
 func HumanVerification(p PR) *Procedure {
+	return HumanVerificationAt(p, p.HeadRefOid)
+}
+
+// HumanVerificationAt returns the procedure in the newest review that says
+// READY_FOR_HUMAN about head, a commit the pull request had, or nil.
+func HumanVerificationAt(p PR, at string) *Procedure {
 	var best *Procedure
 	for _, r := range p.Reviews {
 		m := contract.VerdictRE.FindStringSubmatch(r.Body)
@@ -168,7 +174,7 @@ func HumanVerification(p PR) *Procedure {
 			oid = r.Commit.Oid
 		}
 		head := firstGroup(contract.ReviewedHeadRE, r.Body, oid)
-		if head == "" || !strings.HasPrefix(p.HeadRefOid, head) {
+		if head == "" || !strings.HasPrefix(at, head) {
 			continue
 		}
 		section, steps, ok := ParseProcedure(r.Body)

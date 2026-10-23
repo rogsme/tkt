@@ -14,6 +14,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/forge"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
+	"gitlab.com/rogs/tkt/internal/state"
 )
 
 // DoneOpts are tkt done's arguments.
@@ -39,6 +40,9 @@ type DoneTicket struct {
 	Started string `json:"started"`
 	Merged  string `json:"merged"`
 	Elapsed int64  `json:"elapsed_s"`
+	// Unblocked lists the tickets finish-ticket said the merge unblocked:
+	// their blockers are all done now.
+	Unblocked []string `json:"unblocked"`
 }
 
 // DoneResult is what tkt done did.
@@ -61,6 +65,9 @@ func (r *DoneResult) Text(w io.Writer) {
 		}
 		if t.Elapsed > 0 {
 			fmt.Fprintf(w, "%s  %s from start to merge\n", t.Ticket, Ago(time.Duration(t.Elapsed)*time.Second))
+		}
+		if len(t.Unblocked) > 0 {
+			fmt.Fprintf(w, "%s  the merge unblocked %s; tkt start %s starts one\n", t.Ticket, idsText(t.Unblocked), t.Unblocked[0])
 		}
 	}
 }
@@ -152,7 +159,7 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 	kept := []string{}
 	for _, t := range tickets {
 		c.ticket(t.ID)
-		dt := DoneTicket{Ticket: t.ID, Path: t.Path, ClosedTabs: []string{}, Reasons: []string{}}
+		dt := DoneTicket{Ticket: t.ID, Path: t.Path, ClosedTabs: []string{}, Reasons: []string{}, Unblocked: []string{}}
 		if t.Path == "" {
 			a.UI.Warn("%s: no worktree", t.ID)
 			dt.Outcome = "missing"
@@ -174,6 +181,13 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 			kept = append(kept, t.ID)
 			continue
 		}
+		st := state.State{}
+		if ts, err := c.readState(t.Path); err == nil {
+			st = ts.st
+		}
+		// finish-ticket's report names the tickets the merge unblocked, and
+		// its session holds the report until the tabs close.
+		dt.Unblocked = c.sessionUnblocked(t.ID, t.Path, herdr.AgentsInPath(agents, t.Path), st)
 		for _, tab := range closeTabs {
 			if c.Dry {
 				c.Would([]string{"herdr", "tab", "close", tab})
@@ -182,10 +196,7 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 			}
 			dt.ClosedTabs = append(dt.ClosedTabs, tab)
 		}
-		started, tmp := "", ""
-		if ts, err := c.readState(t.Path); err == nil {
-			started, tmp = ts.st["started"], ts.st["tmpdir"]
-		}
+		started, tmp := st["started"], st["tmpdir"]
 		dt.Started, dt.Merged = started, merged.MergedAt
 		if s, err := time.Parse(time.RFC3339, started); err == nil {
 			if m, err := time.Parse(time.RFC3339, merged.MergedAt); err == nil {
@@ -205,7 +216,10 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		}
 		c.removeTmp(t.ID, tmp)
 		c.record(history.Event{Ticket: t.ID, Event: history.Merged, PR: merged.Number, MergedAt: merged.MergedAt, OpenedAt: merged.CreatedAt})
-		c.record(history.Event{Ticket: t.ID, Event: history.Done})
+		c.record(history.Event{Ticket: t.ID, Event: history.Done, Unblocked: dt.Unblocked})
+		c.noteUnblocked(t.ID, dt.Unblocked)
+		// A ticket another merge named, and that merged since, is done.
+		c.forgetUnblocked(t.ID)
 		dt.Outcome = "removed"
 		dt.BranchDeleted = !c.Git.HasRef(c.Ctx, c.Repo.Root, "refs/heads/"+t.ID)
 		res.Tickets = append(res.Tickets, dt)
