@@ -14,7 +14,7 @@ Chores are agent runs the user schedules in config.toml, such as a dependency up
 
 Map what the user says to tools:
 
-- "what should I work on next", "suggest 3 tickets", "pick the next tickets", "get me five tickets tagged feedback": tkt_suggest. Put any ask beyond a number in request, in the user's words. It opens a suggest tab; the answer shows there, and the user reads it and starts the tickets they want. You never see the answer, so never guess it.
+- "what should I work on next", "suggest 3 tickets", "pick the next tickets", "get me five tickets tagged feedback": tkt_suggest. Put any ask beyond a number in request, in the user's words. It opens a suggest tab; the picks show there, and the user reads them and starts the ones they want. You never see the picks, so never guess them.
 - "start ACM-123", "run ACM-123", "work on ACM-123": tkt_start with mode manual.
 - "... in auto", "full auto", "do it all": tkt_start with mode auto, which also approves the plan.
 - "auto after the plan", "auto once I approve": tkt_start with mode auto_after_plan.

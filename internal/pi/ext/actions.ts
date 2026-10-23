@@ -30,11 +30,10 @@ export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 	return `Queued: ${list} starting${on}. The board shows each plan when it is ready.`;
 }
 
-/** suggest opens a suggest tab and asks a fresh agent there which tickets
- * to start: request goes to it word for word, and a count, or nothing, has
- * suggest-tickets pick that many, 3 by default. tkt reads none of the
- * answer: you read it in the tab, talk it over with the agent, and start
- * the tickets you want. */
+/** suggest opens a suggest tab where suggest-tickets picks the tickets to
+ * start: the ones request asks for, or a count, 3 by default. tkt reads
+ * none of the answer: you read it in the tab, talk it over with the agent,
+ * and start the tickets you want. */
 export function suggest(hub: Hub, request: string, as = ""): string {
 	const ask = request.trim();
 	const count = /^\d+$/.test(ask) ? Number(ask) : ask ? 0 : 3;
@@ -45,11 +44,11 @@ export function suggest(hub: Hub, request: string, as = ""): string {
 		then: (env) => {
 			if (!env.ok || !env.result) return;
 			const r = env.result as SuggestResult;
-			if (count === 0) return hub.post(`The suggest agent has your request in the suggest tab (pane ${r.pane}). Read its answer there, and /start the tickets you want.`);
+			if (count === 0) return hub.post(`suggest-tickets has your request in the suggest tab (pane ${r.pane}). Read its picks there, and /start the ones you want.`);
 			hub.post(`suggest-tickets is picking in the suggest tab (pane ${r.pane}). Read its picks there, and /start the ones you want.`);
 		},
 	});
-	if (count === 0) return "Queued: your request goes to a fresh agent in a suggest tab, word for word. Its answer shows in that tab, not here.";
+	if (count === 0) return "Queued: suggest-tickets gets your request in a suggest tab, reading only. Its picks show in that tab, not here.";
 	const n = `${count} ticket${count === 1 ? "" : "s"}`;
 	return `Queued: suggest-tickets picks ${n} in a suggest tab, reading only. Its picks show in that tab, not here.`;
 }

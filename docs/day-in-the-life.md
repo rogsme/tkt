@@ -156,7 +156,7 @@ ACM-131 starts on `claude` and the other two on `fast`, each in its own tab, suc
 
 Five tickets now run in tkt auto loops, but `[auto] max_parallel` caps the agents tkt auto and tkt watch put to work, not the loops. A loop takes a slot to start a ticket, approve a plan or run a stage, and gives it up while it waits for CI, the review bot or you. ACM-124's planning agent holds one slot and two of the picks take the others, so ACM-133 waits in the queued phase until a plan is ready. ACM-121's agent, which your answer set working, and ACM-127's address session hold no slot, since you started them.
 
-From a terminal, `tkt suggest 3` opens the same tab and returns at once. A narrower ask works the same way: "get me two tickets tagged bug" in the chat, or `tkt suggest two tickets tagged bug`, sends those words to the suggest tab as they are.
+From a terminal, `tkt suggest 3` opens the same tab and returns at once. A narrower ask works the same way: "get me two tickets tagged bug" in the chat, or `tkt suggest two tickets tagged bug`, hands those words to suggest-tickets as its request.
 
 ## 09:40 Read the plans
 

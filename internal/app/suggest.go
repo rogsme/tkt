@@ -17,9 +17,9 @@ import (
 	"gitlab.com/rogs/tkt/internal/state"
 )
 
-// SuggestOpts are tkt suggest's arguments: what to ask the agent, either
-// Request in your own words or the suggest line for Count tickets, and the
-// preset it runs on.
+// SuggestOpts are tkt suggest's arguments: what to ask suggest-tickets,
+// either Request in your own words or Count tickets, and the preset it runs
+// on.
 type SuggestOpts struct {
 	Count   int
 	Request string
@@ -45,7 +45,7 @@ type SuggestResult struct {
 
 func (r *SuggestResult) Text(w io.Writer) {
 	if r.Count == 0 {
-		fmt.Fprintf(w, "the suggest agent has your request in pane %s (%s, %s); read its answer there\n", r.Pane, r.Preset, r.Harness)
+		fmt.Fprintf(w, "suggest-tickets has your request in pane %s (%s, %s); read its picks there\n", r.Pane, r.Preset, r.Harness)
 		return
 	}
 	fmt.Fprintf(w, "suggest-tickets picks %d in pane %s (%s, %s); read its picks there\n", r.Count, r.Pane, r.Preset, r.Harness)
@@ -59,13 +59,15 @@ const suggestLock = "suggest"
 func suggestStatePath(common string) string { return filepath.Join(common, "tkt", "suggest") }
 
 // Suggest starts a fresh session in the suggest tab at the repository's
-// root, on the [suggest] preset, and sends it your request as you wrote it,
-// or without one the suggest line, which has suggest-tickets pick the next
-// tickets to start, ones that can run side by side. tkt reads none of the
-// answer: it is yours to weigh in the tab.
+// root, on the [suggest] preset, and has suggest-tickets pick the next
+// tickets to start: those your request asks for, or without one, Count
+// tickets that can run side by side. tkt reads none of the answer: it is
+// yours to weigh in the tab.
 func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error) {
-	line := strings.TrimSpace(o.Request)
-	if line == "" {
+	line := ""
+	if r := strings.TrimSpace(o.Request); r != "" {
+		line, o.Count = config.SuggestRequestLine(r), 0
+	} else {
 		if o.Count == 0 {
 			o.Count = 3
 		}
@@ -73,8 +75,6 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 			return nil, apperr.New(apperr.Usage, "tkt suggest picks 1 to 10 tickets, not %d", o.Count).WithHint("tkt suggest 3")
 		}
 		line = config.SuggestLine(o.Count)
-	} else {
-		o.Count = 0
 	}
 	c, err := a.begin(ctx, o.Dry, false)
 	if err != nil {

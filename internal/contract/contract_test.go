@@ -100,7 +100,8 @@ func TestStageLinesNameRegisteredSkills(t *testing.T) {
 		}
 	}
 	named := regexp.MustCompile(`the ([a-z]+(?:-[a-z]+)+) skill`)
-	lines := map[string]string{"approve": config.ApproveLine, "merge": config.MergeLine([]int{1}, "aaa", "aaa"), "suggest": config.SuggestLine(3)}
+	lines := map[string]string{"approve": config.ApproveLine, "merge": config.MergeLine([]int{1}, "aaa", "aaa"), "suggest": config.SuggestLine(3),
+		"suggest request": config.SuggestRequestLine("five tickets tagged feedback")}
 	for stage, line := range config.BuiltinStages {
 		lines[stage] = line
 	}

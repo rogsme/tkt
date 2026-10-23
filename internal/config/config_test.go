@@ -296,6 +296,9 @@ func TestSuggestSettings(t *testing.T) {
 	if got := SuggestLine(1); got != "Use the suggest-tickets skill to suggest the next ticket to start." {
 		t.Errorf("SuggestLine(1) = %q", got)
 	}
+	if got := SuggestRequestLine("five tickets tagged feedback"); got != "Use the suggest-tickets skill for this request: five tickets tagged feedback" {
+		t.Errorf("SuggestRequestLine = %q", got)
+	}
 }
 
 func TestMergeLineNamesEveryStep(t *testing.T) {

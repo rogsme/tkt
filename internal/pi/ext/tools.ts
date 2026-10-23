@@ -113,9 +113,9 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		name: "tkt_suggest",
 		label: "tkt suggest",
 		description:
-			"Queue a fresh agent in a suggest tab that says which tickets to start next. It opens the tab and returns; the answer shows in that tab only, for the user to read. request is what the user asks for in their own words, such as 'five tickets tagged feedback', which goes to the agent word for word; leave it out for a plain suggestion, and then suggest-tickets picks count tickets, 3 unless the user names a number. as picks the preset the agent runs on.",
+			"Queue suggest-tickets in a suggest tab, which reads the tracker and the work in flight, then picks the next tickets to start. It opens the tab and returns; the picks show in that tab only, for the user to read. request is what the user asks for in their own words, such as 'five tickets tagged feedback', which suggest-tickets gets as its request; leave it out for a plain suggestion, and then it picks count tickets, 3 unless the user names a number. as picks the preset suggest-tickets runs on.",
 		parameters: Type.Object({
-			request: Type.Optional(Type.String({ description: "What the user asks the agent for, in their words, when they ask for more than a number of tickets; otherwise leave it out" })),
+			request: Type.Optional(Type.String({ description: "What the user asks suggest-tickets for, in their words, when they ask for more than a number of tickets; otherwise leave it out" })),
 			count: Type.Optional(Type.Integer({ minimum: 1, maximum: 10, description: "How many tickets suggest-tickets picks without a request; 3 unless the user names a number" })),
 			as: preset,
 		}),

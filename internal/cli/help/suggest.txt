@@ -1,15 +1,15 @@
-tkt suggest asks a fresh agent which tickets to start next. It opens a
-suggest tab at the repository's root, or reuses it, starts a fresh session
-there, and sends it what you ask, word for word:
+tkt suggest has the suggest-tickets skill pick the next tickets to start.
+It opens a suggest tab at the repository's root, or reuses it, starts a
+fresh session there, and sends it what you ask, after the skill's name:
 
-  tkt suggest five tickets tagged feedback that can run side by side
-  tkt suggest 'tickets small enough for the fast preset'
+  tkt suggest five tickets tagged feedback
+  -> Use the suggest-tickets skill for this request: five tickets tagged
+     feedback
 
-tkt names no skill in a request, so the agent works from your words alone.
-Ask for suggest-tickets by name when you want its rules.
-
-With no words, or only a count, it sends the suggest line instead, which
-has the suggest-tickets skill pick that many tickets, 3 by default:
+suggest-tickets takes the number your request names, and narrows the
+candidates by what else it says, such as a label, an area or a model. With
+no words, or only a count, tkt sends the suggest line for that many tickets,
+3 by default:
 
   Use the suggest-tickets skill to suggest the next 3 tickets to start, ones
   that can run side by side.
