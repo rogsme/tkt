@@ -62,6 +62,7 @@ const (
 	UpdateNotWritable      Code = "update_not_writable"
 	PiMissing              Code = "pi_missing"
 	TerminalRequired       Code = "terminal_required"
+	ServiceUnsupported     Code = "service_unsupported"
 
 	TicketLocked        Code = "ticket_locked"
 	WorktreeLockTimeout Code = "worktree_lock_timeout"
@@ -108,6 +109,7 @@ const (
 	UpdateVerify      Code = "update_verify_failed"
 	Internal          Code = "internal"
 	PiUnpackFailed    Code = "pi_unpack_failed"
+	ServiceFailed     Code = "service_failed"
 
 	AgentNotReady   Code = "agent_not_ready"
 	PromptUncertain Code = "prompt_uncertain"
@@ -157,6 +159,7 @@ var Registry = []Info{
 	{UpdateNotWritable, ExitEnvironment, "tkt cannot replace its own binary"},
 	{PiMissing, ExitEnvironment, "tkt agent has no pi to run: this tkt has no bundled pi and TKT_PI names none"},
 	{TerminalRequired, ExitEnvironment, "the command is interactive and needs a terminal on stdin and stdout"},
+	{ServiceUnsupported, ExitEnvironment, "tkt watch --install found neither systemd nor launchd to run the services"},
 
 	{TicketLocked, ExitState, "another tkt command is working on the ticket"},
 	{WorktreeLockTimeout, ExitState, "another tkt start kept the worktree lock too long"},
@@ -203,6 +206,7 @@ var Registry = []Info{
 	{UpdateVerify, ExitTool, "the downloaded binary did not run or did not print its version; nothing was replaced"},
 	{Internal, ExitTool, "an unexpected failure inside tkt"},
 	{PiUnpackFailed, ExitTool, "tkt cannot unpack its bundled pi, or write the extension or settings it starts pi with"},
+	{ServiceFailed, ExitTool, "a systemctl, launchctl or loginctl command failed, or tkt cannot write a service's file"},
 
 	{AgentNotReady, ExitUncertain, "the agent stopped at a startup dialog; answer it in its pane"},
 	{PromptUncertain, ExitUncertain, "tkt cannot confirm the agent received the prompt; check before sending it again"},

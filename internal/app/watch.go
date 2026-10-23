@@ -20,25 +20,32 @@ import (
 	"gitlab.com/rogs/tkt/internal/lock"
 	"gitlab.com/rogs/tkt/internal/output"
 	"gitlab.com/rogs/tkt/internal/runner"
+	"gitlab.com/rogs/tkt/internal/service"
 	"gitlab.com/rogs/tkt/internal/state"
 )
 
-// WatchOpts are tkt watch's arguments.
+// WatchOpts are tkt watch's arguments. Install and Uninstall add or remove
+// the services that run it; Yes answers yes to starting them at boot.
 type WatchOpts struct {
-	Once bool
-	Stop bool
-	Dry  bool
+	Once      bool
+	Stop      bool
+	Dry       bool
+	Install   bool
+	Uninstall bool
+	Yes       bool
 }
 
-// WatchResult is what tkt watch did in its last pass, or, with --stop,
-// whether it stopped one.
+// WatchResult is what tkt watch did in its last pass; with --stop, whether
+// it stopped one; with --install or --uninstall, the service it set up or
+// removed.
 type WatchResult struct {
-	Repo    string        `json:"repo"`
-	Passes  int           `json:"passes"`
-	Tickets []WatchTicket `json:"tickets"`
-	Stopped bool          `json:"stopped"`
-	DryRun  bool          `json:"dry_run"`
-	Actions []Action      `json:"actions"`
+	Repo    string         `json:"repo"`
+	Passes  int            `json:"passes"`
+	Tickets []WatchTicket  `json:"tickets"`
+	Stopped bool           `json:"stopped"`
+	Service *ServiceResult `json:"service"`
+	DryRun  bool           `json:"dry_run"`
+	Actions []Action       `json:"actions"`
 }
 
 // WatchTicket is what one pass did with a ticket. Action is done, sync or
@@ -59,6 +66,10 @@ type WatchTicket struct {
 }
 
 func (r *WatchResult) Text(w io.Writer) {
+	if r.Service != nil {
+		fmt.Fprint(w, r.Service.text(r.Repo, r.DryRun))
+		return
+	}
 	if r.Stopped {
 		fmt.Fprintf(w, "stopped tkt watch for %s\n", r.Repo)
 		return
@@ -220,8 +231,11 @@ func watchPauseText(id, why, last string) string {
 // pass; with Dry it says what each ticket would get. With Stop it stops the
 // tkt watch that runs for the repository.
 func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
-	if o.Dry && !o.Once && !o.Stop {
+	if o.Dry && !o.Once && !o.Stop && !o.Install && !o.Uninstall {
 		return nil, apperr.New(apperr.Usage, "--dry-run needs --once: a dry run takes one pass").WithHint("tkt watch --once --dry-run")
+	}
+	if o.Yes && !o.Install {
+		return nil, apperr.New(apperr.Usage, "--yes answers --install's question about starting at boot").WithHint("tkt watch --install --yes")
 	}
 	a.watching = true
 	c, err := a.begin(ctx, o.Dry, false)
@@ -229,8 +243,13 @@ func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
 		return nil, err
 	}
 	defer c.release()
-	if o.Stop {
+	switch {
+	case o.Stop:
 		return c.stopWatch()
+	case o.Install:
+		return c.installWatch(o)
+	case o.Uninstall:
+		return c.uninstallWatch()
 	}
 	if err := c.LC.RequireGitHub("watch"); err != nil {
 		return nil, err
@@ -705,33 +724,55 @@ func (w *watcher) dropSlots(keep map[string]bool) {
 }
 
 // stopWatch stops the tkt watch that runs for the repository and waits
-// until it has finished the step it was taking.
+// until it has finished the step it was taking. A watch its service runs
+// stops through the service, which would start it again otherwise.
 func (c *Ctx) stopWatch() (*WatchResult, error) {
 	res := &WatchResult{Repo: c.Repo.Root, Tickets: []WatchTicket{}, DryRun: c.Dry, Actions: []Action{}}
+	if s, err := c.watchService(c.Ctx, c.Repo.Root); err == nil && c.active(c.Ctx, s, s.unit) {
+		argv := service.SystemctlArgv("stop", s.unit)
+		if s.manager == service.Launchd {
+			argv = service.LaunchctlArgv("bootout", s.domain+"/"+s.unit)
+		}
+		if err := c.serviceRun(argv); err != nil {
+			return nil, err
+		}
+		c.UI.Info("stopped %s; the next tkt command in a herdr pane, or the next boot, starts it again", s.unit)
+		res.Stopped, res.Actions = !c.Dry, append([]Action{}, c.Plan...)
+		return res, nil
+	}
 	if !c.watchRunning() {
 		c.UI.Info("no tkt watch runs for %s", c.Repo.Root)
 		return res, nil
 	}
+	stopped, err := c.signalWatch()
+	if err != nil {
+		return nil, err
+	}
+	res.Stopped, res.Actions = stopped, append([]Action{}, c.Plan...)
+	return res, nil
+}
+
+// signalWatch sends the running tkt watch SIGTERM and waits until it has
+// finished the step it was taking. It reports whether it stopped one.
+func (c *Ctx) signalWatch() (bool, error) {
 	pid := atoi(state.Read(watchStatePath(c.Repo.Common))["pid"])
 	if pid <= 0 {
-		return nil, apperr.New(apperr.Internal, "cannot tell which process runs tkt watch for %s", c.Repo.Root)
+		return false, apperr.New(apperr.Internal, "cannot tell which process runs tkt watch for %s", c.Repo.Root)
 	}
 	if c.Dry {
 		c.Would([]string{"kill", "-TERM", strconv.Itoa(pid)})
-		res.Actions = c.Plan
-		return res, nil
+		return false, nil
 	}
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
-		return nil, apperr.New(apperr.Internal, "cannot stop tkt watch (pid %d): %v", pid, err)
+		return false, apperr.New(apperr.Internal, "cannot stop tkt watch (pid %d): %v", pid, err)
 	}
 	for deadline := time.Now().Add(30 * time.Second); c.watchRunning(); c.Sleep(100 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			return nil, apperr.New(apperr.WatchRunning, "tkt watch (pid %d) did not stop within 30 seconds; it finishes the step it took first", pid).
+			return false, apperr.New(apperr.WatchRunning, "tkt watch (pid %d) did not stop within 30 seconds; it finishes the step it took first", pid).
 				WithHint("kill %d stops it at once", pid)
 		}
 	}
-	res.Stopped = true
-	return res, nil
+	return true, nil
 }
 
 // ensureWatch starts tkt watch for the repository when none runs, so its
@@ -765,6 +806,10 @@ func (c *Ctx) ensureWatch() {
 	}
 	if os.WriteFile(mark, nil, 0o644) == nil {
 		os.Chtimes(mark, c.Now(), c.Now())
+	}
+	// A service that tkt watch --install set up runs the repository's watch.
+	if c.startWatchService() {
+		return
 	}
 	log := filepath.Join(dir, "watch.log")
 	if fi, err := os.Stat(log); err == nil && fi.Size() > 1<<20 {

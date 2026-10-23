@@ -64,7 +64,7 @@ var doctorGroups = []struct {
 	{"Tools", []string{"git", "wt", "herdr", "gh", "pi"}},
 	{"Harnesses", nil},
 	{"Project", []string{"repository", "lifecycle", "worktrunk_hooks"}},
-	{"Environment", []string{"config", "herdr_env", "log"}},
+	{"Environment", []string{"config", "herdr_env", "services", "log"}},
 }
 
 // doctorLabels names checks whose id reads poorly in the terminal view.
@@ -288,6 +288,17 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 		}
 		return Check{ID: "herdr_env", Status: CheckWarn, Message: "not inside a herdr pane; start, approve, send, auto, run, resume, done, show and wait need one",
 			Hint: "open a herdr pane and run tkt there"}
+	})
+	add(func() Check {
+		var harnesses []string
+		if cfgErr == nil {
+			for _, p := range cfg.Presets {
+				if !slices.Contains(harnesses, p.Harness) {
+					harnesses = append(harnesses, p.Harness)
+				}
+			}
+		}
+		return a.serviceCheck(ctx, repo.Root, harnesses)
 	})
 	add(func() Check {
 		switch {

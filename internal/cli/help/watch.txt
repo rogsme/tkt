@@ -43,5 +43,15 @@ Outside a herdr pane it finds the workspace whose panes work in the
 repository. When none has a pane there, it opens one before its first step,
 since every step works in herdr. While herdr is down it waits.
 
+--install keeps it running while no terminal is open: it writes systemd user
+units, or launchd agents on macOS, for herdr's server and for this
+repository's tkt watch, with this shell's PATH, since the agents in herdr's
+panes inherit herdr's. It enables both, starts herdr's unless herdr already
+runs, and asks before loginctl enable-linger starts them at boot; --yes
+answers yes. tkt commands then start the unit rather than a watch of their
+own, and --stop stops the unit. --uninstall removes this repository's unit;
+herdr's stays. tkt doctor checks that they run and that their PATH finds the
+tools and harnesses.
+
 --once takes one pass and exits; with --dry-run it says what each ticket would
-get, and changes nothing.
+get, and changes nothing. --install and --uninstall take --dry-run too.

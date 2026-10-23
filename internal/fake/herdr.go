@@ -144,6 +144,10 @@ func Herdr() {
 	if len(args) < 2 {
 		die(2, "fake herdr: unsupported: %s", strings.Join(args, " "))
 	}
+	// FAKE_HERDR_DOWN=1 is a herdr whose server does not run.
+	if os.Getenv("FAKE_HERDR_DOWN") == "1" {
+		die(1, "error: herdr server is not running")
+	}
 	s := loadState()
 	group, cmd, args := args[0], args[1], args[2:]
 	switch group + " " + cmd {

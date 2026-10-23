@@ -38,6 +38,11 @@ func TestMain(m *testing.M) {
 		"claude":   fake.Claude,
 		"git":      fake.Git,
 		"pi":       fake.Pi,
+		// The service managers and their helpers, for tkt watch --install.
+		"systemctl":      fake.Systemctl,
+		"systemd-escape": fake.SystemdEscape,
+		"loginctl":       fake.Loginctl,
+		"launchctl":      fake.Launchctl,
 	})
 }
 
@@ -188,6 +193,15 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"claudedir":   cmdClaudeDir,
 	"gitvar":      cmdGitVar,
 	"mkrelease":   cmdMkRelease,
+	"unitvar":     cmdUnitVar,
+}
+
+// unitvar VAR PATH: sets VAR to PATH as systemd-escape --path names it.
+func cmdUnitVar(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 2 {
+		ts.Fatalf("usage: unitvar VAR PATH")
+	}
+	ts.Setenv(args[0], fake.EscapePath(args[1]))
 }
 
 // rc N: the last tkt command exited with status N.

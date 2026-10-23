@@ -19,20 +19,21 @@ The script starts in `$REPO`. Files in a script's archive land in `$WORK`, so a 
 
 The fakes in `internal/fake` stand in for the real tools on `PATH`:
 
-- `herdr` keeps workspaces, tabs, panes and agents in `$FAKE_DIR/herdr.json` and answers the commands tkt uses. A pane that `tab create` opens keeps its `--env` values as `env`. Environment variables inject failures, such as `FAKE_HERDR_START_ERRORS=agent_pane_busy,...` or `FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled`. A `-` in such a list lets that call succeed. `agent read` prints `$FAKE_DIR/screen` when it exists, otherwise `FAKE_HERDR_SCREEN`.
+- `herdr` keeps workspaces, tabs, panes and agents in `$FAKE_DIR/herdr.json` and answers the commands tkt uses. A pane that `tab create` opens keeps its `--env` values as `env`. Environment variables inject failures, such as `FAKE_HERDR_START_ERRORS=agent_pane_busy,...` or `FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled`. A `-` in such a list lets that call succeed. `agent read` prints `$FAKE_DIR/screen` when it exists, otherwise `FAKE_HERDR_SCREEN`. `FAKE_HERDR_DOWN=1` makes every call fail, as when herdr's server does not run.
 - In turns mode, `FAKE_HERDR_TURNS` names a JSON list of agent turns, such as `[{"screen": "Status: AWAITING_APPROVAL"}, {"screen": "...", "prs": "/path/prs.json"}]`. A prompt sets the agent working, and each `agent wait` on a working agent ends its turn with the next entry: its `status` (idle by default), its screen, and a pull request file that `gh` lists from then on. The `auto_` scripts drive whole tickets this way.
 - `wt` creates and removes real git worktrees under `$FAKE_WT_ROOT` and prints worktrunk's JSON: schema 1, or schema 2 with `FAKE_WT_SCHEMA=2`.
 - `gh` answers `pr list` from `$FAKE_DIR/prs.json` when it exists, otherwise from the JSON file in `FAKE_GH_PRS`.
 - `opencode` answers the session API calls, and a session's messages from the JSON file in `FAKE_OC_MESSAGES`; `FAKE_OC_PAD=N` adds an old message of N bytes. Like the real `opencode api`, it writes only the first 256 KiB of an answer to a pipe.
 - `claude` fails if anything calls it, because tkt starts agents through herdr only.
 - `git` logs each call, then runs the real git.
+- `systemctl` keeps the user units' states in `$FAKE_DIR/systemd.json` (enabled and active) and answers `--user` commands. Like systemd, it refuses to enable or start a unit whose file, or template's file, is not in `$XDG_CONFIG_HOME/systemd/user`. It runs nothing: a started unit only counts as active. `systemd-escape --path` names a path with systemd's rules, `loginctl` reads and writes `$FAKE_DIR/linger`, and `launchctl` keeps the loaded agents in `$FAKE_DIR/launchd.json`.
 - `pi` answers `--version` with `1.3.0`. Any other call appends the variables tkt agent sets (`PI_CODING_AGENT_DIR`, `PI_SKIP_VERSION_CHECK`, `PI_TELEMETRY`, `TKT_BIN`) to `$FAKE_DIR/pi-env` and exits. The test binary has no bundled pi, so the `agent_` scripts set `TKT_PI=pi`; the condition `[bundled_pi]` holds when `go test -tags bundled_pi` built one in. A script has no terminal, so `tkt agent` never gets past its terminal check there: the scripts check its dry run, and unit tests in `internal/pi` and `internal/runner` cover the command line and the process replacement.
 
 The `update_` scripts point `TKT_RELEASES` and `TKT_RELEASES_API` at `file://` URLs under `$WORK`, and set `TKT_UPDATE_TARGET` to the file `tkt update` replaces. Only the tests set `TKT_UPDATE_TARGET`: without it, `tkt update` would replace the shared test binary.
 
 Every fake appends its command line to `$FAKE_LOG`, each word quoted like bash `printf %q`.
 
-`TKT_WATCH=off` keeps every script's tkt commands from starting a `tkt watch` that would outlive the script; the `watch_` scripts turn it back on where they test that.
+`TKT_WATCH=off` keeps every script's tkt commands from starting a `tkt watch` that would outlive the script; the `watch_` scripts turn it back on where they test that. `TKT_SERVICE_MANAGER` picks the services `tkt watch --install` writes, so a script on Linux can test the launchd agents too.
 
 The scripts use these commands beyond testscript's own:
 
@@ -54,6 +55,7 @@ The scripts use these commands beyond testscript's own:
 | `touchat FILE DATE` | Creates FILE with a modification time. |
 | `mkrelease TAG` | Publishes a fake release TAG under `$WORK/rel`: a binary for each system that logs `new-tkt ARGS` and prints `tkt version TAG`, and `SHA256SUMS`. |
 | `envelope [EXPR WANT]` | stdout holds exactly one JSON envelope, and EXPR applied to it gives WANT. |
+| `unitvar VAR PATH` | Sets VAR to PATH as `systemd-escape --path` names it. |
 
 ## Manual check in herdr
 
@@ -84,6 +86,16 @@ After a change to `tkt sync`, `tkt watch` or the tabs' `TMPDIR`, in a scratch Gi
 3. In the ticket's tab, run `echo $TMPDIR` and `mktemp`: both name `/tmp/tkt-...-ACM-1-...`. `tkt done ACM-1` after the merge removes the directory.
 4. Run `tkt ls` in a herdr pane: it says it started `tkt watch`, `tkt ls --json` shows `watch.running`, and the chat's board heading says `watch on`. Make the checks fail on a new head: within a minute, a fresh session runs ci, and herdr notifies. `tkt watch --stop` stops it.
 5. From a terminal outside herdr, `tkt watch --once --dry-run` finds the workspace from the panes and says what each ticket would get.
+
+After a change to `tkt watch --install` or the units, on a Linux machine with systemd, from a herdr pane in a scratch repository with the lifecycle configuration and a pull request for `ACM-1`:
+
+1. Run `tkt watch --install --dry-run`, then `tkt watch --install`. `systemctl --user status 'tkt-watch@*'` shows the unit running, and `tkt doctor` says so.
+2. Run `herdr server stop`, then `systemctl --user start herdr.service`, from a terminal outside herdr. Attach a herdr client: the workspaces and tabs are back, and agents resumed. In a new pane, `echo $PATH` matches the shell you installed from.
+3. Merge a change into `main` and make the pull request's base merge due. Within a minute, with no terminal attached, the unit syncs it: `journalctl --user -u 'tkt-watch@*'` shows the sync.
+4. Reboot, or log out and in. Both units run again before you open a herdr client, and `tkt ls --json` shows `watch.running`.
+5. Run `tkt watch --uninstall`. The unit stops and stays stopped after a reboot; `herdr.service` still runs.
+
+On a Mac, the same steps with `launchctl print gui/$(id -u)/tkt.herdr` for the status and `~/Library/Logs/herdr.log` and `tkt/watch.log` in the repository's git directory for the lines; the agents start at login, not at boot.
 
 After a change to how tkt starts pi, or after `just bump-pi`, build with `just build` and check pi itself:
 

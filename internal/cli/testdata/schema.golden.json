@@ -420,8 +420,8 @@
       "path": "watch",
       "use": "watch",
       "short": "Keep the repository's tickets moving: sync moved bases, fix failing checks, remove finished tickets",
-      "long": "tkt watch keeps a repository's tickets moving, every ticket and not only the\nones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads\nevery ticket with a fixed number of gh calls, and takes at most one step per\nticket, from the same rules as tkt ls:\n\n  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,\n    unless [watch] done_after_merge = false;\n  - the base moved at a moment a sync is due (a conflict, the bot's\n    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base\n    itself, as tkt sync does, with no agent, and runs resolve on a conflict;\n  - the checks fail at the head: it runs ci in a fresh session, once per\n    head.\n\nEverything else waits for you or for tkt auto: plans, reviews, findings,\nhuman verification and the merge. It leaves alone a ticket on hold (tkt\nhold), one a tkt auto loop drives, one another tkt command works on, one\nwhose agent works or asks a question, and one whose worktree directory is\ngone. It replaces an agent with a fresh session only after the agent sat\nidle for five minutes, since a person may still use that session, and it\nwaits while the forge still shows an older head than the branch has. A step\nit would repeat on the same head, or a fix run past [auto] max_rounds, waits\nfor you instead: tkt ls shows the ticket as needs_you, with watch.paused\nsaying why, and herdr notifies once.\n\nIts agent runs take the [auto] max_parallel slots tkt auto uses. It records\neach step in the history, and shows a herdr notification for each agent run,\nfailure and removal; a clean sync stays quiet. A sync that fails, such as\nwhile the network is down, is tried again at the next pass, with one\nnotification for each head and reason.\n\nOne tkt watch runs per repository. Every tkt command in a herdr pane starts\nit when none runs, in a session of its own, so it outlives the command and the\npane; it writes its lines to watch.log in the repository's git directory,\nunder tkt/. It waits a minute between two starts, so a watch that exits at\nonce is not started again by every command. [watch] autostart = false, or\nTKT_WATCH=off, turns that off. tkt ls --json says whether it runs, in\nwatch.running, and watch.error says why its last pass failed. tkt watch\n--stop stops it, after the step it is taking; a second SIGTERM stops it at\nonce. When tkt update replaces tkt, the watch stops by itself, and the next\ntkt command starts one that runs the new tkt.\n\nOutside a herdr pane it finds the workspace whose panes work in the\nrepository. When none has a pane there, it opens one before its first step,\nsince every step works in herdr. While herdr is down it waits.\n\n--once takes one pass and exits; with --dry-run it says what each ticket would\nget, and changes nothing.",
-      "example": "  tkt watch\n  tkt watch --once --dry-run\n  tkt watch --stop",
+      "long": "tkt watch keeps a repository's tickets moving, every ticket and not only the\nones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads\nevery ticket with a fixed number of gh calls, and takes at most one step per\nticket, from the same rules as tkt ls:\n\n  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,\n    unless [watch] done_after_merge = false;\n  - the base moved at a moment a sync is due (a conflict, the bot's\n    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base\n    itself, as tkt sync does, with no agent, and runs resolve on a conflict;\n  - the checks fail at the head: it runs ci in a fresh session, once per\n    head.\n\nEverything else waits for you or for tkt auto: plans, reviews, findings,\nhuman verification and the merge. It leaves alone a ticket on hold (tkt\nhold), one a tkt auto loop drives, one another tkt command works on, one\nwhose agent works or asks a question, and one whose worktree directory is\ngone. It replaces an agent with a fresh session only after the agent sat\nidle for five minutes, since a person may still use that session, and it\nwaits while the forge still shows an older head than the branch has. A step\nit would repeat on the same head, or a fix run past [auto] max_rounds, waits\nfor you instead: tkt ls shows the ticket as needs_you, with watch.paused\nsaying why, and herdr notifies once.\n\nIts agent runs take the [auto] max_parallel slots tkt auto uses. It records\neach step in the history, and shows a herdr notification for each agent run,\nfailure and removal; a clean sync stays quiet. A sync that fails, such as\nwhile the network is down, is tried again at the next pass, with one\nnotification for each head and reason.\n\nOne tkt watch runs per repository. Every tkt command in a herdr pane starts\nit when none runs, in a session of its own, so it outlives the command and the\npane; it writes its lines to watch.log in the repository's git directory,\nunder tkt/. It waits a minute between two starts, so a watch that exits at\nonce is not started again by every command. [watch] autostart = false, or\nTKT_WATCH=off, turns that off. tkt ls --json says whether it runs, in\nwatch.running, and watch.error says why its last pass failed. tkt watch\n--stop stops it, after the step it is taking; a second SIGTERM stops it at\nonce. When tkt update replaces tkt, the watch stops by itself, and the next\ntkt command starts one that runs the new tkt.\n\nOutside a herdr pane it finds the workspace whose panes work in the\nrepository. When none has a pane there, it opens one before its first step,\nsince every step works in herdr. While herdr is down it waits.\n\n--install keeps it running while no terminal is open: it writes systemd user\nunits, or launchd agents on macOS, for herdr's server and for this\nrepository's tkt watch, with this shell's PATH, since the agents in herdr's\npanes inherit herdr's. It enables both, starts herdr's unless herdr already\nruns, and asks before loginctl enable-linger starts them at boot; --yes\nanswers yes. tkt commands then start the unit rather than a watch of their\nown, and --stop stops the unit. --uninstall removes this repository's unit;\nherdr's stays. tkt doctor checks that they run and that their PATH finds the\ntools and harnesses.\n\n--once takes one pass and exits; with --dry-run it says what each ticket would\nget, and changes nothing. --install and --uninstall take --dry-run too.",
+      "example": "  tkt watch\n  tkt watch --once --dry-run\n  tkt watch --stop\n  tkt watch --install\n  tkt watch --uninstall",
       "group": "lifecycle",
       "args": [],
       "flags": [
@@ -429,7 +429,13 @@
           "name": "dry-run",
           "type": "bool",
           "default": "false",
-          "usage": "with --once, say what each ticket would get instead of doing it"
+          "usage": "with --once, say what each ticket would get instead of doing it; with --install or --uninstall, what would change"
+        },
+        {
+          "name": "install",
+          "type": "bool",
+          "default": "false",
+          "usage": "run tkt watch for this repository, and herdr's server, as services that start at boot"
         },
         {
           "name": "once",
@@ -442,6 +448,18 @@
           "type": "bool",
           "default": "false",
           "usage": "stop the tkt watch that runs for this repository"
+        },
+        {
+          "name": "uninstall",
+          "type": "bool",
+          "default": "false",
+          "usage": "stop running tkt watch for this repository as a service"
+        },
+        {
+          "name": "yes",
+          "type": "bool",
+          "default": "false",
+          "usage": "with --install, start the services at boot without asking (loginctl enable-linger)"
         }
       ],
       "result": {
@@ -454,6 +472,17 @@
         "dry_run": "boolean",
         "passes": "integer",
         "repo": "string",
+        "service": {
+          "fields": {
+            "files": "array of string",
+            "herdr": "string",
+            "linger": "string",
+            "manager": "string",
+            "removed": "boolean",
+            "unit": "string"
+          },
+          "nullable": true
+        },
         "stopped": "boolean",
         "tickets": [
           {
@@ -1564,6 +1593,11 @@
       "summary": "the command is interactive and needs a terminal on stdin and stdout"
     },
     {
+      "code": "service_unsupported",
+      "exit": 3,
+      "summary": "tkt watch --install found neither systemd nor launchd to run the services"
+    },
+    {
       "code": "ticket_locked",
       "exit": 4,
       "summary": "another tkt command is working on the ticket"
@@ -1784,6 +1818,11 @@
       "summary": "tkt cannot unpack its bundled pi, or write the extension or settings it starts pi with"
     },
     {
+      "code": "service_failed",
+      "exit": 1,
+      "summary": "a systemctl, launchctl or loginctl command failed, or tkt cannot write a service's file"
+    },
+    {
       "code": "agent_not_ready",
       "exit": 5,
       "summary": "the agent stopped at a startup dialog; answer it in its pane"
@@ -1852,6 +1891,10 @@
     {
       "name": "TKT_WATCH",
       "description": "off keeps tkt commands from starting tkt watch, as [watch] autostart = false does"
+    },
+    {
+      "name": "TKT_SERVICE_MANAGER",
+      "description": "systemd or launchd: the services tkt watch --install writes, instead of launchd on macOS and systemd elsewhere; any other value means neither"
     },
     {
       "name": "CLAUDE_CONFIG_DIR",

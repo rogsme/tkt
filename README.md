@@ -75,7 +75,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan; `--steer` types it in while the agent works, and `--wait` queues it until the agent stops. |
 | `tkt auto ID` | Drives the ticket: approves the plan with `--approve-plan`, waits for CI and the review bot, runs the fixes, pauses when the ticket needs you, and stops when the head is reviewed clean. |
 | `tkt hold ID` | Puts the ticket on hold, so `tkt watch` and `tkt auto` leave it alone; `--off` takes it off hold. |
-| `tkt watch` | Keeps every ticket moving: syncs a moved base, runs ci once per head when the checks fail, and removes a ticket after finish-ticket's `Status: DONE`. tkt commands start it by themselves. |
+| `tkt watch` | Keeps every ticket moving: syncs a moved base, runs ci once per head when the checks fail, and removes a ticket after finish-ticket's `Status: DONE`. tkt commands start it by themselves; `--install` runs it, and herdr's server, as services that start at boot. |
 | `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first), `resolve`, `ci`, `verify` or `start`. `sync`, the old name of `address`, still works and warns. |
 | `tkt sync ID` | Merges the base into the ticket's branch: itself, with no agent, when the merge is clean; through a fresh session that only resolves, on a conflict. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
@@ -166,6 +166,12 @@ interval = "60s"   # how often tkt watch looks at every ticket
 
 Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. `tkt help config` has the details.
 
+### Always on
+
+`tkt watch --install`, run in the repository, makes `tkt watch` and herdr's server services that start at boot: systemd user units on Linux (`herdr.service`, and a `tkt-watch@` unit named after the repository's path), launchd agents on macOS, which start at login. Syncs, CI fixes and removals then go on while no terminal is open. It asks before it runs `loginctl enable-linger`, which starts the units at boot rather than at login; `--yes` answers yes.
+
+The units keep the `PATH` of the shell you run it from, since the agents in herdr's panes inherit herdr's. Run it again after you install a harness somewhere new; `tkt doctor` checks that the units run and that their `PATH` still finds the tools and harnesses. When herdr's server already runs, its unit takes over at the next boot. To move it now, run `herdr server stop`, then `systemctl --user start herdr.service`, from a terminal outside herdr while no agent works; herdr resumes the agents when it starts. A server started at boot has no display, so a skill that opens a browser, such as present-plan, cannot; its handoff still carries the URL. `tkt watch --uninstall` stops the repository's unit and leaves herdr's.
+
 ### Driving tkt from a program
 
 - `--json`, or `TKT_FORMAT=json` in the environment, makes stdout hold exactly one JSON document per run. On success it carries the command's result; on failure it carries an error with a stable `code`, the exit status, a `hint` naming what to do next, and `details` (`tkt help json`).
@@ -179,7 +185,7 @@ Without the file, tkt runs Claude Code and OpenCode on their default models. The
 
 tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. Each ticket's tabs get `TMPDIR` set to a private directory under `/tmp`, which `tkt done` removes too. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. Past 10 MB the log starts over, and the older lines stay in `tkt.log.1`. `-v` prints the same lines as tkt goes.
 
-`tkt watch` writes its lines to `tkt/watch.log` in the repository's git directory, and how its last pass went to `tkt/watch` beside it.
+`tkt watch` writes its lines to `tkt/watch.log` in the repository's git directory, and how its last pass went to `tkt/watch` beside it. Under systemd, its lines go to the journal instead: `journalctl --user -u 'tkt-watch@*'`.
 
 What has to outlive a worktree goes to `~/.local/state/tkt/history.jsonl`, one JSON event per line: when tkt started a ticket, each phase it saw it enter, each stage, each `tkt auto` step, and the merge. `tkt stats` and `tkt history` read it.
 

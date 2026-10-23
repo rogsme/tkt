@@ -317,7 +317,9 @@ func watchCmd(g *globals) *cobra.Command {
 		Long:  helpText("watch"),
 		Example: `  tkt watch
   tkt watch --once --dry-run
-  tkt watch --stop`,
+  tkt watch --stop
+  tkt watch --install
+  tkt watch --uninstall`,
 		SuggestFor: []string{"daemon", "serve"},
 		Args:       cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -327,8 +329,11 @@ func watchCmd(g *globals) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&o.Once, "once", false, "take one pass over the tickets, then exit")
 	cmd.Flags().BoolVar(&o.Stop, "stop", false, "stop the tkt watch that runs for this repository")
-	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "with --once, say what each ticket would get instead of doing it")
-	cmd.MarkFlagsMutuallyExclusive("once", "stop")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "with --once, say what each ticket would get instead of doing it; with --install or --uninstall, what would change")
+	cmd.Flags().BoolVar(&o.Install, "install", false, "run tkt watch for this repository, and herdr's server, as services that start at boot")
+	cmd.Flags().BoolVar(&o.Uninstall, "uninstall", false, "stop running tkt watch for this repository as a service")
+	cmd.Flags().BoolVar(&o.Yes, "yes", false, "with --install, start the services at boot without asking (loginctl enable-linger)")
+	cmd.MarkFlagsMutuallyExclusive("once", "stop", "install", "uninstall")
 	return cmd
 }
 
