@@ -41,6 +41,11 @@ tkt auto --stop, which it notices at its next look. Ctrl-C ends it with exit 5
 and leaves the ticket marked for auto, so tkt ls shows auto.wanted. While a
 loop drives the ticket, its tab reads ACM-12 (claude, auto).
 
+When tkt update replaces tkt, a loop restarts on the new tkt at its next
+look, once its agent stops working: the same process runs the same command
+again. It keeps the pause it notified you about, so it does not notify it
+twice.
+
 At most [auto] max_parallel tkt auto agents work at once in a repository. A
 loop holds a slot while its agent works and gives it up while it waits for CI,
 the bot or you. A ticket waiting for a slot shows as queued in tkt ls, even

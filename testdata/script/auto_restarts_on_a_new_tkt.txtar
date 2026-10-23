@@ -1,0 +1,35 @@
+# A tkt auto loop whose tkt was replaced, as tkt update replaces it,
+# restarts on the new one between two looks: the same process runs the same
+# command, keeps the pause it notified about, and does not notify it twice.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "blocked"'
+
+# The loop runs from a copy of tkt that the script can replace.
+mkdir $WORK/bin
+exec sh -c 'cp "$(command -v tkt)" "$1"' sh $WORK/bin/tkt
+exec $WORK/bin/tkt auto ACM-12 --notify --poll 1s --json &
+waitstate $FAKE_WT_ROOT/ACM-12 auto_pause needs_you
+waitgrep 'notification show ACM-12:\\ needs' $FAKE_LOG
+
+# tkt update renames the new binary over the old one.
+exec sh -c 'cp "$(command -v tkt)" "$1"' sh $WORK/tkt.new
+touchat $WORK/tkt.new 2026-01-02
+mv $WORK/tkt.new $WORK/bin/tkt
+waitgrep 'rc=exec 0ms \S*/bin/tkt auto ACM-12 --notify --poll 1s --json' $HOME/.local/state/tkt/tkt.log
+state $FAKE_WT_ROOT/ACM-12 auto_pause needs_you
+
+# You answered in the tab, and then the pull request merged: the new loop
+# ends as the old one would have.
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+cp $WORK/merged.json $FAKE_DIR/prs.json
+wait
+stderr 'tkt was replaced, so tkt auto ACM-12 restarts on the new tkt'
+stdout '"stop": *"merged"'
+state $FAKE_WT_ROOT/ACM-12 auto_stop merged
+grep -count=1 'notification show .*needs' $FAKE_LOG
+
+-- merged.json --
+[{"number": 4, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "createdAt": "2026-01-01T00:00:00Z", "mergedAt": "2026-01-02T00:00:00Z"}]

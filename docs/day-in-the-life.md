@@ -383,7 +383,7 @@ The chat answers from ACM-121's history: the bot's formula finding on three head
 
 ACM-133 stays on hold, its plan waiting, until the data team answers.
 
-Last, `/update` checks the new release, asks you to confirm, installs v0.6.1 with `tkt update`, and offers to quit, since the chat runs the old tkt until you reopen it. You quit, and the chat prints the command that resumes it, `tkt agent --session ID`. tkt watch stops when its binary changes, and its unit starts it again on the new one. Nothing waited for the chat: ACM-125's tkt auto loop and tkt watch go on overnight and notify through herdr, and tomorrow `tkt agent --continue` picks up this conversation.
+Last, `/update` checks the new release, asks you to confirm, installs v0.6.1 with `tkt update`, and offers to quit, since the chat runs the old tkt until you reopen it. You quit, and the chat prints the command that resumes it, `tkt agent --session ID`. tkt watch stops when its binary changes, and its unit starts it again on the new one; ACM-125's tkt auto loop restarts on the new one at its next look. Nothing waited for the chat: ACM-125's tkt auto loop and tkt watch go on overnight and notify through herdr, and tomorrow `tkt agent --continue` picks up this conversation.
 
 ## What the board can ask of you
 
