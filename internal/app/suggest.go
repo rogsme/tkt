@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"gitlab.com/rogs/tkt/internal/agent"
 	"gitlab.com/rogs/tkt/internal/apperr"
@@ -16,19 +17,23 @@ import (
 	"gitlab.com/rogs/tkt/internal/state"
 )
 
-// SuggestOpts are tkt suggest's arguments: how many tickets to suggest and
-// the preset suggest-tickets runs on.
+// SuggestOpts are tkt suggest's arguments: what to ask the agent, either
+// Request in your own words or the suggest line for Count tickets, and the
+// preset it runs on.
 type SuggestOpts struct {
-	Count int
-	As    string
-	Dry   bool
+	Count   int
+	Request string
+	As      string
+	Dry     bool
 }
 
 // SuggestResult is what tkt suggest did: the session it started in the
-// suggest tab at the repository's root. The picks stay in that tab, for you
-// to read and talk over with the agent.
+// suggest tab at the repository's root, and the prompt it sent. The answer
+// stays in that tab, for you to read and talk over with the agent. Count is
+// 0 for a request.
 type SuggestResult struct {
 	Count   int      `json:"count"`
+	Prompt  string   `json:"prompt"`
 	Tab     string   `json:"tab"`
 	Pane    string   `json:"pane"`
 	Preset  string   `json:"preset"`
@@ -39,6 +44,10 @@ type SuggestResult struct {
 }
 
 func (r *SuggestResult) Text(w io.Writer) {
+	if r.Count == 0 {
+		fmt.Fprintf(w, "the suggest agent has your request in pane %s (%s, %s); read its answer there\n", r.Pane, r.Preset, r.Harness)
+		return
+	}
 	fmt.Fprintf(w, "suggest-tickets picks %d in pane %s (%s, %s); read its picks there\n", r.Count, r.Pane, r.Preset, r.Harness)
 }
 
@@ -49,17 +58,23 @@ const suggestLock = "suggest"
 // session, next to tkt watch's in the repository's git directory.
 func suggestStatePath(common string) string { return filepath.Join(common, "tkt", "suggest") }
 
-// Suggest has suggest-tickets pick the next tickets to start, ones that can
-// run side by side: it starts a fresh session in the suggest tab at the
-// repository's root, on the [suggest] preset, and sends the suggest line.
-// suggest-tickets only reads, and tkt reads none of its report: its picks
-// are yours to weigh in the tab.
+// Suggest starts a fresh session in the suggest tab at the repository's
+// root, on the [suggest] preset, and sends it your request as you wrote it,
+// or without one the suggest line, which has suggest-tickets pick the next
+// tickets to start, ones that can run side by side. tkt reads none of the
+// answer: it is yours to weigh in the tab.
 func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error) {
-	if o.Count == 0 {
-		o.Count = 3
-	}
-	if o.Count < 1 || o.Count > 10 {
-		return nil, apperr.New(apperr.Usage, "tkt suggest picks 1 to 10 tickets, not %d", o.Count).WithHint("tkt suggest 3")
+	line := strings.TrimSpace(o.Request)
+	if line == "" {
+		if o.Count == 0 {
+			o.Count = 3
+		}
+		if o.Count < 1 || o.Count > 10 {
+			return nil, apperr.New(apperr.Usage, "tkt suggest picks 1 to 10 tickets, not %d", o.Count).WithHint("tkt suggest 3")
+		}
+		line = config.SuggestLine(o.Count)
+	} else {
+		o.Count = 0
 	}
 	c, err := a.begin(ctx, o.Dry, false)
 	if err != nil {
@@ -83,7 +98,7 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 		return nil, err
 	}
 	ts := &ticketState{path: suggestStatePath(c.Repo.Common), st: state.Read(suggestStatePath(c.Repo.Common))}
-	res := &SuggestResult{Count: o.Count, Preset: preset.Name, Harness: h, DryRun: c.Dry, Actions: []Action{}}
+	res := &SuggestResult{Count: o.Count, Prompt: line, Preset: preset.Name, Harness: h, DryRun: c.Dry, Actions: []Action{}}
 	// herdr names agents across every repository it serves.
 	name := prompt.AgentName(suggestLock + "-" + filepath.Base(c.Repo.Root))
 	res.Tab, res.Pane, err = c.suggestPane(ts, preset, name)
@@ -106,7 +121,7 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 	case agent.Failed:
 		return nil, apperr.New(apperr.AgentLaunchFailed, "%s", err.Error())
 	}
-	switch out, _, err := c.Agent.Deliver(c.Ctx, res.Pane, config.SuggestLine(o.Count), h, sid, c.Repo.Root); out {
+	switch out, _, err := c.Agent.Deliver(c.Ctx, res.Pane, line, h, sid, c.Repo.Root); out {
 	case agent.Uncertain:
 		c.save(ts, "status", "prompt_uncertain")
 		return nil, c.screenErr(apperr.New(apperr.PromptUncertain,

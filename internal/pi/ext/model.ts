@@ -174,10 +174,11 @@ export interface MergeResult {
 	sent?: string;
 }
 
-/** SuggestResult is what tkt suggest prints: the tab and pane where
- * suggest-tickets runs. */
+/** SuggestResult is what tkt suggest prints: the tab and pane where the
+ * agent runs, and the prompt it got; count is 0 for a request. */
 export interface SuggestResult {
 	count: number;
+	prompt: string;
 	tab: string;
 	pane: string;
 	preset: string;

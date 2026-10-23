@@ -1,6 +1,15 @@
-tkt suggest has the suggest-tickets skill pick the next tickets to start,
-ones that can run side by side. It opens a suggest tab at the repository's
-root, or reuses it, and starts a fresh session there that gets the line
+tkt suggest asks a fresh agent which tickets to start next. It opens a
+suggest tab at the repository's root, or reuses it, starts a fresh session
+there, and sends it what you ask, word for word:
+
+  tkt suggest five tickets tagged feedback that can run side by side
+  tkt suggest 'tickets small enough for the fast preset'
+
+tkt names no skill in a request, so the agent works from your words alone.
+Ask for suggest-tickets by name when you want its rules.
+
+With no words, or only a count, it sends the suggest line instead, which
+has the suggest-tickets skill pick that many tickets, 3 by default:
 
   Use the suggest-tickets skill to suggest the next 3 tickets to start, ones
   that can run side by side.
@@ -15,12 +24,11 @@ and ends with a line such as
 
   Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)
 
-COUNT is how many to pick, 3 by default. The session runs on the [suggest]
-preset (tkt help config), or the default preset; --as picks another, such as
-a cheap one, since the run only reads.
+The session runs on the [suggest] preset (tkt help config), or the default
+preset; --as picks another, such as a cheap one.
 
-tkt suggest returns once the agent has the line, and reads nothing it
-says. The picks stay in the tab: read them there, ask the agent about them,
-and start the ones you want with tkt start, adding --as PRESET for a pick
-whose model another preset serves. The tkt agent's /suggest opens the same
-tab.
+tkt suggest returns once the agent has the prompt, and reads nothing it
+says. The answer stays in the tab: read it there, ask the agent about it,
+and start the tickets you want with tkt start, adding --as PRESET for a
+ticket whose model another preset serves. The tkt agent's /suggest opens
+the same tab.

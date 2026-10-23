@@ -24,6 +24,16 @@ stdout '^suggest-tickets picks 3 in pane w1:p[0-9]+ \(cheap, claude\); read its 
 ! logged herdr agent wait
 grep '^Use the suggest-tickets skill to suggest the next 3 tickets to start, ones that can run side by side.$' $FAKE_DIR/prompts
 
+# Words other than a count go to the agent as they are, with no skill
+# named, such as a request for tickets with a tag.
+resetlog
+exec tkt suggest five tickets tagged feedback --json
+envelope '.result | [.count, .prompt]' '[0,"five tickets tagged feedback"]'
+grep '^five tickets tagged feedback$' $FAKE_DIR/prompts
+! grep 'suggest-tickets' $FAKE_DIR/prompts
+exec tkt suggest 'tickets for the fast preset'
+stdout '^the suggest agent has your request in pane w1:p[0-9]+ \(cheap, claude\); read its answer there$'
+
 # herdr numbers panes again when its server restarts, so a kept pane id
 # that now names another pane, here tkt's own, never gets the agent.
 jqedit $FAKE_DIR/herdr.json '.agents |= map(select(.name != "suggest-app"))'
@@ -43,6 +53,8 @@ envelope '.error.code' agent_busy
 ! exec tkt suggest 11 --json
 rc 2
 envelope '.error.code' usage
+! exec tkt suggest 0 --json
+rc 2
 ! exec tkt suggest --as nope --json
 envelope '.error.code' unknown_preset
 houserules

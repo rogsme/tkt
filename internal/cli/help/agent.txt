@@ -23,7 +23,8 @@ in ACM-12 and ACM-13?". The chat reads tkt history: each step with its time,
 and the pull request's commits and reviews with the review bot's findings.
 
 The same actions work without the model as slash commands: /suggest (a
-tab where suggest-tickets picks tickets to start next), /start (add "as
+fresh agent in a suggest tab says which tickets to start next; add what you
+want, such as /suggest five tickets tagged feedback), /start (add "as
 PRESET" for a preset), /approve, /next, /auto, /hold, /sync, /send, /show,
 /peek (the agent's live screen), /check (the human verification checklist,
 which offers to sync a ticket that is behind first), /done, /inbox (what needs
