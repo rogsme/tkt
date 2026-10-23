@@ -19,7 +19,7 @@ The script starts in `$REPO`. Files in a script's archive land in `$WORK`, so a 
 
 The fakes in `internal/fake` stand in for the real tools on `PATH`:
 
-- `herdr` keeps workspaces, tabs, panes and agents in `$FAKE_DIR/herdr.json` and answers the commands tkt uses. Environment variables inject failures, such as `FAKE_HERDR_START_ERRORS=agent_pane_busy,...` or `FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled`. A `-` in such a list lets that call succeed. `agent read` prints `$FAKE_DIR/screen` when it exists, otherwise `FAKE_HERDR_SCREEN`.
+- `herdr` keeps workspaces, tabs, panes and agents in `$FAKE_DIR/herdr.json` and answers the commands tkt uses. A pane that `tab create` opens keeps its `--env` values as `env`. Environment variables inject failures, such as `FAKE_HERDR_START_ERRORS=agent_pane_busy,...` or `FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled`. A `-` in such a list lets that call succeed. `agent read` prints `$FAKE_DIR/screen` when it exists, otherwise `FAKE_HERDR_SCREEN`.
 - In turns mode, `FAKE_HERDR_TURNS` names a JSON list of agent turns, such as `[{"screen": "Status: AWAITING_APPROVAL"}, {"screen": "...", "prs": "/path/prs.json"}]`. A prompt sets the agent working, and each `agent wait` on a working agent ends its turn with the next entry: its `status` (idle by default), its screen, and a pull request file that `gh` lists from then on. The `auto_` scripts drive whole tickets this way.
 - `wt` creates and removes real git worktrees under `$FAKE_WT_ROOT` and prints worktrunk's JSON: schema 1, or schema 2 with `FAKE_WT_SCHEMA=2`.
 - `gh` answers `pr list` from `$FAKE_DIR/prs.json` when it exists, otherwise from the JSON file in `FAKE_GH_PRS`.
@@ -32,6 +32,8 @@ The `update_` scripts point `TKT_RELEASES` and `TKT_RELEASES_API` at `file://` U
 
 Every fake appends its command line to `$FAKE_LOG`, each word quoted like bash `printf %q`.
 
+`TKT_WATCH=off` keeps every script's tkt commands from starting a `tkt watch` that would outlive the script; the `watch_` scripts turn it back on where they test that.
+
 The scripts use these commands beyond testscript's own:
 
 | Command | Checks or does |
@@ -41,9 +43,10 @@ The scripts use these commands beyond testscript's own:
 | `logcontains TEXT` | The log holds TEXT exactly. |
 | `resetlog` | Forgets the commands and prompts so far. |
 | `houserules` | No `wt` run used `--no-hooks`, `--clobber` or `--yes`; no git or herdr command changed worktrees; nothing ran `claude` directly. |
-| `jqedit FILE EXPR`, `jqeq FILE EXPR WANT` | Edits or checks a JSON file with a jq expression. Expressions can read `$REPO`, `$WORK`, `$WT`, `$FAKE_WT_ROOT`, `$FAKE_DIR`, `$HOME`, `$SID` and `$H1` to `$H3`. |
+| `jqedit FILE EXPR`, `jqeq FILE EXPR WANT` | Edits or checks a JSON file with a jq expression. Expressions can read `$REPO`, `$WORK`, `$WT`, `$FAKE_WT_ROOT`, `$FAKE_DIR`, `$HOME`, `$SID` and `$H1` to `$H5`. |
 | `state DIR KEY WANT`, `statevar DIR KEY VAR` | Checks or reads the ticket state of the worktree in DIR. |
 | `waitstate DIR KEY WANT` | Waits up to 30 seconds for the ticket state to record KEY=WANT, for a `tkt auto` loop started in the background with `exec ... &`. |
+| `waitfile FILE` | Waits up to 30 seconds for FILE to exist, such as the status file a `tkt watch` started in the background writes. |
 | `mkprompt FILE ID [LINE...]` | Writes a start-ticket prompt for ID. |
 | `realgit ARGS...` | Runs the real git without logging, for setup. |
 | `gitvar VAR DIR REV` | Sets VAR to a commit. |
@@ -73,6 +76,14 @@ After a change to how tkt reads sessions or drives tickets (`show`, `approve`, `
 3. `tkt wait ACM-1 --notify` shows a herdr notification when the agent stops.
 4. On another ticket, `tkt auto ACM-2 --approve-plan --notify` runs to `READY_FOR_HUMAN`. Check that it waits for CI and for the review bot, and that it stops with a notification when the agent asks a question.
 5. `tkt show ACM-2 --steps` lists the review's human verification steps. After the merge, `tkt done ACM-2` reports the time from start to merge, and `tkt stats` lists it.
+
+After a change to `tkt sync`, `tkt watch` or the tabs' `TMPDIR`, in a scratch GitHub repository with the lifecycle configuration and a pull request for `ACM-1`:
+
+1. Merge another branch into `main` that touches other files, then run `tkt sync ACM-1`. It pushes a merge commit within seconds, starts no agent, and CI and the review bot run on the new head.
+2. Merge a change to the same lines into `main`, then run `tkt sync ACM-1`. A fresh session in the ticket's tab gets the resolve line, resolves the conflict, and pushes one merge.
+3. In the ticket's tab, run `echo $TMPDIR` and `mktemp`: both name `/tmp/tkt-...-ACM-1-...`. `tkt done ACM-1` after the merge removes the directory.
+4. Run `tkt ls` in a herdr pane: it says it started `tkt watch`, `tkt ls --json` shows `watch.running`, and the chat's board heading says `watch on`. Make the checks fail on a new head: within a minute, a fresh session runs ci, and herdr notifies. `tkt watch --stop` stops it.
+5. From a terminal outside herdr, `tkt watch --once --dry-run` finds the workspace from the panes and says what each ticket would get.
 
 After a change to how tkt starts pi, or after `just bump-pi`, build with `just build` and check pi itself:
 

@@ -47,6 +47,9 @@ const (
 	StatusBlockedForSync       = "BLOCKED_FOR_SYNC"
 	StatusHumanQAFailed        = "HUMAN_QA_FAILED"
 	StatusAwaitingPostApproval = "AWAITING_POST_APPROVAL"
+	// StatusDone ends a finish-ticket run that merged the pull request,
+	// saw post-merge CI pass and moved the ticket to done.
+	StatusDone = "DONE"
 )
 
 // StatusLineRE finds a status line on an agent's screen.
@@ -78,6 +81,16 @@ var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`
 // Skills names the lifecycle skills tkt's built-in stage lines, and the line
 // tkt approve sends, ask for.
 var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr"}
+
+// CleanMergeRule is how review-pr's rule about a review brief across clean
+// base merges begins. tkt sync relies on it: it pushes such merges with no
+// agent, and leaves the brief as it was.
+const CleanMergeRule = "A brief pinned to an earlier head stays current when every commit after that head is a clean merge of the base"
+
+// ResolveSkill is the engineering skill the resolve stage line asks for. It
+// resolves a merge that stopped on conflicts, keeps it a merge, and asks the
+// user about a hunk that decides product behavior.
+const ResolveSkill = "resolving-merge-conflicts"
 
 // Unattended is the word start-ticket's "Unattended runs" section looks for
 // in its request: the run skips the browser presentation, and every open

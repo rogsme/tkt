@@ -54,6 +54,7 @@ const (
 	ConfigInvalid          Code = "config_invalid"
 	ConfigLegacy           Code = "config_legacy"
 	HerdrEnvMissing        Code = "herdr_env_missing"
+	HerdrWorkspaceMissing  Code = "herdr_workspace_missing"
 	WorktreeLayout         Code = "worktree_layout"
 	WorktreeBranchMismatch Code = "worktree_branch_mismatch"
 	NoPresetForHarness     Code = "no_preset_for_harness"
@@ -87,6 +88,11 @@ const (
 	NoVerification      Code = "no_verification_steps"
 	AutoRunning         Code = "auto_running"
 	AutoStopped         Code = "auto_stopped"
+	WorktreeDirty       Code = "worktree_dirty"
+	BranchNotPushed     Code = "branch_not_pushed"
+	UnpushedCommits     Code = "unpushed_commits"
+	SyncConflict        Code = "sync_conflict"
+	WatchRunning        Code = "watch_running"
 
 	WtFailed          Code = "wt_failed"
 	WtSwitchFailed    Code = "wt_switch_failed"
@@ -144,6 +150,7 @@ var Registry = []Info{
 	{ConfigInvalid, ExitEnvironment, "tkt's own configuration file is invalid"},
 	{ConfigLegacy, ExitEnvironment, "tkt's configuration is in the old presets and stages files"},
 	{HerdrEnvMissing, ExitEnvironment, "tkt does not run inside a herdr pane"},
+	{HerdrWorkspaceMissing, ExitEnvironment, "outside a herdr pane, tkt watch finds no herdr workspace with a pane in the repository"},
 	{WorktreeLayout, ExitEnvironment, "the worktree directory is not named after its branch"},
 	{WorktreeBranchMismatch, ExitEnvironment, "the worktree is not on the ticket's branch"},
 	{NoPresetForHarness, ExitEnvironment, "no preset uses the session's harness"},
@@ -177,6 +184,11 @@ var Registry = []Info{
 	{NoVerification, ExitState, "no review says READY_FOR_HUMAN at the pull request's head with Human verification steps"},
 	{AutoRunning, ExitState, "a tkt auto loop already drives the ticket"},
 	{AutoStopped, ExitState, "tkt auto stopped because the ticket needs a person; details.stop says why"},
+	{WorktreeDirty, ExitState, "the ticket's worktree has uncommitted changes or a merge in progress"},
+	{BranchNotPushed, ExitState, "the ticket's branch is not on the remote yet"},
+	{UnpushedCommits, ExitState, "the ticket's branch has commits that are not on the remote"},
+	{SyncConflict, ExitState, "merging the base conflicts, and --no-agent kept tkt sync from starting a session to resolve it"},
+	{WatchRunning, ExitState, "a tkt watch already runs for the repository, or did not stop when asked"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},

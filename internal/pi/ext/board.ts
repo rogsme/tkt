@@ -42,6 +42,9 @@ export interface BoardState {
 	repo: string;
 	/** update is a newer tkt release that /update installs. */
 	update?: string;
+	/** watch says whether tkt watch runs, and whether its passes fail;
+	 * undefined until tkt ls says. */
+	watch?: "on" | "off" | "failing";
 }
 
 /** The command that acts on an item, shown beside it on the board. */
@@ -70,7 +73,17 @@ export function footer(s: BoardState): string {
 export function title(s: BoardState): string {
 	const n = s.rows.length;
 	const k = new Set(s.items.map((a) => a.ticket)).size;
-	return `tkt  ${s.repo}  ${n} ticket${n === 1 ? "" : "s"}${k ? `  ${k} need${k === 1 ? "s" : ""} you` : ""}`;
+	const watch = s.watch ? `  watch ${s.watch}` : "";
+	return `tkt  ${s.repo}  ${n} ticket${n === 1 ? "" : "s"}${k ? `  ${k} need${k === 1 ? "s" : ""} you` : ""}${watch}`;
+}
+
+/** watchStage names the stage tkt watch set the ticket's working agent to,
+ * or "" when the agent works on something else. */
+export function watchStage(r: Row): string {
+	const last = r.watch?.last ?? "";
+	if (r.agent?.status !== "working" || !last.startsWith("run:")) return "";
+	const stage = last.slice(4, last.indexOf("@"));
+	return stage === r.stage ? stage : "";
 }
 
 /** The board's columns and their widths. AGE is the time since tkt start,
@@ -119,8 +132,11 @@ function rowText(r: Row, s: BoardState): string {
 	const cells = [r.ticket, since(r.started, s.now) || "-", phaseLabel(r.phase), since(r.phase_since, s.now) || "-", agent, r.pr ? `#${r.pr.number}` : "-"];
 	const parts = cells.map((c, i) => pad(c, heads[i][1]));
 	const flags: string[] = [];
-	if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : "auto");
+	if (r.hold) flags.push("hold");
+	else if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : "auto");
 	else if (r.auto?.wanted) flags.push("auto stalled");
+	const ws = watchStage(r);
+	if (ws) flags.push(`watch: ${ws}`);
 	const job = s.jobs.get(r.ticket);
 	if (job) flags.push(`${job} ${spinner[s.tick % spinner.length]}`);
 	if (r.stale) flags.push("stale");

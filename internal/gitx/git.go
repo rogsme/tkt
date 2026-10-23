@@ -4,6 +4,7 @@ package gitx
 import (
 	"context"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,18 @@ func (g Git) run(ctx context.Context, timeout time.Duration, args ...string) run
 func (g Git) out(ctx context.Context, args ...string) (string, bool) {
 	r := g.run(ctx, 0, args...)
 	return strings.TrimRight(r.Out(), "\n"), r.OK()
+}
+
+// Argv is the git command line that runs args in dir. Commands that change
+// a repository build it once, so a dry run reports the same line a real run
+// executes with Do.
+func Argv(dir string, args ...string) []string {
+	return append([]string{"git", "-C", dir}, args...)
+}
+
+// Do runs a command line that Argv built.
+func (g Git) Do(ctx context.Context, timeout time.Duration, argv []string) runner.Result {
+	return g.R.Run(ctx, runner.Cmd{Argv: argv, Timeout: timeout})
 }
 
 // Repo locates a repository: Root is the primary worktree and Common the
@@ -99,6 +112,14 @@ func (g Git) Clean(ctx context.Context, path string) bool {
 	return ok && s == ""
 }
 
+// Unchanged reports whether the worktree has no change to a tracked file.
+// Untracked files do not count: a merge leaves them alone, and refuses to
+// overwrite one.
+func (g Git) Unchanged(ctx context.Context, path string) bool {
+	s, ok := g.out(ctx, "-C", path, "status", "--porcelain=v1", "--untracked-files=no")
+	return ok && s == ""
+}
+
 // Count returns git rev-list --count for a range, or -1.
 func (g Git) Count(ctx context.Context, path, rng string) int {
 	s, ok := g.out(ctx, "-C", path, "rev-list", "--count", rng)
@@ -112,6 +133,58 @@ func (g Git) Count(ctx context.Context, path, rng string) int {
 // IsAncestor reports whether commit is an ancestor of ref.
 func (g Git) IsAncestor(ctx context.Context, dir, commit, ref string) bool {
 	return g.run(ctx, 0, "-C", dir, "merge-base", "--is-ancestor", commit, ref).OK()
+}
+
+// Rev returns the object a revision names, such as a commit for
+// refs/remotes/origin/main or a tree for HEAD^{tree}, or "" when it names
+// none.
+func (g Git) Rev(ctx context.Context, dir, rev string) string {
+	s, ok := g.out(ctx, "-C", dir, "rev-parse", "--quiet", "--verify", rev)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
+// MergeInProgress reports whether the worktree is in the middle of a merge.
+func (g Git) MergeInProgress(ctx context.Context, dir string) bool {
+	return g.Rev(ctx, dir, "MERGE_HEAD") != ""
+}
+
+// Merge is what merging theirs into ours would give: the tree, and the
+// files that conflict. A merge with no conflicting file is clean.
+type Merge struct {
+	Tree      string
+	Conflicts []string
+}
+
+// Clean reports whether the merge has no conflict.
+func (m Merge) Clean() bool { return len(m.Conflicts) == 0 }
+
+var oidRE = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
+
+// MergeTree merges theirs into ours in memory, as git merge would, without
+// touching the worktree, the index or any ref (git 2.38 or newer).
+func (g Git) MergeTree(ctx context.Context, dir, ours, theirs string) (Merge, error) {
+	r := g.run(ctx, time.Minute, "-C", dir, "merge-tree", "--write-tree", "--name-only", "--no-messages", ours, theirs)
+	lines := strings.Split(strings.TrimRight(r.Out(), "\n"), "\n")
+	// Exit 1 means a conflict, but also a bad revision; only a conflict
+	// prints a tree first.
+	if (r.Code != 0 && r.Code != 1) || !oidRE.MatchString(lines[0]) {
+		return Merge{}, apperr.New(apperr.GitFailed, "git merge-tree %s %s failed in %s: %s", ours, theirs, dir, runner.Head(strings.TrimSpace(r.ErrText()), 200))
+	}
+	m := Merge{Tree: lines[0], Conflicts: []string{}}
+	if r.Code == 1 {
+		for _, l := range lines[1:] {
+			if l != "" {
+				m.Conflicts = append(m.Conflicts, l)
+			}
+		}
+		if len(m.Conflicts) == 0 {
+			m.Conflicts = []string{"?"}
+		}
+	}
+	return m, nil
 }
 
 // Worktree is one entry of git worktree list.

@@ -1,6 +1,7 @@
-tkt done closes the ticket's tabs and removes its worktree once its pull
-request is merged. worktrunk deletes the branch when it is merged into the
-base; after a squash merge the branch stays.
+tkt done closes the ticket's tabs and removes its worktree, and the private
+temporary directory its tabs had as TMPDIR, once its pull request is merged.
+worktrunk deletes the branch when it is merged into the base; after a squash
+merge the branch stays.
 
 It keeps the worktree, and says why, when:
   - the pull request is still open, or no merged pull request has the branch;

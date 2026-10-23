@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import type { Envelope, UpdateResult } from "./model.ts";
+import { type Envelope, stepText, type UpdateResult } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
@@ -71,6 +71,13 @@ export function stage(hub: Hub, id: string, name: string, as = ""): string {
 	return `Queued: ${name} for ${id} in a fresh session${as ? ` on ${as}` : ""}. The board shows when it needs you.`;
 }
 
+/** sync merges the base into the ticket's branch in the background: tkt
+ * itself when the merge is clean, a fresh session on a conflict. */
+export function sync(hub: Hub, id: string): string {
+	hub.add({ ticket: id, label: "sync", args: ["sync", id] });
+	return `Queued: tkt sync for ${id}. It merges the base itself when the merge is clean, and hands a conflict to a fresh session.`;
+}
+
 /** resume relaunches the ticket's newest session when no agent runs for it. */
 export function resume(hub: Hub, id: string): string {
 	hub.add({ ticket: id, label: "resume", args: ["resume", id] });
@@ -85,6 +92,14 @@ export async function auto(hub: Hub, id: string, on: boolean, approvePlan: boole
 	const env = await hub.run({ ticket: id, label: "auto off", args: ["auto", id, "--stop"], quiet: true });
 	if (!env.ok) return failure(id, env);
 	return `Stopped tkt auto for ${id}; its loop ends at its next look.`;
+}
+
+/** hold puts a ticket on hold, or takes it off, and waits for tkt's answer. */
+export async function hold(hub: Hub, id: string, on: boolean): Promise<string> {
+	const env = await hub.run({ ticket: id, label: on ? "hold" : "hold off", args: ["hold", id, ...(on ? [] : ["--off"])], quiet: true });
+	if (!env.ok) return failure(id, env);
+	if (!on) return `${id} is off hold; tkt watch and tkt auto can drive it again.`;
+	return `${id} is on hold: tkt watch and tkt auto leave it alone, and the board shows no step to take for it. /hold ${id} off lifts it.`;
 }
 
 export async function done(hub: Hub, id: string): Promise<string> {
@@ -120,7 +135,7 @@ export async function next(hub: Hub, id: string): Promise<string> {
 	const r = dry.result as AutoOnce;
 	if (r.did) {
 		hub.add({ ticket: id, label: r.did.stage || r.did.action, args: ["auto", id, "--once"] });
-		return `Queued: ${id} ${r.did.action === "approve" ? "approving the plan" : r.did.action === "start" ? "starting" : `running ${r.did.stage}`}.`;
+		return `Queued: ${id} ${stepText(r.did)}.`;
 	}
 	if (r.wait === "awaiting_bot") return `${id} waits for the review bot in CI; ${hub.row(id)?.next.text ?? "tkt ls shows it"}.`;
 	if (r.wait) return `${id} has nothing to do yet: ${r.next.text}.`;
@@ -194,6 +209,17 @@ export function restoreMarks(entries: { type: string; customType?: string; data?
 /** check walks the human verification steps: verify first if you want,
  * then the checklist, then a fix session for a failed step. */
 export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promise<string> {
+	// Your steps should run on the code that will merge.
+	const behind = hub.row(id)?.behind ?? 0;
+	if (behind > 0) {
+		const n = `${behind} commit${behind === 1 ? "" : "s"}`;
+		const a = await ask(ctx, `${id} is ${n} behind its base. Sync it first?`, [
+			{ label: "Sync first", description: "tkt sync merges the base; the new head gets a review, then /check again." },
+			{ label: "Verify this head anyway" },
+		], false);
+		if (!a) return "Closed.";
+		if (a.answer.startsWith("Sync")) return `${sync(hub, id)} /check ${id} again once the new head is reviewed.`;
+	}
 	const first = await ask(ctx, `${id}: how do you want to verify?`, [
 		{ label: "Open the checklist", description: "Mark each human verification step as you run it." },
 		{ label: "Run tkt run verify first", description: "An agent runs the steps in a browser and reports; it changes nothing. /check again when it is done." },

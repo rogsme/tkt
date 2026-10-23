@@ -75,6 +75,8 @@ func stepText(s AutoStep) string {
 		return "started"
 	case actApprove:
 		return "approved the plan"
+	case actSync:
+		return "merged the base"
 	}
 	return "ran " + s.Stage
 }
@@ -95,6 +97,12 @@ const (
 	StopRoundLimit    = "round_limit"
 	StopNoProgress    = "no_progress"
 	StopUnknown       = "unknown"
+	// StopHold pauses a loop while the ticket is on hold. You put it there,
+	// so the loop does not notify.
+	StopHold = "hold"
+	// StopSyncFailed pauses a loop whose sync cannot happen for now, such as
+	// while the worktree holds changes. The loop tries again at each look.
+	StopSyncFailed = "sync_failed"
 )
 
 // stopHint says what a person does after a stop.
@@ -120,6 +128,10 @@ func stopHint(stop, id string) string {
 		return "read the review, then tkt run " + id + " address, or raise [auto] max_rounds"
 	case StopNoProgress:
 		return "the last step changed nothing; check the ticket's tab, then tkt auto " + id
+	case StopHold:
+		return "tkt hold " + id + " --off lets tkt auto and tkt watch drive it again"
+	case StopSyncFailed:
+		return "tkt sync " + id + " says why it cannot merge the base; tkt auto goes on once it can"
 	}
 	return "check the agent in its tab, then tkt auto " + id
 }
@@ -144,6 +156,10 @@ func pauseText(stop, reason string) string {
 		return "it reached [auto] max_rounds fix runs since the plan; read the review"
 	case stop == StopNoProgress:
 		return "the last step changed nothing; check the ticket's tab"
+	case stop == StopHold:
+		return "the ticket is on hold; tkt hold --off lets the loop go on"
+	case stop == StopSyncFailed:
+		return "tkt sync cannot merge the base"
 	case reason == ReasonCheckAgent:
 		return "the agent stopped without a status line; check its tab"
 	}
@@ -157,6 +173,7 @@ const (
 	actStart   = "start"
 	actApprove = "approve"
 	actRun     = "run"
+	actSync    = "sync"
 	actStop    = "stop"
 	actPause   = "pause"
 )
@@ -186,8 +203,8 @@ func (a autoAct) key(head string) string {
 // differs from tkt ls on purpose: it never runs done, resume or verify; the
 // review bot's CLEAR ends the loop like review-pr's READY_FOR_HUMAN, since
 // the bot in CI is the reviewer; review-pr runs only where the repository
-// has no bot ([review] bot_wait = "0s"); and where a person decides, it
-// pauses.
+// has no bot ([review] bot_wait = "0s"); and where a person decides, or the
+// ticket is on hold, it pauses.
 func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 	stop := func(why string) autoAct { return autoAct{Kind: actStop, Stop: why} }
 	pause := func(why string) autoAct { return autoAct{Kind: actPause, Stop: why} }
@@ -205,12 +222,18 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 		return act(actRun, stage)
 	}
 	switch {
+	case f.Hold:
+		return pause(StopHold)
 	case f.Agent != herdr.Working && (f.Launch == "not_ready" || f.Launch == "prompt_uncertain"):
 		return pause(StopNeedsYou)
 	case f.Agent != herdr.Working && (f.Launch == "tab" || f.Launch == "launching"):
 		return autoAct{Kind: actPoll}
 	case f.Agent != "" && f.Agent != herdr.Idle && f.Agent != herdr.Done && f.Agent != herdr.Working && f.Agent != herdr.Blocked:
 		return pause(StopUnknown)
+	case f.ForgeLag && f.Agent != herdr.Working:
+		// The forge has not caught up with a push yet, such as the loop's
+		// own sync, so its facts are about an older head.
+		return autoAct{Kind: actPoll}
 	}
 	switch n.Reason {
 	case ReasonMerged:
@@ -232,7 +255,14 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 		return pause(StopPlan)
 	case ReasonBotSilent:
 		return pause(StopBotSilent)
-	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings:
+	case ReasonBaseMoved:
+		// A clean merge needs no agent: tkt sync makes it, and it spends no
+		// fix round. A conflict needs the session that resolves it.
+		if f.BaseMerge == "conflict" || f.BaseMerge == "" && f.Mergeable == "CONFLICTING" {
+			return fix("resolve")
+		}
+		return act(actSync, "")
+	case ReasonQAFailed, ReasonFindings:
 		return fix("address")
 	case ReasonChecksFail:
 		return fix("ci")
@@ -263,8 +293,9 @@ type autoWorld interface {
 	act(ctx context.Context, a autoAct) error
 	remember(m autoMemory, kv ...string)
 	stopped(stop string, v autoView)
-	// paused records that the loop waits for a person, and notifies once.
-	paused(why string, v autoView)
+	// paused records that the loop waits for a person, and why, with a
+	// note such as a sync's error, and notifies once.
+	paused(why string, v autoView, note string)
 	resumed()
 	// holdSlot takes one of [auto] max_parallel slots before the loop sets
 	// an agent to work, and says whether it had to wait for one; dropSlot
@@ -273,6 +304,16 @@ type autoWorld interface {
 	dropSlot()
 	now() time.Time
 }
+
+// errStep is a step that cannot happen for now, such as a sync while the
+// worktree holds changes. The loop takes it again at its next look; stop,
+// when set, is the pause it shows meanwhile, and the error says why.
+type errStep struct {
+	error
+	stop string
+}
+
+func (e errStep) Unwrap() error { return e.error }
 
 // errForge marks a failed forge read, which the loop retries.
 type errForge struct{ error }
@@ -287,7 +328,9 @@ const maxForgeFailures = 5
 func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem autoMemory, poll time.Duration, once, dry bool) (*AutoResult, error) {
 	res := &AutoResult{Ticket: id, Steps: []AutoStep{}, DryRun: dry}
 	fails := 0
-	pausedOn := ""
+	// pausedOn is the pause the loop notified about; retry is a step that
+	// failed and that the loop takes again.
+	pausedOn, retry := "", ""
 	defer w.dropSlot()
 	for {
 		v, err := w.look(ctx, false)
@@ -320,9 +363,9 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 		if !busy && a.Kind != actStart && a.Kind != actApprove && a.Kind != actRun {
 			w.dropSlot()
 		}
-		if a.Kind != actPause && pausedOn != "" {
+		if a.Kind != actPause && pausedOn != "" && a.key(v.Facts.Head) != retry {
 			w.resumed()
-			pausedOn = ""
+			pausedOn, retry = "", ""
 		}
 		switch a.Kind {
 		case actStop:
@@ -337,7 +380,7 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 				return res, nil
 			}
 			if key := a.Stop + "|" + v.Next.Reason + "|" + v.Facts.Head + "|" + v.Facts.LastStatus; key != pausedOn {
-				w.paused(a.Stop, v)
+				w.paused(a.Stop, v, "")
 				pausedOn = key
 			}
 			if err := w.sleep(ctx, poll); err != nil {
@@ -374,7 +417,7 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 			}
 			v = again
 		}
-		if !once && !dry {
+		if !once && !dry && a.Kind != actSync {
 			waited, err := w.holdSlot(ctx)
 			if err != nil {
 				return nil, err
@@ -383,6 +426,7 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 				continue
 			}
 		}
+		prev := mem
 		mem.Last = a.key(v.Facts.Head)
 		if a.Kind == actRun && a.Stage != "review" {
 			mem.Rounds++
@@ -390,7 +434,29 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 		w.remember(mem)
 		step := AutoStep{At: w.now().UTC().Format(history.TimeFormat), Action: a.Kind, Stage: a.Stage, Reason: v.Next.Reason, Head: v.Facts.Head}
 		if err := w.act(ctx, a); err != nil {
-			return nil, err
+			var se errStep
+			if once || !errors.As(err, &se) {
+				return nil, err
+			}
+			// The step did not happen, so the loop takes it again at its
+			// next look, and while it keeps failing, asks for you once.
+			mem = prev
+			w.remember(mem)
+			retry = a.key(v.Facts.Head)
+			if key := se.stop + "|" + retry + "|" + se.Error(); se.stop != "" && key != pausedOn {
+				w.paused(se.stop, v, se.Error())
+				pausedOn = key
+			}
+			if err := w.sleep(ctx, poll); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if retry != "" {
+			if pausedOn != "" {
+				w.resumed()
+			}
+			pausedOn, retry = "", ""
 		}
 		res.Steps = append(res.Steps, step)
 		res.Rounds = mem.Rounds
@@ -403,8 +469,9 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 
 // Auto drives a ticket through the lifecycle until it needs a person: it
 // starts the ticket when it has no worktree, approves the plan with
-// --approve-plan, waits for CI and the review bot, and runs review, address,
-// sync and ci in fresh sessions. It never merges.
+// --approve-plan, waits for CI and the review bot, merges a moved base
+// itself when the merge is clean, and runs review, address, resolve and ci
+// in fresh sessions. It never merges the pull request.
 func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 	if o.Dry && !o.Once {
 		return nil, apperr.New(apperr.Usage, "--dry-run needs --once: a dry run takes one step").WithHint("tkt auto %s --once --dry-run", o.ID)
@@ -477,6 +544,9 @@ func (a *App) Auto(ctx context.Context, o AutoOpts) (*AutoResult, error) {
 	defer w.unqueue()
 	var mem autoMemory
 	if ts != nil {
+		if ts.st["hold"] != "" && !o.Once {
+			a.UI.Info("%s is on hold; the loop waits until tkt hold %s --off", id, id)
+		}
 		mem = autoMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["auto_last"]}
 		if !o.Once {
 			c.save(ts, "auto", mode, "auto_stop", "", "auto_pause", "")
@@ -532,7 +602,7 @@ func (w *ctxWorld) look(ctx context.Context, fetch bool) (autoView, error) {
 		}
 		w.path = e.Path
 	}
-	l, err := c.look(lookOpts{ids: []string{w.id}, fetch: fetch})
+	l, err := c.look(lookOpts{ids: []string{w.id}, fetch: fetch, probe: true})
 	if err != nil {
 		return autoView{}, err
 	}
@@ -606,6 +676,21 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 			return err
 		}
 		actions = res.Actions
+	case actSync:
+		res, err := c.App.Sync(ctx, SyncOpts{ID: w.id, NoAgent: true, Dry: c.Dry})
+		if err != nil {
+			switch apperr.As(err).Code {
+			case apperr.SyncConflict:
+				// The base moved again since the look, and now conflicts:
+				// the next look sees the conflict and runs resolve.
+			case apperr.TicketLocked, apperr.AgentBusy:
+				// Another tkt command, or an agent, works on it right now.
+				return errStep{error: err}
+			default:
+				return errStep{error: err, stop: StopSyncFailed}
+			}
+		}
+		actions = res.Actions
 	}
 	w.actions = append(w.actions, actions...)
 	c.record(history.Event{Ticket: w.id, Event: history.Auto, Action: a.Kind, Stage: a.Stage})
@@ -643,17 +728,21 @@ func (w *ctxWorld) stopped(stop string, v autoView) {
 
 // paused records that the loop waits for a person, and why, so tkt ls and
 // the board show it, and notifies once.
-func (w *ctxWorld) paused(why string, v autoView) {
+func (w *ctxWorld) paused(why string, v autoView, note string) {
 	c := w.c
-	w.remember(w.memoryNow(), "auto_pause", why, "auto_why", v.Next.Reason)
+	w.remember(w.memoryNow(), "auto_pause", why, "auto_why", v.Next.Reason, "auto_note", note)
 	c.record(history.Event{Ticket: w.id, Event: history.Auto, Action: actPause, Stop: why})
-	if w.notify {
-		c.notify(w.id, notice{"needs you", pauseText(why, v.Next.Reason), "request"})
+	if w.notify && why != StopHold {
+		body := pauseText(why, v.Next.Reason)
+		if note != "" {
+			body += ": " + note
+		}
+		c.notify(w.id, notice{"needs you", body, "request"})
 	}
 }
 
 func (w *ctxWorld) resumed() {
-	w.remember(w.memoryNow(), "auto_pause", "", "auto_why", "")
+	w.remember(w.memoryNow(), "auto_pause", "", "auto_why", "", "auto_note", "")
 }
 
 // autoTabLabel marks a tab label for a ticket in auto: ACM-12 (auto), or

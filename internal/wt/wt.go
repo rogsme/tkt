@@ -95,12 +95,18 @@ func parseList(b []byte) (Entries, error) {
 }
 
 // SwitchArgv is the command that creates or checks out a ticket's worktree.
-func (c Client) SwitchArgv(branch string, create bool) []string {
+// base is the ref a new branch starts from; empty leaves worktrunk's
+// default, the local default branch.
+func (c Client) SwitchArgv(branch string, create bool, base string) []string {
 	argv := []string{"wt", "-C", c.Root, "switch"}
 	if create {
 		argv = append(argv, "--create")
 	}
-	return append(argv, branch, "--no-cd", "--format", "json")
+	argv = append(argv, branch)
+	if create && base != "" {
+		argv = append(argv, "--base", base)
+	}
+	return append(argv, "--no-cd", "--format", "json")
 }
 
 // RemoveArgv is the command that removes a ticket's worktree.

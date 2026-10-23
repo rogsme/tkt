@@ -15,7 +15,7 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 - `internal/contract` holds what tkt reads from the skills repository, with verbatim fixtures in `testdata/`.
 - The other `internal/` packages each wrap one outside system: `gitx`, `wt` (worktrunk), `herdr`, `harness` (Claude Code and OpenCode), `forge` (gh), and the agent flows in `agent`.
 - `internal/history` appends ticket events to `$XDG_STATE_HOME/tkt/history.jsonl`, the one file that outlives worktrees, and builds the timelines `tkt stats` shows. A failed history write is a warning, never a failure.
-- `internal/app/next.go` holds the one rule list: `NextStep` gives `tkt ls` its next step and a stable `reason`, and `PhaseOf` names the phase. `tkt auto` (`auto.go`) maps the same reasons to actions in `autoStep`; keep the two in step.
+- `internal/app/next.go` holds the one rule list: `NextStep` gives `tkt ls` its next step and a stable `reason`, and `PhaseOf` names the phase. `tkt auto` (`auto.go`) maps the same reasons to actions in `autoStep`, and `tkt watch` (`watch.go`) maps them to its upkeep steps in `watchStep`; keep the three in step.
 
 ## Rules
 
@@ -26,7 +26,9 @@ tkt is a Go command-line tool that runs the mechanical steps of the [rogs-skills
 - stdout carries only a command's result. Progress, warnings and dry-run lines go to stderr through `output.UI`. A child process's stdout is captured, never passed through.
 - In a dry run, a change goes through `Ctx.Would` with the exact argv a real run would execute. Use the `...Argv` builders so both paths share the command.
 - Worktrees are created and removed only through `wt`, with its hooks. Agents start only through `herdr agent start`, never by running `claude` directly.
+- A ticket's tabs open only through `openTab`, which sets `TMPDIR` to the ticket's private directory (`internal/app/tmp.go`), so two tickets' agents never share a temporary file. `tkt done` removes the directory.
 - One exception: `tkt agent` replaces tkt's own process with pi through `runner.Replacer`, which logs the command first. pi is the front end in the person's own pane, not a ticket's agent, so it does not go through `herdr agent start`.
+- Another: `tkt watch` runs for days. Every repository command in a herdr pane starts it when none runs (`ensureWatch`), through `runner.Spawner`, which logs the command first and starts it in a session of its own. It takes its steps by calling the other commands' `App` methods, and keeps no state of its own beyond the ticket's state file and `tkt/watch` in the common git directory. The scripts set `TKT_WATCH=off`, so a watch never outlives one.
 - Reach for the standard library first. A new dependency needs a reason in its commit message.
 - Match the surrounding code's naming and comment density. Comments say why, not what.
 
@@ -38,6 +40,7 @@ tkt reads no skill files at run time. It depends on these lines from gitlab.com/
 - the status lines in that repository's CLAUDE.md registry;
 - review-pr's `Verdict:` and `Reviewed head:` lines, and the numbered steps under `## Human verification` in its ready summary;
 - the skill names in the built-in stage lines and in the line `tkt approve` sends;
+- review-pr's rule that a clean merge of the base keeps the pull request's review brief current, which `tkt sync` relies on when it pushes such a merge itself;
 - start-ticket's `## Unattended runs` section, which keys on the word "unattended" in the line `tkt auto --approve-plan` adds to the start line.
 
 `internal/contract` pins them, and `internal/contract/testdata/SOURCES.md` records where each fixture comes from. When the skills change one of them, update the fixture and the code in one commit that cites the skills commit. `contract.Version` changes only when the contract's version does.

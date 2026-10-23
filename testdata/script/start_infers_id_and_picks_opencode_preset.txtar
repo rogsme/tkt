@@ -6,7 +6,7 @@ mkprompt $WORK/p.txt ACM-5 'Model: small (acme/fast)'
 stdin $WORK/p.txt
 exec tkt start --prompt -
 stderr 'ticket ACM-5 \(the first id in the prompt\)'
-logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-5 --label 'ACM-5 (fast)' --no-focus
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-5 --label 'ACM-5 (fast)'
 logged opencode api POST /api/session -d
 logcontains '\"agent\":\"build\"'
 logcontains '\"model\":\{\"providerID\":\"acme\"\,\"id\":\"fast\"\,\"variant\":\"max\"\}'

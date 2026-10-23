@@ -3,6 +3,15 @@ herdr tab named after the ticket, starts an agent in build mode (Claude Code
 with --dangerously-skip-permissions, OpenCode on its Build agent) and sends it
 the prompt, typically the dispatcher's start-ticket block.
 
+A new branch starts from the base on the remote, such as origin/main: tkt
+fetches it first, so the plan starts from the code the base holds now. When
+the fetch fails, the branch starts from the local base.
+
+The ticket's tab gets TMPDIR set to a private directory, such as
+/tmp/tkt-acme-app-ACM-12-123456, so agents of two tickets never write the
+same temporary file. Every tab tkt opens for the ticket gets the same one,
+and tkt done removes it.
+
 Without an ID, tkt start takes the first ticket id in the prompt; with both,
 they must match. Without a prompt, it sends the start stage line. --prompt -
 reads the prompt from stdin, which keeps a long prompt out of your shell

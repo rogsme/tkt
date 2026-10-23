@@ -24,9 +24,13 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED"}, "read the agent's reason in its tab", "human", ReasonStatusBlocked},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "AWAITING_POST_APPROVAL"}, "approve or discard the review draft in its tab", "human", ReasonReviewAwaitsApproval},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending", Verdict: "FINDINGS", AtHead: true, Mergeable: "MERGEABLE"}, "wait for CI", "wait", ReasonCIPending},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "STALE_BASE", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 address", "command", ReasonBaseMoved},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "CONFLICTING"}, "tkt run ACM-1 address", "command", ReasonBaseMoved},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED_FOR_SYNC", Behind: 2}, "tkt run ACM-1 address", "command", ReasonBaseMoved},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "STALE_BASE", AtHead: true, Mergeable: "MERGEABLE"}, "tkt sync ACM-1", "command", ReasonBaseMoved},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "CONFLICTING"}, "tkt sync ACM-1", "command", ReasonBaseMoved},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED_FOR_SYNC", Behind: 2}, "tkt sync ACM-1", "command", ReasonBaseMoved},
+		// git merge-tree finds a conflict before the forge reports one.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE", BaseMerge: "conflict", Behind: 3}, "tkt sync ACM-1", "command", ReasonBaseMoved},
+		// A base that merges clean is no reason to sync on its own.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE", BaseMerge: "clean", Behind: 3}, "tkt run ACM-1 verify", "command", ReasonBotClear},
 		// review-pr also says BLOCKED_FOR_SYNC while CI is not green; with
 		// nothing behind, the review is what is missing.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED_FOR_SYNC", Behind: 0}, "tkt run ACM-1 review", "command", ReasonNeedsReview},

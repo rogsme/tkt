@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"gitlab.com/rogs/tkt/internal/agent"
@@ -67,8 +68,11 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 	}
 	c.ticket(id)
 	if !o.Prompt.Set {
-		if text, err = c.Cfg.StageLine(o.Stage, id); err != nil {
+		if text, err = c.stageLine(o.Stage, id); err != nil {
 			return nil, err
+		}
+		if o.Stage == "sync" && !slices.Contains(c.Cfg.OwnStages, "sync") {
+			a.UI.Warn("the sync stage is address under its old name, and the next release drops it; tkt sync %s merges the base without an agent when it can, and tkt run %s address answers the review", id, id)
 		}
 	}
 	if err := prompt.Guard(text, o.Force); err != nil {
@@ -111,7 +115,7 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 	if err := c.lockTicket(id); err != nil {
 		return nil, err
 	}
-	tab, pane, err := c.pickPane(id, path, o.Pane, st, preset)
+	tab, pane, err := c.pickPane(id, path, o.Pane, ts, preset)
 	if err != nil {
 		return nil, err
 	}
@@ -173,10 +177,17 @@ func (a *App) Run(ctx context.Context, o RunOpts) (*RunResult, error) {
 	return res, nil
 }
 
+// stageLine fills a stage's line for a ticket, with the forge's remote and
+// base branch.
+func (c *Ctx) stageLine(stage, id string) (string, error) {
+	return c.Cfg.StageLine(stage, id, "remote", c.LC.Forge.Remote, "base", c.LC.Forge.Base)
+}
+
 // pickPane finds the pane for a ticket's agent: --pane, the recorded pane,
 // the agent running in the worktree, then the ticket tab's first pane. It
 // opens a tab when there is none.
-func (c *Ctx) pickPane(id, path, want string, st map[string]string, preset config.Preset) (tab, pane string, err error) {
+func (c *Ctx) pickPane(id, path, want string, ts *ticketState, preset config.Preset) (tab, pane string, err error) {
+	st := ts.st
 	agents, err := c.H.Agents(c.Ctx)
 	if err != nil {
 		return "", "", herdrErr(err)
@@ -232,7 +243,7 @@ func (c *Ctx) pickPane(id, path, want string, st map[string]string, preset confi
 		}
 		return p.TabID, pane, nil
 	}
-	tab, pane, err = c.openTab(path, c.Cfg.TabLabel(id, preset.Name))
+	tab, pane, err = c.openTab(id, path, c.Cfg.TabLabel(id, preset.Name), ts)
 	if err != nil || c.Dry {
 		return tab, pane, err
 	}

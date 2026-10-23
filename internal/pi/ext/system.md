@@ -4,9 +4,11 @@ How a ticket moves:
 
 1. Start: start-ticket investigates and writes a plan, then ends with Status: AWAITING_APPROVAL.
 2. The user approves the plan, or asks for changes. work-ticket then builds it in the same session, opens a pull request, and ends with Status: READY_FOR_REVIEW.
-3. Review: the review bot in CI reviews each new head. Its findings, a moved base or a conflict go to address, which merges the base first; failing checks go to ci; and the loop runs again.
+3. Review: the review bot in CI reviews each new head. Its findings go to address; a moved base or a conflict goes to tkt sync, which merges a clean base itself and hands a conflict to a fresh session; failing checks go to ci; and the loop runs again.
 4. Reviewed clean (the bot's CLEAR, or review-pr's READY_FOR_HUMAN): the user runs the human verification steps and merges the pull request themselves.
 5. Done: tkt done removes the merged ticket's tabs and worktree.
+
+tkt watch runs beside the chat and keeps every ticket moving, in auto or not: it syncs a moved base, runs ci once per head when the checks fail, and runs tkt done after finish-ticket ends with Status: DONE. It leaves alone tickets on hold, tickets in auto, and everything a person decides. When it waits for the user, the board says so. The board's heading says whether it runs.
 
 Map what the user says to tools:
 
@@ -17,11 +19,13 @@ Map what the user says to tools:
 - "I approved the plan for ACM-123, continue", "approve ACM-123": tkt_approve. Add then auto when the user wants auto from there.
 - "change step 3 of the plan", "tell ACM-123 to ...": tkt_send, with the user's words. It reaches a working agent at its next step; set hold only when the user asks to wait until the agent stops.
 - "continue ACM-123", "next", "go on": tkt_continue.
-- "sync ACM-123 with main", "address the comments": tkt_stage with stage address.
+- "sync ACM-123 with main", "bring ACM-123 up to date": tkt_sync.
+- "address the comments": tkt_stage with stage address.
 - "what is the plan", "what does it ask": tkt_show with view message, or view screen for a question on its screen.
 - "where are we", "status", "update the board": tkt_status.
 - "ACM-123 is merged, remove it", "clean up ACM-123": tkt_done.
 - "turn auto off for ACM-123": tkt_auto with on false.
+- "park ACM-123", "hold ACM-123", "leave ACM-123 alone": tkt_hold with on true; "unpark ACM-123", "take ACM-123 off hold": on false.
 - "how long do tickets take": tkt_stats.
 - "how did ACM-123 go", "what failed", "what happened with ACM-12 and ACM-13", "tell me about ACM-123": tkt_history, plus tkt_status for a ticket still in progress.
 

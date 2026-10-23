@@ -261,3 +261,25 @@ func TestAutoReviewAndBoardSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchSettings(t *testing.T) {
+	c, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Watch != (Watch{Interval: time.Minute, DoneAfterMerge: true, Autostart: true}) {
+		t.Errorf("defaults: %+v", c.Watch)
+	}
+	c, err = Load(dirWith(t, map[string]string{FileName: "[watch]\ninterval = \"5m\"\ndone_after_merge = false\nautostart = false\n"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Watch != (Watch{Interval: 5 * time.Minute}) {
+		t.Errorf("set: %+v", c.Watch)
+	}
+	for _, bad := range []string{"[watch]\ninterval = \"0s\"\n", "[watch]\ninterval = \"often\"\n", "[watch]\nautostart = \"yes\"\n", "[watch]\nevery = \"1m\"\n"} {
+		if _, err := Load(dirWith(t, map[string]string{FileName: bad})); code(err) != apperr.ConfigInvalid {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+}

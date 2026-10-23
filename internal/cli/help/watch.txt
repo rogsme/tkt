@@ -1,0 +1,43 @@
+tkt watch keeps a repository's tickets moving, every ticket and not only the
+ones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads
+every ticket with a fixed number of gh calls, and takes at most one step per
+ticket, from the same rules as tkt ls:
+
+  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,
+    unless [watch] done_after_merge = false;
+  - the base moved at a moment a sync is due (a conflict, the bot's
+    STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base
+    itself, as tkt sync does, with no agent, and runs resolve on a conflict;
+  - the checks fail at the head: it runs ci in a fresh session, once per
+    head.
+
+Everything else waits for you or for tkt auto: plans, reviews, findings,
+human verification and the merge. It leaves alone a ticket on hold (tkt
+hold), one a tkt auto loop drives, one another tkt command works on, one
+whose agent works or asks a question, and one whose worktree directory is
+gone. It replaces an agent with a fresh session only after the agent sat
+idle for five minutes, since a person may still use that session, and it
+waits while the forge still shows an older head than the branch has. A step it would repeat on the same head,
+or a fix run past [auto] max_rounds, waits for you instead: tkt ls shows the
+ticket as needs_you, with watch.paused saying why, and herdr notifies once.
+
+Its agent runs take the [auto] max_parallel slots tkt auto uses. It records
+each step in the history, and shows a herdr notification for each agent run,
+failure and removal; a clean sync stays quiet. A sync that fails, such as
+while the network is down, is tried again at the next pass, with one
+notification for each head and reason.
+
+One tkt watch runs per repository. Every tkt command in a herdr pane starts
+it when none runs, in a session of its own, so it outlives the command and the
+pane; it writes its lines to watch.log in the repository's git directory,
+under tkt/. It waits a minute between two starts, so a watch that exits at
+once is not started again by every command. [watch] autostart = false, or
+TKT_WATCH=off, turns that off. tkt ls --json says whether it runs, in
+watch.running, and watch.error says why its last pass failed. tkt watch
+--stop stops it, after the step it is taking; a second SIGTERM stops it at
+once. When tkt update replaces tkt, the watch stops by
+itself, and the next tkt command starts one that runs the new tkt. Outside a herdr pane it finds the workspace whose
+panes work in the repository, and while herdr is down it waits.
+
+--once takes one pass and exits; with --dry-run it says what each ticket would
+get, and changes nothing.

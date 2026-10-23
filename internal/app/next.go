@@ -64,25 +64,39 @@ func human(reason, text string) Next {
 // Waited is how long the head has waited for a review; BotWait is how long to
 // give the automated reviewer, and 0 means the repository has none, so
 // review-pr reviews instead. Background says an idle agent waits on its
-// own background tasks, such as a CI watcher, and goes on by itself.
+// own background tasks, such as a CI watcher, and goes on by itself. Hold
+// says the ticket is on hold, which the next step ignores: it stops only
+// tkt watch and tkt auto. BaseMerge says how merging the base into the head would go,
+// clean or conflict, when tkt tried it with git merge-tree; "" when it did
+// not. AutoRunning says a tkt auto loop drives the ticket; WatchPause says
+// why tkt watch left it for you, round_limit or no_progress. ForgeLag says
+// the forge still shows an older head than the branch has, as right after
+// a push, and Idle how long the agent has sat idle; tkt auto and tkt watch
+// read both, from a look with probe.
 type Facts struct {
-	ID         string
-	PRState    string
-	Agent      string
-	Background bool
-	LastStatus string
-	Checks     string
-	Verdict    string
-	AtHead     bool
-	Mergeable  string
-	Head       string
-	Behind     int
-	Stage      string
-	Launch     string
-	AutoWait   string
-	AutoPause  string
-	BotWait    time.Duration
-	Waited     time.Duration
+	ID          string
+	PRState     string
+	Agent       string
+	Background  bool
+	Hold        bool
+	AutoRunning bool
+	WatchPause  string
+	ForgeLag    bool
+	Idle        time.Duration
+	LastStatus  string
+	Checks      string
+	Verdict     string
+	AtHead      bool
+	Mergeable   string
+	BaseMerge   string
+	Head        string
+	Behind      int
+	Stage       string
+	Launch      string
+	AutoWait    string
+	AutoPause   string
+	BotWait     time.Duration
+	Waited      time.Duration
 }
 
 // NextStep applies the rules in order and returns the first that matches.
@@ -115,9 +129,9 @@ func NextStep(f Facts) Next {
 		return human(ReasonReviewAwaitsApproval, "approve or discard the review draft in its tab")
 	case f.Checks == "pending":
 		return Next{Kind: "wait", Reason: ReasonCIPending, Text: "wait for CI"}
-	case f.AtHead && f.Verdict == contract.VerdictStaleBase, f.Mergeable == "CONFLICTING",
+	case f.AtHead && f.Verdict == contract.VerdictStaleBase, f.Mergeable == "CONFLICTING", f.BaseMerge == "conflict",
 		f.LastStatus == contract.StatusBlockedForSync && f.Behind > 0:
-		return command(ReasonBaseMoved, "tkt", "run", id, "address")
+		return command(ReasonBaseMoved, "tkt", "sync", id)
 	case f.LastStatus == contract.StatusHumanQAFailed:
 		return command(ReasonQAFailed, "tkt", "run", id, "address")
 	case f.AtHead && (f.Verdict == contract.VerdictFindings || f.Verdict == contract.VerdictChangesRequested):
@@ -176,7 +190,7 @@ func PhaseOf(f Facts, n Next) string {
 	case f.Agent != herdr.Working && f.Agent != herdr.Blocked && f.AutoWait == "slot":
 		return PhaseQueued
 	case f.Agent != herdr.Working && !f.Background &&
-		(f.AutoPause == StopRoundLimit || f.AutoPause == StopNoProgress || f.AutoPause == StopUnknown):
+		(f.AutoPause == StopRoundLimit || f.AutoPause == StopNoProgress || f.AutoPause == StopUnknown || f.AutoPause == StopSyncFailed || f.WatchPause != ""):
 		return PhaseNeedsYou
 	}
 	switch n.Reason {
@@ -188,7 +202,7 @@ func PhaseOf(f Facts, n Next) string {
 			return PhaseBuilding
 		case "review":
 			return PhaseReviewing
-		case "address", "sync", "ci":
+		case "address", "sync", "ci", "resolve":
 			return PhaseFixing
 		case "verify":
 			return PhaseVerifying
@@ -214,13 +228,14 @@ func PhaseOf(f Facts, n Next) string {
 
 // factsFor gathers a row's facts.
 func factsFor(r Row) Facts {
-	f := Facts{ID: r.Ticket, LastStatus: r.LastStatus, Behind: -1, Stage: r.Stage, Launch: r.Launch}
+	f := Facts{ID: r.Ticket, LastStatus: r.LastStatus, Behind: -1, Stage: r.Stage, Launch: r.Launch, Hold: r.Hold}
 	if r.Agent != nil {
 		f.Agent, f.Background = r.Agent.Status, r.Agent.Background > 0
 	}
 	if r.PR != nil {
 		f.PRState, f.Mergeable, f.Head = r.PR.State, r.PR.Mergeable, r.PR.Head
 	}
+	f.BaseMerge = r.BaseMerge
 	if r.Checks != nil {
 		f.Checks = r.Checks.State
 	}
@@ -231,7 +246,10 @@ func factsFor(r Row) Facts {
 		f.Behind = *r.Behind
 	}
 	if r.Auto != nil {
-		f.AutoWait, f.AutoPause = r.Auto.Waiting, r.Auto.Paused
+		f.AutoWait, f.AutoPause, f.AutoRunning = r.Auto.Waiting, r.Auto.Paused, r.Auto.Running
+	}
+	if r.Watch != nil {
+		f.WatchPause = r.Watch.Paused
 	}
 	return f
 }

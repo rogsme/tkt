@@ -36,6 +36,14 @@ func (u *UI) Raw(format string, args ...any) {
 	u.line(format, args...)
 }
 
+// ForgetWarnings drops the warnings kept so far, for a command that runs for
+// days, such as tkt watch, whose result carries only its last pass.
+func (u *UI) ForgetWarnings() {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.warnings = nil
+}
+
 // Warnings returns the warnings printed so far.
 func (u *UI) Warnings() []string {
 	u.mu.Lock()

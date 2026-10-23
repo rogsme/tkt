@@ -1,0 +1,44 @@
+# When the base merge conflicts, tkt sync changes nothing itself and hands
+# the merge to a fresh session that runs the resolve stage.
+cp $WORK/app-start.txt $REPO/app.txt
+realgit -C $REPO add app.txt
+realgit -C $REPO commit -q -m 'add app.txt'
+realgit -C $REPO push -q origin main
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+cp $WORK/app-ticket.txt $WT/app.txt
+realgit -C $WT commit -q -am 'ACM-12 changes app.txt'
+realgit -C $WT push -q origin ACM-12
+gitvar OLD $WT HEAD
+cp $WORK/app-main.txt $REPO/app.txt
+realgit -C $REPO commit -q -am 'another ticket changes app.txt'
+realgit -C $REPO push -q origin main
+
+# --no-agent stops at the conflict.
+! exec tkt sync ACM-12 --no-agent --json
+rc 4
+envelope '.error.code' sync_conflict
+envelope '.error.details.conflicts' '["app.txt"]'
+envelope '.error.hint' 'tkt sync ACM-12 hands it to a fresh session, or tkt run ACM-12 resolve'
+
+resetlog
+exec tkt sync ACM-12
+stdout 'ACM-12  merging origin/main conflicts in app.txt; a fresh session resolves it in pane w1:p10'
+logged herdr agent start acm-12 --kind claude --pane w1:p10
+grep 'Fetch origin and merge origin/main into this branch. The merge conflicts: resolve it with the resolving-merge-conflicts skill' $FAKE_DIR/prompts
+state $WT stage resolve
+! logcontains 'merge --no-ff'
+! logcontains 'push --quiet'
+gitvar SAME $WT HEAD
+exec echo $SAME
+stdout ^$OLD
+realgit -C $WT status --porcelain
+! stdout .
+houserules
+
+-- app-start.txt --
+one
+-- app-ticket.txt --
+one, as ACM-12 wants it
+-- app-main.txt --
+one, as another ticket wants it

@@ -118,6 +118,18 @@ func flagValues(args []string) (map[string]string, []string) {
 	return flags, rest
 }
 
+// repeated returns every value of a flag that may repeat, such as --env.
+func repeated(args []string, flag string) []string {
+	var out []string
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag {
+			out = append(out, args[i+1])
+			i++
+		}
+	}
+	return out
+}
+
 var slugUnsafe = regexp.MustCompile(`[^A-Za-z0-9]`)
 
 // Herdr keeps workspaces, tabs, panes and agents in $FAKE_DIR/herdr.json and
@@ -146,7 +158,13 @@ func Herdr() {
 		s.Next++
 		tab, pane := ws+":t"+n, ws+":p"+n
 		s.Tabs = append(s.Tabs, obj{"tab_id": tab, "workspace_id": ws, "label": f["--label"]})
-		s.Panes = append(s.Panes, obj{"pane_id": pane, "tab_id": tab, "workspace_id": ws, "cwd": f["--cwd"], "foreground_cwd": f["--cwd"]})
+		p := obj{"pane_id": pane, "tab_id": tab, "workspace_id": ws, "cwd": f["--cwd"], "foreground_cwd": f["--cwd"]}
+		// The real herdr gives the tab's shell these variables; the fake
+		// keeps them on the pane for the tests to read.
+		if env := repeated(args, "--env"); len(env) > 0 {
+			p["env"] = env
+		}
+		s.Panes = append(s.Panes, p)
 		s.save()
 		herdrOK(obj{"tab": obj{"tab_id": tab}, "root_pane": obj{"pane_id": pane}})
 	case "tab close":

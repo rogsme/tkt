@@ -48,6 +48,19 @@ type Config struct {
 	Review        Review
 	Board         Board
 	Agent         Agent
+	Watch         Watch
+}
+
+// Watch holds tkt watch's settings.
+type Watch struct {
+	// Interval is the time between two passes over the tickets.
+	Interval time.Duration
+	// DoneAfterMerge runs tkt done once finish-ticket ends with
+	// Status: DONE.
+	DoneAfterMerge bool
+	// Autostart lets every tkt command in a herdr pane start tkt watch for
+	// its repository when none runs.
+	Autostart bool
 }
 
 // Agent holds the [agent] settings for tkt agent.
@@ -91,6 +104,7 @@ const (
 	DefaultMaxParallel = 3
 	DefaultBotWait     = 15 * time.Minute
 	DefaultStaleAfter  = 2 * time.Hour
+	DefaultWatchEvery  = 60 * time.Second
 )
 
 // ApproveLine is what tkt approve sends to the planning session. It is not a
@@ -102,16 +116,22 @@ const ApproveLine = "The plan is approved. Use the work-ticket skill to execute 
 // open question with the harness's question tool, which stops the loop.
 const UnattendedLine = "This run is unattended: no person watches this session until it asks a question."
 
-// BuiltinStages are the stage lines tkt run sends; {id} becomes the ticket.
+// BuiltinStages are the stage lines tkt run sends. {id} becomes the ticket,
+// and {remote} and {base} the forge's remote and base branch.
 var BuiltinStages = map[string]string{
 	"start":   "Use the start-ticket skill to start ticket {id}.",
 	"address": "Use the address-pr-review skill to address the review on this branch's pull request.",
 	// sync is address under its old name: address-pr-review syncs with the
-	// base first on every run (rogs-skills 26cfa58).
-	"sync":   "Use the address-pr-review skill to address the review on this branch's pull request.",
-	"verify": "Run every step of the Human verification section of this branch's pull request with the playwright-cli skill. Report each step as passed or failed with what you saw. Change no code and post nothing.",
-	"ci":     "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
-	"review": "Use the review-pr skill to review the current PR.",
+	// base first on every run (rogs-skills 26cfa58). tkt run warns that it
+	// goes away; tkt sync replaces it.
+	"sync": "Use the address-pr-review skill to address the review on this branch's pull request.",
+	// resolve is the session tkt sync starts when the base merge conflicts.
+	// It leaves the review's findings to address, so a sync never fixes
+	// what nobody asked it to.
+	"resolve": "Fetch {remote} and merge {remote}/{base} into this branch. The merge conflicts: resolve it with the resolving-merge-conflicts skill, keep it a merge, and change nothing the merge does not need. Run the focused checks for the code it touched, commit the merge, and push once, never with force. Then refresh the Review brief in the pull request's body for the new head and base, and end with Status: READY_FOR_REVIEW.",
+	"verify":  "Run every step of the Human verification section of this branch's pull request with the playwright-cli skill. Report each step as passed or failed with what you saw. Change no code and post nothing.",
+	"ci":      "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
+	"review":  "Use the review-pr skill to review the current PR.",
 }
 
 // BuiltinPresets apply when the settings define none.
@@ -126,7 +146,8 @@ func builtin() Config {
 	c := Config{Source: "built-in presets", Presets: BuiltinPresets(), Stages: map[string]string{},
 		Auto:   Auto{MaxRounds: DefaultMaxRounds, Poll: DefaultPoll, MaxParallel: DefaultMaxParallel},
 		Review: Review{BotWait: DefaultBotWait},
-		Board:  Board{StaleAfter: DefaultStaleAfter}}
+		Board:  Board{StaleAfter: DefaultStaleAfter},
+		Watch:  Watch{Interval: DefaultWatchEvery, DoneAfterMerge: true, Autostart: true}}
 	for k, v := range BuiltinStages {
 		c.Stages[k] = v
 	}
@@ -182,14 +203,20 @@ func (c Config) StageNames() []string {
 	return names
 }
 
-// StageLine returns a stage's line for a ticket.
-func (c Config) StageLine(stage, id string) (string, error) {
+// StageLine returns a stage's line for a ticket: {id} becomes the ticket,
+// and vars, as name and value pairs, fill other placeholders, such as
+// "base", "main" for {base}.
+func (c Config) StageLine(stage, id string, vars ...string) (string, error) {
 	t, ok := c.Stages[stage]
 	if !ok || t == "" {
 		return "", apperr.New(apperr.UnknownStage, "unknown stage '%s' (stages: %s)", stage, strings.Join(c.StageNames(), " ")).
 			WithHint("%s", suggestion(stage, c.StageNames()))
 	}
-	return strings.ReplaceAll(t, "{id}", id), nil
+	pairs := []string{"{id}", id}
+	for i := 0; i+1 < len(vars); i += 2 {
+		pairs = append(pairs, "{"+vars[i]+"}", vars[i+1])
+	}
+	return strings.NewReplacer(pairs...).Replace(t), nil
 }
 
 // TabLabel names a ticket's tab: the bare id for the default preset,

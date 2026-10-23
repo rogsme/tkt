@@ -3,7 +3,7 @@
 exec tkt start --scratch spike-login
 rc 0
 exists $FAKE_WT_ROOT/spike-login
-logged wt -C $REPO switch --create spike-login --no-cd --format json
+logged wt -C $REPO switch --create spike-login --base origin/main --no-cd --format json
 logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/spike-login --label spike-login --no-focus
 logged herdr agent start spike-login --kind claude --pane w1:p10
 ! logcontains 'herdr agent prompt'

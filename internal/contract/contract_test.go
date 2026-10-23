@@ -66,7 +66,7 @@ func TestReviewSummariesCarryVerdicts(t *testing.T) {
 func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	registry := read(t, "status-lines.md")
 	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked, contract.StatusSetupRequired,
-		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval} {
+		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone} {
 		if !strings.Contains(registry, "`Status: "+s+"`") {
 			t.Errorf("Status: %s is not in the registry", s)
 		}
@@ -105,7 +105,7 @@ func TestStageLinesNameRegisteredSkills(t *testing.T) {
 	}
 	for stage, line := range lines {
 		for _, m := range named.FindAllStringSubmatch(line, -1) {
-			if m[1] == "playwright-cli" {
+			if m[1] == "playwright-cli" || m[1] == contract.ResolveSkill {
 				continue
 			}
 			found := false
@@ -140,5 +140,36 @@ func TestReadySummaryCarriesHumanVerification(t *testing.T) {
 	p.HeadRefOid = strings.Repeat("c3", 20)
 	if proc := forge.HumanVerification(p); proc != nil {
 		t.Errorf("old head: %+v", proc)
+	}
+}
+
+func TestResolveStageNamesTheMergeConflictSkill(t *testing.T) {
+	skill := read(t, "resolving-merge-conflicts.md")
+	if !strings.Contains(skill, "\nname: "+contract.ResolveSkill+"\n") {
+		t.Fatalf("the fixture is not the %s skill", contract.ResolveSkill)
+	}
+	// The resolve line relies on these: the skill takes a merge another
+	// party started, stays a merge, and stops to ask about product behavior.
+	for _, want := range []string{"another skill hands over a conflicted merge", "A workflow that syncs by merging never turns a merge into a rebase.", "stop and ask the user", "git commit --no-edit"} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("%s no longer says %q", contract.ResolveSkill, want)
+		}
+	}
+	if !strings.Contains(config.BuiltinStages["resolve"], "the "+contract.ResolveSkill+" skill") {
+		t.Errorf("the resolve stage does not name the %s skill: %s", contract.ResolveSkill, config.BuiltinStages["resolve"])
+	}
+}
+
+func TestCleanMergesKeepTheReviewBrief(t *testing.T) {
+	rule := read(t, "review-pr-clean-merge.md")
+	if !strings.HasPrefix(rule, contract.CleanMergeRule) {
+		t.Fatalf("review-pr's clean-merge rule changed:\n%s", rule)
+	}
+	// tkt sync makes exactly this merge: its second parent is the base, and
+	// it checks the merge's tree against git merge-tree before it pushes.
+	for _, want := range []string{"second parent is an ancestor of the base", "`git merge-tree --write-tree <merge>^1 <merge>^2`", "check each one yourself"} {
+		if !strings.Contains(rule, want) {
+			t.Errorf("review-pr's clean-merge rule no longer says %q", want)
+		}
 	}
 }

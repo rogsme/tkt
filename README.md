@@ -7,7 +7,7 @@
 - starts Claude Code or OpenCode in that tab;
 - hands the agent its prompt.
 
-Each command is one step you take, and `tkt ls` suggests the next one. When you want, `tkt auto` takes the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
+Each command is one step you take, and `tkt ls` suggests the next one. `tkt watch`, which tkt starts by itself, takes the upkeep steps for every ticket: it merges a moved base when a sync is due, fixes failing checks once per head, and removes a ticket once finish-ticket merged it. When you want, `tkt auto` takes all the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
 
 People and programs both drive tkt. Every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
 
@@ -37,12 +37,12 @@ To update an installed tkt to the latest release, run `tkt update`. It makes the
 
 ### Requirements
 
-- git 2.31 or newer;
+- git 2.38 or newer;
 - herdr 0.9.3 or newer, with tkt running inside a herdr pane;
 - [worktrunk](https://worktrunk.dev) (`wt`) 0.68 or newer;
 - Claude Code or OpenCode;
 - the configuration that the `/setup-rogs` skill writes into the project;
-- `gh` for `tkt done` and the pull request columns of `tkt ls`, which support GitHub forges only.
+- `gh` for `tkt done`, `tkt watch` and the pull request columns of `tkt ls`, which support GitHub forges only.
 
 `tkt doctor` checks all of these.
 
@@ -74,7 +74,10 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
 | `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan; `--steer` types it in while the agent works, and `--wait` queues it until the agent stops. |
 | `tkt auto ID` | Drives the ticket: approves the plan with `--approve-plan`, waits for CI and the review bot, runs the fixes, pauses when the ticket needs you, and stops when the head is reviewed clean. |
-| `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first; `sync` is its old name), `ci`, `verify` or `start`. |
+| `tkt hold ID` | Puts the ticket on hold, so `tkt watch` and `tkt auto` leave it alone; `--off` takes it off hold. |
+| `tkt watch` | Keeps every ticket moving: syncs a moved base, runs ci once per head when the checks fail, and removes a ticket after finish-ticket's `Status: DONE`. tkt commands start it by themselves. |
+| `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first), `resolve`, `ci`, `verify` or `start`. `sync`, the old name of `address`, still works and warns. |
+| `tkt sync ID` | Merges the base into the ticket's branch: itself, with no agent, when the merge is clean; through a fresh session that only resolves, on a conflict. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
 | `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees. `--all` checks every ticket worktree. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
@@ -90,7 +93,7 @@ A ticket from start to merge, in short:
 1. Run `tkt start ACM-12`, or pipe in the dispatcher's block with `tkt start --prompt -`.
 2. Read the plan with `tkt show ACM-12`, then `tkt approve ACM-12`.
 3. When the agent reports `Status: READY_FOR_REVIEW`, run `tkt run ACM-12 review`.
-4. Act on the verdict with `address`, which also merges a moved base, and review again.
+4. Act on the verdict with `address`, or on a moved base with `tkt sync ACM-12`, and review again.
 5. Verify, merge in the tab, then run `tkt done ACM-12`.
 
 For work with no ticket, `tkt start --scratch spike-login` makes the worktree, branch and tab `spike-login` and starts the agent without sending it anything. The other commands work on tickets only, so remove that worktree with `wt remove spike-login`.
@@ -115,6 +118,8 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/approve ID [auto]` | Approves the plan; with `auto`, `tkt auto` takes over. |
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |
 | `/auto ID on \| off \| full` | Turns `tkt auto` on or off for a ticket. |
+| `/sync ID` | Merges the base into a ticket's branch, as `tkt sync` does. `/check` offers it first when the ticket is behind its base. |
+| `/hold ID [off]` | Puts a ticket on hold, so `tkt watch` and `tkt auto` leave it alone, or takes it off hold. |
 | `/send ID TEXT`, `/show ID`, `/peek ID` | Talks to the ticket's agent, prints its last message, or watches its live screen. |
 | `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. |
 | `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
@@ -153,7 +158,10 @@ lint = "Run the linter on {id} and fix what it reports."
 bot_wait = "15m"   # how long a new head waits for the review bot; "0s" without one, so review-pr reviews
 
 [auto]
-max_parallel = 3   # tkt auto agents at work at once in a repository
+max_parallel = 3   # tkt auto and tkt watch agents at work at once in a repository
+
+[watch]
+interval = "60s"   # how often tkt watch looks at every ticket
 ```
 
 Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. `tkt help config` has the details.
@@ -169,7 +177,9 @@ Without the file, tkt runs Claude Code and OpenCode on their default models. The
 
 ### State and logs
 
-tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. `-v` prints the same lines as tkt goes.
+tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. Each ticket's tabs get `TMPDIR` set to a private directory under `/tmp`, which `tkt done` removes too. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. Past 10 MB the log starts over, and the older lines stay in `tkt.log.1`. `-v` prints the same lines as tkt goes.
+
+`tkt watch` writes its lines to `tkt/watch.log` in the repository's git directory, and how its last pass went to `tkt/watch` beside it.
 
 What has to outlive a worktree goes to `~/.local/state/tkt/history.jsonl`, one JSON event per line: when tkt started a ticket, each phase it saw it enter, each stage, each `tkt auto` step, and the merge. `tkt stats` and `tkt history` read it.
 

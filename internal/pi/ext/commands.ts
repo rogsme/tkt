@@ -80,6 +80,24 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		},
 	});
 
+	pi.registerCommand("hold", {
+		description: "Put a ticket on hold, so tkt watch and tkt auto leave it alone: /hold ACM-12 [off]",
+		getArgumentCompletions: ids,
+		handler: async (args, ctx) => {
+			const id = one(args, ctx, "/hold ACM-12 [off]");
+			if (id) say(await act.hold(hub, id, args.trim().split(/\s+/)[1]?.toLowerCase() !== "off"));
+		},
+	});
+
+	pi.registerCommand("sync", {
+		description: "Merge the base into a ticket's branch: tkt itself when clean, a fresh session on a conflict: /sync ACM-12",
+		getArgumentCompletions: ids,
+		handler: async (args, ctx) => {
+			const id = one(args, ctx, "/sync ACM-12");
+			if (id) say(act.sync(hub, id));
+		},
+	});
+
 	pi.registerCommand("send", {
 		description: "Type text into a ticket's session: /send ACM-12 TEXT",
 		getArgumentCompletions: ids,

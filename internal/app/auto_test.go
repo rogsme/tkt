@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,14 +46,26 @@ func TestAutoStepTable(t *testing.T) {
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 1}, autoAct{Kind: actRun, Stage: "address"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, pause(StopRoundLimit)},
-		// address merges the base itself, so a moved base runs address.
-		{with(open, func(f *Facts) { f.Mergeable = "CONFLICTING" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "address"}},
-		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "address"}},
+		// A moved base that merges clean is tkt sync's, with no agent and
+		// no round, even past the round limit; a conflict needs resolve.
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actSync}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.BaseMerge = "STALE_BASE", true, "clean" }), AutoPolicy{MaxRounds: 1}, autoMemory{Rounds: 1}, autoAct{Kind: actSync}},
+		{with(open, func(f *Facts) { f.Mergeable, f.BaseMerge = "CONFLICTING", "clean" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actSync}},
+		{with(open, func(f *Facts) { f.Mergeable = "CONFLICTING" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "resolve"}},
+		{with(open, func(f *Facts) { f.BaseMerge = "conflict" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "resolve"}},
+		{with(open, func(f *Facts) { f.BaseMerge = "conflict" }), AutoPolicy{MaxRounds: 1}, autoMemory{Rounds: 1}, pause(StopRoundLimit)},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{Last: "sync:@h1"}, pause(StopNoProgress)},
 		{with(open, func(f *Facts) { f.Checks = "fail" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "ci"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "READY_FOR_HUMAN", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
 		{with(open, func(f *Facts) { f.LastStatus = "AWAITING_POST_APPROVAL" }), AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		{with(open, func(f *Facts) { f.PRState = "MERGED" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopMerged}},
 		{with(open, func(f *Facts) { f.PRState = "CLOSED" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopClosed}},
+		// Right after the loop's own sync, the forge may still show the old
+		// head: the loop waits for it instead of calling the sync useless.
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.ForgeLag = "STALE_BASE", true, true }), AutoPolicy{MaxRounds: 5}, autoMemory{Last: "sync:@h1"}, autoAct{Kind: actPoll}},
+		// A ticket on hold pauses the loop, whatever its next step.
+		{with(open, func(f *Facts) { f.Hold, f.Checks = true, "fail" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, pause(StopHold)},
+		{Facts{ID: "ACM-1", Agent: "working", Stage: "work", Hold: true}, AutoPolicy{}, autoMemory{}, pause(StopHold)},
 		// address answered every finding without a new head: running it
 		// again on the same head would change nothing.
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 5}, autoMemory{Last: "run:address@h1"}, pause(StopNoProgress)},
@@ -83,6 +96,9 @@ type simWorld struct {
 	// flip, when set, changes the facts on the confirming look.
 	flip     func(*Facts)
 	forgeErr int
+	// failSync makes that many syncs fail, as with changes in the worktree.
+	failSync int
+	resumes  int
 }
 
 const simPoll = 30 * time.Second
@@ -122,6 +138,15 @@ func (w *simWorld) sleep(_ context.Context, d time.Duration) error {
 }
 
 func (w *simWorld) act(_ context.Context, a autoAct) error {
+	if a.Kind == actSync {
+		if w.failSync > 0 {
+			w.failSync--
+			return errStep{error: errors.New("ACM-1 has uncommitted changes"), stop: StopSyncFailed}
+		}
+		w.acts = append(w.acts, "sync")
+		w.f.Head, w.f.Verdict, w.f.AtHead, w.f.Checks = "h2", "", false, "pending"
+		return nil
+	}
 	name := a.Kind
 	if a.Stage != "" {
 		name += ":" + a.Stage
@@ -139,12 +164,12 @@ func (w *simWorld) act(_ context.Context, a autoAct) error {
 	return nil
 }
 
-func (w *simWorld) remember(m autoMemory, _ ...string) { w.mem = m }
-func (w *simWorld) stopped(stop string, _ autoView)    { w.stops = append(w.stops, stop) }
-func (w *simWorld) paused(why string, _ autoView)      { w.pauses = append(w.pauses, why) }
-func (w *simWorld) resumed()                           {}
-func (w *simWorld) dropSlot()                          { w.slot = false }
-func (w *simWorld) now() time.Time                     { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+func (w *simWorld) remember(m autoMemory, _ ...string)      { w.mem = m }
+func (w *simWorld) stopped(stop string, _ autoView)         { w.stops = append(w.stops, stop) }
+func (w *simWorld) paused(why string, _ autoView, _ string) { w.pauses = append(w.pauses, why) }
+func (w *simWorld) resumed()                                { w.resumes++ }
+func (w *simWorld) dropSlot()                               { w.slot = false }
+func (w *simWorld) now() time.Time                          { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
 
 func (w *simWorld) holdSlot(context.Context) (bool, error) {
 	if !w.slot {
@@ -353,5 +378,31 @@ func TestAutoSlots(t *testing.T) {
 	// While it waited, a ticket with no worktree showed in queued/.
 	if entries, _ := os.ReadDir(queuedDir(common)); len(entries) != 0 {
 		t.Errorf("queued/ keeps %v after the slot came", entries)
+	}
+}
+
+// A sync that cannot happen for now pauses the loop once, with no round
+// spent, and the loop tries it again at each look until it works.
+func TestAutoLoopRetriesASyncThatFails(t *testing.T) {
+	w := &simWorld{
+		f:       Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "ok", Head: "h1", Behind: 2, Verdict: "STALE_BASE", AtHead: true, BotWait: time.Hour},
+		started: true, wanted: true, failSync: 2,
+		polls: []func(*Facts){
+			func(*Facts) {}, func(*Facts) {}, // two failed tries
+			func(f *Facts) { f.Checks = "ok" },      // CI passes on the merge
+			func(f *Facts) { f.PRState = "MERGED" }, // and it merges
+		},
+	}
+	_, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, false, false)
+	if err != nil && !strings.Contains(err.Error(), "the script has no poll left") {
+		t.Fatal(err)
+	}
+	if !slices.Equal(w.pauses, []string{StopSyncFailed}) || !slices.Equal(w.acts, []string{"sync"}) || w.resumes != 1 || w.mem.Rounds != 0 {
+		t.Errorf("pauses %v, acts %v, resumes %d, rounds %d", w.pauses, w.acts, w.resumes, w.mem.Rounds)
+	}
+	// One step that tkt auto --once cannot take reports why.
+	w = &simWorld{f: Facts{ID: "ACM-1", PRState: "OPEN", Agent: "idle", Checks: "ok", Head: "h1", Behind: 2, Verdict: "STALE_BASE", AtHead: true}, started: true, failSync: 1}
+	if _, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, simPoll, true, false); err == nil || !strings.Contains(err.Error(), "uncommitted changes") {
+		t.Errorf("--once: %v", err)
 	}
 }

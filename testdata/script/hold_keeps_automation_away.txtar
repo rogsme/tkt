@@ -1,0 +1,50 @@
+# tkt hold marks a ticket so tkt auto and tkt watch leave it alone; --off
+# lifts the mark.
+exec tkt start ACM-9
+realgit -C $FAKE_WT_ROOT/ACM-9 commit -q --allow-empty -m 'work on ACM-9'
+env FAKE_GH_PRS=$WORK/prs.json
+gitvar H1 $FAKE_WT_ROOT/ACM-9 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+
+exec tkt hold ACM-9
+stdout 'ACM-9  on hold: tkt watch and tkt auto leave it alone until tkt hold ACM-9 --off'
+! state $FAKE_WT_ROOT/ACM-9 hold ''
+grep '"ticket":"ACM-9","event":"hold","action":"on"' $HOME/.local/state/tkt/history.jsonl
+
+# tkt ls still shows the next step, and the hold in the AUTO column.
+exec tkt ls --no-fetch
+stdout '^ACM-9 .* hold +tkt run ACM-9 ci$'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0].hold' true
+
+# tkt auto pauses on it, and says why.
+exec tkt auto ACM-9 --once --json
+envelope '.result | [.stop, .did]' '["hold",null]'
+exec tkt auto ACM-9 --once
+stdout 'ACM-9  hold  rounds 0  tkt hold ACM-9 --off lets tkt auto and tkt watch drive it again'
+
+# tkt watch leaves it alone too.
+exec tkt watch --once --dry-run --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","hold"]'
+
+# Holding it again changes nothing.
+exec tkt hold ACM-9 --json
+envelope '.result | [.hold, .changed]' '[true,false]'
+
+exec tkt hold ACM-9 --off
+stdout 'ACM-9  not on hold'
+state $FAKE_WT_ROOT/ACM-9 hold ''
+exec tkt auto ACM-9 --once --dry-run --json
+envelope '.result.did.stage' ci
+exec tkt history ACM-9
+stdout 'put on hold'
+stdout 'taken off hold'
+
+# A ticket without a worktree has no state to hold.
+! exec tkt hold ACM-10
+rc 4
+stderr 'ACM-10 has no worktree'
+
+-- prs.json --
+[{"number": 9, "state": "OPEN", "headRefName": "ACM-9", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+  "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}], "reviews": []}]

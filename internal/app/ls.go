@@ -67,10 +67,21 @@ type RowAuto struct {
 	// Waiting is "slot" while the loop waits for a free slot.
 	Waiting string `json:"waiting"`
 	// Paused says why a running loop waits for you, such as needs_you, and
-	// Why names the rule behind it, such as agent_blocked. Both are empty
-	// while the loop drives the ticket.
+	// Why names the rule behind it, such as agent_blocked; Note adds what
+	// failed, such as a sync's error. All are empty while the loop drives
+	// the ticket.
 	Paused string `json:"paused"`
 	Why    string `json:"why"`
+	Note   string `json:"note"`
+}
+
+// RowWatch is what tkt watch did with a ticket. Last is its last step and
+// the head it took it on, such as run:ci@HEAD. Paused says why it leaves the
+// ticket for you, round_limit or no_progress, while tkt watch runs and the
+// head is the one it paused on.
+type RowWatch struct {
+	Last   string `json:"last"`
+	Paused string `json:"paused"`
 }
 
 // ReasonAwaitingSlot is the next step of a ticket whose tkt auto loop waits
@@ -89,12 +100,20 @@ type Row struct {
 	Checks     *forge.Checks  `json:"checks"`
 	Review     *forge.Verdict `json:"review"`
 	Behind     *int           `json:"behind"`
-	Next       Next           `json:"next"`
+	// BaseMerge says how merging the base into a pull request that is
+	// behind would go, clean or conflict, when tkt auto or tkt watch tried
+	// it with git merge-tree; tkt ls leaves it "".
+	BaseMerge string `json:"base_merge"`
+	Next      Next   `json:"next"`
 	// Stage is the stage tkt last gave the ticket's agent, and Launch how
 	// its launch went (the state file's status).
 	Stage  string   `json:"stage"`
 	Launch string   `json:"launch"`
 	Auto   *RowAuto `json:"auto"`
+	// Hold says the ticket is on hold: tkt watch and tkt auto leave it
+	// alone (tkt hold).
+	Hold  bool      `json:"hold"`
+	Watch *RowWatch `json:"watch"`
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
 	PhaseSince string `json:"phase_since"`
@@ -114,10 +133,12 @@ type Sources struct {
 	Fetch string `json:"fetch"`
 }
 
-// LsResult is tkt ls's table.
+// LsResult is tkt ls's table, and whether tkt watch keeps the tickets
+// moving.
 type LsResult struct {
-	Sources Sources `json:"sources"`
-	Rows    []Row   `json:"rows"`
+	Sources Sources     `json:"sources"`
+	Watch   WatchStatus `json:"watch"`
+	Rows    []Row       `json:"rows"`
 	now     time.Time
 }
 
@@ -264,13 +285,16 @@ func (r *LsResult) cells(row Row, now time.Time) []string {
 	if t, err := time.Parse(time.RFC3339, row.PhaseSince); err == nil && !now.IsZero() {
 		age = Ago(now.Sub(t))
 	}
-	return []string{row.Ticket, phase, age, ag, pr, checks, review, autoCell(row.Auto), next}
+	return []string{row.Ticket, phase, age, ag, pr, checks, review, autoCell(row.Auto, row.Hold), next}
 }
 
 // autoCell says what tkt auto does with a ticket: drives it, waits for you
-// or for a slot, or nothing because its loop is gone.
-func autoCell(a *RowAuto) string {
+// or for a slot, nothing because its loop is gone, or nothing because the
+// ticket is on hold.
+func autoCell(a *RowAuto, hold bool) string {
 	switch {
+	case hold:
+		return "hold"
 	case a == nil:
 		return "-"
 	case a.Running && a.Waiting == "slot":
@@ -345,7 +369,7 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	if lookErr != nil {
 		return nil, lookErr
 	}
-	res := &LsResult{Sources: l.src, Rows: []Row{}, now: a.Now()}
+	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, now: a.Now()}
 	if res.Sources.Fetch == "failed" {
 		a.UI.Warn("git fetch failed; showing the last fetched state")
 	}
@@ -411,6 +435,7 @@ type look struct {
 	gh        forge.GH
 	baseRef   string
 	hasBase   bool
+	probe     bool
 	// forgeErr is a failed pull request query. When the open pull requests
 	// failed, src.Forge is failed too; when only the full list failed, the
 	// open ones still count.
@@ -419,17 +444,20 @@ type look struct {
 
 // lookOpts says what to read. With one to three ids, pull requests are read
 // by head branch, which no list limit can cut off. tabs is off for callers
-// that never show them, which saves a herdr call per workspace.
+// that never show them, which saves a herdr call per workspace. probe tries
+// the base merge of each open pull request that is behind, for the callers
+// that act on it.
 type lookOpts struct {
 	ids   []string
 	fetch bool
 	tabs  bool
+	probe bool
 }
 
 // look reads herdr, the forge and, when asked, the remote, in parallel.
 func (c *Ctx) look(o lookOpts) (*look, error) {
 	f := c.LC.Forge
-	l := &look{src: Sources{Herdr: "unavailable", Forge: "unsupported", Fetch: "skipped"}}
+	l := &look{src: Sources{Herdr: "unavailable", Forge: "unsupported", Fetch: "skipped"}, probe: o.probe}
 	haveHerdr := c.Getenv("HERDR_ENV") == "1" && found("herdr")
 	l.gh = forge.GH{R: c.R, Repo: f.Host + "/" + f.Repo, Name: f.Repo}
 	haveGH := f.Kind == "GitHub" && found("gh") && f.Host != "" && f.Repo != ""
@@ -510,10 +538,11 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
+	row.Hold = st["hold"] != ""
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan, Rounds: atoi(st["rounds"]),
-		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"]}
+		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"], Note: st["auto_note"]}
 	if !row.Auto.Running {
-		row.Auto.Paused, row.Auto.Why = "", ""
+		row.Auto.Paused, row.Auto.Why, row.Auto.Note = "", "", ""
 	}
 	if l.src.Herdr == "ok" {
 		row.Tabs = herdr.TicketTabs(l.tabs, t.ID)
@@ -553,9 +582,22 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			row.Behind = &n
 		}
 	}
+	if l.probe && row.PR != nil && row.PR.State == "OPEN" && row.Behind != nil && *row.Behind > 0 {
+		row.BaseMerge = c.probeBaseMerge(rctx, t.Path, row.PR.Head, l.baseRef)
+	}
+	row.Watch = &RowWatch{Last: st["watch_last"]}
+	if p := st["watch_pause"]; p != "" && row.PR != nil && st["watch_head"] == row.PR.Head && c.watchRunning() {
+		row.Watch.Paused = p
+	}
 	pf := state.Read(phasePath(ts))
 	f := factsFor(row)
 	f.BotWait = c.Cfg.Review.BotWait
+	if l.probe && row.PR != nil && row.PR.State == "OPEN" && row.PR.Head != "" {
+		f.ForgeLag = c.forgeLags(rctx, t.ID, row.PR.Head)
+	}
+	if at, err := time.Parse(time.RFC3339, row.IdleSince); err == nil {
+		f.Idle = c.Now().Sub(at)
+	}
 	if pf["phase"] == PhaseWaitingReview && f.Head != "" && pf["head"] == f.Head {
 		if since, err := time.Parse(time.RFC3339, pf["since"]); err == nil {
 			f.Waited = c.Now().Sub(since)
@@ -578,6 +620,33 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		}
 	}
 	return row, f
+}
+
+// probeBaseMerge tries merging the base into the pull request's head, or
+// into the worktree's HEAD when the head is not here, without touching the
+// worktree. It returns clean, conflict, or "" when git cannot tell.
+func (c *Ctx) probeBaseMerge(ctx context.Context, path, head, base string) string {
+	if head == "" || c.Git.Rev(ctx, path, head+"^{commit}") == "" {
+		head = "HEAD"
+	}
+	m, err := c.Git.MergeTree(ctx, path, head, base)
+	switch {
+	case err != nil:
+		return ""
+	case m.Clean():
+		return "clean"
+	}
+	return "conflict"
+}
+
+// forgeLags reports whether the forge still shows an older head than the
+// branch has on the remote, as it does for a moment after a push: the
+// branch's remote-tracking ref is a descendant of the head the forge names.
+// A remote-tracking ref older than the forge's head is tkt's own stale
+// fetch, so the forge's facts stand.
+func (c *Ctx) forgeLags(ctx context.Context, id, head string) bool {
+	remote := c.Git.Rev(ctx, c.Repo.Root, "refs/remotes/"+c.LC.Forge.Remote+"/"+id+"^{commit}")
+	return remote != "" && remote != head && c.Git.IsAncestor(ctx, c.Repo.Root, head, remote)
 }
 
 // queuedTickets lists the tickets whose tkt auto loop waits for a slot

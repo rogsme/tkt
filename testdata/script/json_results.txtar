@@ -19,7 +19,7 @@ mkprompt $WORK/p7.txt ACM-7
 stdin $WORK/p7.txt
 exec tkt start ACM-7 --dry-run --prompt - --json
 envelope '.result.dry_run' true
-envelope '[.result.actions[].argv[0:3] | join(" ")]' '["wt -C '$REPO'","herdr tab create","herdr agent start","herdr agent prompt"]'
+envelope '[.result.actions[].argv[0:3] | join(" ")]' '["git -C '$REPO'","wt -C '$REPO'","herdr tab create","herdr agent start","herdr agent prompt"]'
 ! exists $FAKE_WT_ROOT/ACM-7
 
 # tkt ls rows carry typed fields and the next step as a command to run.

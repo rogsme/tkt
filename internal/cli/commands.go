@@ -168,6 +168,36 @@ func runCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func syncCmd(g *globals) *cobra.Command {
+	var o app.SyncOpts
+	cmd := &cobra.Command{
+		Use:   "sync ID",
+		Short: "Merge the base into the ticket's branch: itself when clean, through a fresh session on a conflict",
+		Long:  helpText("sync"),
+		Example: `  tkt sync ACM-12
+  tkt sync ACM-12 --dry-run
+  tkt sync ACM-12 --no-agent --json`,
+		SuggestFor:        []string{"merge", "update", "rebase"},
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt sync ID")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Sync(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.As, "as", "", "run the session that resolves a conflict on PRESET instead of the ticket's")
+	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
+	cmd.Flags().BoolVar(&o.NoAgent, "no-agent", false, "stop at a conflict instead of starting a session to resolve it")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
+	return cmd
+}
+
 func approveCmd(g *globals) *cobra.Command {
 	var o app.ApproveOpts
 	cmd := &cobra.Command{
@@ -276,6 +306,56 @@ func autoCmd(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "with --once, print the step instead of taking it")
 	cmd.MarkFlagsMutuallyExclusive("stop", "once")
 	cmd.MarkFlagsMutuallyExclusive("stop", "approve-plan")
+	return cmd
+}
+
+func watchCmd(g *globals) *cobra.Command {
+	var o app.WatchOpts
+	cmd := &cobra.Command{
+		Use:   "watch",
+		Short: "Keep the repository's tickets moving: sync moved bases, fix failing checks, remove finished tickets",
+		Long:  helpText("watch"),
+		Example: `  tkt watch
+  tkt watch --once --dry-run
+  tkt watch --stop`,
+		SuggestFor: []string{"daemon", "serve"},
+		Args:       cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().Watch(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.Once, "once", false, "take one pass over the tickets, then exit")
+	cmd.Flags().BoolVar(&o.Stop, "stop", false, "stop the tkt watch that runs for this repository")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "with --once, say what each ticket would get instead of doing it")
+	cmd.MarkFlagsMutuallyExclusive("once", "stop")
+	return cmd
+}
+
+func holdCmd(g *globals) *cobra.Command {
+	var o app.HoldOpts
+	cmd := &cobra.Command{
+		Use:   "hold ID",
+		Short: "Put a ticket on hold, so tkt watch and tkt auto leave it alone",
+		Long:  helpText("hold"),
+		Example: `  tkt hold ACM-9
+  tkt hold ACM-9 --off`,
+		SuggestFor:        []string{"park", "pause"},
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt hold ID")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Hold(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.Off, "off", false, "take the ticket off hold")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	return cmd
 }
 

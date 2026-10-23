@@ -22,8 +22,8 @@ The next step is the first of these rules that matches:
      draft waits for your approval: do it in the tab.
   5. The checks are pending: wait for CI.
   6. The review says the base moved, the pull request conflicts, or the agent
-     said BLOCKED_FOR_SYNC with the branch behind the base: tkt run ID
-     address, which merges the base first.
+     said BLOCKED_FOR_SYNC with the branch behind the base: tkt sync ID, which
+     merges a clean base itself and hands a conflict to a fresh session.
   7. The merge stopped with HUMAN_QA_FAILED, or the review at the head has
      findings: tkt run ID address.
   8. The checks fail: tkt run ID ci.
@@ -52,8 +52,8 @@ longer than [board] stale_after is marked stale.
 
 The AUTO column says on while a tkt auto loop drives the ticket, paused while
 it waits for you (auto.paused and auto.why in --json say why), queued while it
-waits for a slot, and stalled when the ticket is marked for auto but no loop
-runs.
+waits for a slot, stalled when the ticket is marked for auto but no loop runs,
+and hold while the ticket is on hold (tkt hold).
 
 tkt ls reads pull requests through gh, so outside GitHub forges those columns
 show ? and nothing is recorded.

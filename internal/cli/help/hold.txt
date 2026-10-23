@@ -1,0 +1,11 @@
+tkt hold puts a ticket on hold: tkt watch and tkt auto leave it alone until
+tkt hold ID --off. Use it for a ticket you parked, or one you want to drive by
+hand. The commands you run yourself, such as tkt run and tkt sync, still work
+on it, and tkt ls still shows its next step.
+
+A tkt auto loop that drives the ticket pauses while it is on hold, without a
+notification, and goes on when the hold lifts. tkt ls shows hold in the AUTO
+column and hold: true in --json.
+
+The mark lives in the ticket's state, so it goes away with the worktree. tkt
+history lists each time a ticket was put on hold and taken off it.

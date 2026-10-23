@@ -55,10 +55,11 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 				const agent = r.agent ? `${(r.agent.background ?? 0) > 0 ? "idle, waiting on its own background task" : r.agent.status} in pane ${r.agent.pane_id}` : "none";
 				const item = hub.items.find((x) => x.ticket === r.ticket);
 				const lines = [
-					`${r.ticket}: ${phaseLabel(r.phase)}${r.phase_since ? ` since ${r.phase_since}` : ""}, stage ${r.stage || "-"}`,
+					`${r.ticket}: ${phaseLabel(r.phase)}${r.phase_since ? ` since ${r.phase_since}` : ""}, stage ${r.stage || "-"}${r.hold ? "; on hold, so tkt watch and tkt auto leave it alone" : ""}`,
 					`agent: ${agent}; last status: ${r.last_status || "none"}`,
 					`pull request: ${r.pr ? `#${r.pr.number} ${r.pr.state}` : "none"}; checks: ${r.checks?.state ?? "-"}; review: ${r.review ? `${r.review.verdict}${r.review.at_head ? "" : " (old head)"}` : "-"}`,
 					`auto: ${auto}; rounds ${a?.rounds ?? 0}`,
+					`tkt watch: ${hub.watching === "off" ? "not running" : hub.watching === "failing" ? "running, but its passes fail" : r.watch?.paused ? `waits for the user (${r.watch.paused})` : r.hold ? "leaves it alone, on hold" : "keeps it moving"}`,
 					`next: ${r.next.text} (${r.next.reason})`,
 					item ? `needs the user: ${item.text}` : "needs the user: nothing",
 				];
@@ -138,7 +139,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_continue",
 		label: "tkt continue",
-		description: "Take a ticket's next step, as tkt auto would: start, approve when allowed, review, address, sync or ci. Use it when the user says continue, go on or next for a ticket.",
+		description: "Take a ticket's next step, as tkt auto would: start, approve when allowed, sync, review, address, resolve or ci. Use it when the user says continue, go on or next for a ticket.",
 		parameters: Type.Object({ ticket }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
@@ -151,13 +152,26 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_stage",
 		label: "tkt run",
-		description: "Queue a stage in a fresh session: review, address (which merges the base first, so it also syncs), ci, verify or start. Prefer tkt_continue, which picks the stage itself. Never run review where the repository has a review bot in CI unless the user asks for it.",
-		parameters: Type.Object({ ticket, stage: Type.String({ description: "review, address, ci, verify, start, or a stage from config.toml" }), as: preset }),
+		description: "Queue a stage in a fresh session: review, address (which merges the base first), resolve, ci, verify or start. Prefer tkt_continue, which picks the stage itself, and tkt_sync for a moved base. Never run review where the repository has a review bot in CI unless the user asks for it.",
+		parameters: Type.Object({ ticket, stage: Type.String({ description: "review, address, resolve, ci, verify, start, or a stage from config.toml" }), as: preset }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
 			if (!(await guard(hub, ctx, [t], `Run ${p.stage} for ${t}?`, "It replaces the ticket's idle agent with a fresh session."))) return text("The user did not confirm; nothing ran.");
 			return text(act.stage(hub, t, p.stage, p.as ?? ""));
+		},
+	});
+
+	pi.registerTool({
+		name: "tkt_sync",
+		label: "tkt sync",
+		description: "Queue tkt sync, which merges the base into a ticket's branch: tkt makes and pushes the merge itself when it is clean, and a fresh session resolves a conflict. Use it when the user asks to sync a ticket, or to bring it up to date with main.",
+		parameters: Type.Object({ ticket }),
+		executionMode: "sequential",
+		async execute(_id, p, _signal, _update, ctx) {
+			const t = id(p.ticket);
+			if (!(await guard(hub, ctx, [t], `Sync ${t} with its base?`, "tkt merges and pushes a clean merge itself; a conflict goes to a fresh session."))) return text("The user did not confirm; nothing ran.");
+			return text(act.sync(hub, t));
 		},
 	});
 
@@ -171,6 +185,20 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 			const t = id(p.ticket);
 			if (!(await guard(hub, ctx, [t], p.on ? `Turn tkt auto on for ${t}?` : `Turn tkt auto off for ${t}?`, p.on ? "tkt auto drives the ticket in the background." : "Its loop ends at its next look."))) return text("The user did not confirm; nothing changed.");
 			return text(await act.auto(hub, t, p.on, p.approve_plan ?? false, p.as ?? ""));
+		},
+	});
+
+	pi.registerTool({
+		name: "tkt_hold",
+		label: "tkt hold",
+		description: "Put a ticket on hold, so tkt watch and tkt auto leave it alone, or take it off hold with on false. Use it when the user parks a ticket, or wants to drive it by hand.",
+		parameters: Type.Object({ ticket, on: Type.Boolean() }),
+		executionMode: "sequential",
+		async execute(_id, p, _signal, _update, ctx) {
+			const t = id(p.ticket);
+			if (!(await guard(hub, ctx, [t], p.on ? `Put ${t} on hold?` : `Take ${t} off hold?`, p.on ? "tkt watch and tkt auto leave it alone until you take it off hold." : "tkt watch and tkt auto can drive it again.")))
+				return text("The user did not confirm; nothing changed.");
+			return text(await act.hold(hub, t, p.on));
 		},
 	});
 
