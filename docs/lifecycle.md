@@ -317,7 +317,7 @@ flowchart TD
 - When the checks on the base fail after the merge, finish-ticket ends with `Status: BLOCKED_POST_MERGE`, and the loop stops with `post_merge_failed` and a notification. Nothing else happens; `tkt watch` leaves the ticket for you.
 - A base branch whose protection requires a person's approval cannot merge this way: finish-ticket never merges with administrator rights.
 
-The ticket stays a yolo one, and every line tkt sends it says so, until `tkt auto ACM-123 --stop` hands it back to you. `tkt ls` shows `auto.yolo`, the AUTO column reads `yolo` while the loop drives it, and the tkt agent's board marks it.
+A yolo run starts with the ticket: `--yolo` refuses a ticket you started another way, which has no `## Autonomous run` comment. The ticket stays a yolo one, and every stage line tkt sends it says so, until `tkt auto ACM-123 --stop` hands it back to you and drops any merge order the loop left. A merge line you send yourself, such as after the loop paused on steps verify-pr could not run, never says the run is autonomous, so finish-ticket takes your word. tkt merge refuses to merge over verify-pr's report of a failed step, since finish-ticket merges no head with open feedback. `tkt ls` shows `auto.yolo`, the AUTO column reads `yolo` while the loop drives it, and the tkt agent's board marks it.
 
 `tkt agent` opens a chat that does all of this for many tickets at once: you say "start ACM-123 in auto", get the prompt back, and hear from it only when a ticket needs you.
 

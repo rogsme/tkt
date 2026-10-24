@@ -269,6 +269,12 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		return nil, err
 	}
 	res.Steps = got
+	if v := row.Verification; v.Holds() && v.Value == contract.VerificationFailed {
+		// The report is open feedback, which finish-ticket refuses to
+		// merge over until address-pr-review answers it.
+		return nil, apperr.New(apperr.NotVerified, "verify-pr's report on %s says a step fails, and finish-ticket merges no head with open feedback", short(v.Head)).
+			WithHint("tkt run %s address", id)
+	}
 	if o.Evidence || o.Autonomous {
 		if err := evidenceFor(id, row.Verification, res.Verified, got); err != nil {
 			return nil, err

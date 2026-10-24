@@ -102,8 +102,9 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		return nil, err
 	}
 	st := ts.st
-	if st["yolo"] != "" && !strings.Contains(text, config.AutonomousLine) {
-		// Nobody answers a yolo ticket's agents, whoever starts them.
+	if st["yolo"] != "" && o.line == "" && !o.Prompt.Set {
+		// Nobody answers a yolo ticket's stages, whoever starts them. A
+		// line of its own, such as yours to merge, says what it means.
 		text = withLine(text, config.AutonomousLine)
 	}
 	if chore := st["chore"]; chore != "" && o.line == "" {

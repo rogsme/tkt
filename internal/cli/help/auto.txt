@@ -29,7 +29,10 @@ Without --yolo it never merges and never removes a worktree.
 
 --yolo carries the ticket to the merge with nobody watching. It runs only
 where workflow.md turns on autonomous runs, agent verification and plan
-review, and refuses with autonomous_off naming the rows that are off. It
+review, and refuses with autonomous_off naming the rows that are off. A
+yolo run starts with the ticket: --yolo refuses a ticket that started
+without it, since start-ticket posted no Autonomous run comment, which
+finish-ticket merges on. It
 approves the plan as --approve-plan does, and every line its agents get,
 from the start line to the merge line, says "This run is autonomous", so
 the skills decide what they would ask, record each decision as an
@@ -43,7 +46,9 @@ ends it with merged, and tkt watch removes the ticket; a failure of the
 checks on the base ends it with post_merge_failed and a notification, and
 nothing else happens. Steps verify-pr could not run pause it (needs_you).
 The ticket stays a yolo one when its loop starts again, and every line tkt
-sends it says so, until tkt auto --stop hands it back to you. tkt ls shows
+sends it says so, until tkt auto --stop hands it back to you, dropping
+any merge order it left. A merge line you send yourself never says the run
+is autonomous, so finish-ticket takes your word. tkt ls shows
 auto.yolo, and yolo in the AUTO column while the loop drives it.
 
 Where a person decides, the loop pauses instead of ending: when the agent

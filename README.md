@@ -118,7 +118,7 @@ Where `docs/agents/workflow.md` turns on `Agent verification` (`/setup-rogs` ask
 - One merge goes at a time in the repository. When the checks on the base fail after the merge, the loop stops and notifies you, and nothing else happens.
 - A base branch whose protection requires a person's approval cannot merge this way.
 
-The ticket stays a yolo one until `tkt auto ACM-12 --stop`. Start with a repository where a wrong merge costs little.
+A yolo run starts with the ticket: `--yolo` refuses a ticket you started another way, since finish-ticket merges only where start-ticket recorded the yolo start. The ticket stays a yolo one until `tkt auto ACM-12 --stop`, which also drops a merge order the loop left. Start with a repository where a wrong merge costs little.
 
 For work with no ticket, `tkt start --scratch spike-login` makes the worktree, branch and tab `spike-login` and starts the agent without sending it anything. The other commands work on tickets and chore runs only, so remove that worktree with `wt remove spike-login`.
 

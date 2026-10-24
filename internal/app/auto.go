@@ -687,10 +687,21 @@ func (a *App) auto(ctx context.Context, o AutoOpts, carry autoCarry, self string
 	if o.Stop {
 		res := &AutoResult{Ticket: id, Stop: StopStopped, Steps: []AutoStep{}}
 		if ts != nil {
-			// A person takes the ticket over: its agents may ask again.
+			// A person takes the ticket over: its agents may ask again, and
+			// a yolo merge order goes, since nobody may send it now.
 			c.save(ts, "auto", "", "auto_stop", StopStopped, "auto_wait", "", "auto_pause", "", "yolo", "")
+			if ts.st["merge_by"] == mergeByAutonomous {
+				c.dropOrder(ts, id, MergeCancelled)
+			}
 		}
 		return res, nil
+	}
+	if o.Yolo && ts != nil && ts.st["yolo"] == "" {
+		// finish-ticket merges on the autonomous line only where
+		// start-ticket posted its Autonomous run comment, which it does
+		// only for a start line that says the run is autonomous.
+		return nil, apperr.New(apperr.AutonomousOff, "%s started without --yolo, so it lacks the Autonomous run comment finish-ticket merges on; a yolo run starts with the ticket", id).
+			WithHint("tkt auto %s --approve-plan", id)
 	}
 	f, err := lock.Wait(c.Ctx, c.Repo.Common, id+".auto", 2*time.Second)
 	switch {
@@ -881,13 +892,25 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 		}
 		actions = res.Actions
 	case actRun:
-		res, err := c.App.Run(ctx, RunOpts{ID: w.id, Stage: a.Stage, As: w.as, Dry: c.Dry})
+		as := w.as
+		if a.Stage == "verify" && c.Cfg.Verify.As != "" {
+			// [verify] as wins over --as: the verifier should not be the
+			// model that built the change.
+			as = ""
+		}
+		res, err := c.App.Run(ctx, RunOpts{ID: w.id, Stage: a.Stage, As: as, Dry: c.Dry})
 		if err != nil {
 			return err
 		}
 		actions = res.Actions
 	case actMerge:
-		res, err := c.App.Merge(ctx, MergeOpts{ID: w.id, Autonomous: true, Dry: c.Dry})
+		o := MergeOpts{ID: w.id, Autonomous: true, Dry: c.Dry}
+		if ts, err := c.readState(w.path); err == nil && ts.st["merge_by"] == mergeByAutonomous && ts.st["merge_head"] != "" {
+			// Carry out the loop's own order, as tkt watch would, so a
+			// wait for the merge turn leaves no new order each look.
+			o.Passed, o.Head, o.As, o.order = ts.st["merge_steps"], ts.st["merge_head"], ts.st["merge_as"], true
+		}
+		res, err := c.App.Merge(ctx, o)
 		if err != nil {
 			switch apperr.As(err).Code {
 			case apperr.TicketLocked, apperr.AgentBusy:
