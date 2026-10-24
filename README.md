@@ -210,7 +210,19 @@ page = "https://www.githubstatus.com"
 components = ["Actions", "Pull Requests", "Git Operations"]
 ```
 
-Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. A `[status.NAME]` table names a status page that Atlassian Statuspage serves, as GitHub's and most model providers' are: while it reports a problem with a component that counts, `tkt watch` and `tkt auto` start no agent, since a fix for checks that fail because CI is down only spends a round, and the board says so at its top. `tkt help config` has the details.
+A repository's own settings go in `.tkt.toml`, at the root of its main checkout, next to `.git`. It takes every table but `[presets]`, `[agent]` and `[chores]`, and wins over `config.toml` key by key, so a repository with no review bot can say so for itself:
+
+```toml
+[review]
+bot_wait = "0s"
+
+[stages]
+lint = "Run just lint on {id} and fix what it reports."
+```
+
+`[presets]` and `[agent]` stay in `config.toml`: they choose the harnesses, models and code that run on your machine, and anyone who can commit to the repository can write its `.tkt.toml`. tkt reads the file whether git tracks it or not, so commit it to share it, or list it in `.git/info/exclude` to keep it yours. Every worktree reads the main checkout's copy, so a change made on a ticket's branch applies once it reaches the main checkout.
+
+Without either file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. A `[status.NAME]` table names a status page that Atlassian Statuspage serves, as GitHub's and most model providers' are: while it reports a problem with a component that counts, `tkt watch` and `tkt auto` start no agent, since a fix for checks that fail because CI is down only spends a round, and the board says so at its top. `tkt help config` has the details.
 
 ### Always on
 

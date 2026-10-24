@@ -239,7 +239,7 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 			lc, lcErr = lifecycle.Load(repo.Root)
 		}
 	}
-	cfg, cfgErr := config.Load(a.ConfigDir())
+	cfg, cfgErr := config.Load(a.ConfigDir(), repo.Root)
 
 	var checks []func() Check
 	add := func(f func() Check) { checks = append(checks, f) }
@@ -275,6 +275,9 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 			return Check{ID: "config", Status: CheckFail, Message: e.Msg, Hint: or(e.Hint, "tkt help config")}
 		}
 		msg := fmt.Sprintf("presets %s from %s", strings.Join(cfg.PresetNames(), ", "), cfg.Source)
+		if cfg.Project != "" {
+			msg += "; repository settings from " + cfg.Project
+		}
 		if len(cfg.IgnoredLegacy) > 0 {
 			return Check{ID: "config", Status: CheckWarn, Message: msg + "; ignoring " + strings.Join(cfg.IgnoredLegacy, " and "),
 				Hint: "delete " + strings.Join(cfg.IgnoredLegacy, " and ")}

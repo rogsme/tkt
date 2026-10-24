@@ -37,8 +37,11 @@ func (p Preset) ServesModel(v string) bool {
 // Config is the loaded settings. Presets keep their file order: the first
 // is the default, and tkt tries them in order.
 type Config struct {
-	// Source names where the settings came from, for messages.
-	Source  string
+	// Source names where the settings came from, for messages: config.toml,
+	// the one file that holds presets.
+	Source string
+	// Project is the repository's .tkt.toml, when tkt read one.
+	Project string
 	Presets []Preset
 	Stages  map[string]string
 	// OwnStages lists the stages the settings define, sorted.

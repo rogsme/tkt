@@ -52,7 +52,7 @@ func code(err error) apperr.Code {
 }
 
 func TestBuiltinPresets(t *testing.T) {
-	c, err := Load(t.TempDir())
+	c, err := Load(t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestBuiltinPresets(t *testing.T) {
 }
 
 func TestUserPresetsKeepHashInModels(t *testing.T) {
-	c, err := Load(dirWith(t, map[string]string{"config.toml": settings}))
+	c, err := Load(dirWith(t, map[string]string{"config.toml": settings}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestSettingsErrors(t *testing.T) {
 		"[presets.x\nharness = \"claude\"\n",
 		"color = true\n",
 	} {
-		_, err := Load(dirWith(t, map[string]string{"config.toml": src}))
+		_, err := Load(dirWith(t, map[string]string{"config.toml": src}), "")
 		if code(err) != apperr.ConfigInvalid {
 			t.Errorf("%q: %v", src, err)
 		}
@@ -102,7 +102,7 @@ func TestSettingsErrors(t *testing.T) {
 
 func TestPresetOrderFollowsTheFile(t *testing.T) {
 	src := "[presets.zeta]\nharness = \"opencode\"\n\n[presets.alpha]\nharness = \"claude\"\n"
-	c, err := Load(dirWith(t, map[string]string{"config.toml": src}))
+	c, err := Load(dirWith(t, map[string]string{"config.toml": src}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestPresetOrderFollowsTheFile(t *testing.T) {
 }
 
 func TestStagesOnlyKeepBuiltinPresets(t *testing.T) {
-	c, err := Load(dirWith(t, map[string]string{"config.toml": "[stages]\nlint = \"\"\"\nRun the linter\non {id}.\n\"\"\"\n"}))
+	c, err := Load(dirWith(t, map[string]string{"config.toml": "[stages]\nlint = \"\"\"\nRun the linter\non {id}.\n\"\"\"\n"}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestStagesOnlyKeepBuiltinPresets(t *testing.T) {
 
 func TestLegacyFilesAreConverted(t *testing.T) {
 	dir := dirWith(t, map[string]string{"presets": legacyPresets, "stages": "lint Run \"the\" linter on {id}.\n"})
-	_, err := Load(dir)
+	_, err := Load(dir, "")
 	e := apperr.As(err)
 	if e.Code != apperr.ConfigLegacy {
 		t.Fatalf("got %v", err)
@@ -139,7 +139,7 @@ func TestLegacyFilesAreConverted(t *testing.T) {
 		t.Errorf("message:\n%s", e.Msg)
 	}
 	os.WriteFile(filepath.Join(dir, "config.toml"), []byte(text), 0o644)
-	c, err := Load(dir)
+	c, err := Load(dir, "")
 	if err != nil {
 		t.Fatalf("the converted file does not load: %v\n%s", err, text)
 	}
@@ -158,7 +158,7 @@ func TestLegacyFilesAreConverted(t *testing.T) {
 }
 
 func TestPickFollowsModelLine(t *testing.T) {
-	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}))
+	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}), "")
 	cases := []struct{ as, prompt, want string }{
 		{"", "- Model: `small` (acme/fast)", "fast"},
 		{"", "Model: frontier.", "claude"},
@@ -174,7 +174,7 @@ func TestPickFollowsModelLine(t *testing.T) {
 }
 
 func TestPickRefusesConflicts(t *testing.T) {
-	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}))
+	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}), "")
 	if _, err := c.Pick("claude", "Model: small", false); code(err) != apperr.PresetModelMismatch {
 		t.Errorf("--as against the Model line: %v", err)
 	}
@@ -202,11 +202,11 @@ func TestModelValues(t *testing.T) {
 }
 
 func TestStageLinesAndOverrides(t *testing.T) {
-	c, _ := Load(t.TempDir())
+	c, _ := Load(t.TempDir(), "")
 	if got, _ := c.StageLine("start", "ACM-7"); got != "Use the start-ticket skill to start ticket ACM-7." {
 		t.Errorf("start: %q", got)
 	}
-	c, err := Load(dirWith(t, map[string]string{"config.toml": "[stages]\naddress = \"Address ticket {id} please.\"\nlint = \"Run the linter.\"\n"}))
+	c, err := Load(dirWith(t, map[string]string{"config.toml": "[stages]\naddress = \"Address ticket {id} please.\"\nlint = \"Run the linter.\"\n"}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestStageLinesAndOverrides(t *testing.T) {
 }
 
 func TestTabLabel(t *testing.T) {
-	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}))
+	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}), "")
 	if got := c.TabLabel("ACM-1", "claude"); got != "ACM-1 (claude)" {
 		t.Errorf("default preset: %q", got)
 	}
@@ -233,14 +233,14 @@ func TestTabLabel(t *testing.T) {
 }
 
 func TestAutoReviewAndBoardSettings(t *testing.T) {
-	c, err := Load(t.TempDir())
+	c, err := Load(t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.Auto != (Auto{MaxRounds: 5, Poll: 30 * time.Second, MaxParallel: 3}) || c.Review.BotWait != 15*time.Minute || c.Board.StaleAfter != 2*time.Hour {
 		t.Errorf("defaults: %+v %+v %+v", c.Auto, c.Review, c.Board)
 	}
-	c, err = Load(dirWith(t, map[string]string{FileName: "[auto]\nmax_rounds = 0\npoll = \"1m\"\nmax_parallel = 0\n\n[review]\nbot_wait = \"0s\"\n\n[board]\nstale_after = \"30m\"\n"}))
+	c, err = Load(dirWith(t, map[string]string{FileName: "[auto]\nmax_rounds = 0\npoll = \"1m\"\nmax_parallel = 0\n\n[review]\nbot_wait = \"0s\"\n\n[board]\nstale_after = \"30m\"\n"}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,21 +256,21 @@ func TestAutoReviewAndBoardSettings(t *testing.T) {
 		"[review]\nbot_wait = 15\n",
 		"[board]\nstale = \"2h\"\n",
 	} {
-		if _, err := Load(dirWith(t, map[string]string{FileName: bad})); code(err) != apperr.ConfigInvalid {
+		if _, err := Load(dirWith(t, map[string]string{FileName: bad}), ""); code(err) != apperr.ConfigInvalid {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}
 }
 
 func TestWatchSettings(t *testing.T) {
-	c, err := Load(t.TempDir())
+	c, err := Load(t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.Watch != (Watch{Interval: time.Minute, DoneAfterMerge: true, Autostart: true}) {
 		t.Errorf("defaults: %+v", c.Watch)
 	}
-	c, err = Load(dirWith(t, map[string]string{FileName: "[watch]\ninterval = \"5m\"\ndone_after_merge = false\nautostart = false\n"}))
+	c, err = Load(dirWith(t, map[string]string{FileName: "[watch]\ninterval = \"5m\"\ndone_after_merge = false\nautostart = false\n"}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,19 +278,19 @@ func TestWatchSettings(t *testing.T) {
 		t.Errorf("set: %+v", c.Watch)
 	}
 	for _, bad := range []string{"[watch]\ninterval = \"0s\"\n", "[watch]\ninterval = \"often\"\n", "[watch]\nautostart = \"yes\"\n", "[watch]\nevery = \"1m\"\n"} {
-		if _, err := Load(dirWith(t, map[string]string{FileName: bad})); code(err) != apperr.ConfigInvalid {
+		if _, err := Load(dirWith(t, map[string]string{FileName: bad}), ""); code(err) != apperr.ConfigInvalid {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}
 }
 
 func TestSuggestSettings(t *testing.T) {
-	c, err := Load(dirWith(t, map[string]string{FileName: "[presets.claude]\nharness = \"claude\"\n\n[presets.cheap]\nharness = \"claude\"\nmodel = \"haiku\"\n\n[suggest]\nas = \"cheap\"\n"}))
+	c, err := Load(dirWith(t, map[string]string{FileName: "[presets.claude]\nharness = \"claude\"\n\n[presets.cheap]\nharness = \"claude\"\nmodel = \"haiku\"\n\n[suggest]\nas = \"cheap\"\n"}), "")
 	if err != nil || c.Suggest.As != "cheap" {
 		t.Fatalf("[suggest] as: %+v, %v", c.Suggest, err)
 	}
 	// A preset the file does not define is a mistake, caught at load.
-	if _, err := Load(dirWith(t, map[string]string{FileName: "[suggest]\nas = \"fast\"\n"})); code(err) != apperr.ConfigInvalid {
+	if _, err := Load(dirWith(t, map[string]string{FileName: "[suggest]\nas = \"fast\"\n"}), ""); code(err) != apperr.ConfigInvalid {
 		t.Errorf("an unknown [suggest] preset: %v", err)
 	}
 	if got := SuggestLine(1); got != "Use the suggest-tickets skill to suggest the next ticket to start." {
@@ -302,11 +302,11 @@ func TestSuggestSettings(t *testing.T) {
 }
 
 func TestVerifySettings(t *testing.T) {
-	c, err := Load(dirWith(t, map[string]string{FileName: "[presets.claude]\nharness = \"claude\"\n\n[presets.other]\nharness = \"opencode\"\n\n[verify]\nas = \"other\"\n"}))
+	c, err := Load(dirWith(t, map[string]string{FileName: "[presets.claude]\nharness = \"claude\"\n\n[presets.other]\nharness = \"opencode\"\n\n[verify]\nas = \"other\"\n"}), "")
 	if err != nil || c.Verify.As != "other" {
 		t.Fatalf("[verify] as: %+v, %v", c.Verify, err)
 	}
-	if _, err := Load(dirWith(t, map[string]string{FileName: "[verify]\nas = \"fast\"\n"})); code(err) != apperr.ConfigInvalid {
+	if _, err := Load(dirWith(t, map[string]string{FileName: "[verify]\nas = \"fast\"\n"}), ""); code(err) != apperr.ConfigInvalid {
 		t.Errorf("an unknown [verify] preset: %v", err)
 	}
 	if got := BuiltinStages["verify"]; got != "Use the verify-pr skill to verify the current PR." {

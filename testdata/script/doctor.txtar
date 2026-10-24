@@ -33,7 +33,24 @@ exec tkt doctor
 stdout '^warn  config           presets fast from .*ignoring .*presets$'
 ! stdout 'harness.claude'
 
+# A .tkt.toml adds the repository's settings.
+rm $HOME/.config/tkt/presets
+cp $WORK/tkt.toml $REPO/.tkt.toml
+exec tkt doctor
+stdout '^ok    config           presets fast from .*config\.toml; repository settings from .*/\.tkt\.toml$'
+
+# One that does not parse fails the config check.
+cp $WORK/presets.toml $REPO/.tkt.toml
+! exec tkt doctor
+stdout '^fail  config           .*\.tkt\.toml: \[presets\] belongs in '
+
 -- config.toml --
 [presets.fast]
 harness = "opencode"
 model = "acme/fast#max"
+-- tkt.toml --
+[review]
+bot_wait = "0s"
+-- presets.toml --
+[presets.big]
+harness = "claude"

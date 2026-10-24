@@ -24,7 +24,8 @@ Stages:
            runs it on another preset (tkt help config).
   start    runs start-ticket again and returns a new plan.
 
-config.toml can change these lines or add stages (tkt help config).
+config.toml and the repository's .tkt.toml can change these lines or add
+stages (tkt help config).
 
 A chore's run takes ci, resolve and your own --prompt. It has no ticket, so
 tkt run refuses it a stage whose line runs a lifecycle skill, such as

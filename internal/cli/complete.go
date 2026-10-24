@@ -84,7 +84,7 @@ func (g *globals) completeRun(cmd *cobra.Command, args []string, toComplete stri
 	if len(args) > 1 {
 		return nil, noFiles
 	}
-	cfg, err := config.Load(g.app().ConfigDir())
+	cfg, err := config.Load(g.app().ConfigDir(), g.rootForCompletion(cmd))
 	if err != nil {
 		return nil, noFiles
 	}
@@ -96,7 +96,7 @@ func (g *globals) completeRun(cmd *cobra.Command, args []string, toComplete stri
 }
 
 func (g *globals) completePresets(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
-	cfg, err := config.Load(g.app().ConfigDir())
+	cfg, err := config.Load(g.app().ConfigDir(), "")
 	if err != nil {
 		return nil, noFiles
 	}
@@ -113,21 +113,31 @@ func (g *globals) completeChores(cmd *cobra.Command, args []string, _ string) ([
 	if len(args) > 0 {
 		return nil, noFiles
 	}
-	cfg, err := config.Load(g.app().ConfigDir())
-	if err != nil {
+	root := g.rootForCompletion(cmd)
+	if root == "" {
 		return nil, noFiles
 	}
-	repo, err := gitx.Git{R: runner.Exec{}}.Resolve(cmd.Context(), g.dirForCompletion())
+	cfg, err := config.Load(g.app().ConfigDir(), root)
 	if err != nil {
 		return nil, noFiles
 	}
 	var out []string
 	for _, ch := range cfg.Chores {
-		if ch.RunsIn(repo.Root) {
+		if ch.RunsIn(root) {
 			out = append(out, ch.Name+"\t"+ch.Schedule.String())
 		}
 	}
 	return out, noFiles
+}
+
+// rootForCompletion is the primary worktree of the repository tkt runs in,
+// whose .tkt.toml adds stages and chores, or "" outside one.
+func (g *globals) rootForCompletion(cmd *cobra.Command) string {
+	repo, err := gitx.Git{R: runner.Exec{}}.Resolve(cmd.Context(), g.dirForCompletion())
+	if err != nil {
+		return ""
+	}
+	return repo.Root
 }
 
 // completePanes offers the herdr panes inside the ticket's worktree, named

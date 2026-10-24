@@ -107,7 +107,7 @@ func (a *App) begin(ctx context.Context, dry, force bool) (*Ctx, error) {
 	if c.LC, err = lifecycle.Load(repo.Root); err != nil {
 		return nil, err
 	}
-	if c.Cfg, err = config.Load(a.ConfigDir()); err != nil {
+	if c.Cfg, err = config.Load(a.ConfigDir(), repo.Root); err != nil {
 		return nil, err
 	}
 	c.WT = wt.Client{R: a.R, Root: repo.Root}

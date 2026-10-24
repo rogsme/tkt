@@ -130,7 +130,8 @@ func parseChores(c *Config, path string, in map[string]choreTOML) error {
 	return nil
 }
 
-// parseStatus reads the [status.NAME] tables, sorted by name.
+// parseStatus reads the [status.NAME] tables, sorted by name. A page the
+// file names again replaces the one read before.
 func parseStatus(c *Config, path string, in map[string]statusTOML) error {
 	for name, t := range in {
 		bad := func(format string, args ...any) error {
@@ -147,6 +148,7 @@ func parseStatus(c *Config, path string, in map[string]statusTOML) error {
 		case slices.Contains(t.Components, ""):
 			return bad("components holds an empty name")
 		}
+		c.Status = slices.DeleteFunc(c.Status, func(p StatusPage) bool { return p.Name == name })
 		c.Status = append(c.Status, StatusPage{Name: name, URL: strings.TrimRight(t.Page, "/"), Components: t.Components})
 	}
 	sort.Slice(c.Status, func(i, j int) bool { return c.Status[i].Name < c.Status[j].Name })

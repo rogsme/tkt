@@ -1,0 +1,34 @@
+# A .tkt.toml at the root of the primary worktree wins over config.toml key
+# by key, from every worktree of the repository: tkt run sends its stage
+# line, and config.toml's other stages stay.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+cp $WORK/tkt.toml $REPO/.tkt.toml
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+cd $FAKE_WT_ROOT/ACM-12
+rm $FAKE_DIR/prompts
+exec tkt run ACM-12 lint
+grep 'Run just lint on ACM-12.' $FAKE_DIR/prompts
+! grep 'Run the linter' $FAKE_DIR/prompts
+exec tkt run ACM-12 docs
+grep 'Update the docs for ACM-12.' $FAKE_DIR/prompts
+
+# A ticket branch's own .tkt.toml changes nothing until it reaches the
+# primary worktree.
+cp $WORK/branch.toml $FAKE_WT_ROOT/ACM-12/.tkt.toml
+rm $FAKE_DIR/prompts
+exec tkt run ACM-12 lint
+grep 'Run just lint on ACM-12.' $FAKE_DIR/prompts
+! grep 'from the branch' $FAKE_DIR/prompts
+
+-- config.toml --
+[stages]
+lint = "Run the linter on {id}."
+docs = "Update the docs for {id}."
+-- tkt.toml --
+[stages]
+lint = "Run just lint on {id}."
+-- branch.toml --
+[stages]
+lint = "Lint {id} from the branch."

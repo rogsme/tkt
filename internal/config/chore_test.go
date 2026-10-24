@@ -34,7 +34,7 @@ repo = "/srv/acme/app/"
 schedule = "@daily"
 prompt = "Gather the changelog lines."
 `
-	c, err := Load(dirWith(t, map[string]string{FileName: src}))
+	c, err := Load(dirWith(t, map[string]string{FileName: src}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestChoreErrors(t *testing.T) {
 		"[chores.deps]\nrepo = \"/srv/app\"\nschedule = \"0 9 * * 1\"\nprompt = \"!npm update\"\n":               "shell mode",
 		"[chores.deps]\nrepo = \"/srv/app\"\nschedule = \"0 9 * * 1\"\nprompt = \"\"\"\n/upgrade\nnow\n\"\"\"\n": "takes one line",
 	} {
-		_, err := Load(dirWith(t, map[string]string{FileName: src}))
+		_, err := Load(dirWith(t, map[string]string{FileName: src}), "")
 		if code(err) != apperr.ConfigInvalid || !strings.Contains(apperr.As(err).Msg, want) {
 			t.Errorf("%q: %v, want an error about %s", src, err, want)
 		}
@@ -85,7 +85,7 @@ func TestChoreErrors(t *testing.T) {
 
 func TestStatusPages(t *testing.T) {
 	src := "[status.github]\npage = \"https://www.githubstatus.com/\"\ncomponents = [\"Actions\", \"Pull Requests\"]\n\n[status.anthropic]\npage = \"https://status.claude.com\"\n"
-	c, err := Load(dirWith(t, map[string]string{FileName: src}))
+	c, err := Load(dirWith(t, map[string]string{FileName: src}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestStatusPages(t *testing.T) {
 		"[status.github]\npage = \"https://www.githubstatus.com\"\ncomponents = [\"\"]\n",
 		"[status.github]\npage = \"https://www.githubstatus.com\"\nservices = [\"Actions\"]\n",
 	} {
-		if _, err := Load(dirWith(t, map[string]string{FileName: bad})); code(err) != apperr.ConfigInvalid {
+		if _, err := Load(dirWith(t, map[string]string{FileName: bad}), ""); code(err) != apperr.ConfigInvalid {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}

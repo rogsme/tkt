@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -18,6 +19,10 @@ import (
 
 // FileName is tkt's settings file inside its configuration directory.
 const FileName = "config.toml"
+
+// ProjectFileName is a repository's own settings file, at the root of its
+// primary worktree.
+const ProjectFileName = ".tkt.toml"
 
 var (
 	presetName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -66,10 +71,12 @@ type fileTOML struct {
 	Status map[string]statusTOML `toml:"status"`
 }
 
-// Load reads the settings from dir, tkt's configuration directory. Without
-// a config.toml, the built-in presets and stages apply. The old presets and
-// stages files are refused with their content converted to TOML.
-func Load(dir string) (Config, error) {
+// Load reads the settings from dir, tkt's configuration directory, then
+// from the .tkt.toml of the repository whose primary worktree is root, whose
+// keys win. Without either file, the built-in presets and stages apply; root
+// is "" outside a repository. The old presets and stages files are refused
+// with their content converted to TOML.
+func Load(dir, root string) (Config, error) {
 	c := builtin()
 	path := filepath.Join(dir, FileName)
 	src, err := os.ReadFile(path)
@@ -78,30 +85,49 @@ func Load(dir string) (Config, error) {
 	case errors.Is(err, fs.ErrNotExist) && len(legacy) > 0:
 		return c, legacyError(dir, legacy)
 	case errors.Is(err, fs.ErrNotExist):
-		return c, nil
 	case err != nil:
 		return c, apperr.New(apperr.ConfigInvalid, "cannot read %s: %v", path, err)
+	default:
+		c.Source = path
+		c.IgnoredLegacy = legacy
+		if err := parseTOML(&c, path, string(src)); err != nil {
+			return c, err
+		}
 	}
-	c.Source = path
-	c.IgnoredLegacy = legacy
-	if err := parseTOML(&c, path, string(src)); err != nil {
-		return c, err
+	if root == "" {
+		return c, nil
 	}
-	return c, nil
+	project := filepath.Join(root, ProjectFileName)
+	src, err = os.ReadFile(project)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return c, nil
+	case err != nil:
+		return c, apperr.New(apperr.ConfigInvalid, "cannot read %s: %v", project, err)
+	}
+	return c, parseProject(&c, path, project, string(src))
 }
 
-func parseTOML(c *Config, path, src string) error {
+func decode(path, src string) (fileTOML, toml.MetaData, error) {
 	var f fileTOML
 	md, err := toml.Decode(src, &f)
 	if err != nil {
-		return apperr.New(apperr.ConfigInvalid, "%s: %v", path, err)
+		return f, md, apperr.New(apperr.ConfigInvalid, "%s: %v", path, err)
 	}
 	if extra := md.Undecoded(); len(extra) > 0 {
 		keys := make([]string, len(extra))
 		for i, k := range extra {
 			keys[i] = k.String()
 		}
-		return apperr.New(apperr.ConfigInvalid, "%s: unknown key %s", path, strings.Join(keys, ", "))
+		return f, md, apperr.New(apperr.ConfigInvalid, "%s: unknown key %s", path, strings.Join(keys, ", "))
+	}
+	return f, md, nil
+}
+
+func parseTOML(c *Config, path, src string) error {
+	f, md, err := decode(path, src)
+	if err != nil {
+		return err
 	}
 	if len(f.Presets) > 0 {
 		c.Presets = nil
@@ -131,6 +157,49 @@ func parseTOML(c *Config, path, src string) error {
 			c.Presets = append(c.Presets, Preset{Name: name, Harness: p.Harness, Model: p.Model, Serves: serves})
 		}
 	}
+	c.Agent.Model = f.Agent.Model
+	for _, p := range f.Agent.Extensions {
+		abs, ok := absPath(p)
+		if !ok {
+			return apperr.New(apperr.ConfigInvalid, "%s: agent extension '%s' is not an absolute path", path, p).
+				WithHint("write the extension's full path, such as ~/.pi/agent/extensions/acme.ts")
+		}
+		c.Agent.Extensions = append(c.Agent.Extensions, abs)
+	}
+	if err := parseSettings(c, path, f); err != nil {
+		return err
+	}
+	return parseChores(c, path, f.Chores)
+}
+
+// parseProject reads a repository's .tkt.toml over the settings from global,
+// tkt's config.toml. It takes every table but the presets and the agent's,
+// which choose the harnesses, models and code that run on your machine, as a
+// file anyone can commit to the repository must not, and the chores, which
+// config.toml keeps with the repository each runs in.
+func parseProject(c *Config, global, path, src string) error {
+	f, md, err := decode(path, src)
+	if err != nil {
+		return err
+	}
+	for _, table := range []string{"presets", "agent"} {
+		if md.IsDefined(table) {
+			return apperr.New(apperr.ConfigInvalid, "%s: [%s] belongs in %s, since the harnesses, models and extensions are yours, not the repository's", path, table, global).
+				WithHint("move [%s] to %s", table, global)
+		}
+	}
+	if md.IsDefined("chores") {
+		return apperr.New(apperr.ConfigInvalid, "%s: [chores] belongs in %s, with the repository each chore runs in", path, global).
+			WithHint("move [chores] to %s", global)
+	}
+	c.Project = path
+	return parseSettings(c, path, f)
+}
+
+// parseSettings reads the tables both files take: [stages], [auto],
+// [review], [board], [watch], [suggest], [verify] and [status]. It sets only
+// the keys the file names, so the file read last wins key by key.
+func parseSettings(c *Config, path string, f fileTOML) error {
 	for name, text := range f.Stages {
 		if !stageName.MatchString(name) {
 			return apperr.New(apperr.ConfigInvalid, "%s: stage '%s': the name may hold lowercase letters, digits, '_' and '-'", path, name)
@@ -139,15 +208,11 @@ func parseTOML(c *Config, path, src string) error {
 			return apperr.New(apperr.ConfigInvalid, "%s: stage '%s' has no text", path, name)
 		}
 		c.Stages[name] = strings.TrimSpace(text)
-		c.OwnStages = append(c.OwnStages, name)
+		if !slices.Contains(c.OwnStages, name) {
+			c.OwnStages = append(c.OwnStages, name)
+		}
 	}
 	sort.Strings(c.OwnStages)
-	return parseSettings(c, path, f)
-}
-
-// parseSettings reads the [auto], [review], [board], [agent], [watch],
-// [suggest], [verify], [chores] and [status] tables.
-func parseSettings(c *Config, path string, f fileTOML) error {
 	bad := func(key, rule string) error {
 		return apperr.New(apperr.ConfigInvalid, "%s: %s %s", path, key, rule)
 	}
@@ -216,18 +281,6 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 			return bad("[verify] as", fmt.Sprintf("names preset '%s', which the presets do not define", v.As))
 		}
 		c.Verify.As = v.As
-	}
-	c.Agent.Model = f.Agent.Model
-	for _, p := range f.Agent.Extensions {
-		abs, ok := absPath(p)
-		if !ok {
-			return apperr.New(apperr.ConfigInvalid, "%s: agent extension '%s' is not an absolute path", path, p).
-				WithHint("write the extension's full path, such as ~/.pi/agent/extensions/acme.ts")
-		}
-		c.Agent.Extensions = append(c.Agent.Extensions, abs)
-	}
-	if err := parseChores(c, path, f.Chores); err != nil {
-		return err
 	}
 	return parseStatus(c, path, f.Status)
 }
