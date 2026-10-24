@@ -136,7 +136,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		name: "tkt_chores",
 		label: "tkt chores",
 		description:
-			"List the repository's chores, the agent runs the user schedules in config.toml, with their next run; with run, start a run of one now. A run is a branch and a pull request with no ticket, which the user merges; tkt watch starts runs on schedule by itself.",
+			"List the repository's chores, the agent runs the user schedules in the repository's .tkt.toml, with their next run; with run, start a run of one now. A run is a branch and a pull request with no ticket, which the user merges; tkt watch starts runs on schedule by itself.",
 		parameters: Type.Object({ run: Type.Optional(Type.String({ description: "The chore to start a run of now, only when the user asks for one" })) }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {

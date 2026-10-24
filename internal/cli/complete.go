@@ -123,9 +123,7 @@ func (g *globals) completeChores(cmd *cobra.Command, args []string, _ string) ([
 	}
 	var out []string
 	for _, ch := range cfg.Chores {
-		if ch.RunsIn(root) {
-			out = append(out, ch.Name+"\t"+ch.Schedule.String())
-		}
+		out = append(out, ch.Name+"\t"+ch.Schedule.String())
 	}
 	return out, noFiles
 }

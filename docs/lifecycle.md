@@ -358,7 +358,7 @@ You rarely start it yourself: every tkt command in a herdr pane starts one when 
 
 ## Chores
 
-A chore is an agent run you schedule in `config.toml`, such as a dependency upgrade twice a week. It has no ticket: each run is a branch and a pull request.
+A chore is an agent run you schedule in the repository's `.tkt.toml`, at the root of its main checkout, such as a dependency upgrade twice a week. It has no ticket: each run is a branch and a pull request.
 
 ```mermaid
 flowchart LR

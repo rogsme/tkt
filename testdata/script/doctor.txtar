@@ -33,11 +33,12 @@ exec tkt doctor
 stdout '^warn  config           presets fast from .*ignoring .*presets$'
 ! stdout 'harness.claude'
 
-# A .tkt.toml adds the repository's settings.
+# A .tkt.toml adds the repository's settings and chores.
 rm $HOME/.config/tkt/presets
 cp $WORK/tkt.toml $REPO/.tkt.toml
 exec tkt doctor
 stdout '^ok    config           presets fast from .*config\.toml; repository settings from .*/\.tkt\.toml$'
+stdout '^warn  chores           no tkt watch runs for this repository, so its chores never start: deps \(next '
 
 # One that does not parse fails the config check.
 cp $WORK/presets.toml $REPO/.tkt.toml
@@ -49,8 +50,9 @@ stdout '^fail  config           .*\.tkt\.toml: \[presets\] belongs in '
 harness = "opencode"
 model = "acme/fast#max"
 -- tkt.toml --
-[review]
-bot_wait = "0s"
+[chores.deps]
+schedule = "0 9 * * 1"
+prompt = "Upgrade the dependencies."
 -- presets.toml --
 [presets.big]
 harness = "claude"

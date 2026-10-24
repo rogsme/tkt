@@ -45,7 +45,7 @@ addressed, run tkt run ACM-12 ci.
 tkt watch, which tkt starts by itself, syncs a moved base when a sync is due,
 runs ci once per head when the checks fail, carries out merge orders, and
 runs step 7 once finish-ticket ends with Status: DONE, for every ticket that
-is not on hold. It also starts the chores config.toml schedules, agent runs
+is not on hold. It also starts the chores .tkt.toml schedules, agent runs
 with no ticket whose pull requests you merge yourself (tkt help chores).
 
 tkt auto ACM-12 --yolo takes every step, the merge too, with nobody

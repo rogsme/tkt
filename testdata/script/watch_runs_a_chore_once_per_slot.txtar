@@ -2,8 +2,7 @@
 # slots passed while no watch ran. The first pass to see a chore only arms
 # it. A slot that comes while the last run is open is skipped, and a run
 # that ended with nothing to change goes.
-mkdir $HOME/.config/tkt
-cp $WORK/config.toml $HOME/.config/tkt/config.toml
+cp $WORK/tkt.toml $REPO/.tkt.toml
 
 exec tkt watch --once --json
 envelope '.result.chores[0] | [.chore, .action, .reason]' '["deps","","armed"]'
@@ -49,9 +48,8 @@ logged wt -C $REPO remove deps-run --foreground --reap --format json
 ! exists $FAKE_WT_ROOT/deps-run
 houserules
 
--- config.toml --
+-- tkt.toml --
 [chores.deps]
-repo = "~/../app"
 schedule = "0 9 * * *"
 branch = "{name}-run"
 prompt = "Upgrade the dependencies."

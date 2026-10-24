@@ -6,6 +6,7 @@
 mkdir $HOME/.config/tkt
 expand $WORK/config.toml
 cp $WORK/config.toml $HOME/.config/tkt/config.toml
+cp $WORK/tkt.toml $REPO/.tkt.toml
 exec tkt start ACM-1
 exec tkt start ACM-2
 realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
@@ -64,15 +65,14 @@ exec tkt watch --once --json
 stderr 'cannot read the status page github'
 
 -- config.toml --
-[chores.deps]
-repo = "$REPO"
-schedule = "0 9 * * *"
-branch = "{name}-run"
-prompt = "Upgrade the dependencies."
-
 [status.github]
 page = "file://$WORK/github"
 components = ["Actions", "Pull Requests"]
+-- tkt.toml --
+[chores.deps]
+schedule = "0 9 * * *"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies."
 -- watch.toml --
 [watch]
 interval = "1s"

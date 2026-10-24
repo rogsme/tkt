@@ -70,23 +70,22 @@ The ticket keeps its preset for the stages after it:
   as = "opencode"
 
 A repository's own settings go in .tkt.toml, at the root of its main
-checkout, next to .git. It takes every table here but [presets], [agent] and
-[chores], and wins over config.toml key by key: a repository with no review
-bot sets bot_wait = "0s" there, and a stage it names replaces the one
-config.toml or tkt defines. [presets] and [agent] stay in config.toml, since
-they choose the harnesses, models and code that run on your machine, and
-anyone who can commit to the repository can write its .tkt.toml.
+checkout, next to .git. It takes every table here but [presets] and [agent],
+and wins over config.toml key by key: a repository with no review bot sets
+bot_wait = "0s" there, and a stage it names replaces the one config.toml or
+tkt defines. [presets] and [agent] stay in config.toml, since they choose
+the harnesses, models and code that run on your machine, and anyone who can
+commit to the repository can write its .tkt.toml.
 
 tkt reads the file whether git tracks it or not: commit it to share it, or
 list it in .git/info/exclude to keep it yours. Every worktree reads the main
 checkout's copy, so a change on a ticket's branch applies once it reaches
 the main checkout. tkt watch reads it again on every pass.
 
-A [chores.NAME] table schedules an agent run in a repository, such as a
-dependency upgrade (tkt help chores). tkt ships none:
+A [chores.NAME] table in .tkt.toml schedules an agent run in that
+repository, such as a dependency upgrade (tkt help chores). tkt ships none:
 
   [chores.deps]
-  repo = "~/code/acme/app"      # the repository's main checkout
   schedule = "0 9 * * 1,4"      # cron's five fields, in local time
   branch = "deps-{date}"        # {name}, {date} and {time}; the default
                                 # is {name}-{date}
@@ -116,3 +115,7 @@ checks both files.
 
 Older versions of tkt read presets and stages column files. When only those
 exist, tkt stops and prints the equivalent config.toml to copy.
+
+Older versions also read chores from config.toml, each with a repo key.
+config.toml takes no [chores] table now: tkt stops and prints, for each
+repository, the tables to move to its .tkt.toml.

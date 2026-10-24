@@ -2,8 +2,7 @@
 # its worktree and a tab with its own TMPDIR, and an agent with the chore's
 # prompt and the rule that says how a run ends. tkt ls and tkt chores list
 # the run, and no second run starts while it is open.
-mkdir $HOME/.config/tkt
-cp $WORK/config.toml $HOME/.config/tkt/config.toml
+cp $WORK/tkt.toml $REPO/.tkt.toml
 
 # tkt doctor says that no watch runs to start the chore on schedule.
 exec tkt doctor --json
@@ -77,15 +76,13 @@ exec tkt chore run lint
 grep -count=1 '^/lint-everything$' $FAKE_DIR/prompts
 ! grep 'scheduled chore' $FAKE_DIR/prompts
 
--- config.toml --
+-- tkt.toml --
 [chores.deps]
-repo = "~/../app"
 schedule = "0 9 * * 1"
 branch = "{name}-run"
 prompt = "Upgrade the dependencies, then open a pull request."
 
 [chores.lint]
-repo = "~/../app"
 schedule = "@weekly"
 prompt = "/lint-everything"
 -- done.txt --

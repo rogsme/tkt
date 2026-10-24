@@ -56,6 +56,7 @@ const (
 	ForgeUnsupported       Code = "forge_unsupported"
 	ConfigInvalid          Code = "config_invalid"
 	ConfigLegacy           Code = "config_legacy"
+	ConfigChoresMoved      Code = "config_chores_moved"
 	HerdrEnvMissing        Code = "herdr_env_missing"
 	WorktreeLayout         Code = "worktree_layout"
 	WorktreeBranchMismatch Code = "worktree_branch_mismatch"
@@ -163,6 +164,7 @@ var Registry = []Info{
 	{ForgeUnsupported, ExitEnvironment, "the command does not support this forge"},
 	{ConfigInvalid, ExitEnvironment, "tkt's own configuration file is invalid"},
 	{ConfigLegacy, ExitEnvironment, "tkt's configuration is in the old presets and stages files"},
+	{ConfigChoresMoved, ExitEnvironment, "config.toml holds chores, which live in each repository's .tkt.toml now"},
 	{HerdrEnvMissing, ExitEnvironment, "tkt does not run inside a herdr pane"},
 	{WorktreeLayout, ExitEnvironment, "the worktree directory is not named after its branch"},
 	{WorktreeBranchMismatch, ExitEnvironment, "the worktree is not on the ticket's branch"},

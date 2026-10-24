@@ -691,7 +691,7 @@ func (w *watcher) chores(ctx context.Context, a *App, c *Ctx, runs []choreRun) [
 	out := []WatchChore{}
 	stamps := choreStamps(c.Repo.Common)
 	now := c.Now()
-	for _, ch := range c.repoChores() {
+	for _, ch := range c.Cfg.Chores {
 		wc := WatchChore{Chore: ch.Name}
 		last, seen := stamps[ch.Name]
 		due, next := choreSlots(ch, last, now)

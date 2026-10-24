@@ -1,0 +1,21 @@
+# config.toml no longer takes chores: tkt prints, for each repository, the
+# tables to move to its .tkt.toml, without their repo key.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+! exec tkt ls
+rc 3
+stderr 'holds chores, and tkt reads them from each repository''s \.tkt\.toml now'
+stderr '^~/code/acme/app/\.tkt\.toml:$'
+stderr '^\[chores\.deps\]$'
+stderr '^schedule = "0 9 \* \* 1,4"$'
+! stderr 'repo ='
+! exec tkt ls --json
+rc 3
+envelope '.error.code' config_chores_moved
+envelope '.error.details.tkt_toml | keys' '["~/code/acme/app/.tkt.toml"]'
+
+-- config.toml --
+[chores.deps]
+repo = "~/code/acme/app"
+schedule = "0 9 * * 1,4"
+prompt = "Upgrade the dependencies."

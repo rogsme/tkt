@@ -6,7 +6,7 @@ The short version: keep the chat open in a herdr pane all day. Its board shows e
 
 ## Before the first day
 
-`acme/app` ran `/setup-rogs` and committed the files it wrote, and a review bot reviews every pull request in CI. Its workflow.md turns on plan review, agent verification, so verify-pr runs the human verification steps once a review clears a head, and autonomous runs, with migrations, payments, sign-in and new dependencies as the hard stops. `~/.config/tkt/config.toml` holds two presets, a stage of your own, two chores and a status page:
+`acme/app` ran `/setup-rogs` and committed the files it wrote, and a review bot reviews every pull request in CI. Its workflow.md turns on plan review, agent verification, so verify-pr runs the human verification steps once a review clears a head, and autonomous runs, with migrations, payments, sign-in and new dependencies as the hard stops. `~/.config/tkt/config.toml` holds two presets, a stage of your own and a status page:
 
 ```toml
 [presets.claude]
@@ -25,23 +25,25 @@ explain = "Explain what this branch changes for someone who has not read the cod
 [suggest]
 as = "fast"
 
+[status.github]
+page = "https://www.githubstatus.com"
+components = ["Actions", "Pull Requests", "Git Operations"]
+```
+
+`acme/app` commits a `.tkt.toml` at its root with its two chores, which run on the `fast` preset from `config.toml`:
+
+```toml
 [chores.deps]
-repo = "~/code/acme/app"
 schedule = "0 7 * * 1,4"
 branch = "deps-{date}"
 as = "fast"
 prompt = "Upgrade the dependencies. Read each migration guide, and note the breaking changes in the pull request."
 
 [chores.flaky]
-repo = "~/code/acme/app"
 schedule = "0 6 * * 1-5"
 branch = "flaky-{date}-{time}"
 as = "fast"
 prompt = "Read the last day of CI runs on main. When a test failed and then passed on a rerun, find out why and fix it."
-
-[status.github]
-page = "https://www.githubstatus.com"
-components = ["Actions", "Pull Requests", "Git Operations"]
 ```
 
 The first preset is the default, so a ticket runs on Claude Code unless its model routing asks for a small model, which `fast` serves through OpenCode. suggest-tickets runs on `fast` too, since it only reads. `deps` upgrades the dependencies on Monday and Thursday mornings. `flaky` looks for flaky tests every weekday, and on most days finds none. `explain` is a stage of your own: `tkt run ACM-131 explain` sends its line to a fresh session, as the built-in stages do.

@@ -3,6 +3,7 @@
 # stages that need none, and your own prompt, go.
 mkdir $HOME/.config/tkt
 cp $WORK/config.toml $HOME/.config/tkt/config.toml
+cp $WORK/tkt.toml $REPO/.tkt.toml
 exec tkt chore run deps
 rm $FAKE_DIR/prompts
 
@@ -32,11 +33,10 @@ rc 2
 rc 2
 
 -- config.toml --
+[stages]
+lint = "Run the linter, then use the review-pr skill."
+-- tkt.toml --
 [chores.deps]
-repo = "~/../app"
 schedule = "0 9 * * 1"
 branch = "{name}-run"
 prompt = "Upgrade the dependencies."
-
-[stages]
-lint = "Run the linter, then use the review-pr skill."

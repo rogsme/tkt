@@ -103,12 +103,11 @@ func TestNoProjectFile(t *testing.T) {
 func TestProjectFileRefusesPersonalTables(t *testing.T) {
 	dir := dirWith(t, map[string]string{FileName: globalSettings})
 	for src, want := range map[string]string{
-		"[presets.big]\nharness = \"claude\"\n":  "[presets] belongs in " + filepath.Join(dir, FileName),
-		"[agent]\nmodel = \"acme/small\"\n":      "[agent] belongs in " + filepath.Join(dir, FileName),
-		"[review]\nbot_wiat = \"0s\"\n":          "unknown key review.bot_wiat",
-		"[verify]\nas = \"big\"\n":               "names preset 'big'",
-		"[stages]\nlint = \"\"\n":                "stage 'lint' has no text",
-		"[chores.deps]\nschedule = \"@daily\"\n": "[chores] belongs in " + filepath.Join(dir, FileName),
+		"[presets.big]\nharness = \"claude\"\n": "[presets] belongs in " + filepath.Join(dir, FileName),
+		"[agent]\nmodel = \"acme/small\"\n":     "[agent] belongs in " + filepath.Join(dir, FileName),
+		"[review]\nbot_wiat = \"0s\"\n":         "unknown key review.bot_wiat",
+		"[verify]\nas = \"big\"\n":              "names preset 'big'",
+		"[stages]\nlint = \"\"\n":               "stage 'lint' has no text",
 	} {
 		root := dirWith(t, map[string]string{ProjectFileName: src})
 		_, err := Load(dir, root)

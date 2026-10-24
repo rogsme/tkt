@@ -114,12 +114,11 @@ export interface ChoresResult {
 	repo: string;
 	watch: { running: boolean };
 	chores: { name: string; schedule: string; as: string; last: string; due: boolean; next: string; runs: string[]; open: string }[];
-	elsewhere: string[];
 }
 
 /** choresText lists the chores for the chat, with times in local time. */
 export function choresText(r: ChoresResult): string {
-	if (r.chores.length === 0) return "No chore runs in this repository: a [chores.NAME] table in config.toml whose repo is this repository adds one.";
+	if (r.chores.length === 0) return "No chore runs in this repository: a [chores.NAME] table in its .tkt.toml adds one.";
 	const when = (at: string) => {
 		const t = Date.parse(at);
 		return Number.isNaN(t) ? "-" : new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });

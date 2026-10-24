@@ -55,7 +55,7 @@ type Config struct {
 	Watch         Watch
 	Suggest       Suggest
 	Verify        Verify
-	// Chores are the scheduled runs, of every repository, by name.
+	// Chores are the repository's scheduled runs, by name.
 	Chores []Chore
 	// Status lists the status pages tkt watch reads, by name.
 	Status []StatusPage

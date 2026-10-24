@@ -105,7 +105,7 @@ func Load(dir, root string) (Config, error) {
 	case err != nil:
 		return c, apperr.New(apperr.ConfigInvalid, "cannot read %s: %v", project, err)
 	}
-	return c, parseProject(&c, path, project, string(src))
+	return c, parseProject(&c, path, project, root, string(src))
 }
 
 func decode(path, src string) (fileTOML, toml.MetaData, error) {
@@ -128,6 +128,9 @@ func parseTOML(c *Config, path, src string) error {
 	f, md, err := decode(path, src)
 	if err != nil {
 		return err
+	}
+	if len(f.Chores) > 0 {
+		return choresMoved(path, f.Chores)
 	}
 	if len(f.Presets) > 0 {
 		c.Presets = nil
@@ -166,18 +169,14 @@ func parseTOML(c *Config, path, src string) error {
 		}
 		c.Agent.Extensions = append(c.Agent.Extensions, abs)
 	}
-	if err := parseSettings(c, path, f); err != nil {
-		return err
-	}
-	return parseChores(c, path, f.Chores)
+	return parseSettings(c, path, f)
 }
 
 // parseProject reads a repository's .tkt.toml over the settings from global,
-// tkt's config.toml. It takes every table but the presets and the agent's,
-// which choose the harnesses, models and code that run on your machine, as a
-// file anyone can commit to the repository must not, and the chores, which
-// config.toml keeps with the repository each runs in.
-func parseProject(c *Config, global, path, src string) error {
+// tkt's config.toml. It takes every table but the presets and the agent's:
+// those choose the harnesses, models and code that run on your machine, and
+// a file anyone can commit to the repository must not.
+func parseProject(c *Config, global, path, root, src string) error {
 	f, md, err := decode(path, src)
 	if err != nil {
 		return err
@@ -188,12 +187,11 @@ func parseProject(c *Config, global, path, src string) error {
 				WithHint("move [%s] to %s", table, global)
 		}
 	}
-	if md.IsDefined("chores") {
-		return apperr.New(apperr.ConfigInvalid, "%s: [chores] belongs in %s, with the repository each chore runs in", path, global).
-			WithHint("move [chores] to %s", global)
-	}
 	c.Project = path
-	return parseSettings(c, path, f)
+	if err := parseSettings(c, path, f); err != nil {
+		return err
+	}
+	return parseChores(c, path, root, f.Chores)
 }
 
 // parseSettings reads the tables both files take: [stages], [auto],
