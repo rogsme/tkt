@@ -209,10 +209,13 @@ page = "https://www.githubstatus.com"
 components = ["Actions", "Pull Requests", "Git Operations"]
 ```
 
-A repository's own settings go in a `.tkt` directory at the root of its main checkout, next to `.git`. `.tkt/tkt.toml` holds the repository's settings, which it may commit to share them; `.tkt/tkt.local.toml` is yours, and git must not track it. Both take every table but `[presets]` and `[agent]`, and win over `config.toml` key by key, the local file over the shared one, so a repository with no review bot can say so for everyone:
+A repository's own settings go in a `.tkt` directory at the root of its main checkout, next to `.git`. `.tkt/tkt.toml` holds the repository's settings, which it may commit to share them; `.tkt/tkt.local.toml` is yours, and git must not track it. Both win over `config.toml` key by key, the local file over the shared one, so a repository with no review bot, which runs Claude Code for everything, can say so for everyone:
 
 ```toml
 # .tkt/tkt.toml
+[presets.claude]
+harness = "claude"
+
 [review]
 bot_wait = "0s"
 
@@ -220,7 +223,7 @@ bot_wait = "0s"
 lint = "Run just lint on {id} and fix what it reports."
 ```
 
-`[presets]` and `[agent]` stay in `config.toml`: they choose the harnesses, models and code that run on your machine, and anyone who can commit to the repository can write its files. Chores go in `tkt.local.toml` only, since every clone that reads a chore runs it and a committed one would run once for each person: tkt refuses `[chores]` in `tkt.toml`, and stops while git tracks `tkt.local.toml`. Commit a `.tkt/.gitignore` that lists `tkt.local.toml`; `tkt doctor` warns until git ignores it. Every worktree reads the main checkout's copies, so a change made on a ticket's branch applies once it reaches the main checkout. An older `config.toml` with `[chores]` tables makes tkt stop and print, for each repository, the tables to move.
+Their presets go before those of `config.toml`, in their own order, and replace those of the same name, so the first preset of the last file that has any is the default in that repository; yours still answer `--as`. An `as` key in `tkt.toml`, such as `[verify] as`, names a preset `tkt.toml` defines, since each person's `config.toml` names its own. `[agent]` goes in `config.toml` or `tkt.local.toml`, never `tkt.toml`: its extensions are code that runs on your machine, and anyone who can commit to the repository can write that file. Chores go in `tkt.local.toml` only, since every clone that reads a chore runs it and a committed one would run once for each person: tkt refuses `[chores]` in `tkt.toml`, and stops while git tracks `tkt.local.toml`. Commit a `.tkt/.gitignore` that lists `tkt.local.toml`; `tkt doctor` warns until git ignores it. Every worktree reads the main checkout's copies, so a change made on a ticket's branch applies once it reaches the main checkout. An older `config.toml` with `[chores]` tables makes tkt stop and print, for each repository, the tables to move.
 
 Without any of these files, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. A `[status.NAME]` table names a status page that Atlassian Statuspage serves, as GitHub's and most model providers' are: while it reports a problem with a component that counts, `tkt watch` and `tkt auto` start no agent, since a fix for checks that fail because CI is down only spends a round, and the board says so at its top. `tkt help config` has the details.
 

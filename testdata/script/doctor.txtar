@@ -60,7 +60,7 @@ realgit -C $REPO rm -q --cached .tkt/tkt.local.toml
 # A file that does not parse fails the config check.
 cp $WORK/presets.toml $REPO/.tkt/tkt.toml
 ! exec tkt doctor
-stdout '^fail  config           .*\.tkt/tkt\.toml: \[presets\] belongs in '
+stdout '^fail  config           .*\.tkt/tkt\.toml: preset ''big'': the harness must be claude or opencode'
 
 -- config.toml --
 [presets.fast]
@@ -77,4 +77,4 @@ prompt = "Upgrade the dependencies."
 tkt.local.toml
 -- presets.toml --
 [presets.big]
-harness = "claude"
+harness = "codex"

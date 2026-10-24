@@ -274,7 +274,7 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 			}
 			return Check{ID: "config", Status: CheckFail, Message: e.Msg, Hint: or(e.Hint, "tkt help config")}
 		}
-		msg := fmt.Sprintf("presets %s from %s", strings.Join(cfg.PresetNames(), ", "), cfg.Source)
+		msg := fmt.Sprintf("presets %s from %s", strings.Join(cfg.PresetNames(), ", "), strings.Join(append(slices.Clone(cfg.PresetFiles), cfg.Source), " and "))
 		if files := slices.DeleteFunc([]string{cfg.Shared, cfg.Local}, func(f string) bool { return f == "" }); len(files) > 0 {
 			msg += "; repository settings from " + strings.Join(files, " and ")
 		}

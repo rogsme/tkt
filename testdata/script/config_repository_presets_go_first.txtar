@@ -1,0 +1,34 @@
+# Presets in a repository's .tkt/tkt.toml go before config.toml's and
+# replace those of the same name, so its first preset is the default there:
+# a repository that runs Claude Code for everything says so once, for
+# everyone. --as still picks a preset of your own.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+mkdir $REPO/.tkt
+cp $WORK/tkt.toml $REPO/.tkt/tkt.toml
+mkprompt $WORK/p.txt ACM-5 'Model: small (acme/fast)'
+stdin $WORK/p.txt
+exec tkt start --prompt -
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-5 --label 'ACM-5 (claude)'
+logged herdr agent start acm-5 --kind claude
+state $FAKE_WT_ROOT/ACM-5 harness claude
+exec tkt start ACM-6 --as fast
+logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-6 --label 'ACM-6 (fast)'
+exec tkt doctor
+stdout '^ok    config           presets claude, fast from .*/\.tkt/tkt\.toml and .*/tkt/config\.toml; repository settings from .*/\.tkt/tkt\.toml$'
+
+-- config.toml --
+[presets.fast]
+harness = "opencode"
+model = "acme/fast#max"
+serves = ["small"]
+
+[presets.claude]
+harness = "claude"
+serves = ["frontier"]
+-- tkt.toml --
+[presets.claude]
+harness = "claude"
+
+[verify]
+as = "claude"

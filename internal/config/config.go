@@ -37,9 +37,12 @@ func (p Preset) ServesModel(v string) bool {
 // Config is the loaded settings. Presets keep their file order: the first
 // is the default, and tkt tries them in order.
 type Config struct {
-	// Source names where the settings came from, for messages: config.toml,
-	// the one file that holds presets.
+	// Source names config.toml, or the built-in presets without one, for
+	// messages.
 	Source string
+	// PresetFiles lists the repository's files whose presets go before
+	// Source's, in the order read.
+	PresetFiles []string
 	// Shared and Local are the repository's .tkt/tkt.toml and
 	// .tkt/tkt.local.toml, when tkt read them.
 	Shared  string

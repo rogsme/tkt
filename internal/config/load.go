@@ -147,35 +147,59 @@ func parseTOML(c *Config, path, src string) error {
 	if len(f.Chores) > 0 {
 		return choresMoved(path, f.Chores)
 	}
-	if len(f.Presets) > 0 {
-		c.Presets = nil
-		for _, k := range md.Keys() {
-			if len(k) != 2 || k[0] != "presets" {
-				continue
-			}
-			name := k[1]
-			p := f.Presets[name]
-			bad := func(format string, args ...any) error {
-				return apperr.New(apperr.ConfigInvalid, "%s: preset '%s': %s", path, name, fmt.Sprintf(format, args...))
-			}
-			switch {
-			case !presetName.MatchString(name):
-				return bad("the name may hold letters, digits, '.', '_' and '-', starting with a letter or digit")
-			case p.Harness != Claude && p.Harness != OpenCode:
-				return bad("the harness must be claude or opencode")
-			case p.Harness == OpenCode && p.Model != "" && !openCode.MatchString(p.Model):
-				return bad("an OpenCode model looks like provider/model or provider/model#variant")
-			case md.IsDefined("presets", name, "serves") && len(p.Serves) == 0:
-				return bad("serves is empty; leave it out to serve any model")
-			}
-			serves := p.Serves
-			if serves == nil {
-				serves = []string{"*"}
-			}
-			c.Presets = append(c.Presets, Preset{Name: name, Harness: p.Harness, Model: p.Model, Serves: serves})
-		}
+	ps, err := readPresets(path, f, md)
+	if err != nil {
+		return err
 	}
-	c.Agent.Model = f.Agent.Model
+	if len(ps) > 0 {
+		c.Presets = ps
+	}
+	if err := readAgent(c, path, f, md); err != nil {
+		return err
+	}
+	return parseSettings(c, path, f)
+}
+
+// readPresets reads a file's [presets.NAME] tables, in the file's order.
+func readPresets(path string, f fileTOML, md toml.MetaData) ([]Preset, error) {
+	var out []Preset
+	for _, k := range md.Keys() {
+		if len(k) != 2 || k[0] != "presets" {
+			continue
+		}
+		name := k[1]
+		p := f.Presets[name]
+		bad := func(format string, args ...any) error {
+			return apperr.New(apperr.ConfigInvalid, "%s: preset '%s': %s", path, name, fmt.Sprintf(format, args...))
+		}
+		switch {
+		case !presetName.MatchString(name):
+			return nil, bad("the name may hold letters, digits, '.', '_' and '-', starting with a letter or digit")
+		case p.Harness != Claude && p.Harness != OpenCode:
+			return nil, bad("the harness must be claude or opencode")
+		case p.Harness == OpenCode && p.Model != "" && !openCode.MatchString(p.Model):
+			return nil, bad("an OpenCode model looks like provider/model or provider/model#variant")
+		case md.IsDefined("presets", name, "serves") && len(p.Serves) == 0:
+			return nil, bad("serves is empty; leave it out to serve any model")
+		}
+		serves := p.Serves
+		if serves == nil {
+			serves = []string{"*"}
+		}
+		out = append(out, Preset{Name: name, Harness: p.Harness, Model: p.Model, Serves: serves})
+	}
+	return out, nil
+}
+
+// readAgent reads the [agent] keys the file sets.
+func readAgent(c *Config, path string, f fileTOML, md toml.MetaData) error {
+	if md.IsDefined("agent", "model") {
+		c.Agent.Model = f.Agent.Model
+	}
+	if !md.IsDefined("agent", "extensions") {
+		return nil
+	}
+	c.Agent.Extensions = nil
 	for _, p := range f.Agent.Extensions {
 		abs, ok := absPath(p)
 		if !ok {
@@ -184,32 +208,53 @@ func parseTOML(c *Config, path, src string) error {
 		}
 		c.Agent.Extensions = append(c.Agent.Extensions, abs)
 	}
-	return parseSettings(c, path, f)
+	return nil
 }
 
 // parseProject reads one of a repository's settings files over the settings
-// read before. Neither takes the presets or the agent's table: those choose
-// the harnesses, models and code that run on your machine, and anyone can
-// commit a file to the repository. Only the local file takes chores, since
-// every clone that reads a chore runs it.
+// read before. Its presets go first, in its own order, and replace those of
+// the same name, so its first preset is the default there. The shared file
+// takes no [agent] table, whose extensions are code that runs on your
+// machine, and no chores, since every clone that reads a chore runs it; an
+// as key in it names a preset it defines, so it never depends on the presets
+// each person's config.toml names.
 func parseProject(c *Config, global, path, root, src string) error {
 	f, md, err := decode(path, src)
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"presets", "agent"} {
-		if md.IsDefined(table) {
-			return apperr.New(apperr.ConfigInvalid, "%s: [%s] belongs in %s, since the harnesses, models and extensions are yours, not the repository's", path, table, global).
-				WithHint("move [%s] to %s", table, global)
-		}
-	}
 	local := filepath.Base(path) == LocalFile
-	if !local && md.IsDefined("chores") {
+	switch {
+	case !local && md.IsDefined("agent"):
+		return apperr.New(apperr.ConfigInvalid, "%s: [agent] belongs in %s or %s: its extensions are code that runs on your machine, and anyone can commit to the repository", path, LocalPath(root), global).
+			WithHint("move [agent] to %s", LocalPath(root))
+	case !local && md.IsDefined("chores"):
 		return apperr.New(apperr.ConfigInvalid, "%s: [chores] belongs in %s: every clone that reads a chore runs it, so a chore the repository commits would run once for each person", path, LocalPath(root)).
 			WithHint("move [chores] to %s", LocalPath(root))
 	}
+	ps, err := readPresets(path, f, md)
+	if err != nil {
+		return err
+	}
+	if !local {
+		for _, k := range []struct{ key, as string }{{"suggest", asOf(f.Suggest)}, {"verify", asOf(f.Verify)}} {
+			if k.as != "" && !slices.ContainsFunc(ps, func(p Preset) bool { return p.Name == k.as }) {
+				return apperr.New(apperr.ConfigInvalid, "%s: [%s] as names preset '%s', which this file does not define: each person's config.toml names its own presets, so the repository's file names only its own", path, k.key, k.as).
+					WithHint("define [presets.%s] in %s, or set [%s] as in %s", k.as, path, k.key, LocalPath(root))
+			}
+		}
+	}
+	if len(ps) > 0 {
+		c.Presets = append(ps, slices.DeleteFunc(c.Presets, func(old Preset) bool {
+			return slices.ContainsFunc(ps, func(p Preset) bool { return p.Name == old.Name })
+		})...)
+		c.PresetFiles = append(c.PresetFiles, path)
+	}
 	if local {
 		c.Local = path
+		if err := readAgent(c, path, f, md); err != nil {
+			return err
+		}
 	} else {
 		c.Shared = path
 	}
@@ -217,6 +262,16 @@ func parseProject(c *Config, global, path, root, src string) error {
 		return err
 	}
 	return parseChores(c, path, root, f.Chores)
+}
+
+// asOf is a [suggest] or [verify] table's as, or "" without the table.
+func asOf(t *struct {
+	As string `toml:"as"`
+}) string {
+	if t == nil {
+		return ""
+	}
+	return t.As
 }
 
 // parseSettings reads the tables both files take: [stages], [auto],

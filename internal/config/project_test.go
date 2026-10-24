@@ -66,9 +66,6 @@ bot_wait = "0s"
 [auto]
 max_rounds = 7
 
-[suggest]
-as = "fast"
-
 [status.github]
 page = "https://status.example.com"
 
@@ -92,7 +89,7 @@ page = "https://www.vercel-status.com"
 	if !slices.Equal(c.OwnStages, []string{"ci", "docs", "lint"}) {
 		t.Errorf("own stages %v", c.OwnStages)
 	}
-	if c.Suggest.As != "fast" || c.Agent.Model != "acme/large" || !slices.Equal(c.PresetNames(), []string{"claude", "fast"}) {
+	if c.Suggest.As != "" || c.Agent.Model != "acme/large" || !slices.Equal(c.PresetNames(), []string{"claude", "fast"}) {
 		t.Errorf("suggest %+v, agent %+v, presets %v", c.Suggest, c.Agent, c.PresetNames())
 	}
 	if len(c.Status) != 2 || c.Status[0].URL != "https://status.example.com" || c.Status[0].Components != nil || c.Status[1].Name != "vercel" {
@@ -143,14 +140,13 @@ func TestNoProjectFile(t *testing.T) {
 	}
 }
 
-func TestProjectFileRefusesPersonalTables(t *testing.T) {
+func TestRepositoryFilesRefuseBadSettings(t *testing.T) {
 	dir := dirWith(t, map[string]string{FileName: globalSettings})
 	for src, want := range map[string]string{
-		"[presets.big]\nharness = \"claude\"\n": "[presets] belongs in " + filepath.Join(dir, FileName),
-		"[agent]\nmodel = \"acme/small\"\n":     "[agent] belongs in " + filepath.Join(dir, FileName),
-		"[review]\nbot_wiat = \"0s\"\n":         "unknown key review.bot_wiat",
-		"[verify]\nas = \"big\"\n":              "names preset 'big'",
-		"[stages]\nlint = \"\"\n":               "stage 'lint' has no text",
+		"[presets.big]\nharness = \"codex\"\n": "preset 'big': the harness must be claude or opencode",
+		"[review]\nbot_wiat = \"0s\"\n":        "unknown key review.bot_wiat",
+		"[stages]\nlint = \"\"\n":              "stage 'lint' has no text",
+		"[suggest]\nas = \"big\"\n":            "names preset 'big'",
 	} {
 		for _, local := range []bool{false, true} {
 			root := repoWith(t, src, "")
@@ -168,11 +164,84 @@ func TestProjectFileRefusesPersonalTables(t *testing.T) {
 	}
 }
 
-func TestSharedFileRefusesChores(t *testing.T) {
-	root := repoWith(t, "[chores.deps]\nschedule = \"@daily\"\nprompt = \"Upgrade.\"\n", "")
-	_, err := Load(t.TempDir(), root)
-	e := apperr.As(err)
-	if e == nil || e.Code != apperr.ConfigInvalid || !strings.Contains(e.Msg, SharedPath(root)+": [chores] belongs in "+LocalPath(root)) {
-		t.Errorf("Load = %v", err)
+func TestSharedFileRefusesWhatIsYours(t *testing.T) {
+	dir := dirWith(t, map[string]string{FileName: globalSettings})
+	for src, want := range map[string]string{
+		"[chores.deps]\nschedule = \"@daily\"\nprompt = \"Upgrade.\"\n": "[chores] belongs in ",
+		"[agent]\nmodel = \"acme/small\"\n":                             "[agent] belongs in ",
+		// fast is a preset config.toml defines, but a teammate's may not.
+		"[verify]\nas = \"fast\"\n": "[verify] as names preset 'fast', which this file does not define",
+	} {
+		root := repoWith(t, src, "")
+		_, err := Load(dir, root)
+		e := apperr.As(err)
+		if e == nil || e.Code != apperr.ConfigInvalid || !strings.Contains(e.Msg, SharedPath(root)+": "+want) {
+			t.Errorf("%q: %v, want an error about %s", src, err, want)
+		}
+		if _, err := Load(dir, repoWith(t, "", src)); err != nil {
+			t.Errorf("%q in the local file: %v", src, err)
+		}
+	}
+}
+
+func TestRepositoryPresetsGoFirst(t *testing.T) {
+	shared := `[presets.claude]
+harness = "claude"
+model = "opus#high"
+
+[verify]
+as = "claude"
+`
+	root := repoWith(t, shared, "")
+	dir := dirWith(t, map[string]string{FileName: globalSettings})
+	c, err := Load(dir, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.PresetNames(); !slices.Equal(got, []string{"claude", "fast"}) {
+		t.Errorf("presets %v", got)
+	}
+	if p := c.Default(); p.Model != "opus#high" || !p.ServesModel("small") {
+		t.Errorf("default %+v", p)
+	}
+	if !slices.Equal(c.PresetFiles, []string{SharedPath(root)}) || c.Verify.As != "claude" {
+		t.Errorf("preset files %v, verify %+v", c.PresetFiles, c.Verify)
+	}
+	if p, _ := c.Pick("", "Model: small", false); p.Name != "claude" {
+		t.Errorf("Model: small picked %s", p.Name)
+	}
+
+	local := `[presets.mine]
+harness = "opencode"
+model = "acme/mine"
+
+[presets.claude]
+harness = "claude"
+
+[agent]
+model = "acme/large-v2"
+`
+	root = repoWith(t, shared, local)
+	c, err = Load(dir, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.PresetNames(); !slices.Equal(got, []string{"mine", "claude", "fast"}) {
+		t.Errorf("presets %v", got)
+	}
+	if p, _ := c.Preset("claude"); p.Model != "" {
+		t.Errorf("the local claude did not replace the shared one: %+v", p)
+	}
+	if c.Agent.Model != "acme/large-v2" || !slices.Equal(c.PresetFiles, []string{SharedPath(root), LocalPath(root)}) {
+		t.Errorf("agent %+v, preset files %v", c.Agent, c.PresetFiles)
+	}
+
+	// Without config.toml, the built-in presets follow the repository's.
+	c, err = Load(t.TempDir(), repoWith(t, shared, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.PresetNames(); !slices.Equal(got, []string{"claude", "opencode"}) {
+		t.Errorf("presets %v", got)
 	}
 }

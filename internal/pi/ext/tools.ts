@@ -28,7 +28,7 @@ function list(ids: string[]): string {
 	return ids.length < 2 ? ids.join("") : `${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]}`;
 }
 
-const preset = Type.Optional(Type.String({ description: "A preset from the user's config.toml, such as sol or claude, when the user names one ('as sol', 'with sol', '--as sol'); otherwise leave it out" }));
+const preset = Type.Optional(Type.String({ description: "A preset from the user's config.toml or the repository's .tkt files, such as sol or claude, when the user names one ('as sol', 'with sol', '--as sol'); otherwise leave it out" }));
 
 export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	const id = (raw: string) => hub.idOf(raw);

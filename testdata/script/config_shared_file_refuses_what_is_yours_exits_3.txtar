@@ -1,0 +1,42 @@
+# The shared .tkt/tkt.toml takes nothing that belongs to each person: no
+# [agent], whose extensions are code that runs on your machine; no
+# [chores], since every clone that reads a chore runs it; and no as key
+# that names a preset it does not define itself, since each person's
+# config.toml names its own. Your .tkt/tkt.local.toml takes all three.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+mkdir $REPO/.tkt
+cp $WORK/agent.toml $REPO/.tkt/tkt.toml
+! exec tkt start ACM-1 --dry-run
+rc 3
+stderr '\.tkt/tkt\.toml: \[agent\] belongs in .*/\.tkt/tkt\.local\.toml or .*/tkt/config\.toml'
+cp $WORK/chores.toml $REPO/.tkt/tkt.toml
+! exec tkt ls
+rc 3
+stderr '\.tkt/tkt\.toml: \[chores\] belongs in .*/\.tkt/tkt\.local\.toml: every clone that reads a chore runs it'
+cp $WORK/verify.toml $REPO/.tkt/tkt.toml
+! exec tkt ls --json
+rc 3
+envelope '.error.code' config_invalid
+envelope '.error.message | test("\\[verify\\] as names preset ''fast'', which this file does not define")' 'true'
+rm $REPO/.tkt/tkt.toml
+
+cp $WORK/verify.toml $REPO/.tkt/tkt.local.toml
+exec tkt ls --no-fetch
+
+-- config.toml --
+[presets.claude]
+harness = "claude"
+
+[presets.fast]
+harness = "opencode"
+-- agent.toml --
+[agent]
+extensions = ["~/acme.ts"]
+-- chores.toml --
+[chores.deps]
+schedule = "0 9 * * 1"
+prompt = "Upgrade the dependencies."
+-- verify.toml --
+[verify]
+as = "fast"
