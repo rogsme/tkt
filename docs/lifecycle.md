@@ -344,7 +344,7 @@ flowchart TD
 
 Plans, findings and human verification stay with you, or with `tkt auto`, and so do reviews and the word to merge: watch merges only through the merge order `tkt merge` leaves when you verified a head finish-ticket could not merge yet, and it reviews only the head a sync made for such an order. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
 
-While a status page that `config.toml` names reports a problem, such as a GitHub Actions outage or a model provider's, `tkt watch` starts no agent: no `ci`, `resolve` or `review` run, no merge line and no chore run, since each would only spend a round on a service that is down. Syncs and removals, which need no agent, go on, and `tkt auto` loops wait the same way. It reads the pages every five minutes, notifies when an incident starts and when it ends, and `tkt ls` and the tkt agent's board show it while it lasts:
+While a status page that `config.toml` or the repository's `.tkt` files name reports a problem, such as a GitHub Actions outage or a model provider's, `tkt watch` starts no agent: no `ci`, `resolve` or `review` run, no merge line and no chore run, since each would only spend a round on a service that is down. Syncs and removals, which need no agent, go on, and `tkt auto` loops wait the same way. It reads the pages every five minutes, notifies when an incident starts and when it ends, and `tkt ls` and the tkt agent's board show it while it lasts:
 
 ```toml
 [status.github]
@@ -358,7 +358,7 @@ You rarely start it yourself: every tkt command in a herdr pane starts one when 
 
 ## Chores
 
-A chore is an agent run you schedule in `config.toml`, such as a dependency upgrade twice a week. It has no ticket: each run is a branch and a pull request.
+A chore is an agent run you schedule in the repository's `.tkt/tkt.local.toml`, your own file in its main checkout, such as a dependency upgrade twice a week. It has no ticket: each run is a branch and a pull request.
 
 ```mermaid
 flowchart LR

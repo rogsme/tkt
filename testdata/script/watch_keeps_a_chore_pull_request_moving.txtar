@@ -3,8 +3,8 @@
 # review found something and when the pull request is ready for you to
 # merge, and once you merged it, tkt watch removes the run without waiting
 # for a finish-ticket that never runs.
-mkdir $HOME/.config/tkt
-cp $WORK/config.toml $HOME/.config/tkt/config.toml
+mkdir $REPO/.tkt
+cp $WORK/tkt.local.toml $REPO/.tkt/tkt.local.toml
 exec tkt chore run deps
 env WT=$FAKE_WT_ROOT/deps-run
 realgit -C $WT commit -q --allow-empty -m 'Upgrade the dependencies'
@@ -57,9 +57,8 @@ logged herdr notification show 'deps-run: removed' --body 'you merged the run''s
 grep '"ticket":"deps-run","event":"merged","pr":44' $HOME/.local/state/tkt/history.jsonl
 houserules
 
--- config.toml --
+-- tkt.local.toml --
 [chores.deps]
-repo = "~/../app"
 schedule = "0 9 * * 1"
 branch = "{name}-run"
 prompt = "Upgrade the dependencies."

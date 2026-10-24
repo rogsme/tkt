@@ -107,7 +107,10 @@ func (a *App) begin(ctx context.Context, dry, force bool) (*Ctx, error) {
 	if c.LC, err = lifecycle.Load(repo.Root); err != nil {
 		return nil, err
 	}
-	if c.Cfg, err = config.Load(a.ConfigDir()); err != nil {
+	if c.Cfg, err = config.Load(a.ConfigDir(), repo.Root); err != nil {
+		return nil, err
+	}
+	if err := localTracked(ctx, c.Git, c.Cfg, repo.Root); err != nil {
 		return nil, err
 	}
 	c.WT = wt.Client{R: a.R, Root: repo.Root}
@@ -118,6 +121,18 @@ func (a *App) begin(ctx context.Context, dry, force bool) (*Ctx, error) {
 		c.ensureWatch()
 	}
 	return c, nil
+}
+
+// localTracked refuses a .tkt/tkt.local.toml that git tracks: every clone
+// runs the chores it reads, so a committed one would run each chore once for
+// each person.
+func localTracked(ctx context.Context, git gitx.Git, cfg config.Config, root string) error {
+	rel := filepath.Join(config.ProjectDir, config.LocalFile)
+	if cfg.Local == "" || !git.Tracked(ctx, root, rel) {
+		return nil
+	}
+	return apperr.New(apperr.ConfigLocalTracked, "git tracks %s, which holds your own settings and chores: every clone runs the chores it reads, so a committed one runs each chore once for each person", cfg.Local).
+		WithHint("run git rm --cached %s and commit, then list %s in %s", rel, config.LocalFile, filepath.Join(config.ProjectDir, ".gitignore"))
 }
 
 // release drops the locks the command took. A command that hands a ticket

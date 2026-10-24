@@ -13,7 +13,7 @@ export type Mode = "manual" | "auto" | "auto_after_plan" | "yolo";
 
 /** start starts tickets in the background: manual ones with tkt start,
  * the others with a tkt auto loop that starts the ticket itself. as picks
- * a preset from config.toml, such as one that runs another model. */
+ * a preset from config.toml or the .tkt files, such as one that runs another model. */
 export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 	for (const id of ids) {
 		if (mode === "manual") hub.add({ ticket: id, label: "start", args: ["start", id, ...(as ? ["--as", as] : [])] });

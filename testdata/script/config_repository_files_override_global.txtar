@@ -1,0 +1,47 @@
+# A repository's .tkt/tkt.toml wins over config.toml key by key, and its
+# .tkt/tkt.local.toml wins over both, from every worktree of the
+# repository: tkt run sends the line the last file names, and the other
+# stages stay.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+mkdir $REPO/.tkt
+cp $WORK/tkt.toml $REPO/.tkt/tkt.toml
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+cd $FAKE_WT_ROOT/ACM-12
+rm $FAKE_DIR/prompts
+exec tkt run ACM-12 lint
+grep 'Run just lint on ACM-12.' $FAKE_DIR/prompts
+! grep 'Run the linter' $FAKE_DIR/prompts
+exec tkt run ACM-12 docs
+grep 'Update the docs for ACM-12.' $FAKE_DIR/prompts
+
+# Your own file wins over the shared one.
+cp $WORK/tkt.local.toml $REPO/.tkt/tkt.local.toml
+rm $FAKE_DIR/prompts
+exec tkt run ACM-12 lint
+grep 'Run my linter on ACM-12.' $FAKE_DIR/prompts
+rm $REPO/.tkt/tkt.local.toml
+
+# A ticket branch's own copy changes nothing until it reaches the primary
+# worktree.
+mkdir $FAKE_WT_ROOT/ACM-12/.tkt
+cp $WORK/branch.toml $FAKE_WT_ROOT/ACM-12/.tkt/tkt.toml
+rm $FAKE_DIR/prompts
+exec tkt run ACM-12 lint
+grep 'Run just lint on ACM-12.' $FAKE_DIR/prompts
+! grep 'from the branch' $FAKE_DIR/prompts
+
+-- config.toml --
+[stages]
+lint = "Run the linter on {id}."
+docs = "Update the docs for {id}."
+-- tkt.toml --
+[stages]
+lint = "Run just lint on {id}."
+-- tkt.local.toml --
+[stages]
+lint = "Run my linter on {id}."
+-- branch.toml --
+[stages]
+lint = "Lint {id} from the branch."

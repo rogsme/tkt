@@ -15,7 +15,7 @@ func TestAgentSettings(t *testing.T) {
 	c, err := Load(dirWith(t, map[string]string{FileName: `[agent]
 model = "acme/large"
 extensions = ["/opt/acme/provider.ts", "~/.pi/agent/extensions/acme.ts"]
-`}))
+`}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestAgentSettingsRefused(t *testing.T) {
 		"unknown key":        "[agent]\nmodle = \"acme/large\"\n",
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Load(dirWith(t, map[string]string{FileName: body}))
+			_, err := Load(dirWith(t, map[string]string{FileName: body}), "")
 			if code(err) != apperr.ConfigInvalid {
 				t.Fatalf("Load = %v, want config_invalid", err)
 			}

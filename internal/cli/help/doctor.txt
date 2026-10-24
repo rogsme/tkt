@@ -1,8 +1,8 @@
 tkt doctor checks what the other commands need and reports each check as ok,
 warn, fail or skip: git, worktrunk and herdr at their minimum versions, the
 herdr pane, gh when the forge is GitHub, the harness of every preset, the
-project's lifecycle configuration, config.toml, worktrunk's hooks and the log
-directory. It exits 3 when a check fails.
+project's lifecycle configuration, config.toml and the repository's .tkt
+files, worktrunk's hooks and the log directory. It exits 3 when a check fails.
 
 On a terminal it groups the checks, colors them and ends with a summary.
 Otherwise, and with --json, it prints the plain format that programs read.

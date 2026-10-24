@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -18,6 +19,20 @@ import (
 
 // FileName is tkt's settings file inside its configuration directory.
 const FileName = "config.toml"
+
+// A repository's own settings live in the ProjectDir directory at the root
+// of its primary worktree: SharedFile, which the repository may commit, and
+// LocalFile, which is yours and git must not track.
+const (
+	ProjectDir = ".tkt"
+	SharedFile = "tkt.toml"
+	LocalFile  = "tkt.local.toml"
+)
+
+// SharedPath and LocalPath are the repository's settings files in the
+// primary worktree root.
+func SharedPath(root string) string { return filepath.Join(root, ProjectDir, SharedFile) }
+func LocalPath(root string) string  { return filepath.Join(root, ProjectDir, LocalFile) }
 
 var (
 	presetName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -66,10 +81,13 @@ type fileTOML struct {
 	Status map[string]statusTOML `toml:"status"`
 }
 
-// Load reads the settings from dir, tkt's configuration directory. Without
-// a config.toml, the built-in presets and stages apply. The old presets and
-// stages files are refused with their content converted to TOML.
-func Load(dir string) (Config, error) {
+// Load reads the settings from dir, tkt's configuration directory, then
+// those of the repository whose primary worktree is root: .tkt/tkt.toml,
+// then .tkt/tkt.local.toml, each winning key by key over what came before.
+// Without any of them, the built-in presets and stages apply; root is ""
+// outside a repository. The old presets and stages files are refused with
+// their content converted to TOML.
+func Load(dir, root string) (Config, error) {
 	c := builtin()
 	path := filepath.Join(dir, FileName)
 	src, err := os.ReadFile(path)
@@ -78,59 +96,188 @@ func Load(dir string) (Config, error) {
 	case errors.Is(err, fs.ErrNotExist) && len(legacy) > 0:
 		return c, legacyError(dir, legacy)
 	case errors.Is(err, fs.ErrNotExist):
-		return c, nil
 	case err != nil:
 		return c, apperr.New(apperr.ConfigInvalid, "cannot read %s: %v", path, err)
+	default:
+		c.Source = path
+		c.IgnoredLegacy = legacy
+		if err := parseTOML(&c, path, string(src)); err != nil {
+			return c, err
+		}
 	}
-	c.Source = path
-	c.IgnoredLegacy = legacy
-	if err := parseTOML(&c, path, string(src)); err != nil {
-		return c, err
+	if root == "" {
+		return c, nil
+	}
+	for _, project := range []string{SharedPath(root), LocalPath(root)} {
+		src, err = os.ReadFile(project)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			continue
+		case err != nil:
+			return c, apperr.New(apperr.ConfigInvalid, "cannot read %s: %v", project, err)
+		}
+		if err := parseProject(&c, path, project, root, string(src)); err != nil {
+			return c, err
+		}
 	}
 	return c, nil
 }
 
-func parseTOML(c *Config, path, src string) error {
+func decode(path, src string) (fileTOML, toml.MetaData, error) {
 	var f fileTOML
 	md, err := toml.Decode(src, &f)
 	if err != nil {
-		return apperr.New(apperr.ConfigInvalid, "%s: %v", path, err)
+		return f, md, apperr.New(apperr.ConfigInvalid, "%s: %v", path, err)
 	}
 	if extra := md.Undecoded(); len(extra) > 0 {
 		keys := make([]string, len(extra))
 		for i, k := range extra {
 			keys[i] = k.String()
 		}
-		return apperr.New(apperr.ConfigInvalid, "%s: unknown key %s", path, strings.Join(keys, ", "))
+		return f, md, apperr.New(apperr.ConfigInvalid, "%s: unknown key %s", path, strings.Join(keys, ", "))
 	}
-	if len(f.Presets) > 0 {
-		c.Presets = nil
-		for _, k := range md.Keys() {
-			if len(k) != 2 || k[0] != "presets" {
-				continue
+	return f, md, nil
+}
+
+func parseTOML(c *Config, path, src string) error {
+	f, md, err := decode(path, src)
+	if err != nil {
+		return err
+	}
+	if len(f.Chores) > 0 {
+		return choresMoved(path, f.Chores)
+	}
+	ps, err := readPresets(path, f, md)
+	if err != nil {
+		return err
+	}
+	if len(ps) > 0 {
+		c.Presets = ps
+	}
+	if err := readAgent(c, path, f, md); err != nil {
+		return err
+	}
+	return parseSettings(c, path, f)
+}
+
+// readPresets reads a file's [presets.NAME] tables, in the file's order.
+func readPresets(path string, f fileTOML, md toml.MetaData) ([]Preset, error) {
+	var out []Preset
+	for _, k := range md.Keys() {
+		if len(k) != 2 || k[0] != "presets" {
+			continue
+		}
+		name := k[1]
+		p := f.Presets[name]
+		bad := func(format string, args ...any) error {
+			return apperr.New(apperr.ConfigInvalid, "%s: preset '%s': %s", path, name, fmt.Sprintf(format, args...))
+		}
+		switch {
+		case !presetName.MatchString(name):
+			return nil, bad("the name may hold letters, digits, '.', '_' and '-', starting with a letter or digit")
+		case p.Harness != Claude && p.Harness != OpenCode:
+			return nil, bad("the harness must be claude or opencode")
+		case p.Harness == OpenCode && p.Model != "" && !openCode.MatchString(p.Model):
+			return nil, bad("an OpenCode model looks like provider/model or provider/model#variant")
+		case md.IsDefined("presets", name, "serves") && len(p.Serves) == 0:
+			return nil, bad("serves is empty; leave it out to serve any model")
+		}
+		serves := p.Serves
+		if serves == nil {
+			serves = []string{"*"}
+		}
+		out = append(out, Preset{Name: name, Harness: p.Harness, Model: p.Model, Serves: serves})
+	}
+	return out, nil
+}
+
+// readAgent reads the [agent] keys the file sets.
+func readAgent(c *Config, path string, f fileTOML, md toml.MetaData) error {
+	if md.IsDefined("agent", "model") {
+		c.Agent.Model = f.Agent.Model
+	}
+	if !md.IsDefined("agent", "extensions") {
+		return nil
+	}
+	c.Agent.Extensions = nil
+	for _, p := range f.Agent.Extensions {
+		abs, ok := absPath(p)
+		if !ok {
+			return apperr.New(apperr.ConfigInvalid, "%s: agent extension '%s' is not an absolute path", path, p).
+				WithHint("write the extension's full path, such as ~/.pi/agent/extensions/acme.ts")
+		}
+		c.Agent.Extensions = append(c.Agent.Extensions, abs)
+	}
+	return nil
+}
+
+// parseProject reads one of a repository's settings files over the settings
+// read before. Its presets go first, in its own order, and replace those of
+// the same name, so its first preset is the default there. The shared file
+// takes no [agent] table, whose extensions are code that runs on your
+// machine, and no chores, since every clone that reads a chore runs it; an
+// as key in it names a preset it defines, so it never depends on the presets
+// each person's config.toml names.
+func parseProject(c *Config, global, path, root, src string) error {
+	f, md, err := decode(path, src)
+	if err != nil {
+		return err
+	}
+	local := filepath.Base(path) == LocalFile
+	switch {
+	case !local && md.IsDefined("agent"):
+		return apperr.New(apperr.ConfigInvalid, "%s: [agent] belongs in %s or %s: its extensions are code that runs on your machine, and anyone can commit to the repository", path, LocalPath(root), global).
+			WithHint("move [agent] to %s", LocalPath(root))
+	case !local && md.IsDefined("chores"):
+		return apperr.New(apperr.ConfigInvalid, "%s: [chores] belongs in %s: every clone that reads a chore runs it, so a chore the repository commits would run once for each person", path, LocalPath(root)).
+			WithHint("move [chores] to %s", LocalPath(root))
+	}
+	ps, err := readPresets(path, f, md)
+	if err != nil {
+		return err
+	}
+	if !local {
+		for _, k := range []struct{ key, as string }{{"suggest", asOf(f.Suggest)}, {"verify", asOf(f.Verify)}} {
+			if k.as != "" && !slices.ContainsFunc(ps, func(p Preset) bool { return p.Name == k.as }) {
+				return apperr.New(apperr.ConfigInvalid, "%s: [%s] as names preset '%s', which this file does not define: each person's config.toml names its own presets, so the repository's file names only its own", path, k.key, k.as).
+					WithHint("define [presets.%s] in %s, or set [%s] as in %s", k.as, path, k.key, LocalPath(root))
 			}
-			name := k[1]
-			p := f.Presets[name]
-			bad := func(format string, args ...any) error {
-				return apperr.New(apperr.ConfigInvalid, "%s: preset '%s': %s", path, name, fmt.Sprintf(format, args...))
-			}
-			switch {
-			case !presetName.MatchString(name):
-				return bad("the name may hold letters, digits, '.', '_' and '-', starting with a letter or digit")
-			case p.Harness != Claude && p.Harness != OpenCode:
-				return bad("the harness must be claude or opencode")
-			case p.Harness == OpenCode && p.Model != "" && !openCode.MatchString(p.Model):
-				return bad("an OpenCode model looks like provider/model or provider/model#variant")
-			case md.IsDefined("presets", name, "serves") && len(p.Serves) == 0:
-				return bad("serves is empty; leave it out to serve any model")
-			}
-			serves := p.Serves
-			if serves == nil {
-				serves = []string{"*"}
-			}
-			c.Presets = append(c.Presets, Preset{Name: name, Harness: p.Harness, Model: p.Model, Serves: serves})
 		}
 	}
+	if len(ps) > 0 {
+		c.Presets = append(ps, slices.DeleteFunc(c.Presets, func(old Preset) bool {
+			return slices.ContainsFunc(ps, func(p Preset) bool { return p.Name == old.Name })
+		})...)
+		c.PresetFiles = append(c.PresetFiles, path)
+	}
+	if local {
+		c.Local = path
+		if err := readAgent(c, path, f, md); err != nil {
+			return err
+		}
+	} else {
+		c.Shared = path
+	}
+	if err := parseSettings(c, path, f); err != nil {
+		return err
+	}
+	return parseChores(c, path, root, f.Chores)
+}
+
+// asOf is a [suggest] or [verify] table's as, or "" without the table.
+func asOf(t *struct {
+	As string `toml:"as"`
+}) string {
+	if t == nil {
+		return ""
+	}
+	return t.As
+}
+
+// parseSettings reads the tables both files take: [stages], [auto],
+// [review], [board], [watch], [suggest], [verify] and [status]. It sets only
+// the keys the file names, so the file read last wins key by key.
+func parseSettings(c *Config, path string, f fileTOML) error {
 	for name, text := range f.Stages {
 		if !stageName.MatchString(name) {
 			return apperr.New(apperr.ConfigInvalid, "%s: stage '%s': the name may hold lowercase letters, digits, '_' and '-'", path, name)
@@ -139,15 +286,11 @@ func parseTOML(c *Config, path, src string) error {
 			return apperr.New(apperr.ConfigInvalid, "%s: stage '%s' has no text", path, name)
 		}
 		c.Stages[name] = strings.TrimSpace(text)
-		c.OwnStages = append(c.OwnStages, name)
+		if !slices.Contains(c.OwnStages, name) {
+			c.OwnStages = append(c.OwnStages, name)
+		}
 	}
 	sort.Strings(c.OwnStages)
-	return parseSettings(c, path, f)
-}
-
-// parseSettings reads the [auto], [review], [board], [agent], [watch],
-// [suggest], [verify], [chores] and [status] tables.
-func parseSettings(c *Config, path string, f fileTOML) error {
 	bad := func(key, rule string) error {
 		return apperr.New(apperr.ConfigInvalid, "%s: %s %s", path, key, rule)
 	}
@@ -216,18 +359,6 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 			return bad("[verify] as", fmt.Sprintf("names preset '%s', which the presets do not define", v.As))
 		}
 		c.Verify.As = v.As
-	}
-	c.Agent.Model = f.Agent.Model
-	for _, p := range f.Agent.Extensions {
-		abs, ok := absPath(p)
-		if !ok {
-			return apperr.New(apperr.ConfigInvalid, "%s: agent extension '%s' is not an absolute path", path, p).
-				WithHint("write the extension's full path, such as ~/.pi/agent/extensions/acme.ts")
-		}
-		c.Agent.Extensions = append(c.Agent.Extensions, abs)
-	}
-	if err := parseChores(c, path, f.Chores); err != nil {
-		return err
 	}
 	return parseStatus(c, path, f.Status)
 }

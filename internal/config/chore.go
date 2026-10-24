@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -14,9 +15,10 @@ import (
 	"gitlab.com/rogs/tkt/internal/cron"
 )
 
-// Chore is an agent run you schedule in a repository, such as a dependency
-// upgrade. Each run is a branch and a pull request with no ticket; that
-// repository's tkt watch starts it when its schedule comes round.
+// Chore is an agent run a repository's .tkt/tkt.local.toml schedules, such as a
+// dependency upgrade. Each run is a branch and a pull request with no
+// ticket; that repository's tkt watch starts it when its schedule comes
+// round.
 type Chore struct {
 	Name string `json:"name"`
 	// Repo is the repository's primary worktree, as an absolute path.
@@ -28,19 +30,6 @@ type Chore struct {
 	// As is the preset its agents run on, or "" for the default.
 	As     string `json:"as"`
 	Prompt string `json:"prompt"`
-}
-
-// RunsIn reports whether the chore runs in the repository whose primary
-// worktree is root, through any symbolic links.
-func (ch Chore) RunsIn(root string) bool {
-	a, b := ch.Repo, root
-	if ra, err := filepath.EvalSymlinks(a); err == nil {
-		a = ra
-	}
-	if rb, err := filepath.EvalSymlinks(b); err == nil {
-		b = rb
-	}
-	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 // DefaultChoreBranch names a chore's runs when its table names none.
@@ -82,8 +71,9 @@ var (
 	placeholder = regexp.MustCompile(`\{[^}]*\}`)
 )
 
-// parseChores reads the [chores.NAME] tables, sorted by name.
-func parseChores(c *Config, path string, in map[string]choreTOML) error {
+// parseChores reads the [chores.NAME] tables of the repository in root,
+// sorted by name.
+func parseChores(c *Config, path, root string, in map[string]choreTOML) error {
 	for name, t := range in {
 		bad := func(format string, args ...any) error {
 			return apperr.New(apperr.ConfigInvalid, "%s: chore '%s': %s", path, name, fmt.Sprintf(format, args...))
@@ -91,10 +81,10 @@ func parseChores(c *Config, path string, in map[string]choreTOML) error {
 		if !choreName.MatchString(name) {
 			return bad("the name may hold lowercase letters, digits, '_' and '-', starting with a letter or digit")
 		}
-		ch := Chore{Name: name, Branch: or(t.Branch, DefaultChoreBranch), As: t.As, Prompt: strings.TrimSpace(t.Prompt)}
+		ch := Chore{Name: name, Repo: filepath.Clean(root), Branch: or(t.Branch, DefaultChoreBranch), As: t.As, Prompt: strings.TrimSpace(t.Prompt)}
 		switch {
-		case t.Repo == "":
-			return bad("repo names the repository it runs in, such as \"~/code/acme/app\"")
+		case t.Repo != "":
+			return bad("it runs in this repository, so it takes no repo; drop the key")
 		case t.Schedule == "":
 			return bad("schedule says when it runs, in cron's five fields, such as \"0 9 * * 1,4\"")
 		case ch.Prompt == "":
@@ -106,11 +96,6 @@ func parseChores(c *Config, path string, in map[string]choreTOML) error {
 		case ch.As != "" && !c.Has(ch.As):
 			return bad("as names preset '%s', which the presets do not define", ch.As)
 		}
-		repo, ok := absPath(t.Repo)
-		if !ok {
-			return bad("repo '%s' is not an absolute path", t.Repo)
-		}
-		ch.Repo = filepath.Clean(repo)
 		s, err := cron.Parse(t.Schedule)
 		if err != nil {
 			return bad("schedule %v", err)
@@ -130,7 +115,46 @@ func parseChores(c *Config, path string, in map[string]choreTOML) error {
 	return nil
 }
 
-// parseStatus reads the [status.NAME] tables, sorted by name.
+// choresMoved refuses the [chores.NAME] tables of config.toml, which older
+// versions read with a repo key, and prints each repository's tables to
+// move to its .tkt/tkt.local.toml.
+func choresMoved(path string, in map[string]choreTOML) error {
+	byRepo := map[string][]string{}
+	for name, t := range in {
+		byRepo[t.Repo] = append(byRepo[t.Repo], name)
+	}
+	repos := slices.Sorted(maps.Keys(byRepo))
+	files := map[string]string{}
+	var b strings.Builder
+	for _, repo := range repos {
+		names := byRepo[repo]
+		sort.Strings(names)
+		var t strings.Builder
+		for i, name := range names {
+			ch := in[name]
+			if i > 0 {
+				t.WriteString("\n")
+			}
+			fmt.Fprintf(&t, "[chores.%s]\n", tomlKey(name))
+			for _, kv := range [][2]string{{"schedule", ch.Schedule}, {"branch", ch.Branch}, {"as", ch.As}, {"prompt", strings.TrimSpace(ch.Prompt)}} {
+				if kv[1] != "" {
+					fmt.Fprintf(&t, "%s = %s\n", kv[0], tomlString(kv[1]))
+				}
+			}
+		}
+		file := LocalPath(repo)
+		files[file] = t.String()
+		fmt.Fprintf(&b, "\n%s:\n\n%s", file, t.String())
+	}
+	return apperr.New(apperr.ConfigChoresMoved,
+		"%s holds chores, and tkt reads them from each repository's %s now; move these tables there, then delete them from %s:\n%s",
+		path, filepath.Join(ProjectDir, LocalFile), path, b.String()).
+		WithHint("move each [chores.NAME] table to its repository's %s, then delete it from %s", filepath.Join(ProjectDir, LocalFile), path).
+		With("tkt_local_toml", files)
+}
+
+// parseStatus reads the [status.NAME] tables, sorted by name. A page the
+// file names again replaces the one read before.
 func parseStatus(c *Config, path string, in map[string]statusTOML) error {
 	for name, t := range in {
 		bad := func(format string, args ...any) error {
@@ -147,6 +171,7 @@ func parseStatus(c *Config, path string, in map[string]statusTOML) error {
 		case slices.Contains(t.Components, ""):
 			return bad("components holds an empty name")
 		}
+		c.Status = slices.DeleteFunc(c.Status, func(p StatusPage) bool { return p.Name == name })
 		c.Status = append(c.Status, StatusPage{Name: name, URL: strings.TrimRight(t.Page, "/"), Components: t.Components})
 	}
 	sort.Slice(c.Status, func(i, j int) bool { return c.Status[i].Name < c.Status[j].Name })

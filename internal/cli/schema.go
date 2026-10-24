@@ -112,7 +112,7 @@ func writeJSON(w io.Writer, v any) error {
 
 var environment = []SchemaVariable{
 	{"TKT_FORMAT", "json makes every command print the JSON envelope; text, or unset, prints text"},
-	{"XDG_CONFIG_HOME", "tkt reads $XDG_CONFIG_HOME/tkt/config.toml (default ~/.config/tkt/config.toml)"},
+	{"XDG_CONFIG_HOME", "tkt reads $XDG_CONFIG_HOME/tkt/config.toml (default ~/.config/tkt/config.toml), then the repository's .tkt/tkt.toml and .tkt/tkt.local.toml"},
 	{"XDG_STATE_HOME", "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it (default ~/.local/state/tkt)"},
 	{"XDG_DATA_HOME", "tkt unpacks its bundled pi and its extension under $XDG_DATA_HOME/tkt (default ~/.local/share/tkt)"},
 	{"HERDR_ENV", "herdr sets it to 1 inside its panes; agent, start, approve, send, auto, run, resume, done, show and wait need it, and tkt alone opens the agent only there"},

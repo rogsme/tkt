@@ -39,28 +39,17 @@ func choreRule(run, remote, base string) string {
 // it took or skipped, or the moment it first saw the chore.
 func choresPath(common string) string { return filepath.Join(common, "tkt", "chores") }
 
-// repoChores lists the chores this repository runs, by name.
-func (c *Ctx) repoChores() []config.Chore {
-	var out []config.Chore
-	for _, ch := range c.Cfg.Chores {
-		if ch.RunsIn(c.Repo.Root) {
-			out = append(out, ch)
-		}
-	}
-	return out
-}
-
 // chore finds this repository's chore by name.
 func (c *Ctx) chore(name string) (config.Chore, error) {
 	var names []string
-	for _, ch := range c.repoChores() {
+	for _, ch := range c.Cfg.Chores {
 		if ch.Name == name {
 			return ch, nil
 		}
 		names = append(names, ch.Name)
 	}
 	if len(names) == 0 {
-		return config.Chore{}, apperr.New(apperr.UnknownChore, "no chore runs in %s; a [chores.NAME] table in config.toml whose repo is this repository adds one", c.Repo.Root).
+		return config.Chore{}, apperr.New(apperr.UnknownChore, "no chore runs in %s; a [chores.NAME] table in %s adds one", c.Repo.Root, config.LocalPath(c.Repo.Root)).
 			WithHint("tkt help config")
 	}
 	return config.Chore{}, apperr.New(apperr.UnknownChore, "no chore named '%s' runs in %s (chores: %s)", name, c.Repo.Root, strings.Join(names, " ")).
@@ -207,7 +196,7 @@ func (c *Ctx) runName(ch config.Chore, es wt.Entries, now time.Time) (string, er
 		}
 		if err := c.LC.ScratchName(name); err != nil {
 			return "", apperr.New(apperr.ConfigInvalid, "chore '%s' names its run %s, which this repository cannot take: %s", ch.Name, name, apperr.As(err).Msg).
-				WithHint("change the chore's branch setting in %s", filepath.Join(c.ConfigDir(), config.FileName))
+				WithHint("change the chore's branch setting in %s", config.LocalPath(c.Repo.Root))
 		}
 		root := c.Repo.Root
 		if _, ok := es.Find(name); ok || c.Git.HasRef(c.Ctx, root, "refs/heads/"+name) || c.Git.HasRef(c.Ctx, root, "refs/remotes/"+f.Remote+"/"+name) {
@@ -345,13 +334,12 @@ type ChoreInfo struct {
 	Open     string   `json:"open"`
 }
 
-// ChoresResult lists the repository's chores, whether tkt watch runs to
-// start them, and the chores config.toml sets for other repositories.
+// ChoresResult lists the repository's chores and whether tkt watch runs to
+// start them.
 type ChoresResult struct {
-	Repo      string      `json:"repo"`
-	Watch     WatchStatus `json:"watch"`
-	Chores    []ChoreInfo `json:"chores"`
-	Elsewhere []string    `json:"elsewhere"`
+	Repo   string      `json:"repo"`
+	Watch  WatchStatus `json:"watch"`
+	Chores []ChoreInfo `json:"chores"`
 }
 
 func (r *ChoresResult) Text(w io.Writer) {
@@ -375,9 +363,6 @@ func (r *ChoresResult) Text(w io.Writer) {
 			fmt.Fprintln(w, "tkt watch does not run for this repository, so no chore runs on schedule; tkt watch --install keeps one running")
 		}
 	}
-	if len(r.Elsewhere) > 0 {
-		fmt.Fprintf(w, "config.toml also sets %s for other repositories, which their own tkt watch runs\n", idsText(r.Elsewhere))
-	}
 }
 
 // localTime renders a UTC time in local time, or "-".
@@ -396,14 +381,8 @@ func (a *App) Chores(ctx context.Context, _ ChoresOpts) (*ChoresResult, error) {
 		return nil, err
 	}
 	defer c.release()
-	res := &ChoresResult{Repo: c.Repo.Root, Watch: c.watchStatus(), Chores: []ChoreInfo{}, Elsewhere: []string{}}
-	for _, ch := range c.Cfg.Chores {
-		if !ch.RunsIn(c.Repo.Root) {
-			res.Elsewhere = append(res.Elsewhere, ch.Name)
-		}
-	}
-	mine := c.repoChores()
-	if len(mine) == 0 {
+	res := &ChoresResult{Repo: c.Repo.Root, Watch: c.watchStatus(), Chores: []ChoreInfo{}}
+	if len(c.Cfg.Chores) == 0 {
 		return res, nil
 	}
 	es, err := c.WT.List(c.Ctx)
@@ -416,7 +395,7 @@ func (a *App) Chores(ctx context.Context, _ ChoresOpts) (*ChoresResult, error) {
 	}
 	stamps := choreStamps(c.Repo.Common)
 	now := c.Now()
-	for _, ch := range mine {
+	for _, ch := range c.Cfg.Chores {
 		info := ChoreInfo{Name: ch.Name, Schedule: ch.Schedule.String(), Branch: ch.Branch, As: ch.As, Runs: []string{}}
 		if r, open := openRun(runs, ch.Name); open {
 			info.Open = r.ID

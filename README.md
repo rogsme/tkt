@@ -84,7 +84,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt merge ID --passed STEPS` | Once the human verification steps passed, sends finish-ticket the word to merge in a fresh session, naming the head they passed on. When finish-ticket could not merge yet, leaves a merge order that `tkt watch` carries out: it syncs a clean base, has the new head reviewed, waits for green checks, and merges one ticket at a time. The steps carry over clean merges of the base, so a verified batch merges while you are away. `--evidence` says you confirmed the steps from verify-pr's evidence. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
 | `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees, and names the tickets each merge unblocked, which `tkt ls` lists and the tkt agent offers to start. `--all` checks every ticket worktree. |
-| `tkt chores` | Lists the repository's chores, the agent runs you schedule in `config.toml`, with their next run and the run still open. |
+| `tkt chores` | Lists the repository's chores, the agent runs you schedule in its `.tkt/tkt.local.toml`, with their next run and the run still open. |
 | `tkt chore run NAME` | Starts a run of a chore now: a branch from the fetched base, its worktree and tab, and an agent with the chore's prompt. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
 | `tkt show ID` | Prints the agent's last message, such as the plan; `--screen` its live screen; `--steps` the human verification steps, with what verify-pr saw on each one. |
@@ -124,11 +124,10 @@ For work with no ticket, `tkt start --scratch spike-login` makes the worktree, b
 
 ### Chores
 
-A chore is an agent run you schedule, such as a dependency upgrade. tkt ships none: each one is a table in `config.toml`, with the repository it runs in:
+A chore is an agent run you schedule, such as a dependency upgrade. tkt ships none: each one is a table in the repository's `.tkt/tkt.local.toml`, your own file there (see [Settings](#settings)):
 
 ```toml
 [chores.deps]
-repo = "~/code/acme/app"
 schedule = "0 9 * * 1,4"   # cron's five fields, in local time
 branch = "deps-{date}"
 as = "fast"
@@ -210,7 +209,23 @@ page = "https://www.githubstatus.com"
 components = ["Actions", "Pull Requests", "Git Operations"]
 ```
 
-Without the file, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. A `[status.NAME]` table names a status page that Atlassian Statuspage serves, as GitHub's and most model providers' are: while it reports a problem with a component that counts, `tkt watch` and `tkt auto` start no agent, since a fix for checks that fail because CI is down only spends a round, and the board says so at its top. `tkt help config` has the details.
+A repository's own settings go in a `.tkt` directory at the root of its main checkout, next to `.git`. `.tkt/tkt.toml` holds the repository's settings, which it may commit to share them; `.tkt/tkt.local.toml` is yours, and git must not track it. Both win over `config.toml` key by key, the local file over the shared one, so a repository with no review bot, which runs Claude Code for everything, can say so for everyone:
+
+```toml
+# .tkt/tkt.toml
+[presets.claude]
+harness = "claude"
+
+[review]
+bot_wait = "0s"
+
+[stages]
+lint = "Run just lint on {id} and fix what it reports."
+```
+
+Their presets go before those of `config.toml`, in their own order, and replace those of the same name, so the first preset of the last file that has any is the default in that repository; yours still answer `--as`. An `as` key in `tkt.toml`, such as `[verify] as`, names a preset `tkt.toml` defines, since each person's `config.toml` names its own. `[agent]` goes in `config.toml` or `tkt.local.toml`, never `tkt.toml`: its extensions are code that runs on your machine, and anyone who can commit to the repository can write that file. Chores go in `tkt.local.toml` only, since every clone that reads a chore runs it and a committed one would run once for each person: tkt refuses `[chores]` in `tkt.toml`, and stops while git tracks `tkt.local.toml`. Commit a `.tkt/.gitignore` that lists `tkt.local.toml`; `tkt doctor` warns until git ignores it. Every worktree reads the main checkout's copies, so a change made on a ticket's branch applies once it reaches the main checkout. An older `config.toml` with `[chores]` tables makes tkt stop and print, for each repository, the tables to move.
+
+Without any of these files, tkt runs Claude Code and OpenCode on their default models. The first preset is the default. A prompt's `Model:` line picks the first preset that serves it. A `[status.NAME]` table names a status page that Atlassian Statuspage serves, as GitHub's and most model providers' are: while it reports a problem with a component that counts, `tkt watch` and `tkt auto` start no agent, since a fix for checks that fail because CI is down only spends a round, and the board says so at its top. `tkt help config` has the details.
 
 ### Always on
 
