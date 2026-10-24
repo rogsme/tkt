@@ -33,26 +33,48 @@ exec tkt doctor
 stdout '^warn  config           presets fast from .*ignoring .*presets$'
 ! stdout 'harness.claude'
 
-# A .tkt.toml adds the repository's settings and chores.
+# The repository's .tkt files add its settings and chores. Your own file
+# warns until git ignores it, since git add -A would commit it.
 rm $HOME/.config/tkt/presets
-cp $WORK/tkt.toml $REPO/.tkt.toml
+mkdir $REPO/.tkt
+cp $WORK/tkt.toml $REPO/.tkt/tkt.toml
+cp $WORK/tkt.local.toml $REPO/.tkt/tkt.local.toml
 exec tkt doctor
-stdout '^ok    config           presets fast from .*config\.toml; repository settings from .*/\.tkt\.toml$'
+stdout '^warn  config           presets fast from .*config\.toml; repository settings from .*/\.tkt/tkt\.toml and .*/\.tkt/tkt\.local\.toml; git does not ignore '
+stdout 'hint: list tkt\.local\.toml in .*/\.tkt/\.gitignore'
 stdout '^warn  chores           no tkt watch runs for this repository, so its chores never start: deps \(next '
+cp $WORK/gitignore $REPO/.tkt/.gitignore
+exec tkt doctor
+stdout '^ok    config           presets fast from .*config\.toml; repository settings from .*/\.tkt/tkt\.toml and .*/\.tkt/tkt\.local\.toml$'
 
-# One that does not parse fails the config check.
-cp $WORK/presets.toml $REPO/.tkt.toml
+# Git tracking your own file fails the check, and every repository command.
+realgit -C $REPO add -f .tkt/tkt.local.toml
 ! exec tkt doctor
-stdout '^fail  config           .*\.tkt\.toml: \[presets\] belongs in '
+stdout '^fail  config           git tracks .*/\.tkt/tkt\.local\.toml, which holds your own settings and chores'
+stdout 'hint: run git rm --cached \.tkt/tkt\.local\.toml and commit'
+! exec tkt ls --json
+rc 3
+envelope '.error.code' config_local_tracked
+realgit -C $REPO rm -q --cached .tkt/tkt.local.toml
+
+# A file that does not parse fails the config check.
+cp $WORK/presets.toml $REPO/.tkt/tkt.toml
+! exec tkt doctor
+stdout '^fail  config           .*\.tkt/tkt\.toml: \[presets\] belongs in '
 
 -- config.toml --
 [presets.fast]
 harness = "opencode"
 model = "acme/fast#max"
 -- tkt.toml --
+[review]
+bot_wait = "0s"
+-- tkt.local.toml --
 [chores.deps]
 schedule = "0 9 * * 1"
 prompt = "Upgrade the dependencies."
+-- gitignore --
+tkt.local.toml
 -- presets.toml --
 [presets.big]
 harness = "claude"

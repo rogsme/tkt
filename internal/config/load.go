@@ -20,9 +20,19 @@ import (
 // FileName is tkt's settings file inside its configuration directory.
 const FileName = "config.toml"
 
-// ProjectFileName is a repository's own settings file, at the root of its
-// primary worktree.
-const ProjectFileName = ".tkt.toml"
+// A repository's own settings live in the ProjectDir directory at the root
+// of its primary worktree: SharedFile, which the repository may commit, and
+// LocalFile, which is yours and git must not track.
+const (
+	ProjectDir = ".tkt"
+	SharedFile = "tkt.toml"
+	LocalFile  = "tkt.local.toml"
+)
+
+// SharedPath and LocalPath are the repository's settings files in the
+// primary worktree root.
+func SharedPath(root string) string { return filepath.Join(root, ProjectDir, SharedFile) }
+func LocalPath(root string) string  { return filepath.Join(root, ProjectDir, LocalFile) }
 
 var (
 	presetName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -72,10 +82,11 @@ type fileTOML struct {
 }
 
 // Load reads the settings from dir, tkt's configuration directory, then
-// from the .tkt.toml of the repository whose primary worktree is root, whose
-// keys win. Without either file, the built-in presets and stages apply; root
-// is "" outside a repository. The old presets and stages files are refused
-// with their content converted to TOML.
+// those of the repository whose primary worktree is root: .tkt/tkt.toml,
+// then .tkt/tkt.local.toml, each winning key by key over what came before.
+// Without any of them, the built-in presets and stages apply; root is ""
+// outside a repository. The old presets and stages files are refused with
+// their content converted to TOML.
 func Load(dir, root string) (Config, error) {
 	c := builtin()
 	path := filepath.Join(dir, FileName)
@@ -97,15 +108,19 @@ func Load(dir, root string) (Config, error) {
 	if root == "" {
 		return c, nil
 	}
-	project := filepath.Join(root, ProjectFileName)
-	src, err = os.ReadFile(project)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return c, nil
-	case err != nil:
-		return c, apperr.New(apperr.ConfigInvalid, "cannot read %s: %v", project, err)
+	for _, project := range []string{SharedPath(root), LocalPath(root)} {
+		src, err = os.ReadFile(project)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			continue
+		case err != nil:
+			return c, apperr.New(apperr.ConfigInvalid, "cannot read %s: %v", project, err)
+		}
+		if err := parseProject(&c, path, project, root, string(src)); err != nil {
+			return c, err
+		}
 	}
-	return c, parseProject(&c, path, project, root, string(src))
+	return c, nil
 }
 
 func decode(path, src string) (fileTOML, toml.MetaData, error) {
@@ -172,10 +187,11 @@ func parseTOML(c *Config, path, src string) error {
 	return parseSettings(c, path, f)
 }
 
-// parseProject reads a repository's .tkt.toml over the settings from global,
-// tkt's config.toml. It takes every table but the presets and the agent's:
-// those choose the harnesses, models and code that run on your machine, and
-// a file anyone can commit to the repository must not.
+// parseProject reads one of a repository's settings files over the settings
+// read before. Neither takes the presets or the agent's table: those choose
+// the harnesses, models and code that run on your machine, and anyone can
+// commit a file to the repository. Only the local file takes chores, since
+// every clone that reads a chore runs it.
 func parseProject(c *Config, global, path, root, src string) error {
 	f, md, err := decode(path, src)
 	if err != nil {
@@ -187,7 +203,16 @@ func parseProject(c *Config, global, path, root, src string) error {
 				WithHint("move [%s] to %s", table, global)
 		}
 	}
-	c.Project = path
+	local := filepath.Base(path) == LocalFile
+	if !local && md.IsDefined("chores") {
+		return apperr.New(apperr.ConfigInvalid, "%s: [chores] belongs in %s: every clone that reads a chore runs it, so a chore the repository commits would run once for each person", path, LocalPath(root)).
+			WithHint("move [chores] to %s", LocalPath(root))
+	}
+	if local {
+		c.Local = path
+	} else {
+		c.Shared = path
+	}
 	if err := parseSettings(c, path, f); err != nil {
 		return err
 	}

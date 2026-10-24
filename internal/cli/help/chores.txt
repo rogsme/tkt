@@ -1,7 +1,7 @@
 A chore is an agent run you schedule, such as a dependency upgrade. Each run
 is a branch and a pull request with no ticket. tkt ships no chores: you
-define them in the repository's .tkt.toml, at the root of its main checkout
-(tkt help config):
+define them in the repository's .tkt/tkt.local.toml, your own file in its
+main checkout, so each person's chores run once (tkt help config):
 
   [chores.deps]
   schedule = "0 9 * * 1,4"     # cron's five fields, in local time

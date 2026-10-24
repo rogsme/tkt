@@ -275,8 +275,16 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 			return Check{ID: "config", Status: CheckFail, Message: e.Msg, Hint: or(e.Hint, "tkt help config")}
 		}
 		msg := fmt.Sprintf("presets %s from %s", strings.Join(cfg.PresetNames(), ", "), cfg.Source)
-		if cfg.Project != "" {
-			msg += "; repository settings from " + cfg.Project
+		if files := slices.DeleteFunc([]string{cfg.Shared, cfg.Local}, func(f string) bool { return f == "" }); len(files) > 0 {
+			msg += "; repository settings from " + strings.Join(files, " and ")
+		}
+		if err := localTracked(ctx, git, cfg, repo.Root); err != nil {
+			e := apperr.As(err)
+			return Check{ID: "config", Status: CheckFail, Message: e.Msg, Hint: e.Hint}
+		}
+		if cfg.Local != "" && !git.Ignored(ctx, repo.Root, filepath.Join(config.ProjectDir, config.LocalFile)) {
+			return Check{ID: "config", Status: CheckWarn, Message: msg + "; git does not ignore " + cfg.Local + ", so git add -A would commit it",
+				Hint: "list " + config.LocalFile + " in " + filepath.Join(repo.Root, config.ProjectDir, ".gitignore")}
 		}
 		if len(cfg.IgnoredLegacy) > 0 {
 			return Check{ID: "config", Status: CheckWarn, Message: msg + "; ignoring " + strings.Join(cfg.IgnoredLegacy, " and "),
@@ -385,7 +393,7 @@ func (a *App) choresCheck(cfg config.Config, cfgErr error, repo gitx.Repo) Check
 	case cfgErr != nil:
 		return Check{ID: "chores", Status: CheckSkip, Message: "the settings do not load"}
 	case len(cfg.Chores) == 0:
-		return Check{ID: "chores", Status: CheckSkip, Message: config.ProjectFileName + " sets no chores"}
+		return Check{ID: "chores", Status: CheckSkip, Message: filepath.Join(config.ProjectDir, config.LocalFile) + " sets no chores"}
 	}
 	var here []string
 	for _, ch := range cfg.Chores {

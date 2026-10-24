@@ -15,7 +15,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/cron"
 )
 
-// Chore is an agent run a repository's .tkt.toml schedules, such as a
+// Chore is an agent run a repository's .tkt/tkt.local.toml schedules, such as a
 // dependency upgrade. Each run is a branch and a pull request with no
 // ticket; that repository's tkt watch starts it when its schedule comes
 // round.
@@ -71,7 +71,7 @@ var (
 	placeholder = regexp.MustCompile(`\{[^}]*\}`)
 )
 
-// parseChores reads the [chores.NAME] tables of the .tkt.toml in root,
+// parseChores reads the [chores.NAME] tables of the repository in root,
 // sorted by name.
 func parseChores(c *Config, path, root string, in map[string]choreTOML) error {
 	for name, t := range in {
@@ -117,7 +117,7 @@ func parseChores(c *Config, path, root string, in map[string]choreTOML) error {
 
 // choresMoved refuses the [chores.NAME] tables of config.toml, which older
 // versions read with a repo key, and prints each repository's tables to
-// move to its .tkt.toml.
+// move to its .tkt/tkt.local.toml.
 func choresMoved(path string, in map[string]choreTOML) error {
 	byRepo := map[string][]string{}
 	for name, t := range in {
@@ -142,15 +142,15 @@ func choresMoved(path string, in map[string]choreTOML) error {
 				}
 			}
 		}
-		file := filepath.Join(repo, ProjectFileName)
+		file := LocalPath(repo)
 		files[file] = t.String()
 		fmt.Fprintf(&b, "\n%s:\n\n%s", file, t.String())
 	}
 	return apperr.New(apperr.ConfigChoresMoved,
 		"%s holds chores, and tkt reads them from each repository's %s now; move these tables there, then delete them from %s:\n%s",
-		path, ProjectFileName, path, b.String()).
-		WithHint("move each [chores.NAME] table to its repository's %s, then delete it from %s", ProjectFileName, path).
-		With("tkt_toml", files)
+		path, filepath.Join(ProjectDir, LocalFile), path, b.String()).
+		WithHint("move each [chores.NAME] table to its repository's %s, then delete it from %s", filepath.Join(ProjectDir, LocalFile), path).
+		With("tkt_local_toml", files)
 }
 
 // parseStatus reads the [status.NAME] tables, sorted by name. A page the

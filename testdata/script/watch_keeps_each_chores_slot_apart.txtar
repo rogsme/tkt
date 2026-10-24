@@ -3,7 +3,8 @@
 # slot keeps its due slot while another chore runs.
 mkdir $HOME/.config/tkt
 cp $WORK/config.toml $HOME/.config/tkt/config.toml
-cp $WORK/tkt.toml $REPO/.tkt.toml
+mkdir $REPO/.tkt
+cp $WORK/tkt.local.toml $REPO/.tkt/tkt.local.toml
 exec tkt watch --once --json
 envelope '[.result.chores[] | .chore + ":" + .reason]' '["deps:armed","updated:armed"]'
 cp $WORK/old $REPO/.git/tkt/chores
@@ -18,7 +19,7 @@ exists $FAKE_WT_ROOT/updated-run
 -- config.toml --
 [auto]
 max_parallel = 1
--- tkt.toml --
+-- tkt.local.toml --
 [chores.deps]
 schedule = "0 9 * * *"
 branch = "{name}-run"

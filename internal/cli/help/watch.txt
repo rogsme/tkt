@@ -37,14 +37,14 @@ failure and removal; a clean sync stays quiet. A sync that fails, such as
 while the network is down, is tried again at the next pass, with one
 notification for each head and reason.
 
-It also starts the repository's chores, the agent runs its .tkt.toml
-schedules, when their slot comes (tkt help chores): once per slot, however
+It also starts the repository's chores, the agent runs its
+.tkt/tkt.local.toml schedules, when their slot comes (tkt help chores): once per slot, however
 many slots passed while no watch ran, and never while the chore's last run
 is still open. A chore's run is a row like a ticket's: watch syncs its base
 when a sync is due, fixes its checks, and removes the run once you merged
 its pull request, or once its agent ended with nothing to change.
 
-The [status.NAME] tables in config.toml and .tkt.toml name status pages, such as GitHub's
+The [status.NAME] tables in config.toml and the .tkt files name status pages, such as GitHub's
 (tkt help config). tkt watch reads them every five minutes. While one
 reports a problem with a component that counts, it starts no agent: no ci,
 resolve or review run, no merge line and no chore run, since each would only

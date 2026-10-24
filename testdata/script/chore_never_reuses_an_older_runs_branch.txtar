@@ -1,7 +1,8 @@
 # tkt finds a run's pull request by its branch, so a run never takes the
 # branch of an older run, even once that one merged and the forge deleted
 # its branch: the new run would inherit the old pull request.
-cp $WORK/tkt.toml $REPO/.tkt.toml
+mkdir $REPO/.tkt
+cp $WORK/tkt.local.toml $REPO/.tkt/tkt.local.toml
 exec tkt chore run deps
 env WT=$FAKE_WT_ROOT/deps-run
 realgit -C $WT commit -q --allow-empty -m 'Upgrade the dependencies'
@@ -42,7 +43,7 @@ logged herdr notification show 'deps-run-2: removed' --body 'you closed the run'
 ! exists $FAKE_WT_ROOT/deps-run-2
 houserules
 
--- tkt.toml --
+-- tkt.local.toml --
 [chores.deps]
 schedule = "0 9 * * 1"
 branch = "{name}-run"

@@ -112,6 +112,19 @@ func (g Git) Clean(ctx context.Context, path string) bool {
 	return ok && s == ""
 }
 
+// Tracked reports whether git tracks the file at path, relative to the
+// worktree dir, in its index.
+func (g Git) Tracked(ctx context.Context, dir, path string) bool {
+	s, ok := g.out(ctx, "-C", dir, "ls-files", "--", path)
+	return ok && s != ""
+}
+
+// Ignored reports whether git ignores the path, relative to the worktree
+// dir, when it is untracked.
+func (g Git) Ignored(ctx context.Context, dir, path string) bool {
+	return g.run(ctx, 0, "-C", dir, "check-ignore", "-q", "--", path).OK()
+}
+
 // Unchanged reports whether the worktree has no change to a tracked file.
 // Untracked files do not count: a merge leaves them alone, and refuses to
 // overwrite one.

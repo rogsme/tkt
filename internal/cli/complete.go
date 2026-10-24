@@ -129,7 +129,7 @@ func (g *globals) completeChores(cmd *cobra.Command, args []string, _ string) ([
 }
 
 // rootForCompletion is the primary worktree of the repository tkt runs in,
-// whose .tkt.toml adds stages and chores, or "" outside one.
+// whose .tkt files add stages and chores, or "" outside one.
 func (g *globals) rootForCompletion(cmd *cobra.Command) string {
 	repo, err := gitx.Git{R: runner.Exec{}}.Resolve(cmd.Context(), g.dirForCompletion())
 	if err != nil {

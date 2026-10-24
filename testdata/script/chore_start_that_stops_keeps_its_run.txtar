@@ -3,7 +3,8 @@
 # the slot instead of having another worktree made beside it every pass,
 # and tkt chore run goes on with it. So does a run whose agent stopped at a
 # startup dialog.
-cp $WORK/tkt.toml $REPO/.tkt.toml
+mkdir $REPO/.tkt
+cp $WORK/tkt.local.toml $REPO/.tkt/tkt.local.toml
 exec tkt watch --once --json
 envelope '[.result.chores[] | .reason]' '["armed","armed"]'
 cp $WORK/old $REPO/.git/tkt/chores
@@ -52,7 +53,7 @@ grep 'on branch lint-run in this worktree' $FAKE_DIR/prompts
 ! exists $FAKE_WT_ROOT/lint-run-2
 houserules
 
--- tkt.toml --
+-- tkt.local.toml --
 [chores.deps]
 schedule = "0 9 * * *"
 branch = "{name}-run"

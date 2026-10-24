@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -35,6 +36,25 @@ components = ["Actions"]
 model = "acme/large"
 `
 
+// repoWith makes a primary worktree whose .tkt directory holds the shared
+// and local settings files given, leaving out an empty one.
+func repoWith(t *testing.T, shared, local string) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ProjectDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{SharedPath(root): shared, LocalPath(root): local} {
+		if body == "" {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
 func TestProjectSettingsWinKeyByKey(t *testing.T) {
 	project := `[stages]
 lint = "Run just lint on {id}."
@@ -55,13 +75,13 @@ page = "https://status.example.com"
 [status.vercel]
 page = "https://www.vercel-status.com"
 `
-	root := dirWith(t, map[string]string{ProjectFileName: project})
+	root := repoWith(t, project, "")
 	c, err := Load(dirWith(t, map[string]string{FileName: globalSettings}), root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Project != filepath.Join(root, ProjectFileName) || !strings.HasSuffix(c.Source, FileName) {
-		t.Errorf("project %q, source %q", c.Project, c.Source)
+	if c.Shared != SharedPath(root) || c.Local != "" || !strings.HasSuffix(c.Source, FileName) {
+		t.Errorf("shared %q, local %q, source %q", c.Shared, c.Local, c.Source)
 	}
 	if c.Review.BotWait != 0 || c.Auto.MaxRounds != 7 || c.Auto.MaxParallel != 2 || c.Auto.Poll != DefaultPoll {
 		t.Errorf("review %+v, auto %+v", c.Review, c.Auto)
@@ -80,6 +100,29 @@ page = "https://www.vercel-status.com"
 	}
 }
 
+func TestLocalSettingsWinOverShared(t *testing.T) {
+	shared := "[stages]\nlint = \"Run just lint on {id}.\"\n\n[auto]\nmax_rounds = 7\n"
+	local := "[stages]\nlint = \"Run my linter on {id}.\"\n\n[chores.deps]\nschedule = \"@daily\"\nprompt = \"Upgrade.\"\n"
+	root := repoWith(t, shared, local)
+	c, err := Load(dirWith(t, map[string]string{FileName: globalSettings}), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Shared != SharedPath(root) || c.Local != LocalPath(root) {
+		t.Errorf("shared %q, local %q", c.Shared, c.Local)
+	}
+	if c.Stages["lint"] != "Run my linter on {id}." || c.Auto.MaxRounds != 7 || c.Auto.MaxParallel != 2 {
+		t.Errorf("lint %q, auto %+v", c.Stages["lint"], c.Auto)
+	}
+	if len(c.Chores) != 1 || c.Chores[0].Repo != root {
+		t.Errorf("chores %+v", c.Chores)
+	}
+	c, err = Load(t.TempDir(), repoWith(t, "", "[review]\nbot_wait = \"0s\"\n"))
+	if err != nil || c.Shared != "" || c.Local == "" || c.Review.BotWait != 0 {
+		t.Errorf("local alone: %v, %+v", err, c.Review)
+	}
+}
+
 func TestNoProjectFile(t *testing.T) {
 	dir := dirWith(t, map[string]string{FileName: globalSettings})
 	for _, root := range []string{"", t.TempDir()} {
@@ -87,11 +130,11 @@ func TestNoProjectFile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if c.Project != "" || c.Review.BotWait != 10*time.Minute || c.Stages["lint"] != "Run the linter on {id}." {
-			t.Errorf("root %q: project %q, review %+v", root, c.Project, c.Review)
+		if c.Shared != "" || c.Local != "" || c.Review.BotWait != 10*time.Minute || c.Stages["lint"] != "Run the linter on {id}." {
+			t.Errorf("root %q: shared %q, local %q, review %+v", root, c.Shared, c.Local, c.Review)
 		}
 	}
-	c, err := Load(t.TempDir(), dirWith(t, map[string]string{ProjectFileName: "[watch]\nautostart = false\n"}))
+	c, err := Load(t.TempDir(), repoWith(t, "[watch]\nautostart = false\n", ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,11 +152,27 @@ func TestProjectFileRefusesPersonalTables(t *testing.T) {
 		"[verify]\nas = \"big\"\n":              "names preset 'big'",
 		"[stages]\nlint = \"\"\n":               "stage 'lint' has no text",
 	} {
-		root := dirWith(t, map[string]string{ProjectFileName: src})
-		_, err := Load(dir, root)
-		e := apperr.As(err)
-		if e == nil || e.Code != apperr.ConfigInvalid || !strings.Contains(e.Msg, filepath.Join(root, ProjectFileName)) || !strings.Contains(e.Msg, want) {
-			t.Errorf("%q: %v, want an error about %s", src, err, want)
+		for _, local := range []bool{false, true} {
+			root := repoWith(t, src, "")
+			path := SharedPath(root)
+			if local {
+				root = repoWith(t, "", src)
+				path = LocalPath(root)
+			}
+			_, err := Load(dir, root)
+			e := apperr.As(err)
+			if e == nil || e.Code != apperr.ConfigInvalid || !strings.Contains(e.Msg, path) || !strings.Contains(e.Msg, want) {
+				t.Errorf("%s %q: %v, want an error about %s", path, src, err, want)
+			}
 		}
+	}
+}
+
+func TestSharedFileRefusesChores(t *testing.T) {
+	root := repoWith(t, "[chores.deps]\nschedule = \"@daily\"\nprompt = \"Upgrade.\"\n", "")
+	_, err := Load(t.TempDir(), root)
+	e := apperr.As(err)
+	if e == nil || e.Code != apperr.ConfigInvalid || !strings.Contains(e.Msg, SharedPath(root)+": [chores] belongs in "+LocalPath(root)) {
+		t.Errorf("Load = %v", err)
 	}
 }

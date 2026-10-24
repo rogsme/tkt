@@ -1,6 +1,6 @@
 tkt reads its settings from ${XDG_CONFIG_HOME:-~/.config}/tkt/config.toml, then
-from the repository's .tkt.toml, which wins key by key. Without either file
-it runs Claude Code and OpenCode on their default models, with the built-in
+from the repository's .tkt/tkt.toml and .tkt/tkt.local.toml, each winning
+key by key over what came before. Without any of them it runs Claude Code and OpenCode on their default models, with the built-in
 stage lines.
 
 Presets choose the agent. Each is a [presets.NAME] table:
@@ -69,20 +69,31 @@ The ticket keeps its preset for the stages after it:
   [verify]
   as = "opencode"
 
-A repository's own settings go in .tkt.toml, at the root of its main
-checkout, next to .git. It takes every table here but [presets] and [agent],
-and wins over config.toml key by key: a repository with no review bot sets
-bot_wait = "0s" there, and a stage it names replaces the one config.toml or
-tkt defines. [presets] and [agent] stay in config.toml, since they choose
-the harnesses, models and code that run on your machine, and anyone who can
-commit to the repository can write its .tkt.toml.
+A repository's own settings go in a .tkt directory at the root of its main
+checkout, next to .git, in two files:
 
-tkt reads the file whether git tracks it or not: commit it to share it, or
-list it in .git/info/exclude to keep it yours. Every worktree reads the main
-checkout's copy, so a change on a ticket's branch applies once it reaches
-the main checkout. tkt watch reads it again on every pass.
+  .tkt/tkt.toml          the repository's settings, which it may commit to
+                         share them
+  .tkt/tkt.local.toml    yours: git must not track it, and it alone takes
+                         chores
 
-A [chores.NAME] table in .tkt.toml schedules an agent run in that
+Both take every table here but [presets] and [agent], and win over
+config.toml key by key, the local file over the shared one: a repository
+with no review bot sets bot_wait = "0s" in tkt.toml, and a stage either one
+names replaces the one config.toml or tkt defines. [presets] and [agent] stay
+in config.toml, since they choose the harnesses, models and code that run on
+your machine, and anyone who can commit to the repository can write its
+files.
+
+Chores go in tkt.local.toml only: every clone that reads a chore runs it,
+so a committed one would run once for each person. tkt refuses [chores] in
+tkt.toml, and stops while git tracks tkt.local.toml. Commit a .tkt/.gitignore
+that lists tkt.local.toml, so git add -A leaves it out; tkt doctor warns
+until git ignores it. Every worktree reads the main checkout's copies, so a
+change on a ticket's branch applies once it reaches the main checkout. tkt
+watch reads them again on every pass.
+
+A [chores.NAME] table in .tkt/tkt.local.toml schedules an agent run in that
 repository, such as a dependency upgrade (tkt help chores). tkt ships none:
 
   [chores.deps]
@@ -111,11 +122,11 @@ files to load, as absolute paths or paths that start with ~/:
   extensions = ["~/.pi/agent/extensions/acme-provider.ts"]
 
 An unknown key is an error, so a misspelling never passes silently. tkt doctor
-checks both files.
+checks every file.
 
 Older versions of tkt read presets and stages column files. When only those
 exist, tkt stops and prints the equivalent config.toml to copy.
 
 Older versions also read chores from config.toml, each with a repo key.
 config.toml takes no [chores] table now: tkt stops and prints, for each
-repository, the tables to move to its .tkt.toml.
+repository, the tables to move to its .tkt/tkt.local.toml.

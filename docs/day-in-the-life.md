@@ -30,7 +30,7 @@ page = "https://www.githubstatus.com"
 components = ["Actions", "Pull Requests", "Git Operations"]
 ```
 
-`acme/app` commits a `.tkt.toml` at its root with its two chores, which run on the `fast` preset from `config.toml`:
+`acme/app` commits a `.tkt/.gitignore` that lists `tkt.local.toml`, and your own `.tkt/tkt.local.toml` there holds two chores, which run on the `fast` preset from `config.toml`. They are yours, so nobody else's tkt runs them a second time:
 
 ```toml
 [chores.deps]

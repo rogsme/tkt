@@ -136,7 +136,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		name: "tkt_chores",
 		label: "tkt chores",
 		description:
-			"List the repository's chores, the agent runs the user schedules in the repository's .tkt.toml, with their next run; with run, start a run of one now. A run is a branch and a pull request with no ticket, which the user merges; tkt watch starts runs on schedule by itself.",
+			"List the repository's chores, the agent runs the user schedules in the repository's .tkt/tkt.local.toml, with their next run; with run, start a run of one now. A run is a branch and a pull request with no ticket, which the user merges; tkt watch starts runs on schedule by itself.",
 		parameters: Type.Object({ run: Type.Optional(Type.String({ description: "The chore to start a run of now, only when the user asks for one" })) }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
@@ -193,7 +193,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		name: "tkt_stage",
 		label: "tkt run",
 		description: "Queue a stage in a fresh session: review, address (which merges the base first), resolve, ci, verify or start. Prefer tkt_continue, which picks the stage itself, and tkt_sync for a moved base. Never run review where the repository has a review bot in CI unless the user asks for it.",
-		parameters: Type.Object({ ticket, stage: Type.String({ description: "review, address, resolve, ci, verify, start, or a stage from config.toml or .tkt.toml" }), as: preset }),
+		parameters: Type.Object({ ticket, stage: Type.String({ description: "review, address, resolve, ci, verify, start, or a stage from config.toml or the repository's .tkt files" }), as: preset }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);

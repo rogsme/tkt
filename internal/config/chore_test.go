@@ -1,8 +1,6 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -31,7 +29,7 @@ Upgrade the dependencies.
 schedule = "@daily"
 prompt = "Gather the changelog lines."
 `
-	root := dirWith(t, map[string]string{ProjectFileName: project})
+	root := repoWith(t, "", project)
 	c, err := Load(dirWith(t, map[string]string{FileName: global}), root)
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +71,7 @@ func TestChoreErrors(t *testing.T) {
 		"[chores.deps]\nschedule = \"0 9 * * 1\"\nprompt = \"!npm update\"\n":               "shell mode",
 		"[chores.deps]\nschedule = \"0 9 * * 1\"\nprompt = \"\"\"\n/upgrade\nnow\n\"\"\"\n": "takes one line",
 	} {
-		root := dirWith(t, map[string]string{ProjectFileName: src})
+		root := repoWith(t, "", src)
 		_, err := Load(t.TempDir(), root)
 		if code(err) != apperr.ConfigInvalid || !strings.Contains(apperr.As(err).Msg, want) {
 			t.Errorf("%q: %v, want an error about %s", src, err, want)
@@ -111,23 +109,20 @@ prompt = "Fix the lint warnings."
 	if e == nil || e.Code != apperr.ConfigChoresMoved {
 		t.Fatalf("Load = %v, want config_chores_moved", err)
 	}
-	files, _ := e.Details["tkt_toml"].(map[string]string)
+	files, _ := e.Details["tkt_local_toml"].(map[string]string)
 	if len(files) != 2 {
-		t.Fatalf("tkt_toml %v", e.Details["tkt_toml"])
+		t.Fatalf("tkt_local_toml %v", e.Details["tkt_local_toml"])
 	}
 	for file, want := range map[string][]string{
-		"~/code/acme/app/.tkt.toml": {"changelog", "deps"},
-		"/srv/acme/api/.tkt.toml":   {"lint"},
+		"~/code/acme/app/.tkt/tkt.local.toml": {"changelog", "deps"},
+		"/srv/acme/api/.tkt/tkt.local.toml":   {"lint"},
 	} {
 		text, ok := files[file]
 		if !ok || !strings.Contains(e.Msg, file+":\n\n"+text) {
 			t.Errorf("%s: missing from %q", file, e.Msg)
 			continue
 		}
-		root := t.TempDir()
-		if err := os.WriteFile(filepath.Join(root, ProjectFileName), []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		root := repoWith(t, "", text)
 		c, err := Load(dirWith(t, map[string]string{FileName: "[presets.fast]\nharness = \"opencode\"\n"}), root)
 		if err != nil {
 			t.Fatalf("%s does not load: %v\n%s", file, err, text)
@@ -139,7 +134,7 @@ prompt = "Fix the lint warnings."
 		if !slices.Equal(names, want) {
 			t.Errorf("%s: chores %v, want %v", file, names, want)
 		}
-		if file == "~/code/acme/app/.tkt.toml" {
+		if file == "~/code/acme/app/.tkt/tkt.local.toml" {
 			if d := c.Chores[1]; d.As != "fast" || d.Branch != "deps-{date}" || d.Prompt != "Upgrade the \"dependencies\".\nNote the breaking changes." {
 				t.Errorf("deps %+v", d)
 			}

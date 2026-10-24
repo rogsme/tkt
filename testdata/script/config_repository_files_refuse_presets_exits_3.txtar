@@ -1,0 +1,31 @@
+# A repository's .tkt files take no [presets] and no [agent]: they choose
+# the harnesses, models and pi extensions that run on your machine, and
+# anyone can commit to the repository. The shared .tkt/tkt.toml takes no
+# [chores] either, since every clone that reads a chore runs it.
+mkdir $REPO/.tkt
+cp $WORK/presets.toml $REPO/.tkt/tkt.toml
+! exec tkt start ACM-1 --dry-run
+rc 3
+stderr '\.tkt/tkt\.toml: \[presets\] belongs in .*/tkt/config\.toml'
+rm $REPO/.tkt/tkt.toml
+cp $WORK/agent.toml $REPO/.tkt/tkt.local.toml
+! exec tkt ls --json
+rc 3
+envelope '.error.code' config_invalid
+envelope '.error.message | test("tkt\\.local\\.toml: \\[agent\\] belongs in")' 'true'
+rm $REPO/.tkt/tkt.local.toml
+cp $WORK/chores.toml $REPO/.tkt/tkt.toml
+! exec tkt ls
+rc 3
+stderr '\.tkt/tkt\.toml: \[chores\] belongs in .*/\.tkt/tkt\.local\.toml: every clone that reads a chore runs it'
+
+-- presets.toml --
+[presets.fast]
+harness = "opencode"
+-- agent.toml --
+[agent]
+extensions = ["~/acme.ts"]
+-- chores.toml --
+[chores.deps]
+schedule = "0 9 * * 1"
+prompt = "Upgrade the dependencies."

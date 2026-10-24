@@ -40,8 +40,10 @@ type Config struct {
 	// Source names where the settings came from, for messages: config.toml,
 	// the one file that holds presets.
 	Source string
-	// Project is the repository's .tkt.toml, when tkt read one.
-	Project string
+	// Shared and Local are the repository's .tkt/tkt.toml and
+	// .tkt/tkt.local.toml, when tkt read them.
+	Shared  string
+	Local   string
 	Presets []Preset
 	Stages  map[string]string
 	// OwnStages lists the stages the settings define, sorted.

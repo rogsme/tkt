@@ -49,7 +49,7 @@ func (c *Ctx) chore(name string) (config.Chore, error) {
 		names = append(names, ch.Name)
 	}
 	if len(names) == 0 {
-		return config.Chore{}, apperr.New(apperr.UnknownChore, "no chore runs in %s; a [chores.NAME] table in its %s adds one", c.Repo.Root, config.ProjectFileName).
+		return config.Chore{}, apperr.New(apperr.UnknownChore, "no chore runs in %s; a [chores.NAME] table in %s adds one", c.Repo.Root, config.LocalPath(c.Repo.Root)).
 			WithHint("tkt help config")
 	}
 	return config.Chore{}, apperr.New(apperr.UnknownChore, "no chore named '%s' runs in %s (chores: %s)", name, c.Repo.Root, strings.Join(names, " ")).
@@ -196,7 +196,7 @@ func (c *Ctx) runName(ch config.Chore, es wt.Entries, now time.Time) (string, er
 		}
 		if err := c.LC.ScratchName(name); err != nil {
 			return "", apperr.New(apperr.ConfigInvalid, "chore '%s' names its run %s, which this repository cannot take: %s", ch.Name, name, apperr.As(err).Msg).
-				WithHint("change the chore's branch setting in %s", filepath.Join(c.Repo.Root, config.ProjectFileName))
+				WithHint("change the chore's branch setting in %s", config.LocalPath(c.Repo.Root))
 		}
 		root := c.Repo.Root
 		if _, ok := es.Find(name); ok || c.Git.HasRef(c.Ctx, root, "refs/heads/"+name) || c.Git.HasRef(c.Ctx, root, "refs/remotes/"+f.Remote+"/"+name) {
