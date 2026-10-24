@@ -11,10 +11,10 @@ Stages:
            then fixes the valid findings, answers the rest and pushes. Run it
            when the review asks for changes, you left comments, or the merge
            stopped with Status: HUMAN_QA_FAILED.
-  resolve  merges the base when the merge conflicts, resolves it with the
-           resolving-merge-conflicts skill, changes nothing else and pushes
-           once. tkt sync starts it on a conflict; for a moved base, run tkt
-           sync instead, which merges a clean one with no agent.
+  resolve  merges the base when the merge conflicts, resolves each conflict
+           from what both sides meant, changes nothing else and pushes once.
+           tkt sync starts it on a conflict; for a moved base, run tkt sync
+           instead, which merges a clean one with no agent.
   sync     the same line as address, under its old name. tkt run warns, and
            the next release drops it: use tkt sync or address.
   ci       finds why the checks fail at the head, fixes it and pushes once.

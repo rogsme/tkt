@@ -389,7 +389,7 @@ flowchart LR
   agent --> next
 ```
 
-`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge. A conflict goes to the `resolve` stage, which merges the base, resolves the conflicts with `resolving-merge-conflicts`, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
+`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge. A conflict goes to the `resolve` stage, which merges the base, resolves each conflict from what both sides meant, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
 
 A clean merge does not make the pull request's review brief stale: the merge commit's tree equals what `git merge-tree` gives for its two parents, and review-pr checks that for itself instead of trusting tkt.
 

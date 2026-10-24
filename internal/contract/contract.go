@@ -134,11 +134,6 @@ const CleanMergeRule = "A brief pinned to an earlier head stays current when eve
 // tkt sync makes.
 const CarryOverRule = "A confirmation counts for the head it names"
 
-// ResolveSkill is the engineering skill the resolve stage line asks for. It
-// resolves a merge that stopped on conflicts, keeps it a merge, and asks the
-// user about a hunk that decides product behavior.
-const ResolveSkill = "resolving-merge-conflicts"
-
 // Autonomous is the word the lifecycle skills' "Autonomous runs" sections
 // look for in their request: the run follows workflow.md's Autonomous runs
 // section in place of every question, and finish-ticket merges on
