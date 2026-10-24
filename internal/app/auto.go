@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/lock"
@@ -24,6 +25,10 @@ import (
 type AutoOpts struct {
 	ID          string
 	ApprovePlan bool
+	// Yolo carries the ticket to the merge with nobody watching: it
+	// approves the plan, and has finish-ticket merge once verify-pr passed
+	// every step. Every line its agents get says the run is autonomous.
+	Yolo bool
 	// As is the preset for the agents the loop starts.
 	As        string
 	MaxRounds int
@@ -83,6 +88,8 @@ func stepText(s AutoStep) string {
 		return "approved the plan"
 	case actSync:
 		return "merged the base"
+	case actMerge:
+		return "sent finish-ticket the merge line"
 	}
 	return "ran " + s.Stage
 }
@@ -112,6 +119,9 @@ const (
 	// StopSyncFailed pauses a loop whose sync cannot happen for now, such as
 	// while the worktree holds changes. The loop tries again at each look.
 	StopSyncFailed = "sync_failed"
+	// StopPostMergeFailed ends a loop whose pull request merged, but whose
+	// finish-ticket saw the checks on the base fail after the merge.
+	StopPostMergeFailed = "post_merge_failed"
 )
 
 // stopHint says what a person does after a stop.
@@ -143,6 +153,8 @@ func stopHint(stop, id string) string {
 		return "tkt hold " + id + " --off lets tkt auto and tkt watch drive it again"
 	case StopSyncFailed:
 		return "tkt sync " + id + " says why it cannot merge the base; tkt auto goes on once it can"
+	case StopPostMergeFailed:
+		return "the change merged, but the checks on the base failed after it; read finish-ticket's report in the ticket's tab"
 	}
 	return "check the agent in its tab, then tkt auto " + id
 }
@@ -157,6 +169,8 @@ func pauseText(stop, reason string) string {
 		return "the agent stopped with Status: BLOCKED; read its reason in its tab"
 	case reason == ReasonReviewAwaitsApproval:
 		return "review-pr waits for you to post or drop its draft"
+	case reason == ReasonVerifyIncomplete:
+		return "verify-pr could not run every human verification step, and a yolo run merges only once it passed them all; run the rest yourself"
 	case stop == StopPlan:
 		return "the plan is ready; read it, then tkt approve"
 	case stop == StopAgentMissing:
@@ -193,9 +207,10 @@ const (
 // incident: --once says so in wait, and tkt ls in auto.waiting.
 const WaitIncident = "incident"
 
-// AutoPolicy is what one tkt auto run may do.
+// AutoPolicy is what one tkt auto run may do. Yolo also merges.
 type AutoPolicy struct {
 	ApprovePlan bool
+	Yolo        bool
 	MaxRounds   int
 }
 
@@ -266,6 +281,13 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 	}
 	switch n.Reason {
 	case ReasonMerged:
+		switch {
+		case f.Agent == herdr.Working:
+			// finish-ticket still waits for the checks after the merge.
+			return autoAct{Kind: actWait}
+		case f.LastStatus == contract.StatusBlockedPostMerge:
+			return stop(StopPostMergeFailed)
+		}
 		return stop(StopMerged)
 	case ReasonClosed:
 		return stop(StopClosed)
@@ -299,11 +321,21 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 		return fix("ci")
 	case ReasonNeedsReview:
 		return act(actRun, "review")
-	case ReasonReviewClear, ReasonBotClear, ReasonVerified, ReasonVerifyIncomplete:
+	case ReasonVerifyIncomplete:
+		if p.Yolo {
+			return pause(StopNeedsYou)
+		}
 		return stop(StopReadyForHuman)
+	case ReasonReviewClear, ReasonBotClear, ReasonVerified:
+		return stop(StopReadyForHuman)
+	case ReasonAutonomousMerge:
+		return act(actMerge, "")
 	case ReasonMergeDue:
-		// The merge order is yours, and tkt watch carries it out once the
-		// loop is gone: tkt auto never merges.
+		// A yolo loop carries out its own order. Otherwise the order is
+		// yours, and tkt watch carries it out once the loop is gone.
+		if p.Yolo && f.MergeBy == mergeByAutonomous {
+			return act(actMerge, "")
+		}
 		return stop(StopMergeOrdered)
 	}
 	return pause(StopUnknown)
@@ -432,7 +464,7 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 		// works or starts, and gives it up while it waits for CI, the bot
 		// or a person.
 		busy := a.Kind == actWait || a.Kind == actPoll && (v.Next.Reason == ReasonAgentWaiting || v.Phase == PhaseStarting)
-		if !busy && a.Kind != actStart && a.Kind != actApprove && a.Kind != actRun {
+		if !busy && a.Kind != actStart && a.Kind != actApprove && a.Kind != actRun && a.Kind != actMerge {
 			w.dropSlot()
 		}
 		if a.Kind != actPause && pausedOn != "" && a.key(v.Facts.Head) != retry {
@@ -492,7 +524,7 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 			}
 			v = again
 		}
-		if !once && !dry && a.Kind != actSync {
+		if !once && !dry && a.Kind != actSync && a.Kind != actMerge {
 			waited, err := w.holdSlot(ctx)
 			if err != nil {
 				return nil, err
@@ -545,8 +577,9 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 // Auto drives a ticket through the lifecycle until it needs a person: it
 // starts the ticket when it has no worktree, approves the plan with
 // --approve-plan, waits for CI and the review bot, merges a moved base
-// itself when the merge is clean, and runs review, address, resolve and ci
-// in fresh sessions. It never merges the pull request.
+// itself when the merge is clean, and runs review, address, resolve, ci and
+// verify in fresh sessions. Only with --yolo does it merge the pull request,
+// through tkt merge --autonomous, once verify-pr passed every step.
 //
 // A loop whose tkt was replaced, as by tkt update, restarts on the new one
 // between two looks: it lets go of its locks and replaces its process with
@@ -634,6 +667,11 @@ func (a *App) auto(ctx context.Context, o AutoOpts, carry autoCarry, self string
 			return nil, err
 		}
 	}
+	if o.Yolo {
+		if err := c.yoloAllowed(id); err != nil {
+			return nil, err
+		}
+	}
 	path := ""
 	if es, err := c.WT.List(c.Ctx); err != nil {
 		return nil, err
@@ -649,7 +687,8 @@ func (a *App) auto(ctx context.Context, o AutoOpts, carry autoCarry, self string
 	if o.Stop {
 		res := &AutoResult{Ticket: id, Stop: StopStopped, Steps: []AutoStep{}}
 		if ts != nil {
-			c.save(ts, "auto", "", "auto_stop", StopStopped, "auto_wait", "", "auto_pause", "")
+			// A person takes the ticket over: its agents may ask again.
+			c.save(ts, "auto", "", "auto_stop", StopStopped, "auto_wait", "", "auto_pause", "", "yolo", "")
 		}
 		return res, nil
 	}
@@ -662,7 +701,10 @@ func (a *App) auto(ctx context.Context, o AutoOpts, carry autoCarry, self string
 		return nil, err
 	}
 	c.locks = append(c.locks, f)
-	p := AutoPolicy{ApprovePlan: o.ApprovePlan, MaxRounds: c.Cfg.Auto.MaxRounds}
+	// A yolo ticket stays one when its loop starts again without --yolo,
+	// as after a pause you answered, until tkt auto --stop.
+	yolo := o.Yolo || ts != nil && ts.st["yolo"] != ""
+	p := AutoPolicy{ApprovePlan: o.ApprovePlan || yolo, Yolo: yolo, MaxRounds: c.Cfg.Auto.MaxRounds}
 	if o.MaxRounds >= 0 {
 		p.MaxRounds = o.MaxRounds
 	}
@@ -671,7 +713,10 @@ func (a *App) auto(ctx context.Context, o AutoOpts, carry autoCarry, self string
 		poll = o.Poll
 	}
 	mode := autoOn
-	if o.ApprovePlan {
+	switch {
+	case yolo:
+		mode = autoYolo
+	case o.ApprovePlan:
 		mode = autoPlan
 	}
 	w := &ctxWorld{c: c, id: id, path: path, mode: mode, as: o.As, notify: o.Notify, once: o.Once, self: self}
@@ -684,11 +729,14 @@ func (a *App) auto(ctx context.Context, o AutoOpts, carry autoCarry, self string
 		mem = autoMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["auto_last"]}
 		if !o.Once {
 			// A loop that restarted keeps the pause it notified about.
-			if carry.PausedOn != "" {
-				c.save(ts, "auto", mode, "auto_stop", "")
-			} else {
-				c.save(ts, "auto", mode, "auto_stop", "", "auto_pause", "")
+			kv := []string{"auto", mode, "auto_stop", ""}
+			if carry.PausedOn == "" {
+				kv = append(kv, "auto_pause", "")
 			}
+			if yolo {
+				kv = append(kv, "yolo", "1")
+			}
+			c.save(ts, kv...)
 			w.labelTab(true)
 		}
 	}
@@ -803,7 +851,7 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 	var actions []Action
 	switch a.Kind {
 	case actStart:
-		res, err := c.App.Start(ctx, StartOpts{ID: w.id, As: w.as, Dry: c.Dry, Unattended: w.mode == autoPlan})
+		res, err := c.App.Start(ctx, StartOpts{ID: w.id, As: w.as, Dry: c.Dry, Unattended: w.mode == autoPlan, Autonomous: w.mode == autoYolo})
 		if err != nil {
 			return err
 		}
@@ -811,8 +859,19 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 		if !c.Dry {
 			w.path = res.Worktree
 			w.unqueue()
-			if ts, err := c.readState(w.path); err == nil && !w.once {
-				c.save(ts, "auto", w.mode, "auto_stop", "", "auto_pause", "")
+			if ts, err := c.readState(w.path); err == nil {
+				// The yolo mark outlives a --once step, so every later
+				// line says the run is autonomous.
+				kv := []string{}
+				if !w.once {
+					kv = append(kv, "auto", w.mode, "auto_stop", "", "auto_pause", "")
+				}
+				if w.mode == autoYolo {
+					kv = append(kv, "yolo", "1")
+				}
+				if len(kv) > 0 {
+					c.save(ts, kv...)
+				}
 			}
 		}
 	case actApprove:
@@ -825,6 +884,21 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 		res, err := c.App.Run(ctx, RunOpts{ID: w.id, Stage: a.Stage, As: w.as, Dry: c.Dry})
 		if err != nil {
 			return err
+		}
+		actions = res.Actions
+	case actMerge:
+		res, err := c.App.Merge(ctx, MergeOpts{ID: w.id, Autonomous: true, Dry: c.Dry})
+		if err != nil {
+			switch apperr.As(err).Code {
+			case apperr.TicketLocked, apperr.AgentBusy:
+				return errStep{error: err}
+			}
+			return err
+		}
+		if res.Action == MergeOrdered && !w.once {
+			// Nothing went out yet, such as while another ticket merges:
+			// the loop takes the step again at its next look.
+			return errStep{error: orderWaits(res.Waits)}
 		}
 		actions = res.Actions
 	case actSync:
@@ -950,6 +1024,8 @@ func autoNotice(stop, id, reason string) notice {
 		return notice{"ready for you", "the review says READY_FOR_HUMAN; run the human verification steps", "done"}
 	case StopMergeOrdered:
 		return notice{"merge order due", "the checks passed, so tkt watch sends finish-ticket your merge line", "none"}
+	case StopPostMergeFailed:
+		return notice{"post-merge CI failed", stopHint(stop, id), "request"}
 	case StopMerged, StopStopped:
 		return notice{stop, stopHint(stop, id), "done"}
 	}

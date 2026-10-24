@@ -102,6 +102,10 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		return nil, err
 	}
 	st := ts.st
+	if st["yolo"] != "" && !strings.Contains(text, config.AutonomousLine) {
+		// Nobody answers a yolo ticket's agents, whoever starts them.
+		text = withLine(text, config.AutonomousLine)
+	}
 	if chore := st["chore"]; chore != "" && o.line == "" {
 		for _, skill := range contract.Skills {
 			if strings.Contains(text, skill) {

@@ -60,6 +60,10 @@ type RowAuto struct {
 	// leaves it, so a new one can take over.
 	Wanted      bool `json:"wanted"`
 	ApprovePlan bool `json:"approve_plan"`
+	// Yolo says tkt auto --yolo started the ticket: it merges with nobody
+	// watching, and every line its agents get says the run is autonomous.
+	// It holds until tkt auto --stop.
+	Yolo bool `json:"yolo"`
 	// Running says a tkt auto loop holds the ticket right now.
 	Running bool `json:"running"`
 	Rounds  int  `json:"rounds"`
@@ -390,6 +394,8 @@ func autoCell(a *RowAuto, hold bool) string {
 		return "queued"
 	case a.Running && a.Paused != "":
 		return "paused"
+	case a.Running && a.Yolo:
+		return "yolo"
 	case a.Running:
 		return "on"
 	case a.Wanted:
@@ -633,7 +639,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
 	row.Hold, row.Chore = st["hold"] != "", or(t.Chore, st["chore"])
-	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan, Rounds: atoi(st["rounds"]),
+	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan || st["auto"] == autoYolo, Yolo: st["yolo"] != "", Rounds: atoi(st["rounds"]),
 		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"], Note: st["auto_note"]}
 	if !row.Auto.Running {
 		row.Auto.Paused, row.Auto.Why, row.Auto.Note = "", "", ""
@@ -826,7 +832,7 @@ func (c *Ctx) queuedTickets() []Row {
 			next, wait = Next{Kind: "wait", Reason: ReasonIncident, Text: "wait for the incident a status page reports to end"}, WaitIncident
 		}
 		out = append(out, Row{Ticket: id, Tabs: []herdr.Tab{}, Phase: PhaseQueued, PhaseSince: st["since"], Stage: "start",
-			Next: next, Auto: &RowAuto{Wanted: true, ApprovePlan: st["mode"] == autoPlan, Running: true, Waiting: wait}})
+			Next: next, Auto: &RowAuto{Wanted: true, ApprovePlan: st["mode"] == autoPlan || st["mode"] == autoYolo, Yolo: st["mode"] == autoYolo, Running: true, Waiting: wait}})
 	}
 	return out
 }

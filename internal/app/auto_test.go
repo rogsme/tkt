@@ -57,6 +57,28 @@ func TestAutoStepTable(t *testing.T) {
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{Last: "sync:@h1"}, pause(StopNoProgress)},
 		{with(open, func(f *Facts) { f.Checks = "fail" }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actRun, Stage: "ci"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "READY_FOR_HUMAN", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
+		// A yolo loop merges on its own: the autonomous merge, and its own
+		// order once a sync carried it; steps verify-pr could not run pause
+		// it. After the merge it waits for finish-ticket, which reports
+		// a failure of the checks on the base.
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.Yolo, f.Verification, f.VerifyHeld = "READY_FOR_HUMAN", true, true, true, "PASSED", true
+		}), AutoPolicy{Yolo: true}, autoMemory{}, autoAct{Kind: actMerge}},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.Yolo, f.Verification, f.VerifyHeld = "READY_FOR_HUMAN", true, true, true, "PASSED", true
+		}), AutoPolicy{Yolo: true}, autoMemory{Last: "merge:@h1"}, pause(StopNoProgress)},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps, f.MergeHead, f.MergeBy = "READY_FOR_HUMAN", true, true, "1", "h0", "autonomous"
+		}), AutoPolicy{Yolo: true}, autoMemory{}, autoAct{Kind: actMerge}},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps, f.MergeHead = "READY_FOR_HUMAN", true, true, "1", "h0"
+		}), AutoPolicy{Yolo: true}, autoMemory{}, autoAct{Kind: actStop, Stop: StopMergeOrdered}},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.Yolo, f.Verification, f.VerifyHeld = "READY_FOR_HUMAN", true, true, true, "INCOMPLETE", true
+		}), AutoPolicy{Yolo: true}, autoMemory{}, pause(StopNeedsYou)},
+		{with(open, func(f *Facts) { f.PRState, f.Agent = "MERGED", "working" }), AutoPolicy{Yolo: true}, autoMemory{}, autoAct{Kind: actWait}},
+		{with(open, func(f *Facts) { f.PRState, f.LastStatus = "MERGED", "BLOCKED_POST_MERGE" }), AutoPolicy{Yolo: true}, autoMemory{}, autoAct{Kind: actStop, Stop: StopPostMergeFailed}},
+		{with(open, func(f *Facts) { f.PRState, f.LastStatus = "MERGED", "DONE" }), AutoPolicy{Yolo: true}, autoMemory{}, autoAct{Kind: actStop, Stop: StopMerged}},
 		// With agent verification on, a clean head gets verify-pr, which
 		// spends no round; a failed step is a fix round; a report that
 		// passed, or could not run every step, ends the loop for you.

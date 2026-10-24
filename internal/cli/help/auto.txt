@@ -25,7 +25,26 @@ decides. It reads the same facts as tkt ls, then:
   - ends with success when the head is reviewed clean and, with agent
     verification on, verify-pr passed every step or could not run some.
 
-It never merges and never removes a worktree.
+Without --yolo it never merges and never removes a worktree.
+
+--yolo carries the ticket to the merge with nobody watching. It runs only
+where workflow.md turns on autonomous runs, agent verification and plan
+review, and refuses with autonomous_off naming the rows that are off. It
+approves the plan as --approve-plan does, and every line its agents get,
+from the start line to the merge line, says "This run is autonomous", so
+the skills decide what they would ask, record each decision as an
+assumption, and stop at the hard stops workflow.md lists instead of asking
+(tkt help lifecycle). A head only the review bot cleared gets review-pr
+first, since finish-ticket merges on its verdict alone; then verify-pr
+runs, and once its report passes every step the loop sends finish-ticket
+the autonomous merge line with tkt merge --autonomous, one merge at a time
+in the repository. It waits for finish-ticket after the merge: Status: DONE
+ends it with merged, and tkt watch removes the ticket; a failure of the
+checks on the base ends it with post_merge_failed and a notification, and
+nothing else happens. Steps verify-pr could not run pause it (needs_you).
+The ticket stays a yolo one when its loop starts again, and every line tkt
+sends it says so, until tkt auto --stop hands it back to you. tkt ls shows
+auto.yolo, and yolo in the AUTO column while the loop drives it.
 
 Where a person decides, the loop pauses instead of ending: when the agent
 asks a question or ends with Status: BLOCKED (needs_you), when the plan waits
@@ -41,7 +60,8 @@ auto.paused, notifies once with --notify, and goes on by itself when the
 ticket moves, such as after you answer the agent in its tab or approve the
 plan.
 
-A loop ends only when the ticket is ready for you, merged or closed, or with
+A loop ends only when the ticket is ready for you, merged or closed (with
+--yolo, also when the checks on the base fail after the merge), or with
 tkt auto --stop, which it notices at its next look. Ctrl-C ends it with exit 5
 and leaves the ticket marked for auto, so tkt ls shows auto.wanted. While a
 loop drives the ticket, its tab reads ACM-12 (claude, auto).

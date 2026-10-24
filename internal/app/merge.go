@@ -29,8 +29,12 @@ type MergeOpts struct {
 	// instead of running them; the line says so, and finish-ticket checks
 	// the report.
 	Evidence bool
-	Cancel   bool
-	Dry      bool
+	// Autonomous merges a yolo ticket: you authorized it when you started
+	// the ticket, and verify-pr's passing report stands in for the steps,
+	// which finish-ticket counts as waived.
+	Autonomous bool
+	Cancel     bool
+	Dry        bool
 	// order marks tkt watch carrying out the ticket's merge order: it
 	// merges only while that order stands.
 	order bool
@@ -66,8 +70,9 @@ type MergeResult struct {
 // Who confirmed the steps of a merge order, its merge_by: you, by running
 // them, or you from verify-pr's evidence.
 const (
-	mergeByYou      = ""
-	mergeByEvidence = "evidence"
+	mergeByYou        = ""
+	mergeByEvidence   = "evidence"
+	mergeByAutonomous = "autonomous"
 )
 
 // The actions tkt merge takes.
@@ -175,6 +180,18 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	if o.Autonomous && !o.Cancel {
+		if ts.st["yolo"] == "" {
+			return nil, apperr.New(apperr.AutonomousOff, "%s is not a yolo ticket: you authorize its merge, with tkt merge %s --passed STEPS", id, id).
+				WithHint("tkt merge %s --passed all", id)
+		}
+		if err := c.yoloAllowed(id); err != nil {
+			return nil, err
+		}
+		if o.Passed == "" {
+			o.Passed = "all"
+		}
+	}
 	base := c.LC.Forge.Remote + "/" + c.LC.Forge.Base
 	res := &MergeResult{Ticket: id, Steps: []int{}, Sent: ts.st["merge_sent"], DryRun: c.Dry, Actions: []Action{}, base: base}
 	res.Head, res.Verified = ts.st["merge_head"], ts.st["merge_head"]
@@ -212,7 +229,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		return nil, apperr.New(apperr.NoVerification, "%s has no open pull request", id).WithHint("tkt ls %s", id)
 	}
 	res.PR, res.Head, res.Verified = row.PR.Number, row.PR.Head, row.PR.Head
-	if v := row.Verification; o.Evidence && o.Head == "" && v != nil {
+	if v := row.Verification; (o.Evidence || o.Autonomous) && o.Head == "" && v != nil {
 		if !v.Holds() {
 			return nil, apperr.New(apperr.NotVerified, "verify-pr's report is about %s, and more than clean merges of the base came after it, so it says nothing about %s's head %s", short(v.Head), id, short(res.Head)).
 				WithHint("tkt run %s verify", id)
@@ -252,7 +269,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		return nil, err
 	}
 	res.Steps = got
-	if o.Evidence {
+	if o.Evidence || o.Autonomous {
 		if err := evidenceFor(id, row.Verification, res.Verified, got); err != nil {
 			return nil, err
 		}
@@ -329,15 +346,39 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 
 // by is who confirmed the steps, as a merge order records it.
 func (o MergeOpts) by() string {
-	if o.Evidence {
+	switch {
+	case o.Autonomous:
+		return mergeByAutonomous
+	case o.Evidence:
 		return mergeByEvidence
 	}
 	return mergeByYou
 }
 
+// yoloAllowed refuses a yolo run where workflow.md does not turn on
+// autonomous runs, and the plan review and agent verification they rest
+// on: the plan review stands in for you reading the plan, and verify-pr
+// for you running the steps.
+func (c *Ctx) yoloAllowed(id string) error {
+	var off []string
+	for _, f := range []string{contract.FeatureAutonomousRuns, contract.FeatureAgentVerification, contract.FeaturePlanReview} {
+		if !c.LC.On(f) {
+			off = append(off, f)
+		}
+	}
+	if len(off) == 0 {
+		return nil
+	}
+	return apperr.New(apperr.AutonomousOff, "a yolo run of %s needs %s on in %s's feature table", id, strings.Join(off, ", "), contract.WorkflowFile).
+		WithHint("run /setup-rogs in this repository to turn them on, or tkt auto %s --approve-plan", id).With("off", off)
+}
+
 // line is the merge line for the steps that passed on verified, with the
 // pull request at head.
 func (o MergeOpts) line(steps []int, verified, head string) string {
+	if o.Autonomous {
+		return config.AutonomousMergeLine(verified, head)
+	}
 	if o.Evidence {
 		return config.EvidenceMergeLine(steps, verified, head)
 	}
@@ -346,7 +387,7 @@ func (o MergeOpts) line(steps []int, verified, head string) string {
 
 // evidenceFor checks that verify-pr's report holds for the head the steps
 // passed on and marks each step PASSED, before tkt merge says you confirmed
-// them from it.
+// them from it, or merges a yolo ticket on it.
 func evidenceFor(id string, v *forge.Verification, verified string, steps []int) error {
 	if v == nil || !strings.HasPrefix(verified, v.Head) {
 		return apperr.New(apperr.NotVerified, "verify-pr has no report for %s's head %s, so there is no evidence to confirm the steps from", id, short(verified)).

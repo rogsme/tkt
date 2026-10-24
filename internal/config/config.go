@@ -197,6 +197,23 @@ func SuggestRequestLine(request string) string {
 // open question with the harness's question tool, which stops the loop.
 const UnattendedLine = "This run is unattended: no person watches this session until it asks a question."
 
+// AutonomousLine follows every line tkt sends a ticket started with tkt auto
+// --yolo: the skills then follow workflow.md's Autonomous runs section in
+// place of every question, since nobody answers one.
+const AutonomousLine = "This run is autonomous: no person reads this session or answers a question. Follow Autonomous runs in docs/agents/workflow.md wherever you would ask."
+
+// AutonomousMergeLine is the merge line of a yolo ticket: the user
+// authorized the merge when they started it, and verify-pr passed every
+// step on the head verified, which finish-ticket counts as each step
+// waived.
+func AutonomousMergeLine(verified, head string) string {
+	line := "Use the finish-ticket skill to merge the PR. " + AutonomousLine + " verify-pr passed every human verification step on head " + verified + "."
+	if head != verified {
+		line += " The pull request is at " + head + " now, after clean merges of the base."
+	}
+	return line
+}
+
 // BuiltinStages are the stage lines tkt run sends. {id} becomes the ticket,
 // and {remote} and {base} the forge's remote and base branch.
 var BuiltinStages = map[string]string{

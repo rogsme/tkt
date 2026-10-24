@@ -32,8 +32,19 @@ envelope '.error | [.code, .details.steps]' '["not_verified",[2]]'
 jqedit $WORK/prs.json '.[0].reviews[1].body |= sub("2. NOT RUN: needs a person: the code goes to a real phone"; "2. PASSED: the code arrived on the test inbox") | .[0].reviews[1].body |= sub("Verification: INCOMPLETE"; "Verification: PASSED")'
 exec tkt ls ACM-12 --json
 envelope '.result.rows[0].next | [.reason, .kind]' '["verified","human"]'
+
+# While CI runs, it leaves an order that says so, and tkt watch carries it
+# out once the checks pass.
+jqedit $WORK/prs.json '.[0].statusCheckRollup[0].status = "IN_PROGRESS"'
 exec tkt merge ACM-12 --passed all --evidence --json
-envelope '.result | [.action, .steps]' '["merging",[1,2]]'
+envelope '.result | [.action, .waits, .steps]' '["ordered","checks",[1,2]]'
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].merge.by' evidence
+jqedit $WORK/prs.json '.[0].statusCheckRollup[0].status = "COMPLETED"'
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].next.argv' '["tkt","merge","ACM-12","--passed","1,2","--head","'$H1'","--evidence"]'
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["merge","merge_due"]'
 grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed on head '$H1': the user confirmed them from verify-pr''s evidence.$' $FAKE_DIR/prompts
 state $FAKE_WT_ROOT/ACM-12 merge_by evidence
 houserules

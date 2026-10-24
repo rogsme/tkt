@@ -139,6 +139,13 @@ const CarryOverRule = "A confirmation counts for the head it names"
 // user about a hunk that decides product behavior.
 const ResolveSkill = "resolving-merge-conflicts"
 
+// Autonomous is the word the lifecycle skills' "Autonomous runs" sections
+// look for in their request: the run follows workflow.md's Autonomous runs
+// section in place of every question, and finish-ticket merges on
+// verify-pr's passing report when the ticket carries start-ticket's
+// "## Autonomous run" comment.
+const Autonomous = "autonomous"
+
 // Unattended is the word start-ticket's "Unattended runs" section looks for
 // in its request: the run skips the browser presentation, and every open
 // question goes through the harness's question tool.

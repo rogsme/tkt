@@ -162,10 +162,12 @@ func (c *Ctx) ticketAgent(id, path, want string, st state.State) (herdr.Agent, e
 }
 
 // The values of the auto state key: on drives the ticket from the approved
-// plan on; plan also approves plans.
+// plan on; plan also approves plans; yolo also merges, with nobody
+// watching (tkt auto --yolo).
 const (
 	autoOn   = "on"
 	autoPlan = "plan"
+	autoYolo = "yolo"
 )
 
 // autoRunning reports whether a tkt auto loop holds the ticket, by trying

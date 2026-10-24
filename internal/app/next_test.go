@@ -56,6 +56,15 @@ func TestNextStepTable(t *testing.T) {
 		// new head needs its own review and its own run.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true, Verification: "FAILED"}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: false, AgentVerify: true, Verification: "FAILED"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
+		// A yolo ticket gets review-pr's verdict before verify-pr, since
+		// finish-ticket merges on it alone; then verify-pr; then the merge,
+		// once its report passed every step. Steps it could not run need you.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Yolo: true}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Yolo: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Yolo: true, Verification: "PASSED", VerifyHeld: true}, "tkt merge ACM-1 --autonomous", "command", ReasonAutonomousMerge},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Yolo: true, Verification: "PASSED", VerifyHeld: true}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Yolo: true, Verification: "INCOMPLETE", VerifyHeld: true}, "run the steps verify-pr could not (tkt show ACM-1 --steps), then tkt merge ACM-1 --passed all", "human", ReasonVerifyIncomplete},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h2", MergeSteps: "1", MergeHead: "h1", MergeBy: "autonomous", Yolo: true}, "tkt merge ACM-1 --passed 1 --head h1 --autonomous", "command", ReasonMergeDue},
 		// An order you confirmed from the evidence keeps saying so.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h1", MergeSteps: "1,2", MergeHead: "h1", MergeBy: "evidence"}, "tkt merge ACM-1 --passed 1,2 --head h1 --evidence", "command", ReasonMergeDue},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 5 * time.Minute}, "wait for the review bot", "wait", ReasonAwaitingBot},

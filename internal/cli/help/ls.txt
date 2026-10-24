@@ -56,7 +56,7 @@ command to run, and whose reason names the rule: merged, closed,
 agent_working, agent_waiting, agent_blocked, no_agent, plan_awaits_approval,
 status_blocked, check_agent, review_awaits_approval, ci_pending, base_moved,
 qa_failed, verify_failed, findings, checks_fail, needs_verify, verified,
-verify_incomplete, bot_clear, review_clear, awaiting_bot,
+verify_incomplete, autonomous_merge, bot_clear, review_clear, awaiting_bot,
 bot_silent, needs_review, no_changes, chore_findings, chore_ready, or, for a
 ticket whose tkt auto loop waits before the ticket has a worktree,
 awaiting_slot while it waits for a slot and incident while a status page's
@@ -76,7 +76,12 @@ history tkt stats reads, so the time in a phase is as exact as how often
 something runs tkt ls or tkt auto. An agent that sits idle with no status line
 longer than [board] stale_after is marked stale.
 
-The AUTO column says on while a tkt auto loop drives the ticket, paused while
+A yolo ticket (tkt auto --yolo) differs at rule 9: a head only the bot
+cleared gets tkt run ID review first, then tkt run ID verify, and once
+verify-pr passed every step, tkt merge ID --autonomous (autonomous_merge).
+
+The AUTO column says on while a tkt auto loop drives the ticket, yolo while a
+tkt auto --yolo loop does, paused while
 it waits for you (auto.paused and auto.why in --json say why), queued while it
 waits for a slot, stalled when the ticket is marked for auto but no loop runs,
 and hold while the ticket is on hold (tkt hold).

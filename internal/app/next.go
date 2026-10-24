@@ -50,6 +50,9 @@ const (
 	ReasonVerifyFailed     = "verify_failed"
 	ReasonVerified         = "verified"
 	ReasonVerifyIncomplete = "verify_incomplete"
+	// ReasonAutonomousMerge is a yolo ticket's: review-pr cleared the head
+	// and verify-pr passed every step, so finish-ticket merges it.
+	ReasonAutonomousMerge = "autonomous_merge"
 	// The reasons only a chore's run gets: it ended with nothing to change,
 	// the review found something, or its pull request waits for your merge.
 	// No skill reviews, fixes or merges a pull request without a ticket.
@@ -98,7 +101,8 @@ func human(reason, text string) Next {
 // workflow.md turns agent verification on. Verification is the outcome of
 // verify-pr's newest report, and VerifyHeld says it counts for the head:
 // it is about the head, or about one only clean merges of the base
-// separate from it.
+// separate from it. Yolo says tkt auto --yolo carries the ticket to the
+// merge with nobody watching.
 type Facts struct {
 	ID           string
 	Chore        string
@@ -130,6 +134,7 @@ type Facts struct {
 	AgentVerify  bool
 	Verification string
 	VerifyHeld   bool
+	Yolo         bool
 	BotWait      time.Duration
 	Waited       time.Duration
 }
@@ -196,8 +201,11 @@ func NextStep(f Facts) Next {
 		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
 	case f.MergeSteps != "" && f.ReviewReady:
 		argv := []string{"tkt", "merge", id, "--passed", f.MergeSteps, "--head", f.MergeHead}
-		if f.MergeBy == mergeByEvidence {
+		switch f.MergeBy {
+		case mergeByEvidence:
 			argv = append(argv, "--evidence")
+		case mergeByAutonomous:
+			argv = append(argv, "--autonomous")
 		}
 		if f.MergeAs != "" {
 			argv = append(argv, "--as", f.MergeAs)
@@ -223,11 +231,17 @@ func NextStep(f Facts) Next {
 func cleared(f Facts) Next {
 	id := f.ID
 	switch {
+	case f.Yolo && !f.ReviewReady:
+		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone, so a
+		// head only the bot cleared gets that review first.
+		return command(ReasonNeedsReview, "tkt", "run", id, "review")
+	case f.Yolo && f.VerifyHeld && f.Verification == contract.VerificationPassed:
+		return command(ReasonAutonomousMerge, "tkt", "merge", id, "--autonomous")
 	case f.VerifyHeld && f.Verification == contract.VerificationPassed:
 		return human(ReasonVerified, "verify-pr passed every step: confirm them from its evidence (tkt show "+id+" --steps), then tkt merge "+id+" --passed all --evidence")
 	case f.VerifyHeld && f.Verification == contract.VerificationIncomplete:
 		return human(ReasonVerifyIncomplete, "run the steps verify-pr could not (tkt show "+id+" --steps), then tkt merge "+id+" --passed all")
-	case f.AgentVerify:
+	case f.AgentVerify || f.Yolo:
 		return command(ReasonNeedsVerify, "tkt", "run", id, "verify")
 	case f.Verdict == contract.VerdictClear:
 		return command(ReasonBotClear, "tkt", "run", id, "verify")
@@ -316,7 +330,7 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseNeedsFix
 	case ReasonReviewClear, ReasonBotClear, ReasonNeedsVerify, ReasonVerified, ReasonVerifyIncomplete:
 		return PhaseReadyForHuman
-	case ReasonMergeDue:
+	case ReasonMergeDue, ReasonAutonomousMerge:
 		return PhaseMerging
 	}
 	return PhaseUnknown
@@ -342,7 +356,7 @@ func factsFor(r Row) Facts {
 		f.Behind = *r.Behind
 	}
 	if r.Auto != nil {
-		f.AutoWait, f.AutoPause, f.AutoRunning = r.Auto.Waiting, r.Auto.Paused, r.Auto.Running
+		f.AutoWait, f.AutoPause, f.AutoRunning, f.Yolo = r.Auto.Waiting, r.Auto.Paused, r.Auto.Running, r.Auto.Yolo
 	}
 	if r.Watch != nil {
 		f.WatchPause = r.Watch.Paused

@@ -171,6 +171,61 @@ func TestUnattendedLineSaysTheWordStartTicketReads(t *testing.T) {
 	}
 }
 
+func TestAutonomousLineSaysTheWordsTheSkillsRead(t *testing.T) {
+	request := `whose request says "This run is ` + contract.Autonomous + `"`
+	for _, name := range []string{"start-ticket-autonomous.md", "finish-ticket-autonomous.md", "workflow-autonomous-runs.md"} {
+		if !strings.Contains(read(t, name), request) {
+			t.Errorf("%s no longer keys on %s", name, request)
+		}
+	}
+	if !strings.HasPrefix(config.AutonomousLine, "This run is "+contract.Autonomous+":") {
+		t.Errorf("config.AutonomousLine %q does not say the run is %s", config.AutonomousLine, contract.Autonomous)
+	}
+	// It names the section the skills follow in place of asking.
+	if !strings.Contains(config.AutonomousLine, "Autonomous runs in "+contract.WorkflowFile) {
+		t.Errorf("config.AutonomousLine %q does not name workflow.md's section", config.AutonomousLine)
+	}
+	// A yolo run needs these on, which tkt auto --yolo checks first.
+	if !strings.Contains(read(t, "workflow-autonomous-runs.md"), "An autonomous run needs plan review and agent verification on") {
+		t.Errorf("workflow.md's section no longer names the features a run needs")
+	}
+}
+
+func TestAutonomousMergeLineIsTheAuthorizationFinishTicketTakes(t *testing.T) {
+	start, finish := read(t, "start-ticket-autonomous.md"), read(t, "finish-ticket-autonomous.md")
+	// start-ticket posts the comment that makes the ticket autonomous, and
+	// finish-ticket merges on the request only when the comment exists.
+	if !strings.Contains(start, "post an `## Autonomous run` comment on the lead") {
+		t.Errorf("start-ticket no longer posts the Autonomous run comment")
+	}
+	for _, want := range []string{
+		"The authorization is the request, and it holds only when the lead carries the `## Autonomous run` comment",
+		"require a `verify-pr` report that says `Verification: PASSED` for the head the request names",
+		"under the same carry-over rule a confirmation follows",
+		"Each numbered step then counts as waived",
+		"`Status: BLOCKED_FOR_SYNC`",
+	} {
+		if !strings.Contains(finish, want) {
+			t.Errorf("finish-ticket's autonomous runs no longer say %q", want)
+		}
+	}
+	verified, head := strings.Repeat("a1", 20), strings.Repeat("b2", 20)
+	line := config.AutonomousMergeLine(verified, verified)
+	for _, want := range []string{"Use the finish-ticket skill to merge the PR.", config.AutonomousLine, "verify-pr passed every human verification step on head " + verified + "."} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the autonomous merge line %q does not say %q", line, want)
+		}
+	}
+	if line := config.AutonomousMergeLine(verified, head); !strings.HasSuffix(line, "The pull request is at "+head+" now, after clean merges of the base.") {
+		t.Errorf("the autonomous merge line %q does not name both heads", line)
+	}
+	// It never says the run is unattended, which would have start-ticket
+	// ask its questions after all.
+	if strings.Contains(line, contract.Unattended) || strings.Contains(config.AutonomousLine, contract.Unattended) {
+		t.Errorf("the autonomous lines say %s", contract.Unattended)
+	}
+}
+
 func TestStageLinesNameRegisteredSkills(t *testing.T) {
 	registry := read(t, "status-lines.md")
 	for _, skill := range contract.Skills {

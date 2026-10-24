@@ -99,6 +99,7 @@ const (
 	MergeHeadMoved      Code = "merge_head_moved"
 	MergeBaseConflicts  Code = "merge_base_conflicts"
 	NotVerified         Code = "not_verified"
+	AutonomousOff       Code = "autonomous_off"
 	MergeChecksFail     Code = "merge_checks_fail"
 	PullRequestMerged   Code = "pull_request_merged"
 	ChoreRunning        Code = "chore_running"
@@ -205,6 +206,7 @@ var Registry = []Info{
 	{MergeHeadMoved, ExitState, "the pull request changed beyond clean merges of the base since the human verification steps ran on it"},
 	{MergeBaseConflicts, ExitState, "merging the base into the branch conflicts, and human verification never carries over the resolution: sync, then verify the new head"},
 	{NotVerified, ExitState, "verify-pr has no report that passes the steps on the head they ran on, so there is no evidence to confirm them from"},
+	{AutonomousOff, ExitState, "the ticket is not a yolo ticket, or workflow.md does not turn on autonomous runs, agent verification and plan review"},
 	{MergeChecksFail, ExitState, "the checks fail at the pull request's head"},
 	{PullRequestMerged, ExitState, "the ticket's pull request is merged already"},
 	{ChoreRunning, ExitState, "the chore's last run is still open: its agent works, or its pull request waits for a merge"},
