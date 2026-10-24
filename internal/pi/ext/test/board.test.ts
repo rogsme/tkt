@@ -47,6 +47,12 @@ test("the board shows auto, paused, queued and waiting tickets", () => {
 	assert.match(lines[3].text, /^ACM-4 +2h +building +2h +waiting/);
 });
 
+test("the board marks a yolo loop", () => {
+	const auto = { wanted: true, approve_plan: true, yolo: true, running: true, rounds: 0, stop: "", waiting: "", paused: "", why: "" };
+	const [, line] = boardLines({ rows: [row({ phase: "building", auto })], jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
+	assert.match(line.text, / yolo$/);
+});
+
 test("the age counts from tkt start, the time from the phase's start", () => {
 	const r = row({ ticket: "ACM-9", phase: "planning", started: "2026-01-01T01:19:00Z", phase_since: "2026-01-01T01:59:11Z" });
 	const [, line] = boardLines({ rows: [r], jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);

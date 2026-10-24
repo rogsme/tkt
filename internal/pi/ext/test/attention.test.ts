@@ -214,3 +214,31 @@ test("a chore's run gets no tkt auto and no plan answers", () => {
 	assert.equal(attentionOf(closed, false, true), undefined);
 	assert.match(attentionOf(closed, false, false)?.text ?? "", /you closed chore deps's pull request #44\. \/done deps-1 removes the run/);
 });
+
+test("verify-pr's report shapes the ready item", () => {
+	const pr = { number: 4, state: "OPEN", head: "abc" };
+	const steps = [{ n: 1, result: "PASSED" as const, text: "opened" }];
+	const passed = attentionOf(row({ phase: "ready_for_human", pr, verification: { verification: "PASSED", head: "abc", at_head: true, carried: false, steps } }), false);
+	assert.equal(passed?.kind, "ready");
+	assert.match(passed?.text ?? "", /passed every human verification step in verify-pr\. \/check ACM-12 shows its evidence/);
+	const part = attentionOf(row({ phase: "ready_for_human", pr, verification: { verification: "INCOMPLETE", head: "abc", at_head: true, carried: false, steps } }), false);
+	assert.match(part?.text ?? "", /could not run every human verification step/);
+	// A report on an older head that no clean merge carried says nothing.
+	const old = attentionOf(row({ phase: "ready_for_human", pr, verification: { verification: "PASSED", head: "old", at_head: false, carried: false, steps } }), false);
+	assert.match(old?.text ?? "", /is ready for human verification/);
+	const waits = attentionOf(row({ phase: "ready_for_human", pr, next: { kind: "command", reason: "needs_verify", argv: ["tkt", "run", "ACM-12", "verify"], text: "tkt run ACM-12 verify" } }), false);
+	assert.match(waits?.text ?? "", /waits for verify-pr\. \/check ACM-12 starts it/);
+	// A loop runs verify-pr itself, so it raises nothing before the run.
+	assert.equal(attentionOf(row({ phase: "ready_for_human", pr, auto: auto({}), next: { kind: "command", reason: "needs_verify", argv: null, text: "" } }), false), undefined);
+	const failed = attentionOf(row({ phase: "needs_fix", next: { kind: "command", reason: "verify_failed", argv: ["tkt", "run", "ACM-12", "address"], text: "tkt run ACM-12 address" } }), false);
+	assert.equal(failed?.title, "verify-pr found a step that fails");
+});
+
+test("a yolo loop's pause and its failed base need you", () => {
+	const paused = attentionOf(row({ phase: "ready_for_human", auto: auto({ yolo: true, paused: "needs_you", why: "verify_incomplete" }) }), false);
+	assert.equal(paused?.title, "verification incomplete");
+	assert.match(paused?.text ?? "", /the yolo run cannot merge it/);
+	const base = attentionOf(row({ phase: "merged", auto: { ...auto({ running: false, wanted: false, yolo: true }), stop: "post_merge_failed" } }), false);
+	assert.equal(base?.kind, "failed");
+	assert.match(base?.text ?? "", /checks on the base failed/);
+});

@@ -3,7 +3,7 @@
 // answers /inbox offers for it. Items are worked out again on every read, so
 // an item goes away as soon as its ticket moves on.
 
-import { type Row, type Unblocked } from "./model.ts";
+import { type Row, type Unblocked, verifiedAt } from "./model.ts";
 
 export type AttentionKind = "plan" | "question" | "blocked" | "check" | "ready" | "merged" | "next" | "paused" | "stalled" | "failed" | "unblocked" | "chore";
 
@@ -111,6 +111,7 @@ const nextSteps: Record<string, string> = {
 	base_moved: "the base moved; tkt sync merges it",
 	checks_fail: "the checks fail",
 	qa_failed: "human verification failed",
+	verify_failed: "verify-pr found a step that fails",
 	merge_due: "the checks passed, and its merge order is due",
 };
 
@@ -130,13 +131,15 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 	// hold you set does not announce the plan again.
 	const keyOf = (kind: AttentionKind) => (kind === "paused" ? `${kind}|${base}|${a?.paused ?? ""}|${a?.why ?? ""}` : `${kind}|${base}`);
 	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: keyOf(kind), ticket: id, kind, title, text, byAuto, offers, chore: !!row.chore });
+	if (row.phase === "merged" && a?.stop === "post_merge_failed") return item("failed", "post-merge CI failed", `${id} merged in yolo, but the checks on the base failed after it. /show ${id} for finish-ticket's report; tkt leaves the ticket as it is.`);
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
 	if (a?.running && !row.hold) {
 		// A pause stays in the loop's state until its next look. Once the
 		// agent works again, you acted, such as approving the plan.
 		if (a.paused && row.agent?.status === "working") return undefined;
 		if (a.paused) return paused(row, item);
-		if (row.phase === "ready_for_human") return item("ready", "ready to verify", readyText(row), true);
+		// The loop runs verify-pr itself; it stops when the steps need you.
+		if (row.phase === "ready_for_human" && reason !== "needs_verify") return item("ready", "ready to verify", readyText(row), true);
 		return undefined;
 	}
 	if (a?.wanted && !row.hold) return item("stalled", "auto stalled", `${id} is marked for auto, but no tkt auto loop drives it. /auto ${id} on resumes it.`);
@@ -241,6 +244,8 @@ function byReason(row: Row, reason: string, item: Make, byAuto = false): Attenti
 			return item("check", "review draft waits", `${id}: review-pr waits for you to post or drop its draft, in its tab.${after}`, byAuto, [reply]);
 		case "bot_silent":
 			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI.`, byAuto, [review]);
+		case "verify_incomplete":
+			return item("paused", "verification incomplete", `${id}: verify-pr could not run every step, so the yolo run cannot merge it. /check ${id} shows the rest; run them, and merge it yourself.`, byAuto);
 	}
 	return item("check", "stopped, no status", `${id}: the agent stopped without a status line. /show ${id} for what it said.${after}`, byAuto, [reply]);
 }
@@ -250,8 +255,16 @@ function planText(id: string): string {
 }
 
 function readyText(row: Row): string {
+	const id = row.ticket;
 	const pr = row.pr ? ` Pull request #${row.pr.number}` : " The pull request";
-	return `${row.ticket}:${pr} is ready for human verification. /check ${row.ticket} walks the steps, and merges once they all pass.`;
+	switch (verifiedAt(row)?.verification) {
+		case "PASSED":
+			return `${id}:${pr} passed every human verification step in verify-pr. /check ${id} shows its evidence, and merges once you confirm it.`;
+		case "INCOMPLETE":
+			return `${id}: verify-pr could not run every human verification step. /check ${id} starts with the ones it passed, and merges once the rest pass.`;
+	}
+	if (row.next?.reason === "needs_verify") return `${id}:${pr} waits for verify-pr. /check ${id} starts it, or walks the steps yourself.`;
+	return `${id}:${pr} is ready for human verification. /check ${id} walks the steps, and merges once they all pass.`;
 }
 
 /** unblockedOf offers to start a ticket a merge unblocked: finish-ticket

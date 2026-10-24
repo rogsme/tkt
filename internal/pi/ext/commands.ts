@@ -6,7 +6,7 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import * as act from "./actions.ts";
 import type { Hub } from "./hub.ts";
 import { expandIds } from "./model.ts";
-import { board } from "./ui.ts";
+import { ask, board } from "./ui.ts";
 
 export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	const ids = (prefix: string): AutocompleteItem[] | null => {
@@ -97,15 +97,22 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerCommand("auto", {
-		description: "tkt auto for a ticket: /auto ACM-12 on | off | full [as PRESET]",
+		description: "tkt auto for a ticket: /auto ACM-12 on | off | full | yolo [as PRESET]",
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
-			const id = one(args, ctx, "/auto ACM-12 on | off | full [as PRESET]");
+			const id = one(args, ctx, "/auto ACM-12 on | off | full | yolo [as PRESET]");
 			if (!id) return;
 			const words = args.trim().split(/\s+/);
 			const as = preset(words);
 			const how = words[1]?.toLowerCase() ?? "on";
-			say(await act.auto(hub, id, how !== "off", how === "full", as));
+			if (how === "yolo") {
+				const a = await ask(ctx, `No person checks anything before ${id} merges. Start it in yolo?`, [
+					{ label: "Start in yolo", description: "tkt auto approves the plan, has every step reviewed and verified by agents, and merges once verify-pr passed every step." },
+					{ label: "Not now" },
+				], false);
+				if (!a?.answer.startsWith("Start")) return say("Nothing started.");
+			}
+			say(await act.auto(hub, id, how !== "off", how === "full", as, how === "yolo"));
 		},
 	});
 

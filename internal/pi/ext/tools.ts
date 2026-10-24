@@ -50,6 +50,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 					: a.running && a.waiting === "slot" ? "on, queued for a free slot"
 					: a.running && a.waiting === "incident" ? "on, waiting for the incident at the top of the board to end before it sets an agent to work"
 					: a.running && a.paused ? `on, paused for the user (${a.paused}${a.why ? `, ${a.why}` : ""}); it goes on by itself when the ticket moves`
+					: a.running && a.yolo ? "on, yolo: it merges with nobody watching once verify-pr passed every step"
 					: a.running ? `on${a.approve_plan ? ", approving plans" : ""}`
 					: a.wanted ? "stalled: marked for auto, but no loop runs"
 					: a.stop ? `off, last loop ended: ${a.stop}` : "off";
@@ -88,10 +89,10 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		name: "tkt_start",
 		label: "tkt start",
 		description:
-			"Queue tickets to start in the background; it returns before they start. mode manual stops at the plan; auto_after_plan also stops at the plan, then tkt auto takes over once the user approves; auto approves the plan too and drives each ticket until it is reviewed clean. Expand ranges such as ACM-12 to ACM-15 into every id. as picks the preset the agents run on.",
+			"Queue tickets to start in the background; it returns before they start. mode manual stops at the plan; auto_after_plan also stops at the plan, then tkt auto takes over once the user approves; auto approves the plan too and drives each ticket until it is reviewed clean; yolo also merges, with nobody watching, once verify-pr passed every step, where workflow.md turns on autonomous runs. Expand ranges such as ACM-12 to ACM-15 into every id. as picks the preset the agents run on.",
 		parameters: Type.Object({
 			tickets: Type.Array(ticket, { minItems: 1 }),
-			mode: StringEnum(["manual", "auto", "auto_after_plan"] as const),
+			mode: StringEnum(["manual", "auto", "auto_after_plan", "yolo"] as const),
 			as: preset,
 		}),
 		executionMode: "sequential",
@@ -101,10 +102,16 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 				return many.length > 0 ? many : [id(t)];
 			}))];
 			if (ids.length === 0) return text("Name the tickets to start, such as ACM-123.");
-			const how = p.mode === "auto" ? " in full auto" : p.mode === "auto_after_plan" ? " in auto after the plan" : "";
+			const how = p.mode === "auto" ? " in full auto" : p.mode === "auto_after_plan" ? " in auto after the plan" : p.mode === "yolo" ? " in yolo" : "";
 			const on = p.as ? ` on ${p.as}` : "";
-			if (!(await guard(hub, ctx, ids, `Start ${list(ids)}${how}${on}?`, p.mode === "auto" ? "tkt auto starts each ticket, approves its plan, and drives it until it is reviewed clean." : "Each ticket starts in its own tab and stops at its plan.")))
-				return text("The user did not confirm; nothing started.");
+			const what = p.mode === "auto" ? "tkt auto starts each ticket, approves its plan, and drives it until it is reviewed clean."
+				: p.mode === "yolo" ? "No person checks anything before these merge: agents plan, build, review, verify and merge each ticket."
+				: "Each ticket starts in its own tab and stops at its plan.";
+			if (!(await guard(hub, ctx, ids, `Start ${list(ids)}${how}${on}?`, what))) return text("The user did not confirm; nothing started.");
+			if (p.mode === "yolo") {
+				const refused = await act.yoloRefusal(hub, ids);
+				if (refused) return text(refused);
+			}
 			return text(act.start(hub, ids, p.mode, p.as ?? ""));
 		},
 	});
@@ -211,13 +218,16 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_auto",
 		label: "tkt auto",
-		description: "Turn tkt auto on or off for a ticket. On, it drives the ticket until it is reviewed clean, pauses when the ticket needs the user and goes on by itself after; approve_plan lets it approve the plan too.",
-		parameters: Type.Object({ ticket, on: Type.Boolean(), approve_plan: Type.Optional(Type.Boolean()), as: preset }),
+		description: "Turn tkt auto on or off for a ticket. On, it drives the ticket until it is reviewed clean, pauses when the ticket needs the user and goes on by itself after; approve_plan lets it approve the plan too; yolo also merges it with nobody watching, once verify-pr passed every step, and only when the user asked for yolo.",
+		parameters: Type.Object({ ticket, on: Type.Boolean(), approve_plan: Type.Optional(Type.Boolean()), yolo: Type.Optional(Type.Boolean()), as: preset }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!(await guard(hub, ctx, [t], p.on ? `Turn tkt auto on for ${t}?` : `Turn tkt auto off for ${t}?`, p.on ? "tkt auto drives the ticket in the background." : "Its loop ends at its next look."))) return text("The user did not confirm; nothing changed.");
-			return text(await act.auto(hub, t, p.on, p.approve_plan ?? false, p.as ?? ""));
+			const yolo = p.on && (p.yolo ?? false);
+			const question = yolo ? `Carry ${t} to the merge in yolo?` : p.on ? `Turn tkt auto on for ${t}?` : `Turn tkt auto off for ${t}?`;
+			const what = yolo ? "No person checks anything before it merges." : p.on ? "tkt auto drives the ticket in the background." : "Its loop ends at its next look.";
+			if (!(await guard(hub, ctx, [t], question, what))) return text("The user did not confirm; nothing changed.");
+			return text(await act.auto(hub, t, p.on, p.approve_plan ?? false, p.as ?? "", yolo));
 		},
 	});
 

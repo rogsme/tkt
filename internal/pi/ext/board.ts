@@ -165,7 +165,7 @@ function rowText(r: Row, s: BoardState, w: number[]): string {
 	const flags: string[] = [];
 	if (r.chore) flags.push("chore");
 	if (r.hold) flags.push("hold");
-	else if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : "auto");
+	else if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : r.auto.yolo ? "yolo" : "auto");
 	else if (r.auto?.wanted) flags.push("auto stalled");
 	const ws = watchStage(r);
 	if (ws) flags.push(`watch: ${ws}`);
