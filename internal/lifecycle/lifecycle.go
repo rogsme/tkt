@@ -1,5 +1,6 @@
 // Package lifecycle reads the project configuration that /setup-rogs writes:
-// the tracker's ticket id pattern and the forge's fields.
+// the tracker's ticket id pattern, the forge's fields, and the features
+// workflow.md turns on.
 package lifecycle
 
 import (
@@ -32,7 +33,14 @@ type Config struct {
 	RE      *regexp.Regexp
 	Prefix  string
 	Forge   Forge
+	// Features holds the rows of workflow.md's feature table that read on.
+	// An older configuration may lack the file or a row: both mean off.
+	Features map[string]bool
 }
+
+// On reports whether workflow.md turns a feature on, such as
+// contract.FeatureAgentVerification.
+func (c Config) On(feature string) bool { return c.Features[strings.ToLower(feature)] }
 
 var (
 	patternRE = regexp.MustCompile("`(\\^[^`]*\\$)`")
@@ -90,7 +98,25 @@ func Load(root string) (Config, error) {
 		return c, apperr.New(apperr.ForgeConfigIncomplete,
 			"%s: '## Forge' needs '- Remote:' and '- Base branch:' lines", c.ForgeFile)
 	}
+	workflow, _ := readLines(filepath.Join(root, contract.WorkflowFile))
+	c.Features = features(workflow)
 	return c, nil
+}
+
+// featureRE is the row the skills' preflight reads as on: a cell with the
+// feature's name, then a cell that says on, in any case.
+var featureRE = regexp.MustCompile(`(?i)^[|] *([^|]*[^| ]) *[|] *on *[|]`)
+
+// features reads the rows of workflow.md's table that say on, by lowercase
+// name.
+func features(lines []string) map[string]bool {
+	on := map[string]bool{}
+	for _, line := range lines {
+		if m := featureRE.FindStringSubmatch(line); m != nil {
+			on[strings.ToLower(m[1])] = true
+		}
+	}
+	return on
 }
 
 func readLines(path string) ([]string, error) {

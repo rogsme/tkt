@@ -8,7 +8,9 @@ Each fixture copies text that another project produces, so a change there shows 
 | `forge.md` | gitlab.com/rogs/skills `skills/lifecycle/setup-rogs/assets/forge-github.md`, the `## Forge` section filled for Acme | `6a7b88c` |
 | `summary-changes-requested.txt`, `summary-ready.txt` | gitlab.com/rogs/skills `skills/lifecycle/review-pr/references/summary.md`, the two summary blocks | `6a7b88c` |
 | `summary-ready-verification.txt` | gitlab.com/rogs/skills `skills/lifecycle/review-pr/references/summary.md`, the ready summary "followed by a `## Human verification` section holding the final numbered procedure", with a procedure written for Acme to the standard in `skills/lifecycle/setup-rogs/assets/workflow.md` `## Human verification` | `33d185b` |
-| `status-lines.md` | gitlab.com/rogs/skills `CLAUDE.md`, the "Status lines" registry | `b56a8a4` |
+| `status-lines.md` | gitlab.com/rogs/skills `CLAUDE.md`, the "Status lines" registry | `ee3c228` |
+| `verify-pr-report.txt` | gitlab.com/rogs/skills `skills/lifecycle/verify-pr/references/report.md`, the report block | `b4a3343` |
+| `workflow-features.md` | gitlab.com/rogs/skills `skills/lifecycle/setup-rogs/assets/workflow.md`, the `## Features` table | `9a25c66` |
 | `start-ticket-unattended.md` | gitlab.com/rogs/skills `skills/lifecycle/start-ticket/SKILL.md`, the `## Unattended runs` section | `619ef65` |
 | `review-pr-clean-merge.md` | gitlab.com/rogs/skills `skills/lifecycle/review-pr/SKILL.md`, the paragraph on a brief pinned to an earlier head, under `## 3. Review the complete change` | `05d27d5` |
 | `resolving-merge-conflicts.md` | gitlab.com/rogs/skills `skills/engineering/resolving-merge-conflicts/SKILL.md`, whole | `b502691` |
@@ -27,6 +29,10 @@ The built-in `sync` stage sends the same line as `address`: address-pr-review me
 The built-in `resolve` stage, which `tkt sync` starts when the base merge conflicts, names `resolving-merge-conflicts`. The line relies on what the fixture says: the skill takes over a merge another party started, keeps it a merge, asks about a hunk that decides product behavior, and concludes with `git commit --no-edit`.
 
 `tkt sync` pushes a clean base merge without touching the pull request's Review brief. It relies on review-pr's rule in `review-pr-clean-merge.md`: a brief pinned to an earlier head stays current when every commit after it is a merge commit whose second parent is on the base and whose tree equals what `git merge-tree --write-tree` prints for its parents, which is the merge `tkt sync` makes and checks before it pushes.
+
+`forge.LatestVerification` reads verify-pr's report, a comment-only review, from the reviews tkt already lists: its `Verified head:` line, one line per step, and the `Verification:` line, as `verify-pr-report.txt` shows them. The report holds no `Verdict:` line and no `## Human verification` heading, so `forge.LatestVerdict` and the procedure `tkt show --steps` reads never take it for a review summary.
+
+`lifecycle.Load` reads the rows of workflow.md's feature table that say `on`, as the skills' preflight `on()` helper does (gitlab.com/rogs/skills `5ab313f` and `9a25c66`). A missing file or row means off.
 
 `tkt done` reads finish-ticket's `Unblocked:` line from the last turn of the ticket's session before it closes the tabs: the line `finish-ticket-unblocked.md` shows, right before `Status: DONE`, naming the tickets whose blockers are all done now, or `none`. `contract.UnblockedRE` finds it, and tkt takes only whole ticket ids from it, so `none` names nothing.
 

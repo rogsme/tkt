@@ -67,7 +67,8 @@ func TestReviewSummariesCarryVerdicts(t *testing.T) {
 func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	registry := read(t, "status-lines.md")
 	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked, contract.StatusSetupRequired,
-		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone} {
+		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone,
+		contract.StatusBlockedPostMerge, contract.StatusVerified, contract.StatusVerificationFailed, contract.StatusVerificationIncomplete} {
 		if !strings.Contains(registry, "`Status: "+s+"`") {
 			t.Errorf("Status: %s is not in the registry", s)
 		}
@@ -75,6 +76,84 @@ func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	for _, v := range []string{contract.VerdictChangesRequested, contract.VerdictReadyForHuman} {
 		if !strings.Contains(registry, "`Verdict: "+v+"`") {
 			t.Errorf("Verdict: %s is not in the registry", v)
+		}
+	}
+	for _, v := range []string{contract.VerificationPassed, contract.VerificationFailed, contract.VerificationIncomplete} {
+		if !strings.Contains(registry, "`Verification: "+v+"`") {
+			t.Errorf("Verification: %s is not in the registry", v)
+		}
+	}
+}
+
+// verifyReport fills the report fixture for head with an outcome.
+func verifyReport(t *testing.T, head, outcome string) string {
+	t.Helper()
+	return strings.NewReplacer("<full SHA>", head, "<PASSED | FAILED | INCOMPLETE>", outcome).Replace(read(t, "verify-pr-report.txt"))
+}
+
+func TestVerifyReportCarriesItsHeadAndSteps(t *testing.T) {
+	head := strings.Repeat("d4", 20)
+	for _, outcome := range []string{contract.VerificationPassed, contract.VerificationFailed, contract.VerificationIncomplete} {
+		p := forge.PR{HeadRefOid: head, Reviews: []forge.Review{{Body: verifyReport(t, head, outcome), SubmittedAt: "2026-01-01T00:00:00Z"}}}
+		v := forge.LatestVerification(p)
+		if v == nil || v.Value != outcome || !v.AtHead || !v.Holds() {
+			t.Fatalf("%s: %+v", outcome, v)
+		}
+		want := []string{contract.VerificationPassed, contract.VerificationFailed, contract.StepNotRun}
+		if len(v.Steps) != 3 {
+			t.Fatalf("steps: %+v", v.Steps)
+		}
+		for i, s := range v.Steps {
+			if s.N != i+1 || s.Result != want[i] || s.Text == "" {
+				t.Errorf("step %d: %+v", i+1, s)
+			}
+		}
+		// Nothing reads the report as a review summary, or its steps as
+		// the procedure a person runs.
+		if vd := forge.LatestVerdict(p); vd != nil {
+			t.Errorf("%s: the report reads as a verdict: %+v", outcome, vd)
+		}
+		if proc := forge.HumanVerification(p); proc != nil {
+			t.Errorf("%s: the report reads as a procedure: %+v", outcome, proc)
+		}
+	}
+	// A report on an older head does not hold by itself.
+	p := forge.PR{HeadRefOid: strings.Repeat("e5", 20), Reviews: []forge.Review{{Body: verifyReport(t, head, contract.VerificationPassed)}}}
+	if v := forge.LatestVerification(p); v == nil || v.AtHead || v.Holds() {
+		t.Errorf("older head: %+v", v)
+	}
+}
+
+func TestWorkflowFeatureRowsTurnFeaturesOn(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "docs/agents")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "issue-tracker.md"), []byte(read(t, "issue-tracker.md")), 0o644)
+	os.WriteFile(filepath.Join(dir, "forge.md"), []byte(read(t, "forge.md")), 0o644)
+	features := []string{contract.FeatureAgentVerification, contract.FeatureAutonomousRuns, contract.FeaturePlanReview}
+	// Without workflow.md, as in an older configuration, every feature is
+	// off.
+	if c, err := lifecycle.Load(root); err != nil || c.On(contract.FeatureAgentVerification) {
+		t.Fatalf("no workflow.md: %v", err)
+	}
+	table := read(t, "workflow-features.md")
+	for _, f := range features {
+		if !strings.Contains(table, "| "+f+" | {{FILL:") {
+			t.Errorf("workflow.md's feature table has no %s row", f)
+		}
+	}
+	fill := regexp.MustCompile(`\{\{FILL:[^}]*\}\}`)
+	for _, state := range []string{"on", "off"} {
+		body := "<!-- rogs-skills config v1: workflow -->\n# Workflow\n\n" + fill.ReplaceAllString(table, state)
+		os.WriteFile(filepath.Join(dir, "workflow.md"), []byte(body), 0o644)
+		c, err := lifecycle.Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range features {
+			if c.On(f) != (state == "on") {
+				t.Errorf("%s with every row %s: %v", f, state, c.On(f))
+			}
 		}
 	}
 }

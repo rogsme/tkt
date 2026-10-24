@@ -247,3 +247,65 @@ func ParseProcedure(body string) (section string, steps []Step, ok bool) {
 	}
 	return section, steps, len(steps) > 0
 }
+
+// Verification is a verify-pr report: the head it ran the human verification
+// steps on, the outcome, and each step's result.
+type Verification struct {
+	Value string `json:"verification"`
+	Head  string `json:"head"`
+	// AtHead says the report is about the pull request's current head, and
+	// Carried that it is about an older one that only clean merges of the
+	// base separate from it, which the caller checks with git. The report
+	// holds for the head in either case.
+	AtHead      bool         `json:"at_head"`
+	Carried     bool         `json:"carried"`
+	SubmittedAt string       `json:"submitted_at"`
+	Steps       []StepResult `json:"steps"`
+}
+
+// Holds reports whether the report counts for the pull request's head.
+func (v *Verification) Holds() bool { return v != nil && (v.AtHead || v.Carried) }
+
+// StepResult is one step of a verify-pr report: PASSED, FAILED or NOT RUN,
+// with what verify-pr saw.
+type StepResult struct {
+	N      int    `json:"n"`
+	Result string `json:"result"`
+	Text   string `json:"text"`
+}
+
+// LatestVerification returns the newest verify-pr report on a pull request,
+// or nil.
+func LatestVerification(p PR) *Verification {
+	var best *Verification
+	for _, r := range p.Reviews {
+		v, ok := ReviewVerification(r)
+		if !ok || best != nil && best.SubmittedAt > v.SubmittedAt {
+			continue
+		}
+		best = &v
+	}
+	if best != nil {
+		best.AtHead = best.Head != "" && strings.HasPrefix(p.HeadRefOid, best.Head)
+	}
+	return best
+}
+
+// ReviewVerification reads a verify-pr report from a review. The head
+// defaults to the commit the review was submitted on.
+func ReviewVerification(r Review) (Verification, bool) {
+	m := contract.VerificationRE.FindStringSubmatch(r.Body)
+	if m == nil {
+		return Verification{}, false
+	}
+	oid := ""
+	if r.Commit != nil {
+		oid = r.Commit.Oid
+	}
+	v := Verification{Value: m[1], Head: firstGroup(contract.VerifiedHeadRE, r.Body, oid), SubmittedAt: r.SubmittedAt, Steps: []StepResult{}}
+	for _, s := range contract.VerifiedStepRE.FindAllStringSubmatch(r.Body, -1) {
+		n, _ := strconv.Atoi(s[1])
+		v.Steps = append(v.Steps, StepResult{N: n, Result: s[2], Text: strings.TrimSpace(s[3])})
+	}
+	return v, true
+}

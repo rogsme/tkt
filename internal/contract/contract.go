@@ -16,10 +16,22 @@ const Version = 1
 
 // The lifecycle configuration files, relative to the primary worktree.
 const (
-	TrackerFile = "docs/agents/issue-tracker.md"
-	ForgeFile   = "docs/agents/forge.md"
-	TrackerID   = "issue-tracker"
-	ForgeID     = "forge"
+	TrackerFile  = "docs/agents/issue-tracker.md"
+	ForgeFile    = "docs/agents/forge.md"
+	WorkflowFile = "docs/agents/workflow.md"
+	TrackerID    = "issue-tracker"
+	ForgeID      = "forge"
+	WorkflowID   = "workflow"
+)
+
+// The rows of workflow.md's feature table that tkt reads. A row reads
+// "| Name | on |"; a missing row means off. tkt runs verify-pr after a clean
+// review only with agent verification on, and tkt auto --yolo needs all
+// three on.
+const (
+	FeatureAgentVerification = "Agent verification"
+	FeatureAutonomousRuns    = "Autonomous runs"
+	FeaturePlanReview        = "Plan review"
 )
 
 var markerRE = regexp.MustCompile(`^<!-- rogs-skills config v(\d+): (\S+) -->$`)
@@ -50,6 +62,13 @@ const (
 	// StatusDone ends a finish-ticket run that merged the pull request,
 	// saw post-merge CI pass and moved the ticket to done.
 	StatusDone = "DONE"
+	// StatusBlockedPostMerge ends one whose merge landed but whose
+	// post-merge CI failed.
+	StatusBlockedPostMerge = "BLOCKED_POST_MERGE"
+	// verify-pr ends with one of these, after posting its report.
+	StatusVerified               = "VERIFIED"
+	StatusVerificationFailed     = "VERIFICATION_FAILED"
+	StatusVerificationIncomplete = "VERIFICATION_INCOMPLETE"
 )
 
 // StatusLineRE finds a status line on an agent's screen.
@@ -74,6 +93,23 @@ const (
 	VerdictReadyForHuman    = "READY_FOR_HUMAN"
 )
 
+// verify-pr's report, a comment-only review: the head it ran the human
+// verification steps on, one line per step, and the outcome. It holds no
+// Verdict: line, so nothing reads it as a review summary.
+var (
+	VerificationRE = regexp.MustCompile(`(?m)^Verification: (PASSED|FAILED|INCOMPLETE)[ \t]*$`)
+	VerifiedHeadRE = regexp.MustCompile("(?m)^Verified head: `?([0-9a-f]{7,40})")
+	VerifiedStepRE = regexp.MustCompile(`(?m)^(\d+)\. (PASSED|FAILED|NOT RUN): (.*)$`)
+)
+
+// The outcomes of a verify-pr run, and of each of its steps.
+const (
+	VerificationPassed     = "PASSED"
+	VerificationFailed     = "FAILED"
+	VerificationIncomplete = "INCOMPLETE"
+	StepNotRun             = "NOT RUN"
+)
+
 // UnblockedRE finds the line finish-ticket's report gives right before
 // Status: DONE: the tickets the merge unblocked, whose blockers are all
 // done now, or none.
@@ -85,7 +121,7 @@ var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`
 
 // Skills names the lifecycle skills tkt's built-in stage lines, and the
 // lines tkt approve, tkt merge and tkt suggest send, ask for.
-var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr", "finish-ticket", "suggest-tickets"}
+var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr", "verify-pr", "finish-ticket", "suggest-tickets"}
 
 // CleanMergeRule is how review-pr's rule about a review brief across clean
 // base merges begins. tkt sync relies on it: it pushes such merges with no

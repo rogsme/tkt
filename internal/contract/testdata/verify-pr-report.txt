@@ -1,0 +1,13 @@
+## Agent verification
+
+Verified head: <full SHA>
+Verified base: <the base SHA the review summary names, or "not named" for the pull request body's procedure>
+Procedure: <link to the review summary, or "the pull request body">
+Verified by: <the harness and model in use, or "Unknown">
+
+1. PASSED: <what you saw, in one sentence> (<capture link, or the command>)
+2. FAILED: expected <the step's expected result>, saw <what happened> (<capture link, or the command and its output>)
+3. NOT RUN: <needs a person: why>, or <setup failed: the error>
+
+Cleanup: <done, or what is left and why>
+Verification: <PASSED | FAILED | INCOMPLETE>
