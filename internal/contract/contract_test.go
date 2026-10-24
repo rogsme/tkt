@@ -281,6 +281,25 @@ func TestMergeLineIsFinishTicketsExplicitWord(t *testing.T) {
 	}
 }
 
+func TestEvidenceLineIsAConfirmationFinishTicketTakes(t *testing.T) {
+	skill := read(t, "finish-ticket-authorization.md")
+	// The user may confirm steps from verify-pr's evidence; finish-ticket
+	// then checks the report for that head, which tkt merge --evidence
+	// checked first.
+	for _, want := range []string{"The user may confirm steps from the evidence `verify-pr` posted instead of running them", "When the merge instruction says so, require a `verify-pr` report for the confirmed head that marks each of those steps `PASSED`"} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("finish-ticket no longer says %q", want)
+		}
+	}
+	head := strings.Repeat("a1", 20)
+	line := config.EvidenceMergeLine([]int{1, 2}, head, head)
+	for _, want := range []string{"merge the PR", "steps 1 and 2 passed on head " + head, "the user confirmed them from verify-pr's evidence"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the evidence line %q does not say %q", line, want)
+		}
+	}
+}
+
 func TestStepsCarryOverCleanMerges(t *testing.T) {
 	skill := read(t, "finish-ticket-authorization.md")
 	if !strings.Contains(skill, "\n"+contract.CarryOverRule) {

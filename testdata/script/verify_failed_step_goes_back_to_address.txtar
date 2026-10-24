@@ -1,0 +1,72 @@
+# A step verify-pr reports failed goes back to address-pr-review, which
+# counts as a fix round; review-pr then reviews the fix, and verify-pr runs
+# again on the new head. The report on the old head no longer counts.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+cp $WORK/workflow.md docs/agents/workflow.md
+jqedit $WORK/turns.json 'map(if .prs then .prs = $WORK + "/" + .prs else . end)'
+env FAKE_HERDR_TURNS=$WORK/turns.json
+exec tkt auto ACM-12 --approve-plan --poll 1s --json
+envelope '.result | [.stop, .rounds]' '["ready_for_human",1]'
+envelope '[.result.steps[] | .action + ":" + (.stage // "") + ":" + .reason]' '["start::","approve::plan_awaits_approval","run:review:needs_review","run:verify:needs_verify","run:address:verify_failed","run:review:needs_review","run:verify:needs_verify"]'
+exec cat $FAKE_DIR/prompts
+stdout -count=2 '^Use the verify-pr skill to verify the current PR.$'
+stdout -count=1 '^Use the address-pr-review skill to address the review on this branch''s pull request.$'
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].verification | [.verification, .head]' '["PASSED","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]'
+houserules
+
+-- config.toml --
+[review]
+bot_wait = "0s"
+-- workflow.md --
+<!-- rogs-skills config v1: workflow -->
+# Workflow
+
+## Features
+
+| Feature | State |
+|---|---|
+| Agent verification | on |
+-- turns.json --
+[
+ {
+  "screen": "1. Do it.\nStatus: AWAITING_APPROVAL"
+ },
+ {
+  "screen": "Pull request opened.\nStatus: READY_FOR_REVIEW",
+  "prs": "prs1.json"
+ },
+ {
+  "screen": "Review posted.\nStatus: READY_FOR_HUMAN",
+  "prs": "prs2.json"
+ },
+ {
+  "screen": "Report posted.\nStatus: VERIFICATION_FAILED",
+  "prs": "prs3.json"
+ },
+ {
+  "screen": "Fixed the sign-in.\nStatus: READY_FOR_REVIEW",
+  "prs": "prs4.json"
+ },
+ {
+  "screen": "Review posted.\nStatus: READY_FOR_HUMAN",
+  "prs": "prs5.json"
+ },
+ {
+  "screen": "Report posted.\nStatus: VERIFIED",
+  "prs": "prs6.json"
+ }
+]
+-- prs1.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": []}]
+-- prs2.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": [{"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]
+-- prs3.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": [{"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "## Agent verification\n\nVerified head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\n1. PASSED: the app opened\n2. FAILED: expected the dashboard, saw a 500 error\n\nCleanup: done\nVerification: FAILED", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]
+-- prs4.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": [{"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "## Agent verification\n\nVerified head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\n1. PASSED: the app opened\n2. FAILED: expected the dashboard, saw a 500 error\n\nCleanup: done\nVerification: FAILED", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]
+-- prs5.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": [{"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "## Agent verification\n\nVerified head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\n1. PASSED: the app opened\n2. FAILED: expected the dashboard, saw a 500 error\n\nCleanup: done\nVerification: FAILED", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "Reviewed head: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-03T00:00:00Z", "commit": {"oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}]}]
+-- prs6.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": [{"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "## Agent verification\n\nVerified head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\n1. PASSED: the app opened\n2. FAILED: expected the dashboard, saw a 500 error\n\nCleanup: done\nVerification: FAILED", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "Reviewed head: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-03T00:00:00Z", "commit": {"oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}, {"body": "## Agent verification\n\nVerified head: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n\n1. PASSED: the app opened\n2. PASSED: signed in\n\nCleanup: done\nVerification: PASSED", "submittedAt": "2026-01-03T01:00:00Z", "commit": {"oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}]}]

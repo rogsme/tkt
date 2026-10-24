@@ -46,6 +46,10 @@ type ShowResult struct {
 	// numbered steps.
 	Procedure string       `json:"procedure"`
 	Steps     []forge.Step `json:"steps"`
+	// Verification is verify-pr's newest report on the pull request, with
+	// each step's result, or null. AtHead says whether it is about the head
+	// the steps are for.
+	Verification *forge.Verification `json:"verification"`
 }
 
 func (r *ShowResult) Text(w io.Writer) {
@@ -54,6 +58,16 @@ func (r *ShowResult) Text(w io.Writer) {
 		fmt.Fprintln(w, strings.TrimRight(r.Screen, "\n"))
 	case "steps":
 		fmt.Fprintln(w, r.Procedure)
+		if v := r.Verification; v != nil {
+			at := "on " + short(v.Head)
+			if !v.AtHead {
+				at += ", an older head"
+			}
+			fmt.Fprintf(w, "\nverify-pr: %s %s\n", v.Value, at)
+			for _, s := range v.Steps {
+				fmt.Fprintf(w, "%d. %s: %s\n", s.N, s.Result, s.Text)
+			}
+		}
 	default:
 		fmt.Fprintln(w, strings.TrimRight(r.Message, "\n"))
 	}
@@ -135,6 +149,10 @@ func (c *Ctx) stepsAt(id, head string, res *ShowResult) error {
 			continue
 		}
 		res.PR = p.Number
+		if v := forge.LatestVerification(p); v != nil {
+			v.AtHead = v.Head != "" && strings.HasPrefix(or(head, p.HeadRefOid), v.Head)
+			res.Verification = v
+		}
 		if proc := forge.HumanVerificationAt(p, or(head, p.HeadRefOid)); proc != nil {
 			res.Procedure, res.Steps, res.Source = proc.Section, proc.Steps, "review"
 			return nil

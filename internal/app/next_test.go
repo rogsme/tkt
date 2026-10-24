@@ -41,6 +41,23 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 verify", "command", ReasonBotClear},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true}, "tkt run ACM-1 verify", "command", ReasonReviewClear},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: false, Mergeable: "MERGEABLE"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
+		// With agent verification on, a clean head gets verify-pr, whose
+		// report then decides: a failed step goes to address, a pass waits
+		// for you to confirm the evidence, and steps it could not run wait
+		// for you to run them. A report decides with the feature off too.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, AgentVerify: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true, Verification: "FAILED", VerifyHeld: true}, "tkt run ACM-1 address", "command", ReasonVerifyFailed},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true, Verification: "PASSED", VerifyHeld: true},
+			"verify-pr passed every step: confirm them from its evidence (tkt show ACM-1 --steps), then tkt merge ACM-1 --passed all --evidence", "human", ReasonVerified},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Verification: "INCOMPLETE", VerifyHeld: true},
+			"run the steps verify-pr could not (tkt show ACM-1 --steps), then tkt merge ACM-1 --passed all", "human", ReasonVerifyIncomplete},
+		// A report that no longer holds, after a fix, decides nothing: the
+		// new head needs its own review and its own run.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true, Verification: "FAILED"}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: false, AgentVerify: true, Verification: "FAILED"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
+		// An order you confirmed from the evidence keeps saying so.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h1", MergeSteps: "1,2", MergeHead: "h1", MergeBy: "evidence"}, "tkt merge ACM-1 --passed 1,2 --head h1 --evidence", "command", ReasonMergeDue},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 5 * time.Minute}, "wait for the review bot", "wait", ReasonAwaitingBot},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 15 * time.Minute}, "the review bot has not reviewed this head; check its CI job, or run tkt run ACM-1 review", "human", ReasonBotSilent},
 		{Facts{PRState: "OPEN", Agent: "idle", Background: true}, "wait (the agent waits on a background task)", "wait", ReasonAgentWaiting},

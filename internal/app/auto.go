@@ -118,7 +118,7 @@ const (
 func stopHint(stop, id string) string {
 	switch stop {
 	case StopReadyForHuman:
-		return "run the human verification steps (tkt show " + id + " --steps), merge, then tkt done " + id
+		return "confirm the human verification steps, yourself or from verify-pr's evidence (tkt show " + id + " --steps), then tkt merge " + id
 	case StopMergeOrdered:
 		return "tkt watch sends finish-ticket the merge line your order holds"
 	case StopMerged:
@@ -228,9 +228,10 @@ func held(a autoAct, hold string) autoAct {
 }
 
 // autoStep decides tkt auto's next action from the rule tkt ls applies. It
-// differs from tkt ls on purpose: it never runs done, resume or verify; the
-// review bot's CLEAR ends the loop like review-pr's READY_FOR_HUMAN, since
-// the bot in CI is the reviewer; review-pr runs only where the repository
+// differs from tkt ls on purpose: it never runs done or resume, and runs
+// verify only where workflow.md turns agent verification on; the
+// review bot's CLEAR counts like review-pr's READY_FOR_HUMAN, since the bot
+// in CI is the reviewer; review-pr runs only where the repository
 // has no bot ([review] bot_wait = "0s"); and where a person decides, or the
 // ticket is on hold, it pauses.
 func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
@@ -290,13 +291,15 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 			return fix("resolve")
 		}
 		return act(actSync, "")
-	case ReasonQAFailed, ReasonFindings:
+	case ReasonQAFailed, ReasonFindings, ReasonVerifyFailed:
 		return fix("address")
+	case ReasonNeedsVerify:
+		return act(actRun, "verify")
 	case ReasonChecksFail:
 		return fix("ci")
 	case ReasonNeedsReview:
 		return act(actRun, "review")
-	case ReasonReviewClear, ReasonBotClear:
+	case ReasonReviewClear, ReasonBotClear, ReasonVerified, ReasonVerifyIncomplete:
 		return stop(StopReadyForHuman)
 	case ReasonMergeDue:
 		// The merge order is yours, and tkt watch carries it out once the
@@ -500,7 +503,7 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 		}
 		prev := mem
 		mem.Last = a.key(v.Facts.Head)
-		if a.Kind == actRun && a.Stage != "review" {
+		if a.Kind == actRun && a.Stage != "review" && a.Stage != "verify" {
 			mem.Rounds++
 		}
 		w.remember(mem)
@@ -870,7 +873,7 @@ func (w *ctxWorld) stopped(stop string, v autoView) {
 	w.labelTab(false)
 	c.record(history.Event{Ticket: w.id, Event: history.Auto, Stop: stop})
 	if w.notify {
-		c.notify(w.id, autoNotice(stop, w.id))
+		c.notify(w.id, autoNotice(stop, w.id, v.Next.Reason))
 	}
 }
 
@@ -935,7 +938,13 @@ func (w *ctxWorld) labelTab(on bool) {
 	}
 }
 
-func autoNotice(stop, id string) notice {
+func autoNotice(stop, id, reason string) notice {
+	switch {
+	case stop == StopReadyForHuman && reason == ReasonVerified:
+		return notice{"ready for you", "verify-pr passed every human verification step; confirm them from its evidence", "done"}
+	case stop == StopReadyForHuman && reason == ReasonVerifyIncomplete:
+		return notice{"ready for you", "verify-pr could not run every human verification step; run the rest", "done"}
+	}
 	switch stop {
 	case StopReadyForHuman:
 		return notice{"ready for you", "the review says READY_FOR_HUMAN; run the human verification steps", "done"}

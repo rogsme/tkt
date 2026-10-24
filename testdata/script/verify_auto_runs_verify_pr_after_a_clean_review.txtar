@@ -1,0 +1,57 @@
+# Where workflow.md turns agent verification on, tkt auto runs verify-pr once
+# review-pr clears the head, spends no round on it, and stops for you once
+# its report passes every step. tkt ls then says to confirm the steps from
+# the evidence.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+cp $WORK/workflow.md docs/agents/workflow.md
+jqedit $WORK/turns.json 'map(if .prs then .prs = $WORK + "/" + .prs else . end)'
+env FAKE_HERDR_TURNS=$WORK/turns.json
+exec tkt auto ACM-12 --approve-plan --poll 1s --json
+envelope '.result | [.stop, .phase, .rounds]' '["ready_for_human","ready_for_human",0]'
+envelope '[.result.steps[] | .action + ":" + (.stage // "")]' '["start:","approve:","run:review","run:verify"]'
+exec cat $FAKE_DIR/prompts
+stdout -count=1 '^Use the verify-pr skill to verify the current PR.$'
+state $FAKE_WT_ROOT/ACM-12 auto_stop ready_for_human
+state $FAKE_WT_ROOT/ACM-12 stage verify
+grep '"event":"auto","stop":"ready_for_human"' $HOME/.local/state/tkt/history.jsonl
+
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].next | [.reason, .kind]' '["verified","human"]'
+envelope '.result.rows[0].verification | [.verification, .at_head, (.steps | length)]' '["PASSED",true,2]'
+envelope '.result.rows[0].phase' ready_for_human
+exec tkt ls ACM-12
+stdout 'READY_FOR_HUMAN verified'
+houserules
+
+-- config.toml --
+[review]
+bot_wait = "0s"
+-- workflow.md --
+<!-- rogs-skills config v1: workflow -->
+# Workflow
+
+## Features
+
+| Feature | State |
+|---|---|
+| Agent verification | on |
+-- turns.json --
+[
+  {"screen": "1. Do it.\nStatus: AWAITING_APPROVAL"},
+  {"screen": "Pull request opened.\nStatus: READY_FOR_REVIEW", "prs": "prs1.json"},
+  {"screen": "Review posted.\nStatus: READY_FOR_HUMAN", "prs": "prs2.json"},
+  {"screen": "Report posted.\nStatus: VERIFIED", "prs": "prs3.json"}
+]
+-- prs1.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": []}]
+-- prs2.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]
+-- prs3.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+    {"body": "## Agent verification\n\nVerified head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\n1. PASSED: the app opened (capture)\n2. PASSED: signed in as the demo user (capture)\n\nCleanup: done\nVerification: PASSED", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]

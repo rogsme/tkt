@@ -301,6 +301,28 @@ func TestSuggestSettings(t *testing.T) {
 	}
 }
 
+func TestVerifySettings(t *testing.T) {
+	c, err := Load(dirWith(t, map[string]string{FileName: "[presets.claude]\nharness = \"claude\"\n\n[presets.other]\nharness = \"opencode\"\n\n[verify]\nas = \"other\"\n"}))
+	if err != nil || c.Verify.As != "other" {
+		t.Fatalf("[verify] as: %+v, %v", c.Verify, err)
+	}
+	if _, err := Load(dirWith(t, map[string]string{FileName: "[verify]\nas = \"fast\"\n"})); code(err) != apperr.ConfigInvalid {
+		t.Errorf("an unknown [verify] preset: %v", err)
+	}
+	if got := BuiltinStages["verify"]; got != "Use the verify-pr skill to verify the current PR." {
+		t.Errorf("the verify stage: %q", got)
+	}
+}
+
+func TestEvidenceMergeLineSaysHowTheStepsWereConfirmed(t *testing.T) {
+	if got, want := EvidenceMergeLine([]int{1, 2, 3}, "aaa", "aaa"), "Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed on head aaa: the user confirmed them from verify-pr's evidence."; got != want {
+		t.Errorf("same head:\n%s\nwant\n%s", got, want)
+	}
+	if got := EvidenceMergeLine([]int{1}, "aaa", "bbb"); !strings.HasSuffix(got, "from verify-pr's evidence. The pull request is at bbb now, after clean merges of the base.") {
+		t.Errorf("after a sync: %s", got)
+	}
+}
+
 func TestMergeLineNamesEveryStep(t *testing.T) {
 	for _, tc := range []struct {
 		steps []int

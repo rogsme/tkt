@@ -40,6 +40,12 @@ once. A new head of any other kind, such as a fix or the resolution of a
 conflict, drops the order, with a notification, since the steps ran on code
 it changed.
 
+--evidence says you confirmed the steps from verify-pr's evidence rather than
+by running them. The line then says so, and finish-ticket checks that
+verify-pr's report for that head marks each step PASSED. --head defaults to
+the head the report ran on, and tkt merge refuses with not_verified when the
+report is missing there or marks a step otherwise.
+
 --cancel drops the order. tkt merge holds the ticket's lock until the line
 is sent, so --cancel either drops the order before or finds the line sent:
 it then says when, and stopping finish-ticket is up to you, in the

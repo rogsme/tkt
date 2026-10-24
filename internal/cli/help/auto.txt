@@ -16,11 +16,16 @@ decides. It reads the same facts as tkt ls, then:
     two apart);
   - runs address on findings, and ci when checks fail, each in a fresh
     session;
-  - ends with success when the head is reviewed clean: the bot's CLEAR, or
-    review-pr's READY_FOR_HUMAN. review-pr runs only in a repository with no
-    review bot, [review] bot_wait = "0s".
+  - once the head is reviewed clean (the bot's CLEAR, or review-pr's
+    READY_FOR_HUMAN; review-pr runs only in a repository with no review bot,
+    [review] bot_wait = "0s"), runs verify where workflow.md turns agent
+    verification on: verify-pr runs the human verification steps and posts
+    what it saw. A step it reports failed gets an address run, which counts
+    as a fix round, then a new review and a new verify;
+  - ends with success when the head is reviewed clean and, with agent
+    verification on, verify-pr passed every step or could not run some.
 
-It never merges, never runs verify, and never removes a worktree.
+It never merges and never removes a worktree.
 
 Where a person decides, the loop pauses instead of ending: when the agent
 asks a question or ends with Status: BLOCKED (needs_you), when the plan waits

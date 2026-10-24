@@ -24,11 +24,17 @@ The next step is the first of these rules that matches:
   6. The review says the base moved, the pull request conflicts, or the agent
      said BLOCKED_FOR_SYNC with the branch behind the base: tkt sync ID, which
      merges a clean base itself and hands a conflict to a fresh session.
-  7. The merge stopped with HUMAN_QA_FAILED, or the review at the head has
-     findings: tkt run ID address.
+  7. The merge stopped with HUMAN_QA_FAILED, verify-pr's report for the head
+     failed a step, or the review at the head has findings: tkt run ID
+     address.
   8. The checks fail: tkt run ID ci.
-  9. The review at the head is clear, from the bot or from review-pr: tkt run
-     ID verify, or the steps yourself.
+  9. The review at the head is clear, from the bot or from review-pr. When
+     verify-pr's report for the head passed every step: confirm them from
+     its evidence, then tkt merge ID --passed all --evidence. When it could
+     not run some: run those yourself. Otherwise tkt run ID verify, which
+     workflow.md's Agent verification row makes the step, or the steps
+     yourself. A report counts for the head it ran on, and across clean
+     merges of the base after it.
  10. No review at the head yet: without a bot ([review] bot_wait = "0s"),
      tkt run ID review. With one, wait bot_wait for it, counted from when tkt
      first saw the head waiting; after that, check the bot's CI job.
@@ -49,13 +55,16 @@ With --json each row's next step is an object whose argv, when set, is the
 command to run, and whose reason names the rule: merged, closed,
 agent_working, agent_waiting, agent_blocked, no_agent, plan_awaits_approval,
 status_blocked, check_agent, review_awaits_approval, ci_pending, base_moved,
-qa_failed, findings, checks_fail, bot_clear, review_clear, awaiting_bot,
+qa_failed, verify_failed, findings, checks_fail, needs_verify, verified,
+verify_incomplete, bot_clear, review_clear, awaiting_bot,
 bot_silent, needs_review, no_changes, chore_findings, chore_ready, or, for a
 ticket whose tkt auto loop waits before the ticket has a worktree,
 awaiting_slot while it waits for a slot and incident while a status page's
 incident lasts. Each row also carries chore, the chore's name for a
 chore's run; title, the open pull request's title without the ticket id;
-and diff, what the branch changes against its base. incidents lists what
+diff, what the branch changes against its base; and verification,
+verify-pr's newest report with each step's result, whose at_head and
+carried say whether it counts for the head. incidents lists what
 the status pages report while a tkt watch reads them.
 
 The phase names where a ticket stands: queued, starting, planning,

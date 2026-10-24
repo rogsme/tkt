@@ -42,6 +42,14 @@ const (
 	ReasonBotSilent            = "bot_silent"
 	ReasonNeedsReview          = "needs_review"
 	ReasonUnknown              = "unknown"
+	// The reasons verify-pr gives: a clean head waits for it, where
+	// workflow.md turns agent verification on; its report found a step
+	// that fails; or the report holds, every step passed or some it could
+	// not run, and you confirm the steps.
+	ReasonNeedsVerify      = "needs_verify"
+	ReasonVerifyFailed     = "verify_failed"
+	ReasonVerified         = "verified"
+	ReasonVerifyIncomplete = "verify_incomplete"
 	// The reasons only a chore's run gets: it ended with nothing to change,
 	// the review found something, or its pull request waits for your merge.
 	// No skill reviews, fixes or merges a pull request without a ticket.
@@ -82,39 +90,48 @@ func human(reason, text string) Next {
 // read both, from a look with probe. MergeSteps holds the steps of a merge
 // order that holds at the head, such as 1,2,3, or "" without one; MergeHead
 // is the head they passed on, which clean merges of the base may have left
-// behind, and MergeAs the preset the order names. ReviewReady says review-
-// pr's READY_FOR_HUMAN summary is at the head, which finish-ticket merges
-// on; the review bot's CLEAR is not one. Chore names the chore whose run
-// this is, or is "" for a ticket.
+// behind, MergeAs the preset the order names, and MergeBy who confirmed
+// the steps: "" for you, evidence for you from verify-pr's evidence.
+// ReviewReady says review-pr's READY_FOR_HUMAN summary is at the head, which
+// finish-ticket merges on; the review bot's CLEAR is not one. Chore names
+// the chore whose run this is, or is "" for a ticket. AgentVerify says
+// workflow.md turns agent verification on. Verification is the outcome of
+// verify-pr's newest report, and VerifyHeld says it counts for the head:
+// it is about the head, or about one only clean merges of the base
+// separate from it.
 type Facts struct {
-	ID          string
-	Chore       string
-	PRState     string
-	Agent       string
-	Background  bool
-	Hold        bool
-	AutoRunning bool
-	WatchPause  string
-	ForgeLag    bool
-	Idle        time.Duration
-	LastStatus  string
-	Checks      string
-	Verdict     string
-	AtHead      bool
-	Mergeable   string
-	BaseMerge   string
-	Head        string
-	Behind      int
-	Stage       string
-	Launch      string
-	AutoWait    string
-	AutoPause   string
-	MergeSteps  string
-	MergeHead   string
-	MergeAs     string
-	ReviewReady bool
-	BotWait     time.Duration
-	Waited      time.Duration
+	ID           string
+	Chore        string
+	PRState      string
+	Agent        string
+	Background   bool
+	Hold         bool
+	AutoRunning  bool
+	WatchPause   string
+	ForgeLag     bool
+	Idle         time.Duration
+	LastStatus   string
+	Checks       string
+	Verdict      string
+	AtHead       bool
+	Mergeable    string
+	BaseMerge    string
+	Head         string
+	Behind       int
+	Stage        string
+	Launch       string
+	AutoWait     string
+	AutoPause    string
+	MergeSteps   string
+	MergeHead    string
+	MergeAs      string
+	MergeBy      string
+	ReviewReady  bool
+	AgentVerify  bool
+	Verification string
+	VerifyHeld   bool
+	BotWait      time.Duration
+	Waited       time.Duration
 }
 
 // NextStep applies the rules in order and returns the first that matches.
@@ -161,6 +178,9 @@ func NextStep(f Facts) Next {
 		return command(ReasonBaseMoved, "tkt", "sync", id)
 	case f.LastStatus == contract.StatusHumanQAFailed:
 		return command(ReasonQAFailed, "tkt", "run", id, "address")
+	case f.VerifyHeld && f.Verification == contract.VerificationFailed && f.Chore == "":
+		// The report is feedback, which address-pr-review answers.
+		return command(ReasonVerifyFailed, "tkt", "run", id, "address")
 	case f.AtHead && (f.Verdict == contract.VerdictFindings || f.Verdict == contract.VerdictChangesRequested):
 		if f.Chore != "" {
 			return human(ReasonChoreFindings, "read the review's findings, then have its agent fix them in its tab, or merge the pull request as it is")
@@ -176,6 +196,9 @@ func NextStep(f Facts) Next {
 		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
 	case f.MergeSteps != "" && f.ReviewReady:
 		argv := []string{"tkt", "merge", id, "--passed", f.MergeSteps, "--head", f.MergeHead}
+		if f.MergeBy == mergeByEvidence {
+			argv = append(argv, "--evidence")
+		}
 		if f.MergeAs != "" {
 			argv = append(argv, "--as", f.MergeAs)
 		}
@@ -183,16 +206,33 @@ func NextStep(f Facts) Next {
 	case f.MergeSteps != "" && f.AtHead && f.Verdict == contract.VerdictClear:
 		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone.
 		return command(ReasonNeedsReview, "tkt", "run", id, "review")
-	case f.AtHead && f.Verdict == contract.VerdictClear:
-		return command(ReasonBotClear, "tkt", "run", id, "verify")
-	case f.AtHead && f.Verdict == contract.VerdictReadyForHuman:
-		return command(ReasonReviewClear, "tkt", "run", id, "verify")
+	case f.AtHead && (f.Verdict == contract.VerdictClear || f.Verdict == contract.VerdictReadyForHuman):
+		return cleared(f)
 	case f.BotWait == 0:
 		return command(ReasonNeedsReview, "tkt", "run", id, "review")
 	case f.Waited < f.BotWait:
 		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
 	}
 	return human(ReasonBotSilent, "the review bot has not reviewed this head; check its CI job, or run tkt run "+id+" review")
+}
+
+// cleared is the next step of a head a review cleared: verify-pr's report
+// when one holds, verify-pr itself where workflow.md turns agent
+// verification on, and otherwise the steps, which tkt run verify can run
+// for you.
+func cleared(f Facts) Next {
+	id := f.ID
+	switch {
+	case f.VerifyHeld && f.Verification == contract.VerificationPassed:
+		return human(ReasonVerified, "verify-pr passed every step: confirm them from its evidence (tkt show "+id+" --steps), then tkt merge "+id+" --passed all --evidence")
+	case f.VerifyHeld && f.Verification == contract.VerificationIncomplete:
+		return human(ReasonVerifyIncomplete, "run the steps verify-pr could not (tkt show "+id+" --steps), then tkt merge "+id+" --passed all")
+	case f.AgentVerify:
+		return command(ReasonNeedsVerify, "tkt", "run", id, "verify")
+	case f.Verdict == contract.VerdictClear:
+		return command(ReasonBotClear, "tkt", "run", id, "verify")
+	}
+	return command(ReasonReviewClear, "tkt", "run", id, "verify")
 }
 
 // The phases PhaseOf names: the board's columns, and the history's steps.
@@ -272,9 +312,9 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseCI
 	case ReasonAwaitingBot, ReasonNeedsReview:
 		return PhaseWaitingReview
-	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings, ReasonChecksFail:
+	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings, ReasonChecksFail, ReasonVerifyFailed:
 		return PhaseNeedsFix
-	case ReasonReviewClear, ReasonBotClear:
+	case ReasonReviewClear, ReasonBotClear, ReasonNeedsVerify, ReasonVerified, ReasonVerifyIncomplete:
 		return PhaseReadyForHuman
 	case ReasonMergeDue:
 		return PhaseMerging
@@ -308,7 +348,10 @@ func factsFor(r Row) Facts {
 		f.WatchPause = r.Watch.Paused
 	}
 	if r.Merge != nil {
-		f.MergeSteps, f.MergeHead, f.MergeAs = stepList(r.Merge.Steps), r.Merge.Head, r.Merge.As
+		f.MergeSteps, f.MergeHead, f.MergeAs, f.MergeBy = stepList(r.Merge.Steps), r.Merge.Head, r.Merge.As, r.Merge.By
+	}
+	if v := r.Verification; v != nil {
+		f.Verification, f.VerifyHeld = v.Value, v.Holds()
 	}
 	return f
 }

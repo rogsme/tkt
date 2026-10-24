@@ -96,7 +96,10 @@ type RowMerge struct {
 	Head  string `json:"head"`
 	Steps []int  `json:"steps"`
 	// As is the preset finish-ticket runs on, or "" for the ticket's own.
-	As   string `json:"as"`
+	As string `json:"as"`
+	// By says who confirmed the steps: "" for you, by running them, or
+	// evidence for you, from verify-pr's evidence.
+	By   string `json:"by"`
 	At   string `json:"at"`
 	Sent string `json:"sent"`
 }
@@ -136,7 +139,10 @@ type Row struct {
 	PR         *RowPR         `json:"pr"`
 	Checks     *forge.Checks  `json:"checks"`
 	Review     *forge.Verdict `json:"review"`
-	Behind     *int           `json:"behind"`
+	// Verification is verify-pr's newest report, and whether it holds for
+	// the head.
+	Verification *forge.Verification `json:"verification"`
+	Behind       *int                `json:"behind"`
 	// BaseMerge says how merging the base into a pull request that is
 	// behind would go, clean or conflict, when tkt auto or tkt watch tried
 	// it with git merge-tree; tkt ls leaves it "".
@@ -349,6 +355,9 @@ func (r *LsResult) cells(row Row, now time.Time) []string {
 		if !row.Review.AtHead {
 			review += " (old)"
 		}
+		if v := row.Verification; v.Holds() {
+			review += " " + verifiedText[v.Value]
+		}
 	}
 	phase := or(row.Phase, "-")
 	if row.Stale {
@@ -359,6 +368,13 @@ func (r *LsResult) cells(row Row, now time.Time) []string {
 		age = Ago(now.Sub(t))
 	}
 	return []string{row.Ticket, phase, age, ag, pr, checks, review, autoCell(row.Auto, row.Hold), next}
+}
+
+// verifiedText words verify-pr's outcome in the REVIEW column.
+var verifiedText = map[string]string{
+	contract.VerificationPassed:     "verified",
+	contract.VerificationFailed:     "verify failed",
+	contract.VerificationIncomplete: "verify incomplete",
 }
 
 // autoCell says what tkt auto does with a ticket: drives it, waits for you
@@ -652,6 +668,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			row.PR = &RowPR{Number: p.Number, State: "OPEN", Mergeable: p.Mergeable, Head: p.HeadRefOid}
 			row.Checks, row.Review = &checks, verdict
 			row.reviewReady = forge.HumanVerification(p) != nil
+			row.Verification = forge.LatestVerification(p)
 			row.Title = prTitle(p.Title, t.ID)
 		} else if p, ok := closedPR(l.gh.Mine(l.all, t.ID)); ok {
 			row.PR = &RowPR{Number: p.Number, State: p.State}
@@ -673,6 +690,13 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	if l.hasBase {
 		base = l.baseRef
 	}
+	if v := row.Verification; v != nil && !v.AtHead && base != "" && row.PR != nil {
+		// The report carries over clean merges of the base, as your own
+		// confirmations do.
+		if h := c.Git.Rev(rctx, t.Path, v.Head+"^{commit}"); h != "" {
+			v.Carried, _ = c.Git.CleanMerges(rctx, t.Path, h, row.PR.Head, base)
+		}
+	}
 	row.Merge, row.orderVoid = c.mergeOrder(rctx, t.Path, st, row.PR, base, row.LastStatus)
 	row.orderHead = st["merge_head"]
 	if p := st["watch_pause"]; p != "" && row.PR != nil && st["watch_head"] == row.PR.Head && c.watchRunning() {
@@ -681,6 +705,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	pf := state.Read(phasePath(ts))
 	f := factsFor(row)
 	f.BotWait = c.Cfg.Review.BotWait
+	f.AgentVerify = c.LC.On(contract.FeatureAgentVerification)
 	if l.probe && row.PR != nil && row.PR.State == "OPEN" && row.PR.Head != "" {
 		f.ForgeLag = c.forgeLags(rctx, t.ID, row.PR.Head)
 	}
@@ -750,7 +775,7 @@ func (c *Ctx) mergeOrder(ctx context.Context, path string, st state.State, pr *R
 			return nil, ""
 		}
 	}
-	return &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], At: st["merge_at"], Sent: st["merge_sent"]}, ""
+	return &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], By: st["merge_by"], At: st["merge_at"], Sent: st["merge_sent"]}, ""
 }
 
 // probeBaseMerge tries merging the base into the pull request's head, or

@@ -59,6 +59,9 @@ type fileTOML struct {
 	Suggest *struct {
 		As string `toml:"as"`
 	} `toml:"suggest"`
+	Verify *struct {
+		As string `toml:"as"`
+	} `toml:"verify"`
 	Chores map[string]choreTOML  `toml:"chores"`
 	Status map[string]statusTOML `toml:"status"`
 }
@@ -143,7 +146,7 @@ func parseTOML(c *Config, path, src string) error {
 }
 
 // parseSettings reads the [auto], [review], [board], [agent], [watch],
-// [suggest], [chores] and [status] tables.
+// [suggest], [verify], [chores] and [status] tables.
 func parseSettings(c *Config, path string, f fileTOML) error {
 	bad := func(key, rule string) error {
 		return apperr.New(apperr.ConfigInvalid, "%s: %s %s", path, key, rule)
@@ -207,6 +210,12 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 			return bad("[suggest] as", fmt.Sprintf("names preset '%s', which the presets do not define", s.As))
 		}
 		c.Suggest.As = s.As
+	}
+	if v := f.Verify; v != nil && v.As != "" {
+		if !c.Has(v.As) {
+			return bad("[verify] as", fmt.Sprintf("names preset '%s', which the presets do not define", v.As))
+		}
+		c.Verify.As = v.As
 	}
 	c.Agent.Model = f.Agent.Model
 	for _, p := range f.Agent.Extensions {
