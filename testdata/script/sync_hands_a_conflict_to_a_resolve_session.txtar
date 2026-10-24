@@ -25,7 +25,7 @@ resetlog
 exec tkt sync ACM-12
 stdout 'ACM-12  merging origin/main conflicts in app.txt; a fresh session resolves it in pane w1:p10'
 logged herdr agent start acm-12 --kind claude --pane w1:p10
-grep 'Fetch origin and merge origin/main into this branch. The merge conflicts: resolve it with the resolving-merge-conflicts skill' $FAKE_DIR/prompts
+grep 'Fetch origin and merge origin/main into this branch. The merge conflicts: resolve each conflict from what both sides meant' $FAKE_DIR/prompts
 state $WT stage resolve
 ! logcontains 'merge --no-ff'
 ! logcontains 'push --quiet'

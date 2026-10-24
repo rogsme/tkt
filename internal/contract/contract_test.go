@@ -241,7 +241,7 @@ func TestStageLinesNameRegisteredSkills(t *testing.T) {
 	}
 	for stage, line := range lines {
 		for _, m := range named.FindAllStringSubmatch(line, -1) {
-			if m[1] == "playwright-cli" || m[1] == contract.ResolveSkill {
+			if m[1] == "playwright-cli" {
 				continue
 			}
 			found := false
@@ -276,23 +276,6 @@ func TestReadySummaryCarriesHumanVerification(t *testing.T) {
 	p.HeadRefOid = strings.Repeat("c3", 20)
 	if proc := forge.HumanVerification(p); proc != nil {
 		t.Errorf("old head: %+v", proc)
-	}
-}
-
-func TestResolveStageNamesTheMergeConflictSkill(t *testing.T) {
-	skill := read(t, "resolving-merge-conflicts.md")
-	if !strings.Contains(skill, "\nname: "+contract.ResolveSkill+"\n") {
-		t.Fatalf("the fixture is not the %s skill", contract.ResolveSkill)
-	}
-	// The resolve line relies on these: the skill takes a merge another
-	// party started, stays a merge, and stops to ask about product behavior.
-	for _, want := range []string{"another skill hands over a conflicted merge", "A workflow that syncs by merging never turns a merge into a rebase.", "stop and ask the user", "git commit --no-edit"} {
-		if !strings.Contains(skill, want) {
-			t.Errorf("%s no longer says %q", contract.ResolveSkill, want)
-		}
-	}
-	if !strings.Contains(config.BuiltinStages["resolve"], "the "+contract.ResolveSkill+" skill") {
-		t.Errorf("the resolve stage does not name the %s skill: %s", contract.ResolveSkill, config.BuiltinStages["resolve"])
 	}
 }
 

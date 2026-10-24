@@ -48,7 +48,7 @@ exec tkt ls --no-fetch --json
 envelope '.result.rows[0] | [.next.reason, .base_merge]' '["review_clear",""]'
 exec tkt auto ACM-12 --once --poll 100ms --json
 envelope '.result | [.did.action, .did.stage, .did.reason, .rounds]' '["run","resolve","base_moved",1]'
-grep 'The merge conflicts: resolve it with the resolving-merge-conflicts skill' $FAKE_DIR/prompts
+grep 'The merge conflicts: resolve each conflict from what both sides meant' $FAKE_DIR/prompts
 houserules
 
 -- app-start.txt --

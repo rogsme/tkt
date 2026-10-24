@@ -234,7 +234,7 @@ var BuiltinStages = map[string]string{
 	// resolve is the session tkt sync starts when the base merge conflicts.
 	// It leaves the review's findings to address, so a sync never fixes
 	// what nobody asked it to.
-	"resolve": "Fetch {remote} and merge {remote}/{base} into this branch. The merge conflicts: resolve it with the resolving-merge-conflicts skill, keep it a merge, and change nothing the merge does not need. Run the focused checks for the code it touched, commit the merge, and push once, never with force. Then refresh the Review brief in the pull request's body for the new head and base, when it has one, and end with Status: READY_FOR_REVIEW.",
+	"resolve": "Fetch {remote} and merge {remote}/{base} into this branch. The merge conflicts: resolve each conflict from what both sides meant, keep it a merge, and change nothing the merge does not need. Stage only the paths you resolved, and ask the user about any hunk that decides product behavior. Run the focused checks for the code it touched, commit the merge, and push once, never with force. Then refresh the Review brief in the pull request's body for the new head and base, when it has one, and end with Status: READY_FOR_REVIEW.",
 	"verify":  "Use the verify-pr skill to verify the current PR.",
 	"ci":      "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
 	"review":  "Use the review-pr skill to review the current PR.",

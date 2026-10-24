@@ -5,9 +5,9 @@ merge-tree, which touches neither the worktree nor the branch:
   - When the merge is clean, tkt makes the merge commit itself and pushes it,
     in seconds. CI and the review bot then run on the new head.
   - When it conflicts, a fresh session runs the resolve stage: it merges the
-    base, resolves the conflicts with the resolving-merge-conflicts skill,
-    changes nothing else, and pushes once. Review findings stay for address.
-    --no-agent stops at the conflict instead, with exit 4.
+    base, resolves each conflict from what both sides meant, changes nothing
+    else, and pushes once. Review findings stay for address. --no-agent
+    stops at the conflict instead, with exit 4.
   - When the branch already contains the base, it does nothing.
 
 It never rebases and never force-pushes. A merge commit tkt made counts as
