@@ -45,6 +45,10 @@ tkt reads no skill files at run time. It depends on these lines from gitlab.com/
 - review-pr's rule that a clean merge of the base keeps the pull request's review brief current, which `tkt sync` relies on when it pushes such a merge itself;
 - finish-ticket's `Unblocked:` line, right before `Status: DONE`, which `tkt done` reads to name the tickets a merge unblocked;
 - start-ticket's `## Unattended runs` section, which keys on the word "unattended" in the line `tkt auto --approve-plan` adds to the start line.
+- the `Agent verification`, `Autonomous runs` and `Plan review` rows of workflow.md's feature table, which decide whether verify-pr runs after a clean review and whether `tkt auto --yolo` may run;
+- verify-pr's report, a comment-only review: its `Verified head:` and `Verification:` lines and one line per step, which `tkt ls`, `tkt show --steps`, `tkt merge --evidence` and `/check` read, and its rule that a failed step is feedback address-pr-review answers;
+- finish-ticket's rule that a confirmation made from verify-pr's evidence counts, which the line `tkt merge --evidence` sends;
+- the `## Autonomous runs` sections, which key on "This run is autonomous" in every line `tkt auto --yolo` sends; start-ticket's `## Autonomous run` comment; and finish-ticket's rule that it merges such a ticket on verify-pr's passing report for the head the line names.
 
 `internal/contract` pins them, and `internal/contract/testdata/SOURCES.md` records where each fixture comes from. When the skills change one of them, update the fixture and the code in one commit that cites the skills commit. `contract.Version` changes only when the contract's version does.
 

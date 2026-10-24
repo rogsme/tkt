@@ -208,6 +208,7 @@ func mergeCmd(g *globals) *cobra.Command {
 		Long:  helpText("merge"),
 		Example: `  tkt merge ACM-12 --passed 1-3
   tkt merge ACM-12 --passed all --head a1b2c3d
+  tkt merge ACM-12 --passed all --evidence
   tkt merge ACM-12 --cancel`,
 		SuggestFor:        []string{"ship", "finish"},
 		ValidArgsFunction: g.completeTickets(false),
@@ -215,7 +216,7 @@ func mergeCmd(g *globals) *cobra.Command {
 			switch {
 			case len(args) != 1:
 				return usage("usage: tkt merge ID --passed STEPS")
-			case !cmd.Flags().Changed("passed") && !o.Cancel:
+			case !cmd.Flags().Changed("passed") && !o.Cancel && !o.Autonomous:
 				return usage("tkt merge needs --passed: the human verification steps that passed, such as 1-3, or all")
 			}
 			return nil
@@ -230,9 +231,14 @@ func mergeCmd(g *globals) *cobra.Command {
 	cmd.Flags().StringVar(&o.Head, "head", "", "the head the steps ran on; tkt merge refuses once the pull request moved past it")
 	cmd.Flags().StringVar(&o.As, "as", "", "run finish-ticket on PRESET instead of the ticket's")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
+	cmd.Flags().BoolVar(&o.Evidence, "evidence", false, "say you confirmed the steps from verify-pr's evidence, on the head it ran on, instead of running them")
+	cmd.Flags().BoolVar(&o.Autonomous, "autonomous", false, "merge a yolo ticket on verify-pr's passing report, as tkt auto --yolo does")
 	cmd.Flags().BoolVar(&o.Cancel, "cancel", false, "drop the ticket's merge order")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	cmd.MarkFlagsMutuallyExclusive("passed", "cancel")
+	cmd.MarkFlagsMutuallyExclusive("evidence", "cancel")
+	cmd.MarkFlagsMutuallyExclusive("evidence", "autonomous")
+	cmd.MarkFlagsMutuallyExclusive("autonomous", "cancel")
 	return cmd
 }
 
@@ -377,6 +383,7 @@ func autoCmd(g *globals) *cobra.Command {
 		Short: "Drive the ticket until it needs you: approve, review, fix, until READY_FOR_HUMAN",
 		Long:  helpText("auto"),
 		Example: `  tkt auto ACM-12 --approve-plan --notify
+  tkt auto ACM-12 --yolo --notify
   tkt approve ACM-12 && tkt auto ACM-12
   tkt auto ACM-12 --once
   tkt auto ACM-12 --once --dry-run
@@ -395,6 +402,7 @@ func autoCmd(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&o.ApprovePlan, "approve-plan", false, "approve the plan in your place when start-ticket ends with AWAITING_APPROVAL")
+	cmd.Flags().BoolVar(&o.Yolo, "yolo", false, "carry the ticket to the merge with nobody watching: approve the plan, and merge once verify-pr passed every step")
 	cmd.Flags().StringVar(&o.As, "as", "", "start the ticket's agents on PRESET")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
 	cmd.Flags().IntVar(&o.MaxRounds, "max-rounds", -1, "pause for you after N address and ci runs since the plan's approval (default [auto] max_rounds)")
@@ -405,6 +413,7 @@ func autoCmd(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "with --once, print the step instead of taking it")
 	cmd.MarkFlagsMutuallyExclusive("stop", "once")
 	cmd.MarkFlagsMutuallyExclusive("stop", "approve-plan")
+	cmd.MarkFlagsMutuallyExclusive("stop", "yolo")
 	return cmd
 }
 

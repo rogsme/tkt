@@ -18,15 +18,17 @@ Stages:
   sync     the same line as address, under its old name. tkt run warns, and
            the next release drops it: use tkt sync or address.
   ci       finds why the checks fail at the head, fixes it and pushes once.
-  verify   runs the pull request's human verification steps in a browser and
-           reports each one. It changes no code and posts nothing.
+  verify   verify-pr runs the pull request's human verification steps at its
+           head, in a browser or with each step's commands, and posts what
+           it saw for each one as a review. It changes no code. [verify] as
+           runs it on another preset (tkt help config).
   start    runs start-ticket again and returns a new plan.
 
 config.toml can change these lines or add stages (tkt help config).
 
-A chore's run takes ci, resolve, verify and your own --prompt. It has no
-ticket, so tkt run refuses it a stage whose line runs a lifecycle skill,
-such as review, address or start, which needs one.
+A chore's run takes ci, resolve and your own --prompt. It has no ticket, so
+tkt run refuses it a stage whose line runs a lifecycle skill, such as
+review, address, verify or start, which needs one.
 
 tkt run refuses while the agent works or waits for your answer (tkt wait
 blocks until it is done). It also refuses while the ticket is still in

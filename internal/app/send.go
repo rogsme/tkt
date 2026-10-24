@@ -174,7 +174,11 @@ func (c *Ctx) approve(id, path string, ts *ticketState, pane string) (*SendResul
 				WithHint("read the agent's last message with tkt show %s", id).With("last_status", last)
 		}
 	}
-	res, err := c.sendTo(id, path, ts, target, config.ApproveLine, false)
+	line := config.ApproveLine
+	if ts.st["yolo"] != "" {
+		line = withLine(line, config.AutonomousLine)
+	}
+	res, err := c.sendTo(id, path, ts, target, line, false)
 	if err != nil {
 		return nil, err
 	}

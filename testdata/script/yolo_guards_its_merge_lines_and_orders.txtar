@@ -1,0 +1,85 @@
+# A yolo run starts with the ticket, since finish-ticket merges on the
+# autonomous line only where start-ticket posted its Autonomous run comment.
+# On a yolo ticket, a merge line you send yourself carries no autonomous
+# sentence; tkt merge refuses to merge over verify-pr's failed step; and tkt
+# auto --stop drops the yolo merge order nobody may send any more.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+cp $WORK/workflow.md docs/agents/workflow.md
+exec tkt start ACM-12
+! exec tkt auto ACM-12 --yolo --json
+envelope '.error.code' autonomous_off
+stdout 'started without --yolo'
+
+exec tkt auto ACM-13 --yolo --once --json
+state $FAKE_WT_ROOT/ACM-13 yolo 1
+grep 'start ticket ACM-13. This run is autonomous: ' $FAKE_DIR/prompts
+realgit -C $FAKE_WT_ROOT/ACM-13 commit -q --allow-empty -m 'work on ACM-13'
+realgit -C $FAKE_WT_ROOT/ACM-13 push -q origin ACM-13
+gitvar H1 $FAKE_WT_ROOT/ACM-13 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+
+# A stage on a yolo ticket says the run is autonomous.
+resetlog
+exec tkt run ACM-13 verify
+grep '^Use the verify-pr skill to verify the current PR. This run is autonomous: ' $FAKE_DIR/prompts
+
+# verify-pr's failed step is open feedback: no merge goes over it.
+! exec tkt merge ACM-13 --passed all --json
+envelope '.error | [.code, .hint]' '["not_verified","tkt run ACM-13 address"]'
+
+# Steps it could not run are yours; your own merge line says nothing about
+# an autonomous run, so finish-ticket takes your word.
+jqedit $WORK/prs.json '.[0].reviews[1].body |= sub("1. FAILED: expected the page, saw a 500"; "1. NOT RUN: needs a person: a real phone") | .[0].reviews[1].body |= sub("Verification: FAILED"; "Verification: INCOMPLETE")'
+exec tkt ls ACM-13 --json
+envelope '.result.rows[0].next.reason' verify_incomplete
+exec tkt merge ACM-13 --passed all --dry-run
+stderr 'Human\\ verification\\ step\\ 1\\ passed\\ on\\ head\\ '$H1'\.'
+! stderr autonomous
+
+# A yolo order waiting for CI goes when tkt auto --stop hands the ticket back.
+jqedit $WORK/prs.json '.[0].reviews[1].body |= sub("1. NOT RUN: needs a person: a real phone"; "1. PASSED: the page shows") | .[0].reviews[1].body |= sub("Verification: INCOMPLETE"; "Verification: PASSED") | .[0].statusCheckRollup[0].status = "IN_PROGRESS"'
+exec tkt merge ACM-13 --autonomous --json
+envelope '.result | [.action, .waits]' '["ordered","checks"]'
+state $FAKE_WT_ROOT/ACM-13 merge_by autonomous
+exec tkt auto ACM-13 --stop
+state $FAKE_WT_ROOT/ACM-13 yolo ''
+state $FAKE_WT_ROOT/ACM-13 merge_by ''
+state $FAKE_WT_ROOT/ACM-13 merge_head ''
+
+# A loop on a preset of its own still runs verify-pr on [verify] as.
+jqedit $WORK/prs.json '.[0].reviews = [.[0].reviews[0]] | .[0].statusCheckRollup[0].status = "COMPLETED"'
+resetlog
+exec tkt auto ACM-13 --as claude --once --json
+envelope '.result.did.stage' verify
+logcontains '--model haiku'
+state $FAKE_WT_ROOT/ACM-13 preset claude
+houserules
+
+-- config.toml --
+[presets.claude]
+harness = "claude"
+
+[presets.other]
+harness = "claude"
+model = "haiku"
+
+[verify]
+as = "other"
+-- workflow.md --
+<!-- rogs-skills config v1: workflow -->
+# Workflow
+
+## Features
+
+| Feature | State |
+|---|---|
+| Plan review | on |
+| Agent verification | on |
+| Autonomous runs | on |
+-- prs.json --
+[{"number": 8, "state": "OPEN", "headRefName": "ACM-13", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}},
+    {"body": "## Agent verification\n\nVerified head: H1\n\n1. FAILED: expected the page, saw a 500\n\nCleanup: done\nVerification: FAILED", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "H1"}}]}]

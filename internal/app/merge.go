@@ -25,8 +25,16 @@ type MergeOpts struct {
 	Passed string
 	Head   string
 	As     string
-	Cancel bool
-	Dry    bool
+	// Evidence says you confirmed the steps from verify-pr's evidence
+	// instead of running them; the line says so, and finish-ticket checks
+	// the report.
+	Evidence bool
+	// Autonomous merges a yolo ticket: you authorized it when you started
+	// the ticket, and verify-pr's passing report stands in for the steps,
+	// which finish-ticket counts as waived.
+	Autonomous bool
+	Cancel     bool
+	Dry        bool
 	// order marks tkt watch carrying out the ticket's merge order: it
 	// merges only while that order stands.
 	order bool
@@ -58,6 +66,14 @@ type MergeResult struct {
 	Actions []Action   `json:"actions"`
 	base    string
 }
+
+// Who confirmed the steps of a merge order, its merge_by: you, by running
+// them, or you from verify-pr's evidence.
+const (
+	mergeByYou        = ""
+	mergeByEvidence   = "evidence"
+	mergeByAutonomous = "autonomous"
+)
 
 // The actions tkt merge takes.
 const (
@@ -164,6 +180,18 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	if o.Autonomous && !o.Cancel {
+		if ts.st["yolo"] == "" {
+			return nil, apperr.New(apperr.AutonomousOff, "%s is not a yolo ticket: you authorize its merge, with tkt merge %s --passed STEPS", id, id).
+				WithHint("tkt merge %s --passed all", id)
+		}
+		if err := c.yoloAllowed(id); err != nil {
+			return nil, err
+		}
+		if o.Passed == "" {
+			o.Passed = "all"
+		}
+	}
 	base := c.LC.Forge.Remote + "/" + c.LC.Forge.Base
 	res := &MergeResult{Ticket: id, Steps: []int{}, Sent: ts.st["merge_sent"], DryRun: c.Dry, Actions: []Action{}, base: base}
 	res.Head, res.Verified = ts.st["merge_head"], ts.st["merge_head"]
@@ -176,7 +204,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		c.dropOrder(ts, id, MergeCancelled)
 		res.Action = MergeCancelled
 		return res, nil
-	case o.order && (res.Head != o.Head || ts.st["merge_steps"] != o.Passed || ts.st["merge_as"] != o.As):
+	case o.order && (res.Head != o.Head || ts.st["merge_steps"] != o.Passed || ts.st["merge_as"] != o.As || ts.st["merge_by"] != o.by()):
 		// Cancelled, or replaced, since tkt watch read it.
 		res.Action = MergeNone
 		return res, nil
@@ -201,6 +229,15 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		return nil, apperr.New(apperr.NoVerification, "%s has no open pull request", id).WithHint("tkt ls %s", id)
 	}
 	res.PR, res.Head, res.Verified = row.PR.Number, row.PR.Head, row.PR.Head
+	if v := row.Verification; (o.Evidence || o.Autonomous) && o.Head == "" && v != nil {
+		if !v.Holds() {
+			return nil, apperr.New(apperr.NotVerified, "verify-pr's report is about %s, and more than clean merges of the base came after it, so it says nothing about %s's head %s", short(v.Head), id, short(res.Head)).
+				WithHint("tkt run %s verify", id)
+		}
+		// The evidence is for the head verify-pr ran on, which clean merges
+		// of the base may have left behind.
+		o.Head = v.Head
+	}
 	if o.Head != "" && !strings.HasPrefix(res.Head, o.Head) {
 		v := c.Git.Rev(c.Ctx, path, o.Head+"^{commit}")
 		clean := false
@@ -232,6 +269,17 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		return nil, err
 	}
 	res.Steps = got
+	if v := row.Verification; v.Holds() && v.Value == contract.VerificationFailed {
+		// The report is open feedback, which finish-ticket refuses to
+		// merge over until address-pr-review answers it.
+		return nil, apperr.New(apperr.NotVerified, "verify-pr's report on %s says a step fails, and finish-ticket merges no head with open feedback", short(v.Head)).
+			WithHint("tkt run %s address", id)
+	}
+	if o.Evidence || o.Autonomous {
+		if err := evidenceFor(id, row.Verification, res.Verified, got); err != nil {
+			return nil, err
+		}
+	}
 	switch {
 	case f.Behind > 0:
 		// finish-ticket merges only a head reviewed against the current
@@ -267,7 +315,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		}
 		// A new order is a new word from you: tkt watch forgets that it
 		// sent one on this head already.
-		kv := []string{"merge_head", res.Verified, "merge_steps", stepList(got), "merge_as", o.As, "merge_at", c.Now().UTC().Format(history.TimeFormat), "merge_sent", ""}
+		kv := []string{"merge_head", res.Verified, "merge_steps", stepList(got), "merge_as", o.As, "merge_by", o.by(), "merge_at", c.Now().UTC().Format(history.TimeFormat), "merge_sent", ""}
 		if strings.HasPrefix(ts.st["watch_last"], actMerge+":") {
 			kv = append(kv, "watch_last", "", "watch_pause", "", "watch_head", "")
 		}
@@ -286,7 +334,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	// The lock stays held, so the order cannot change while the line goes
 	// out, and a --cancel after it finds the line sent. So does the turn,
 	// so no other merge line goes out before this one shows as in flight.
-	run, err := c.run(RunOpts{ID: id, Stage: "merge", As: o.As, Dry: o.Dry, line: config.MergeLine(got, res.Verified, res.Head)})
+	run, err := c.run(RunOpts{ID: id, Stage: "merge", As: o.As, Dry: o.Dry, line: o.line(got, res.Verified, res.Head)})
 	if err != nil {
 		return nil, err
 	}
@@ -295,11 +343,77 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	// and sends the line again on the new head. watch_last keeps it from
 	// sending the line twice on one head.
 	sent := c.Now().UTC().Format(history.TimeFormat)
-	c.save(ts, "merge_head", res.Verified, "merge_steps", stepList(got), "merge_as", o.As, "merge_at", or(ts.st["merge_at"], sent),
+	c.save(ts, "merge_head", res.Verified, "merge_steps", stepList(got), "merge_as", o.As, "merge_by", o.by(), "merge_at", or(ts.st["merge_at"], sent),
 		"merge_sent", sent, "watch_last", watchAct{Kind: actMerge}.key(res.Head))
 	res.Action, res.Run, res.Sent = MergeMerging, run, sent
 	res.Actions = append(res.Actions, run.Actions...)
 	return res, nil
+}
+
+// by is who confirmed the steps, as a merge order records it.
+func (o MergeOpts) by() string {
+	switch {
+	case o.Autonomous:
+		return mergeByAutonomous
+	case o.Evidence:
+		return mergeByEvidence
+	}
+	return mergeByYou
+}
+
+// yoloAllowed refuses a yolo run where workflow.md does not turn on
+// autonomous runs, and the plan review and agent verification they rest
+// on: the plan review stands in for you reading the plan, and verify-pr
+// for you running the steps.
+func (c *Ctx) yoloAllowed(id string) error {
+	var off []string
+	for _, f := range []string{contract.FeatureAutonomousRuns, contract.FeatureAgentVerification, contract.FeaturePlanReview} {
+		if !c.LC.On(f) {
+			off = append(off, f)
+		}
+	}
+	if len(off) == 0 {
+		return nil
+	}
+	return apperr.New(apperr.AutonomousOff, "a yolo run of %s needs %s on in %s's feature table", id, strings.Join(off, ", "), contract.WorkflowFile).
+		WithHint("run /setup-rogs in this repository to turn them on, or tkt auto %s --approve-plan", id).With("off", off)
+}
+
+// line is the merge line for the steps that passed on verified, with the
+// pull request at head.
+func (o MergeOpts) line(steps []int, verified, head string) string {
+	if o.Autonomous {
+		return config.AutonomousMergeLine(verified, head)
+	}
+	if o.Evidence {
+		return config.EvidenceMergeLine(steps, verified, head)
+	}
+	return config.MergeLine(steps, verified, head)
+}
+
+// evidenceFor checks that verify-pr's report holds for the head the steps
+// passed on and marks each step PASSED, before tkt merge says you confirmed
+// them from it, or merges a yolo ticket on it.
+func evidenceFor(id string, v *forge.Verification, verified string, steps []int) error {
+	if v == nil || !strings.HasPrefix(verified, v.Head) {
+		return apperr.New(apperr.NotVerified, "verify-pr has no report for %s's head %s, so there is no evidence to confirm the steps from", id, short(verified)).
+			WithHint("tkt run %s verify", id)
+	}
+	passed := map[int]bool{}
+	for _, s := range v.Steps {
+		passed[s.N] = s.Result == contract.VerificationPassed
+	}
+	var not []int
+	for _, n := range steps {
+		if !passed[n] {
+			not = append(not, n)
+		}
+	}
+	if len(not) > 0 {
+		return apperr.New(apperr.NotVerified, "verify-pr's report on %s does not mark %s passed; run them yourself and leave out --evidence", short(v.Head), config.StepsText(not)).
+			WithHint("tkt show %s --steps", id).With("steps", not)
+	}
+	return nil
 }
 
 // passedSteps reads --passed against the human verification procedure at
@@ -391,7 +505,7 @@ func (c *Ctx) mergeInFlight(agents []herdr.Agent, except string) (string, error)
 // dropOrder forgets a ticket's merge order and records why: cancelled by
 // tkt merge --cancel, or dropped by a new head.
 func (c *Ctx) dropOrder(ts *ticketState, id, why string) {
-	c.save(ts, "merge_head", "", "merge_steps", "", "merge_as", "", "merge_at", "", "merge_sent", "")
+	c.save(ts, "merge_head", "", "merge_steps", "", "merge_as", "", "merge_by", "", "merge_at", "", "merge_sent", "")
 	c.record(history.Event{Ticket: id, Event: history.Merge, Action: why})
 }
 

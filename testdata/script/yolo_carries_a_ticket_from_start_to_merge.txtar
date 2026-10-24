@@ -1,0 +1,69 @@
+# tkt auto --yolo carries a ticket from start to merge with nobody watching:
+# it approves the plan, has review-pr review a head the bot cleared, since
+# finish-ticket merges on its verdict alone, runs verify-pr, and sends
+# finish-ticket the autonomous merge line once verify-pr passed every step.
+# Every line its agents get says the run is autonomous, never unattended.
+cp $WORK/workflow.md docs/agents/workflow.md
+jqedit $WORK/turns.json 'map(if .prs then .prs = $WORK + "/" + .prs else . end)'
+env FAKE_HERDR_TURNS=$WORK/turns.json
+exec tkt auto ACM-12 --yolo --poll 1s --notify --json
+envelope '.result | [.stop, .rounds]' '["merged",0]'
+envelope '[.result.steps[] | .action + ":" + (.stage // "") + ":" + .reason]' '["start::","approve::plan_awaits_approval","run:review:needs_review","run:verify:needs_verify","merge::autonomous_merge"]'
+exec cat $FAKE_DIR/prompts
+stdout -count=5 'This run is autonomous: no person reads this session or answers a question. Follow Autonomous runs in docs/agents/workflow.md wherever you would ask.'
+! stdout unattended
+stdout '^Use the start-ticket skill to start ticket ACM-12. This run is autonomous: '
+stdout '^The plan is approved. Use the work-ticket skill to execute it. This run is autonomous: '
+stdout '^Use the finish-ticket skill to merge the PR. This run is autonomous: .* verify-pr passed every human verification step on head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.$'
+state $FAKE_WT_ROOT/ACM-12 yolo 1
+state $FAKE_WT_ROOT/ACM-12 merge_by autonomous
+state $FAKE_WT_ROOT/ACM-12 auto_stop merged
+grep '"event":"auto","action":"merge"' $HOME/.local/state/tkt/history.jsonl
+houserules
+
+# The ticket stays a yolo one, so a stage you run by hand says so too, until
+# tkt auto --stop hands it to you.
+exec tkt auto ACM-12 --stop
+state $FAKE_WT_ROOT/ACM-12 yolo ''
+
+-- workflow.md --
+<!-- rogs-skills config v1: workflow -->
+# Workflow
+
+## Features
+
+| Feature | State |
+|---|---|
+| Plan review | on |
+| Agent verification | on |
+| Autonomous runs | on |
+-- turns.json --
+[
+ {
+  "screen": "1. Do it.\nAssumptions: none.\nStatus: AWAITING_APPROVAL"
+ },
+ {
+  "screen": "Pull request opened.\nStatus: READY_FOR_REVIEW",
+  "prs": "prs1.json"
+ },
+ {
+  "screen": "Review posted.\nStatus: READY_FOR_HUMAN",
+  "prs": "prs2.json"
+ },
+ {
+  "screen": "Report posted.\nStatus: VERIFIED",
+  "prs": "prs3.json"
+ },
+ {
+  "screen": "Merged.\nUnblocked: none\nStatus: DONE",
+  "prs": "prs4.json"
+ }
+]
+-- prs1.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** head `aaaaaaa`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]
+-- prs2.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** head `aaaaaaa`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]
+-- prs3.json --
+[{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** head `aaaaaaa`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "## Agent verification\n\nVerified head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\n1. PASSED: the app opened\n2. PASSED: signed in\n\nCleanup: done\nVerification: PASSED", "submittedAt": "2026-01-02T02:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]
+-- prs4.json --
+[{"number": 4, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** head `aaaaaaa`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "Reviewed head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the app.\n2. Sign in.\n", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, {"body": "## Agent verification\n\nVerified head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\n1. PASSED: the app opened\n2. PASSED: signed in\n\nCleanup: done\nVerification: PASSED", "submittedAt": "2026-01-02T02:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]

@@ -1,0 +1,52 @@
+# verify-pr's report carries over clean merges of the base, as your own
+# confirmations do: after tkt sync, it still holds at the new head, once
+# review-pr clears that head, and --evidence names the head it ran on. A fix
+# after it voids it.
+mkdir $HOME/.config/tkt
+cp $WORK/workflow.md docs/agents/workflow.md
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].verification | [.at_head, .carried]' '[true,false]'
+
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+exec tkt sync ACM-12 --json
+gitvar H2 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H2 | .[0].reviews += [.[0].reviews[0] | .body |= gsub($H1; $H2) | .commit.oid = $H2 | .submittedAt = "2026-01-03T00:00:00Z"]'
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].verification | [.at_head, .carried]' '[false,true]'
+envelope '.result.rows[0].next.reason' verified
+exec tkt merge ACM-12 --passed all --evidence --dry-run --json
+envelope '.result | [.action, .verified, .head]' '["merging","'$H1'","'$H2'"]'
+
+# A fix is more than a clean merge: the report no longer holds, and the new
+# head needs its own run.
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'fix the sign-in'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H3 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H3 | .[0].reviews += [.[0].reviews[0] | .body |= gsub($H1; $H3) | .commit.oid = $H3 | .submittedAt = "2026-01-04T00:00:00Z"]'
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].verification | [.at_head, .carried]' '[false,false]'
+envelope '.result.rows[0].next | [.reason, .text]' '["needs_verify","tkt run ACM-12 verify"]'
+! exec tkt merge ACM-12 --passed all --evidence --json
+envelope '.error.code' not_verified
+
+-- workflow.md --
+<!-- rogs-skills config v1: workflow -->
+# Workflow
+
+## Features
+
+| Feature | State |
+|---|---|
+| Agent verification | on |
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}},
+    {"body": "## Agent verification\n\nVerified head: H1\n\n1. PASSED: the login page shows (capture)\n\nCleanup: done\nVerification: PASSED", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "H1"}}]}]

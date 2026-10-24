@@ -8,4 +8,4 @@ resetlog
 env FAKE_HERDR_EXIT_IGNORED=1
 exec tkt run ACM-12 verify
 logged herdr agent send-keys w1:p10 ctrl+c
-grep 'Human verification' $FAKE_DIR/prompts
+grep 'Use the verify-pr skill' $FAKE_DIR/prompts

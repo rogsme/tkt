@@ -60,6 +60,14 @@ as a cheap one; without it, the default preset runs it:
   [suggest]
   as = "fast"
 
+A [verify] table names the preset the verify stage runs verify-pr on, such as
+one from another vendor than the one that built the change, so the verifier
+does not share its blind spots; without it, the ticket's own preset runs it.
+The ticket keeps its preset for the stages after it:
+
+  [verify]
+  as = "opencode"
+
 A [chores.NAME] table schedules an agent run in a repository, such as a
 dependency upgrade (tkt help chores). tkt ships none:
 

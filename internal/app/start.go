@@ -26,8 +26,10 @@ type StartOpts struct {
 	Force   bool
 	Dry     bool
 	// Unattended adds config.UnattendedLine to the prompt, for a tkt auto
-	// that approves the plan itself.
+	// that approves the plan itself. Autonomous adds config.AutonomousLine
+	// instead, for tkt auto --yolo, where nobody answers a question either.
 	Unattended bool
+	Autonomous bool
 	// chore names the chore tkt chore run starts a run of, in the worktree
 	// that Scratch names, with Prompt as its prompt. Unlike a scratch
 	// worktree's, a run's agent gets its prompt, its tabs a TMPDIR, and its
@@ -128,12 +130,12 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 	case !o.Prompt.Set:
 		text, _ = c.stageLine("start", id)
 	}
-	if o.Unattended && !named {
-		sep := " "
-		if strings.Contains(text, "\n") {
-			sep = "\n\n"
-		}
-		text = strings.TrimRight(text, "\n") + sep + config.UnattendedLine
+	switch {
+	case named:
+	case o.Autonomous:
+		text = withLine(text, config.AutonomousLine)
+	case o.Unattended:
+		text = withLine(text, config.UnattendedLine)
 	}
 	if err := c.needHerdr(); err != nil {
 		return nil, err
@@ -338,4 +340,14 @@ func sendErr(msg string, err error) error {
 		code, detail = e.Code, e.Stderr
 	}
 	return apperr.New(apperr.PromptSendFailed, "%s: %s %s", msg, code, detail).Wrap(err)
+}
+
+// withLine adds a line to a prompt: after a space, or after a blank line
+// when the prompt runs over several lines.
+func withLine(text, line string) string {
+	sep := " "
+	if strings.Contains(text, "\n") {
+		sep = "\n\n"
+	}
+	return strings.TrimRight(text, "\n") + sep + line
 }

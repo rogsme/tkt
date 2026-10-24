@@ -102,6 +102,11 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		return nil, err
 	}
 	st := ts.st
+	if st["yolo"] != "" && o.line == "" && !o.Prompt.Set {
+		// Nobody answers a yolo ticket's stages, whoever starts them. A
+		// line of its own, such as yours to merge, says what it means.
+		text = withLine(text, config.AutonomousLine)
+	}
 	if chore := st["chore"]; chore != "" && o.line == "" {
 		for _, skill := range contract.Skills {
 			if strings.Contains(text, skill) {
@@ -118,6 +123,18 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		}
 	case c.Cfg.Has(st["preset"]):
 		preset, _ = c.Cfg.Preset(st["preset"])
+	}
+	// [verify] as runs verify-pr on a preset of its own, such as another
+	// vendor's, for that run only: the ticket keeps its preset for the
+	// stages after it.
+	own := preset.Name
+	if o.Stage == "verify" && o.As == "" && o.line == "" && c.Cfg.Verify.As != "" {
+		preset, _ = c.Cfg.Preset(c.Cfg.Verify.As)
+		if c.Cfg.Has(st["preset"]) {
+			own = st["preset"]
+		} else {
+			own = c.Cfg.Default().Name
+		}
 	}
 	h, name := preset.Harness, prompt.AgentName(id)
 	if err := c.needTools(h); err != nil {
@@ -169,7 +186,7 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		return nil, err
 	}
 	res.Session = sid
-	c.save(ts, "ticket", id, "preset", preset.Name, "harness", h, "stage", stage, "tab", tab, "pane", pane, "agent", name, "session", sid, "status", "launching")
+	c.save(ts, "ticket", id, "preset", own, "harness", h, "stage", stage, "tab", tab, "pane", pane, "agent", name, "session", sid, "status", "launching")
 	out, err := c.Agent.Launch(c.Ctx, pane, name, h, harness.LaunchArgs(h, harness.New, sid, preset, path))
 	switch out {
 	case agent.NotReady:

@@ -1,0 +1,66 @@
+# verify-pr's report shows beside the steps in tkt show --steps, and lets you
+# merge with --evidence once it passes every step on the head the steps ran
+# on. [verify] as runs verify-pr on a preset of its own, for that run only.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+
+exec tkt run ACM-12 verify --json
+envelope '.result | [.stage, .preset]' '["verify","other"]'
+state $FAKE_WT_ROOT/ACM-12 preset claude
+grep '^Use the verify-pr skill to verify the current PR.$' $FAKE_DIR/prompts
+
+# A report that could not run a step leaves that step to you.
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].next.reason' verify_incomplete
+exec tkt show ACM-12 --steps
+stdout '^1\. Open the login page\.'
+stdout '^verify-pr: INCOMPLETE on '
+stdout '^2\. NOT RUN: needs a person: the code goes to a real phone$'
+exec tkt show ACM-12 --steps --json
+envelope '.result.verification | [.verification, .at_head]' '["INCOMPLETE",true]'
+! exec tkt merge ACM-12 --passed all --evidence --json
+rc 4
+envelope '.error | [.code, .details.steps]' '["not_verified",[2]]'
+
+# Once it passes every step, --evidence sends the line that says so.
+jqedit $WORK/prs.json '.[0].reviews[1].body |= sub("2. NOT RUN: needs a person: the code goes to a real phone"; "2. PASSED: the code arrived on the test inbox") | .[0].reviews[1].body |= sub("Verification: INCOMPLETE"; "Verification: PASSED")'
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].next | [.reason, .kind]' '["verified","human"]'
+
+# While CI runs, it leaves an order that says so, and tkt watch carries it
+# out once the checks pass.
+jqedit $WORK/prs.json '.[0].statusCheckRollup[0].status = "IN_PROGRESS"'
+exec tkt merge ACM-12 --passed all --evidence --json
+envelope '.result | [.action, .waits, .steps]' '["ordered","checks",[1,2]]'
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].merge.by' evidence
+jqedit $WORK/prs.json '.[0].statusCheckRollup[0].status = "COMPLETED"'
+exec tkt ls ACM-12 --json
+envelope '.result.rows[0].next.argv' '["tkt","merge","ACM-12","--passed","1,2","--head","'$H1'","--evidence"]'
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["merge","merge_due"]'
+grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed on head '$H1': the user confirmed them from verify-pr''s evidence.$' $FAKE_DIR/prompts
+state $FAKE_WT_ROOT/ACM-12 merge_by evidence
+houserules
+
+-- config.toml --
+[presets.claude]
+harness = "claude"
+
+[presets.other]
+harness = "claude"
+model = "haiku"
+
+[verify]
+as = "other"
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n2. Sign in with the code sent by text.\n   Expected: the dashboard.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}},
+    {"body": "## Agent verification\n\nVerified head: H1\n\n1. PASSED: the login page shows (capture)\n2. NOT RUN: needs a person: the code goes to a real phone\n\nCleanup: done\nVerification: INCOMPLETE", "submittedAt": "2026-01-02T01:00:00Z", "commit": {"oid": "H1"}}]}]

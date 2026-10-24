@@ -5,11 +5,11 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, stepText, type SuggestResult, type UpdateResult, versionText } from "./model.ts";
+import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
 import { ask, checklist, peek, type Step } from "./ui.ts";
 
-export type Mode = "manual" | "auto" | "auto_after_plan";
+export type Mode = "manual" | "auto" | "auto_after_plan" | "yolo";
 
 /** start starts tickets in the background: manual ones with tkt start,
  * the others with a tkt auto loop that starts the ticket itself. as picks
@@ -17,7 +17,7 @@ export type Mode = "manual" | "auto" | "auto_after_plan";
 export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 	for (const id of ids) {
 		if (mode === "manual") hub.add({ ticket: id, label: "start", args: ["start", id, ...(as ? ["--as", as] : [])] });
-		else hub.startAuto(id, mode === "auto", as);
+		else hub.startAuto(id, mode === "auto", as, mode === "yolo");
 	}
 	const list = ids.join(", ");
 	const on = as ? ` on ${as}` : "";
@@ -26,6 +26,8 @@ export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 			return `Queued: ${list} starting${on} in full auto. tkt approves the plan and drives each ticket until it is reviewed clean; the board shows when one needs you.`;
 		case "auto_after_plan":
 			return `Queued: ${list} starting${on} in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket.`;
+		case "yolo":
+			return `Queued: ${list} starting${on} in yolo. tkt carries each ticket to the merge with nobody watching; the board shows when one needs you, and the plan and pull request list the assumptions its agents made.`;
 	}
 	return `Queued: ${list} starting${on}. The board shows each plan when it is ready.`;
 }
@@ -119,8 +121,8 @@ export function sync(hub: Hub, id: string): string {
 /** merge hands a ticket whose steps all passed on head to finish-ticket:
  * tkt merge sends it the merge line now, or leaves an order that tkt watch
  * carries out once the checks pass. */
-export function merge(hub: Hub, id: string, steps: number[], head: string): string {
-	const args = ["merge", id, "--passed", steps.join(","), ...(head ? ["--head", head] : [])];
+export function merge(hub: Hub, id: string, steps: number[], head: string, evidence = false): string {
+	const args = ["merge", id, "--passed", steps.join(","), ...(head ? ["--head", head] : []), ...(evidence ? ["--evidence"] : [])];
 	hub.add({ ticket: id, label: "merge", args, then: (env) => (env.ok && env.result ? hub.post(mergeText(env.result as MergeResult)) : undefined) });
 	return `Queued: tkt merge for ${id}. finish-ticket merges it now when the checks passed at its head; otherwise tkt watch hands it over once they do.`;
 }
@@ -131,10 +133,16 @@ export function resume(hub: Hub, id: string): string {
 	return `Queued: tkt resume for ${id}, which relaunches its newest session. The board shows when it needs you.`;
 }
 
-export async function auto(hub: Hub, id: string, on: boolean, approvePlan: boolean, as = ""): Promise<string> {
+export async function auto(hub: Hub, id: string, on: boolean, approvePlan: boolean, as = "", yolo = false): Promise<string> {
 	// tkt auto refuses a run's id, and its loop runs detached, so the chat
 	// says so here rather than after a silent failure.
 	if (hub.row(id)?.chore) return `${id} is a run of a chore: tkt auto drives tickets only. tkt watch syncs its base and fixes its checks, and you merge its pull request.`;
+	if (on && yolo) {
+		const refused = await yoloRefusal(hub, [id]);
+		if (refused) return refused;
+		hub.startAuto(id, true, as, true);
+		return `tkt auto now carries ${id} to the merge with nobody watching (yolo). The board shows when it needs you.`;
+	}
 	if (on) {
 		hub.startAuto(id, approvePlan, as);
 		return `tkt auto now drives ${id}${approvePlan ? ", approving its plan too" : ""}. The board shows when it needs you.`;
@@ -142,6 +150,17 @@ export async function auto(hub: Hub, id: string, on: boolean, approvePlan: boole
 	const env = await hub.run({ ticket: id, label: "auto off", args: ["auto", id, "--stop"], quiet: true });
 	if (!env.ok) return failure(id, env);
 	return `Stopped tkt auto for ${id}; its loop ends at its next look.`;
+}
+
+/** yoloRefusal says why tkt auto --yolo would refuse the first of ids, such
+ * as a repository whose workflow.md does not turn on autonomous runs, or
+ * nothing. Its loop runs detached, so the chat asks for one step's dry run
+ * first rather than lose the refusal. */
+export async function yoloRefusal(hub: Hub, ids: string[]): Promise<string | undefined> {
+	const id = ids[0];
+	if (!id) return undefined;
+	const env = await hub.run({ ticket: id, label: "yolo check", args: ["auto", id, "--yolo", "--once", "--dry-run"], quiet: true });
+	return env.ok || env.error?.code !== "autonomous_off" ? undefined : failure(id, env);
 }
 
 /** hold puts a ticket on hold, or takes it off, and waits for tkt's answer. */
@@ -291,19 +310,21 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 		if (!a) return "Closed.";
 		if (a.answer.startsWith("Sync")) return `${sync(hub, id)} /check ${id} again once the new head is reviewed.`;
 	}
-	const first = await ask(ctx, `${id}: how do you want to verify?`, [
-		{ label: "Open the checklist", description: "Mark each human verification step as you run it." },
-		{ label: "Run tkt run verify first", description: "An agent runs the steps in a browser and reports; it changes nothing. /check again when it is done." },
-	], false);
+	// verify-pr's report, when it holds for the head, is evidence: you may
+	// confirm the steps from it, and the checklist starts with the steps
+	// it passed marked.
+	const v = verifiedAt(hub.row(id));
+	const first = await ask(ctx, `${id}: how do you want to verify?`, howOptions(v), false);
 	if (!first) return "Closed.";
-	if (first.answer.startsWith("Run")) return stage(hub, id, "verify");
+	if (first.answer.startsWith("Run verify-pr")) return stage(hub, id, "verify");
 	const env = await hub.tkt<{ steps: Step[]; procedure: string; pr: number; source: string }>(["show", id, "--steps"]);
 	if (!env.ok || !env.result) return failure(id, env);
 	const steps = env.result.steps;
+	if (first.answer.startsWith("Confirm") && v) return confirmEvidence(hub, ctx, id, steps, v, behind);
 	const from = env.result.source === "pull_request" ? `The review bot cleared the head; these steps come from pull request #${env.result.pr}.` : "";
 	const head = hub.row(id)?.pr?.head ?? "";
 	const key = `${id}@${head}`;
-	const got = await checklist(ctx, id, steps, marks.get(key) ?? [], from);
+	const got = await checklist(ctx, id, steps, marks.get(key) ?? evidenceMarks(steps, v), from);
 	marks.set(key, got);
 	hub.pi.appendEntry("tkt-check", { key, marks: got });
 	const t = tally(got, steps.length);
@@ -337,6 +358,42 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	], false);
 	if (!go?.answer.startsWith("Merge")) return `${id}: every step passed. /check ${id} merges it when you are ready.`;
 	return merge(hub, id, steps.map((s) => s.n), head);
+}
+
+/** howOptions are /check's first answers: confirm from verify-pr's
+ * evidence when its report passed every step, the checklist, and a run of
+ * verify-pr. */
+function howOptions(v: Verification | undefined): { label: string; description?: string }[] {
+	const list = { label: "Open the checklist", description: v ? "The steps verify-pr passed start marked; mark the rest as you run them." : "Mark each human verification step as you run it." };
+	const run = { label: "Run verify-pr first", description: "verify-pr runs the steps in a fresh session and posts what it saw; it changes no code. /check again when it is done." };
+	if (v?.verification === "PASSED") return [{ label: "Confirm from verify-pr's evidence", description: "Read what it saw on each step, then merge on it." }, list, { ...run, label: "Run verify-pr again" }];
+	return v ? [list, { ...run, label: "Run verify-pr again" }] : [list, run];
+}
+
+/** evidenceMarks marks the steps verify-pr passed. */
+function evidenceMarks(steps: Step[], v: Verification | undefined): Mark[] {
+	if (!v) return [];
+	const passed = new Set(v.steps.filter((s) => s.result === "PASSED").map((s) => s.n));
+	return steps.map((s) => (passed.has(s.n) ? "pass" : ""));
+}
+
+/** confirmEvidence shows what verify-pr saw on each step, and merges with
+ * tkt merge --evidence once you confirm: finish-ticket records that you
+ * confirmed the steps from it. */
+async function confirmEvidence(hub: Hub, ctx: ExtensionContext, id: string, steps: Step[], v: Verification, behind: number): Promise<string> {
+	const seen = steps.map((s) => {
+		const r = v.steps.find((x) => x.n === s.n);
+		return `${s.n}. ${r ? `${r.result}: ${r.text}` : "not in the report"}`;
+	});
+	const pending = hub.row(id)?.checks?.state === "pending";
+	const go = await ask(ctx, `${id}: verify-pr on ${v.head.slice(0, 7)}${v.at_head ? "" : ", carried over clean merges of the base"}:\n${seen.join("\n")}\nConfirm the steps from this and merge?`, [
+		behind > 0 || pending
+			? { label: "Confirm and merge once ready", description: "tkt merge --evidence leaves an order, which tkt watch carries out once the base is synced and the checks pass." }
+			: { label: "Confirm and merge now", description: "tkt merge --evidence sends finish-ticket the merge line, which says you confirmed the steps from verify-pr's evidence." },
+		{ label: "Not yet" },
+	], false);
+	if (!go?.answer.startsWith("Confirm")) return `${id}: nothing confirmed. /check ${id} goes on when you are ready.`;
+	return merge(hub, id, steps.map((s) => s.n), v.head, true);
 }
 
 /** inbox walks what needs you, each with fixed answers. It asks about each

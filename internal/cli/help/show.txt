@@ -12,4 +12,6 @@ steps. When the review bot cleared the head instead, it reads the Human
 verification section of the pull request's body, which work-ticket writes;
 source says which. It reads pull requests through gh, so it supports GitHub
 forges only, and it exits 4 with no_verification_steps when neither has
-steps.
+steps. When verify-pr reported on the pull request, it prints the report's
+result for each step after the procedure, and says when the report is about
+an older head; with --json, verification holds it.

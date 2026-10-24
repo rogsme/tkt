@@ -23,9 +23,13 @@ else; you read the answer there and start the tickets you want.
    conflict to a fresh session. On READY_FOR_HUMAN, or the review bot's
    CLEAR, go on.
 5. Do the human verification steps (tkt show ACM-12 --steps). tkt run ACM-12
-   verify has an agent run them in a browser and report each one, but you
-   decide whether each step passed.
-6. Once every step passed, run tkt merge ACM-12 --passed 1-3. It sends a
+   verify has verify-pr run them in a fresh session and post what it saw for
+   each one, and tkt auto does it for you where workflow.md turns agent
+   verification on. A step it reports failed goes back to step 4 with tkt
+   run ACM-12 address. You still decide whether each step passed: read its
+   evidence, or run the steps yourself.
+6. Once every step passed, run tkt merge ACM-12 --passed 1-3, with
+   --evidence when you confirmed them from verify-pr's evidence. It sends a
    fresh session finish-ticket's explicit word to merge, naming the steps
    and the head they passed on. When the checks still run or the base moved,
    it leaves a merge order that tkt watch carries out: it syncs a clean base,
@@ -44,8 +48,16 @@ runs step 7 once finish-ticket ends with Status: DONE, for every ticket that
 is not on hold. It also starts the chores config.toml schedules, agent runs
 with no ticket whose pull requests you merge yourself (tkt help chores).
 
+tkt auto ACM-12 --yolo takes every step, the merge too, with nobody
+watching, where workflow.md turns on autonomous runs: the agents decide
+what they would ask you, write each decision down as an assumption in the
+plan and the pull request, and stop only at the hard stops workflow.md
+lists. finish-ticket merges once review-pr cleared the head and verify-pr
+passed every step. Read the assumptions afterwards.
+
 tkt auto ACM-12 takes steps 3 and 4 for you, and step 2 too with
 --approve-plan: it waits for CI and the review bot, syncs a moved base, runs
 address and ci in fresh sessions, pauses when the ticket needs you, and stops
-when the head is reviewed clean. Steps 5 to 7 stay yours. tkt agent does the
+when the head is reviewed clean, after verify-pr where agent verification is
+on. Confirming the steps, merging and step 7 stay yours. tkt agent does the
 same from a chat, for many tickets at once.

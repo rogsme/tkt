@@ -67,7 +67,8 @@ func TestReviewSummariesCarryVerdicts(t *testing.T) {
 func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	registry := read(t, "status-lines.md")
 	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked, contract.StatusSetupRequired,
-		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone} {
+		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone,
+		contract.StatusBlockedPostMerge, contract.StatusVerified, contract.StatusVerificationFailed, contract.StatusVerificationIncomplete} {
 		if !strings.Contains(registry, "`Status: "+s+"`") {
 			t.Errorf("Status: %s is not in the registry", s)
 		}
@@ -75,6 +76,84 @@ func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	for _, v := range []string{contract.VerdictChangesRequested, contract.VerdictReadyForHuman} {
 		if !strings.Contains(registry, "`Verdict: "+v+"`") {
 			t.Errorf("Verdict: %s is not in the registry", v)
+		}
+	}
+	for _, v := range []string{contract.VerificationPassed, contract.VerificationFailed, contract.VerificationIncomplete} {
+		if !strings.Contains(registry, "`Verification: "+v+"`") {
+			t.Errorf("Verification: %s is not in the registry", v)
+		}
+	}
+}
+
+// verifyReport fills the report fixture for head with an outcome.
+func verifyReport(t *testing.T, head, outcome string) string {
+	t.Helper()
+	return strings.NewReplacer("<full SHA>", head, "<PASSED | FAILED | INCOMPLETE>", outcome).Replace(read(t, "verify-pr-report.txt"))
+}
+
+func TestVerifyReportCarriesItsHeadAndSteps(t *testing.T) {
+	head := strings.Repeat("d4", 20)
+	for _, outcome := range []string{contract.VerificationPassed, contract.VerificationFailed, contract.VerificationIncomplete} {
+		p := forge.PR{HeadRefOid: head, Reviews: []forge.Review{{Body: verifyReport(t, head, outcome), SubmittedAt: "2026-01-01T00:00:00Z"}}}
+		v := forge.LatestVerification(p)
+		if v == nil || v.Value != outcome || !v.AtHead || !v.Holds() {
+			t.Fatalf("%s: %+v", outcome, v)
+		}
+		want := []string{contract.VerificationPassed, contract.VerificationFailed, contract.StepNotRun}
+		if len(v.Steps) != 3 {
+			t.Fatalf("steps: %+v", v.Steps)
+		}
+		for i, s := range v.Steps {
+			if s.N != i+1 || s.Result != want[i] || s.Text == "" {
+				t.Errorf("step %d: %+v", i+1, s)
+			}
+		}
+		// Nothing reads the report as a review summary, or its steps as
+		// the procedure a person runs.
+		if vd := forge.LatestVerdict(p); vd != nil {
+			t.Errorf("%s: the report reads as a verdict: %+v", outcome, vd)
+		}
+		if proc := forge.HumanVerification(p); proc != nil {
+			t.Errorf("%s: the report reads as a procedure: %+v", outcome, proc)
+		}
+	}
+	// A report on an older head does not hold by itself.
+	p := forge.PR{HeadRefOid: strings.Repeat("e5", 20), Reviews: []forge.Review{{Body: verifyReport(t, head, contract.VerificationPassed)}}}
+	if v := forge.LatestVerification(p); v == nil || v.AtHead || v.Holds() {
+		t.Errorf("older head: %+v", v)
+	}
+}
+
+func TestWorkflowFeatureRowsTurnFeaturesOn(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "docs/agents")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "issue-tracker.md"), []byte(read(t, "issue-tracker.md")), 0o644)
+	os.WriteFile(filepath.Join(dir, "forge.md"), []byte(read(t, "forge.md")), 0o644)
+	features := []string{contract.FeatureAgentVerification, contract.FeatureAutonomousRuns, contract.FeaturePlanReview}
+	// Without workflow.md, as in an older configuration, every feature is
+	// off.
+	if c, err := lifecycle.Load(root); err != nil || c.On(contract.FeatureAgentVerification) {
+		t.Fatalf("no workflow.md: %v", err)
+	}
+	table := read(t, "workflow-features.md")
+	for _, f := range features {
+		if !strings.Contains(table, "| "+f+" | {{FILL:") {
+			t.Errorf("workflow.md's feature table has no %s row", f)
+		}
+	}
+	fill := regexp.MustCompile(`\{\{FILL:[^}]*\}\}`)
+	for _, state := range []string{"on", "off"} {
+		body := "<!-- rogs-skills config v1: workflow -->\n# Workflow\n\n" + fill.ReplaceAllString(table, state)
+		os.WriteFile(filepath.Join(dir, "workflow.md"), []byte(body), 0o644)
+		c, err := lifecycle.Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range features {
+			if c.On(f) != (state == "on") {
+				t.Errorf("%s with every row %s: %v", f, state, c.On(f))
+			}
 		}
 	}
 }
@@ -89,6 +168,61 @@ func TestUnattendedLineSaysTheWordStartTicketReads(t *testing.T) {
 	}
 	if !strings.Contains(config.UnattendedLine, "This run is "+contract.Unattended) {
 		t.Errorf("config.UnattendedLine %q does not say the run is %s", config.UnattendedLine, contract.Unattended)
+	}
+}
+
+func TestAutonomousLineSaysTheWordsTheSkillsRead(t *testing.T) {
+	request := `whose request says "This run is ` + contract.Autonomous + `"`
+	for _, name := range []string{"start-ticket-autonomous.md", "finish-ticket-autonomous.md", "workflow-autonomous-runs.md"} {
+		if !strings.Contains(read(t, name), request) {
+			t.Errorf("%s no longer keys on %s", name, request)
+		}
+	}
+	if !strings.HasPrefix(config.AutonomousLine, "This run is "+contract.Autonomous+":") {
+		t.Errorf("config.AutonomousLine %q does not say the run is %s", config.AutonomousLine, contract.Autonomous)
+	}
+	// It names the section the skills follow in place of asking.
+	if !strings.Contains(config.AutonomousLine, "Autonomous runs in "+contract.WorkflowFile) {
+		t.Errorf("config.AutonomousLine %q does not name workflow.md's section", config.AutonomousLine)
+	}
+	// A yolo run needs these on, which tkt auto --yolo checks first.
+	if !strings.Contains(read(t, "workflow-autonomous-runs.md"), "An autonomous run needs plan review and agent verification on") {
+		t.Errorf("workflow.md's section no longer names the features a run needs")
+	}
+}
+
+func TestAutonomousMergeLineIsTheAuthorizationFinishTicketTakes(t *testing.T) {
+	start, finish := read(t, "start-ticket-autonomous.md"), read(t, "finish-ticket-autonomous.md")
+	// start-ticket posts the comment that makes the ticket autonomous, and
+	// finish-ticket merges on the request only when the comment exists.
+	if !strings.Contains(start, "post an `## Autonomous run` comment on the lead") {
+		t.Errorf("start-ticket no longer posts the Autonomous run comment")
+	}
+	for _, want := range []string{
+		"The authorization is the request, and it holds only when the lead carries the `## Autonomous run` comment",
+		"require a `verify-pr` report that says `Verification: PASSED` for the head the request names",
+		"under the same carry-over rule a confirmation follows",
+		"Each numbered step then counts as waived",
+		"`Status: BLOCKED_FOR_SYNC`",
+	} {
+		if !strings.Contains(finish, want) {
+			t.Errorf("finish-ticket's autonomous runs no longer say %q", want)
+		}
+	}
+	verified, head := strings.Repeat("a1", 20), strings.Repeat("b2", 20)
+	line := config.AutonomousMergeLine(verified, verified)
+	for _, want := range []string{"Use the finish-ticket skill to merge the PR.", config.AutonomousLine, "verify-pr passed every human verification step on head " + verified + "."} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the autonomous merge line %q does not say %q", line, want)
+		}
+	}
+	if line := config.AutonomousMergeLine(verified, head); !strings.HasSuffix(line, "The pull request is at "+head+" now, after clean merges of the base.") {
+		t.Errorf("the autonomous merge line %q does not name both heads", line)
+	}
+	// It never says the run is unattended, which would have start-ticket
+	// ask its questions after all.
+	if strings.Contains(line, contract.Unattended) || strings.Contains(config.AutonomousLine, contract.Unattended) {
+		t.Errorf("the autonomous lines say %s", contract.Unattended)
 	}
 }
 
@@ -199,6 +333,25 @@ func TestMergeLineIsFinishTicketsExplicitWord(t *testing.T) {
 	// checks first.
 	if !strings.Contains(skill, "When the base moved at all after the review, stop with `Status: "+contract.StatusBlockedForSync+"`") {
 		t.Errorf("finish-ticket no longer stops on a moved base:\n%s", skill)
+	}
+}
+
+func TestEvidenceLineIsAConfirmationFinishTicketTakes(t *testing.T) {
+	skill := read(t, "finish-ticket-authorization.md")
+	// The user may confirm steps from verify-pr's evidence; finish-ticket
+	// then checks the report for that head, which tkt merge --evidence
+	// checked first.
+	for _, want := range []string{"The user may confirm steps from the evidence `verify-pr` posted instead of running them", "When the merge instruction says so, require a `verify-pr` report for the confirmed head that marks each of those steps `PASSED`"} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("finish-ticket no longer says %q", want)
+		}
+	}
+	head := strings.Repeat("a1", 20)
+	line := config.EvidenceMergeLine([]int{1, 2}, head, head)
+	for _, want := range []string{"merge the PR", "steps 1 and 2 passed on head " + head, "the user confirmed them from verify-pr's evidence"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the evidence line %q does not say %q", line, want)
+		}
 	}
 }
 

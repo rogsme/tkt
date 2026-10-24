@@ -33,6 +33,10 @@ export interface Row {
 	pr: { number: number; state: string; mergeable?: string; head?: string } | null;
 	checks: { state: string; total: number; failing: string[]; pending: number } | null;
 	review: { verdict: string; head: string; at_head: boolean } | null;
+	/** verification is verify-pr's newest report: PASSED, FAILED or
+	 * INCOMPLETE, with each step's result. It counts for the head when
+	 * at_head, or carried over clean merges of the base. */
+	verification?: Verification | null;
 	/** behind counts the base's commits the branch lacks, or null. */
 	behind?: number | null;
 	next: Next;
@@ -41,7 +45,7 @@ export interface Row {
 	/** paused says why a running tkt auto loop waits for you, why names
 	 * the rule behind it, and note what failed, such as a sync's error; all
 	 * are empty while the loop drives the ticket. */
-	auto: { wanted: boolean; approve_plan: boolean; running: boolean; rounds: number; stop: string; waiting: string; paused?: string; why?: string; note?: string } | null;
+	auto: { wanted: boolean; approve_plan: boolean; yolo?: boolean; running: boolean; rounds: number; stop: string; waiting: string; paused?: string; why?: string; note?: string } | null;
 	/** hold says tkt watch and tkt auto leave the ticket alone (tkt hold). */
 	hold?: boolean;
 	/** watch is what tkt watch did: last is its last step, such as
@@ -52,12 +56,28 @@ export interface Row {
 	 * head: tkt watch hands them to finish-ticket once the head is synced,
 	 * reviewed and green. It holds across clean merges of the base, and sent
 	 * says when finish-ticket last got the line. */
-	merge?: { head: string; steps: number[]; at: string; sent?: string } | null;
+	merge?: { head: string; steps: number[]; at: string; sent?: string; by?: string } | null;
 	phase: string;
 	phase_since: string;
 	started: string;
 	idle_since: string;
 	stale: boolean;
+}
+
+/** Verification is a verify-pr report: what it saw on each human
+ * verification step of one head. */
+export interface Verification {
+	verification: "PASSED" | "FAILED" | "INCOMPLETE";
+	head: string;
+	at_head: boolean;
+	carried: boolean;
+	steps: { n: number; result: "PASSED" | "FAILED" | "NOT RUN"; text: string }[];
+}
+
+/** verifiedAt returns the report when it counts for the row's head. */
+export function verifiedAt(row: Row | undefined): Verification | undefined {
+	const v = row?.verification;
+	return v && (v.at_head || v.carried) ? v : undefined;
 }
 
 /** Unblocked is a ticket a merge unblocked that has no worktree yet: by is

@@ -51,6 +51,7 @@ type Config struct {
 	Agent         Agent
 	Watch         Watch
 	Suggest       Suggest
+	Verify        Verify
 	// Chores are the scheduled runs, of every repository, by name.
 	Chores []Chore
 	// Status lists the status pages tkt watch reads, by name.
@@ -61,6 +62,13 @@ type Config struct {
 type Suggest struct {
 	// As is the preset suggest-tickets runs on, such as a cheap one; empty
 	// means the default preset.
+	As string
+}
+
+// Verify holds the [verify] settings for the verify stage.
+type Verify struct {
+	// As is the preset verify-pr runs on, such as one from another vendor
+	// than the one that built the change; empty means the ticket's own.
 	As string
 }
 
@@ -138,6 +146,15 @@ func MergeLine(steps []int, verified, head string) string {
 	return line
 }
 
+// EvidenceMergeLine is the merge line for steps the user confirmed from
+// verify-pr's evidence rather than by running them: finish-ticket then
+// checks that verify-pr's report for that head marks each one PASSED.
+func EvidenceMergeLine(steps []int, verified, head string) string {
+	line := MergeLine(steps, verified, head)
+	at := "passed on head " + verified + "."
+	return strings.Replace(line, at, "passed on head "+verified+": the user confirmed them from verify-pr's evidence.", 1)
+}
+
 // StepsText names steps for people: step 2, steps 1 and 2, steps 1 to 3,
 // steps 1, 2 and 4.
 func StepsText(steps []int) string {
@@ -180,6 +197,23 @@ func SuggestRequestLine(request string) string {
 // open question with the harness's question tool, which stops the loop.
 const UnattendedLine = "This run is unattended: no person watches this session until it asks a question."
 
+// AutonomousLine follows every line tkt sends a ticket started with tkt auto
+// --yolo: the skills then follow workflow.md's Autonomous runs section in
+// place of every question, since nobody answers one.
+const AutonomousLine = "This run is autonomous: no person reads this session or answers a question. Follow Autonomous runs in docs/agents/workflow.md wherever you would ask."
+
+// AutonomousMergeLine is the merge line of a yolo ticket: the user
+// authorized the merge when they started it, and verify-pr passed every
+// step on the head verified, which finish-ticket counts as each step
+// waived.
+func AutonomousMergeLine(verified, head string) string {
+	line := "Use the finish-ticket skill to merge the PR. " + AutonomousLine + " verify-pr passed every human verification step on head " + verified + "."
+	if head != verified {
+		line += " The pull request is at " + head + " now, after clean merges of the base."
+	}
+	return line
+}
+
 // BuiltinStages are the stage lines tkt run sends. {id} becomes the ticket,
 // and {remote} and {base} the forge's remote and base branch.
 var BuiltinStages = map[string]string{
@@ -193,7 +227,7 @@ var BuiltinStages = map[string]string{
 	// It leaves the review's findings to address, so a sync never fixes
 	// what nobody asked it to.
 	"resolve": "Fetch {remote} and merge {remote}/{base} into this branch. The merge conflicts: resolve it with the resolving-merge-conflicts skill, keep it a merge, and change nothing the merge does not need. Run the focused checks for the code it touched, commit the merge, and push once, never with force. Then refresh the Review brief in the pull request's body for the new head and base, when it has one, and end with Status: READY_FOR_REVIEW.",
-	"verify":  "Run every step of the Human verification section of this branch's pull request with the playwright-cli skill. Report each step as passed or failed with what you saw. Change no code and post nothing.",
+	"verify":  "Use the verify-pr skill to verify the current PR.",
 	"ci":      "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
 	"review":  "Use the review-pr skill to review the current PR.",
 }

@@ -327,9 +327,10 @@ export class Hub {
 	/** startAuto starts a tkt auto loop that outlives this chat, so a ticket
 	 * in auto keeps moving after you close it. The loop notifies through
 	 * herdr when it pauses for you or ends; the board reads it from tkt ls. */
-	startAuto(ticket: string, approvePlan: boolean, as?: string): void {
+	startAuto(ticket: string, approvePlan: boolean, as?: string, yolo = false): void {
 		const args = ["auto", ticket, "--notify"];
-		if (approvePlan) args.push("--approve-plan");
+		if (yolo) args.push("--yolo");
+		else if (approvePlan) args.push("--approve-plan");
 		if (as) args.push("--as", as);
 		const child = spawn(this.bin, args, { cwd: this.cwd, detached: true, stdio: "ignore" });
 		child.on("error", (err) => {
