@@ -10,12 +10,12 @@ This page follows one ticket, `ACM-123`, from the tracker to a merged pull reque
 | The forge | Holds the branch and the pull request: GitHub, Gitea or GitLab. The skills drive it through `gh`, `tea` or `glab`. tkt reads it through `gh`, so `tkt ls` and `tkt done` support GitHub only, and pushes one thing to it: a base merge that merges clean. |
 | CI | Runs the checks on every push. Every claim that CI is green names the exact head it ran on. |
 | The skills | Do the thinking: plan, implement, review, fix, merge. Each one ends with a `Status:` line and never starts the next one. |
-| `docs/agents/*.md` | The project's lifecycle configuration, written by `/setup-rogs`. The skills read all of it; tkt reads the ticket id pattern and the `## Forge` fields. |
+| `docs/agents/*.md` | The project's lifecycle configuration, written by `/setup-rogs`. The skills read all of it; tkt reads the ticket id pattern, the `## Forge` fields, and the rows of workflow.md's feature table that turn on agent verification and autonomous runs. |
 | Claude Code or OpenCode | The harness that runs a skill. tkt calls the pair of harness and model a preset. |
 | herdr | The terminal multiplexer. It holds one tab per ticket and knows whether each agent is working, blocked, idle or done. |
 | worktrunk (`wt`) | Creates and removes worktrees, and runs their hooks. |
 | tkt | Runs the mechanical steps between stages: worktrees, tabs, agent sessions, prompts, clean base merges and cleanup. `tkt watch` takes the upkeep steps for every ticket and starts the chores you schedule, and `tkt auto` chains all of them for a ticket you hand over. |
-| You | Approve the plan (or let `tkt auto --approve-plan` approve it), run the human verification steps, and merge. |
+| You | Approve the plan (or let `tkt auto --approve-plan` approve it), confirm the human verification steps, by running them or from verify-pr's evidence, and merge. Or hand a ticket to `tkt auto --yolo`, which does all of it with nobody watching. |
 
 ```mermaid
 flowchart LR
@@ -69,7 +69,8 @@ flowchart TD
   address[tkt run ACM-123 address<br/>address-pr-review: merge the base, then at most two rounds]
   sync[tkt sync ACM-123<br/>merge a clean base, or resolve a conflict in a fresh session]
   cifix[tkt run ACM-123 ci<br/>fix the failing checks, push once]
-  human[You run the human verification steps<br/>optional: tkt run ACM-123 verify]
+  verify[tkt run ACM-123 verify<br/>verify-pr runs the steps, posts the evidence]
+  human[You confirm the steps<br/>from the evidence, or by running them]
   merge[tkt merge ACM-123 --passed 1-3<br/>finish-ticket in a fresh session]
   done[tkt done ACM-123<br/>close the tab, remove the worktree]
 
@@ -84,7 +85,9 @@ flowchart TD
   verdict -->|Verdict: CHANGES_REQUESTED| address
   verdict -->|Status: BLOCKED_FOR_SYNC, STALE_BASE or a conflict| sync
   verdict -->|checks fail at the head| cifix
-  verdict -->|Verdict: READY_FOR_HUMAN| human
+  verdict -->|Verdict: READY_FOR_HUMAN| verify
+  verify -->|Verification: FAILED| address
+  verify -->|PASSED, or INCOMPLETE| human
   address -->|Status: READY_FOR_REVIEW| review
   sync -->|a new head| review
   cifix --> review
@@ -190,9 +193,25 @@ Act on the verdict, then review again:
 
 `address` ends with `Status: READY_FOR_REVIEW`, which leads back to step 5, and so does a sync, since its new head needs a review too. On a re-review, `review-pr` checks each earlier thread against the new head and resolves the ones that are fixed.
 
-### 7. You verify
+### 7. verify-pr runs the steps, and you confirm them
 
-When the verdict is `READY_FOR_HUMAN`, or the bot's `CLEAR`, run the numbered steps yourself; `tkt show ACM-123 --steps` prints them from the review summary, or from the pull request's body after the bot. `tkt run ACM-123 verify` can have an agent run them in a browser and report what it saw for each one. It changes no code and posts nothing, and you still decide whether each step passed.
+When the verdict is `READY_FOR_HUMAN`, or the bot's `CLEAR`, the numbered steps are next. `tkt show ACM-123 --steps` prints them from the review summary, or from the pull request's body after the bot.
+
+```bash
+tkt run ACM-123 verify
+```
+
+`verify-pr` runs them in a fresh session, as you would: it starts the app as `browser-pass.md` says, drives a page with `playwright-cli`, runs a step's commands otherwise, and runs the cleanup. It posts one comment-only review on the pull request: one line per step, `PASSED`, `FAILED` or `NOT RUN`, with a capture or the command's output, and a `Verification:` line. It changes no code and never writes to the tracker. A step that needs a person, such as one that sends a code to a real phone, or one that would change a staging environment or shared data, stays `NOT RUN`.
+
+Where workflow.md's feature table turns on `Agent verification`, this is the next step `tkt ls` names, and `tkt auto` takes it for you. `[verify] as` in `config.toml` runs it on another preset, such as one from another vendor, so the verifier does not share the blind spots of the model that built the change.
+
+| Report | Next |
+|---|---|
+| `Verification: FAILED` | `tkt run ACM-123 address`: address-pr-review answers each failed step as a finding. The fix gets a new review, and verify-pr runs again on the new head. |
+| `Verification: PASSED` | You confirm the steps from its evidence, or run them yourself. |
+| `Verification: INCOMPLETE` | You run the steps it could not. |
+
+A report counts for the head it ran on, and across clean merges of the base after it, as your confirmations do; a fix voids it. You still decide whether each step passed: verify-pr's report is evidence, not your word. `/check` in the tkt agent shows what it saw on each step, and starts the checklist with the steps it passed already marked.
 
 ### 8. finish-ticket merges
 
@@ -202,7 +221,7 @@ When the verdict is `READY_FOR_HUMAN`, or the bot's `CLEAR`, run the numbered st
 Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed on head 3f2a....
 ```
 
-`--passed all` names every step, and `/check` in the tkt agent runs it when you mark the last one passed. Before any session starts, tkt merge refuses a list that leaves a step out, a head the steps cannot carry to (`--head`), a head no review cleared that no sync made, a base whose merge conflicts, and failing checks at a head it would merge as it is; `finish-ticket` checks the rest itself. When finish-ticket could not merge yet, tkt merge leaves a merge order instead, and `tkt watch` carries it out:
+`--passed all` names every step, and `/check` in the tkt agent runs it when you mark the last one passed. When you confirmed the steps from verify-pr's evidence instead of running them, add `--evidence`: the line then says `... passed on head 3f2a...: the user confirmed them from verify-pr's evidence.`, and finish-ticket checks that the report for that head marks each step `PASSED` and ran the final review's procedure. tkt merge checks the report first, and refuses with `not_verified` when it is missing or marks a step otherwise. Before any session starts, tkt merge refuses a list that leaves a step out, a head the steps cannot carry to (`--head`), a head no review cleared that no sync made, a base whose merge conflicts, and failing checks at a head it would merge as it is; `finish-ticket` checks the rest itself. When finish-ticket could not merge yet, tkt merge leaves a merge order instead, and `tkt watch` carries it out:
 
 ```mermaid
 flowchart LR
@@ -259,11 +278,46 @@ Status: DONE
 | Bot `STALE_BASE`, a conflict, or `BLOCKED_FOR_SYNC` behind the base | Syncs: when `git merge-tree` finds the merge clean, it merges and pushes it as `tkt sync` does, with no agent and no fix round; on a conflict it runs `tkt run ACM-123 resolve`. |
 | Bot `FINDINGS`, or `Verdict: CHANGES_REQUESTED` | Runs `tkt run ACM-123 address`, which merges the base first. |
 | Checks fail | Runs `tkt run ACM-123 ci`. |
-| Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head | Stops: the ticket is yours to verify and merge. |
+| Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head, with agent verification on | Runs `tkt run ACM-123 verify`, which spends no fix round. |
+| verify-pr's `Verification: FAILED` | Runs `tkt run ACM-123 address`, a fix round. |
+| Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head, and verify-pr passed every step or could not run some, or agent verification is off | Stops: the ticket is yours to confirm and merge. |
 | No bot review after `[review] bot_wait` (15 minutes) | Pauses for you. With no bot (`bot_wait = "0s"`) it runs `tkt run ACM-123 review` instead. |
 | A status page reports an incident (see [tkt watch keeps the tickets moving](#tkt-watch-keeps-the-tickets-moving)) | Waits: it starts, approves and runs nothing, and spends no round, until the incident ends. A sync goes on. |
 
 Where a person decides, it pauses rather than ends: when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. It notifies once, shows the ticket as paused, and goes on by itself when the ticket moves, such as after you answer the agent in its tab. While it drives a ticket, the tab reads `ACM-123 (claude, auto)`. After `tkt update`, a loop restarts on the new tkt at its next look, once its agent stops working, and keeps the pause it notified about. `tkt hold ACM-123` pauses the loop until `tkt hold ACM-123 --off`, without a notification, for a ticket you want to park or drive by hand. At most `[auto] max_parallel` tkt auto agents (3) work at once in a repository; a loop gives up its slot while it waits for CI, the bot or you, and the others wait, queued.
+
+## Yolo: a ticket nobody watches
+
+`tkt auto ACM-123 --yolo` takes every step above, the merge too, with nobody watching. It is for a repository and a ticket where a wrong merge costs little: no person checks anything before it merges.
+
+It runs only where workflow.md's feature table turns on `Autonomous runs`, `Agent verification` and `Plan review`, and refuses with `autonomous_off` elsewhere, naming the rows that are off. `/setup-rogs` writes the rows, and an `## Autonomous runs` section with the repository's hard stops, such as migrations, payments or a new dependency.
+
+```mermaid
+flowchart TD
+  go["tkt auto ACM-123 --yolo"] --> plan["start-ticket: posts ## Autonomous run,<br/>plans, review-plan reviews the plan"]
+  plan -->|a hard stop| parked["the ticket goes to blocked;<br/>the loop pauses for you"]
+  plan --> work["tkt approves; work-ticket builds,<br/>writes ## Assumptions in the PR"]
+  work --> rev["review-pr reviews every head;<br/>address and sync as usual"]
+  rev --> ver["verify-pr runs the steps"]
+  ver -->|FAILED| rev
+  ver -->|INCOMPLETE| parked
+  ver -->|PASSED| fin["tkt merge --autonomous:<br/>finish-ticket merges"]
+  fin -->|Status: DONE| done["tkt watch runs tkt done"]
+  fin -->|BLOCKED_POST_MERGE| alert["the loop stops and notifies you"]
+```
+
+- Every line tkt sends a yolo ticket's agents, from the start line to the merge line and the stages `tkt watch` runs, ends with `This run is autonomous: no person reads this session or answers a question. Follow Autonomous runs in docs/agents/workflow.md wherever you would ask.` The skills then decide what they would ask you, on the most conservative reading the ticket, the code and the recorded decisions support, and write each decision under `## Assumptions` in the plan and in the pull request.
+- start-ticket posts an `## Autonomous run` comment on the ticket, which finish-ticket requires before it merges on the request, so a ticket you started by hand never merges this way.
+- review-plan, a model from another vendor, reviews the plan in place of you; a plan review that fails stops the run.
+- At a hard stop, the skill moves the ticket to `blocked` with a comment naming the decision a person has to make, and the loop pauses for you.
+- review-pr reviews every head, even one the review bot cleared, since finish-ticket merges on its verdict alone. Then verify-pr runs.
+- Once verify-pr passed every step, `tkt merge ACM-123 --autonomous` sends finish-ticket `Use the finish-ticket skill to merge the PR. This run is autonomous: ... verify-pr passed every human verification step on head 3f2a....` finish-ticket counts each step as waived on that report, keeps every other gate (green CI at the exact head, review-pr's verdict at the same head and base, no open feedback, an unmoved base), checks the hard stops once more, and records that no person verified the change.
+- Merges still go one at a time in the repository, through the same turn as `tkt merge`.
+- Steps verify-pr could not run pause the loop: a yolo ticket merges only when every step passed.
+- When the checks on the base fail after the merge, finish-ticket ends with `Status: BLOCKED_POST_MERGE`, and the loop stops with `post_merge_failed` and a notification. Nothing else happens; `tkt watch` leaves the ticket for you.
+- A base branch whose protection requires a person's approval cannot merge this way: finish-ticket never merges with administrator rights.
+
+The ticket stays a yolo one, and every line tkt sends it says so, until `tkt auto ACM-123 --stop` hands it back to you. `tkt ls` shows `auto.yolo`, the AUTO column reads `yolo` while the loop drives it, and the tkt agent's board marks it.
 
 `tkt agent` opens a chat that does all of this for many tickets at once: you say "start ACM-123 in auto", get the prompt back, and hear from it only when a ticket needs you.
 
@@ -371,17 +425,18 @@ work-ticket also moves a ticket that is still `new` before its first edit, and s
 
 A ticket that waits on a blocker sits in `blocked`, with a `## Blocked` comment that says why. create-ticket creates a ticket there while a ticket it waits on is open, and start-ticket, work-ticket and address-pr-review move one there when they stop on a blocker. It goes back to the state it had, with an `## Unblocked` comment, when finish-ticket merges its last blocker, or when the next run on it finds its blockers cleared. When the tracker has no blocked state, the ticket keeps its state, and only the comment shows the block.
 
-`review-pr` never writes to the tracker. `address-pr-review` writes only replacement browser captures and the blocked moves. tkt never touches the tracker at all.
+`review-pr` and `verify-pr` never write to the tracker. `address-pr-review` writes only replacement browser captures and the blocked moves. In a yolo run, start-ticket also posts the `## Autonomous run` comment. tkt never touches the tracker at all.
 
 ## The rules that hold it together
 
 - One ticket, one branch, one worktree, one tab, all named `ACM-123`. A chore's run is the same, named after its branch.
 - The implementer never reviews its own change. `tkt run` always starts a fresh session, which makes that easy.
 - The fixer never resolves review threads; the next review does.
-- Only `finish-ticket` merges, and only when you say so.
+- Only `finish-ticket` merges, and only when you say so: with your merge line, or when you started the ticket with `tkt auto --yolo`.
+- An agent's verification is evidence, never your word. Only in a yolo run does finish-ticket count verify-pr's passing report in place of your confirmation.
 - Every claim that CI passed, the change was reviewed, or the steps were verified names the exact head, and that head contains the current base.
 - Branches take the base by merging it. Nothing rebases or force-pushes a published branch, `tkt sync` included.
-- The skills never start one another. tkt suggests the next step in `tkt ls`; you run it, `tkt watch` runs the upkeep steps, or `tkt auto` runs it for a ticket you hand over. Neither merges a pull request.
+- The skills never start one another. tkt suggests the next step in `tkt ls`; you run it, `tkt watch` runs the upkeep steps, or `tkt auto` runs it for a ticket you hand over. Neither merges a pull request on its own word: `tkt watch` carries out the merge order you left, and `tkt auto` merges only a ticket you started with `--yolo`.
 
 ## When something stops
 
