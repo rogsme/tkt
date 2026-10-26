@@ -143,7 +143,8 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 		if (row.phase === "ready_for_human" && reason !== "needs_verify") return item("ready", "ready to verify", readyText(row), true);
 		return undefined;
 	}
-	if (a?.wanted && !row.hold) return item("stalled", "auto stalled", `${id} is marked for auto, but no tkt auto loop drives it. /auto ${id} on resumes it.`);
+	// A running tkt watch starts such a loop again by itself.
+	if (a?.wanted && !row.hold && !watching) return item("stalled", "auto stalled", `${id} is marked for auto, but no tkt auto loop drives it. /auto ${id} on resumes it.`);
 	if (row.watch?.paused) return watchPaused(row, item);
 	if (row.chore) {
 		// No skill reviews, fixes or merges a pull request without a ticket,

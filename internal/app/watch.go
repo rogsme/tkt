@@ -166,12 +166,19 @@ const (
 // with a fresh session: a person may still be reading or typing there.
 const watchSettle = 5 * time.Minute
 
-// tkt watch's own actions: actDone runs tkt done, and actMerge carries out a
-// merge order with tkt merge.
+// tkt watch's own actions: actDone runs tkt done, actMerge carries out a
+// merge order with tkt merge, and actAuto starts again the tkt auto loop of
+// a ticket marked for auto whose loop is gone.
 const (
 	actDone  = "done"
 	actMerge = "merge"
+	actAuto  = "auto"
 )
+
+// autoRespawn is how long a loop tkt started has to take its lock before
+// tkt watch starts another: one that exits at once, such as on a refusal,
+// is not started again every pass.
+const autoRespawn = 10 * time.Minute
 
 // WatchPolicy is what tkt watch may do. Hold says why it starts no agent
 // for now, such as an incident a status page reports, or is "".
@@ -812,6 +819,15 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	if why := row.orderVoid; why != "" && ts.st["merge_head"] == row.orderHead && !f.ForgeLag && !c.Dry && !c.ticketLocked(t.ID) {
 		c.dropOrder(ts, t.ID, "dropped")
 		c.notify(t.ID, notice{"merge order dropped", voidText(why), "request"})
+	}
+	// A ticket marked for auto whose loop is gone, as after a reboot, gets
+	// its loop back, in the mode it had; tkt auto --stop or tkt hold stops
+	// that.
+	if row.Auto != nil && row.Auto.Wanted && !row.Auto.Running && !f.Hold && t.Chore == "" && f.PRState != "MERGED" && f.PRState != "CLOSED" {
+		if c.respawnAuto(t.ID, ts) {
+			res.Action, res.Reason = actAuto, WatchAuto
+		}
+		return res
 	}
 	mem := watchMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["watch_last"]}
 	p := WatchPolicy{MaxRounds: c.Cfg.Auto.MaxRounds, DoneAfterMerge: c.Cfg.Watch.DoneAfterMerge, Hold: w.hold()}

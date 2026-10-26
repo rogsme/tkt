@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gitlab.com/rogs/tkt/internal/agent"
 	"gitlab.com/rogs/tkt/internal/apperr"
@@ -348,7 +349,34 @@ func (c *Ctx) startAuto(id, mode string, ts *ticketState) string {
 		c.UI.Warn("%s stays manual: cannot start tkt auto: %v", id, err)
 		return config.ModeManual
 	}
+	c.save(ts, "auto_spawned", c.Now().UTC().Format(history.TimeFormat))
 	return mode
+}
+
+// respawnAuto starts again the tkt auto loop of a ticket marked for auto
+// whose loop is gone, in the mode its state names, unless tkt started one
+// within autoRespawn. It reports whether it started one.
+func (c *Ctx) respawnAuto(id string, ts *ticketState) bool {
+	if at, err := time.Parse(time.RFC3339, ts.st["auto_spawned"]); err == nil && c.Now().Sub(at) < autoRespawn {
+		return false
+	}
+	mode := config.ModeAuto
+	switch ts.st["auto"] {
+	case autoPlan:
+		mode = config.ModeAutoPlan
+	case autoYolo:
+		mode = config.ModeYolo
+	}
+	if c.startAuto(id, mode, ts) == config.ModeManual {
+		return false
+	}
+	c.UI.Info("%s: its tkt auto loop was gone, so tkt watch started it again", id)
+	c.record(history.Event{Ticket: id, Event: history.Watch, Action: actAuto})
+	if c.Dry {
+		return true
+	}
+	c.notify(id, notice{"tkt auto restarted", "its loop was gone, as after a reboot; tkt auto --stop " + id + " turns it off", "none"})
+	return true
 }
 
 // autoEnv is the environment a tkt auto loop starts with: this one, in the

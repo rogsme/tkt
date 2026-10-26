@@ -143,6 +143,7 @@ export function eventText(e: HistoryEvent): string {
 			if (e.action === "pause") return `tkt watch waits for you: ${e.stop}`;
 			if (e.stop === "failed") return `tkt watch could not ${[e.action, e.stage].filter(Boolean).join(" ")}${e.note ? `: ${e.note}` : ""}`;
 			if (e.action === "merge") return "tkt watch carried out the merge order";
+			if (e.action === "auto") return "tkt watch started its tkt auto loop again";
 			return `tkt watch ran ${e.stage}`;
 		case "merge":
 			if (e.action === "ordered") return "merge order left, for when finish-ticket can merge";

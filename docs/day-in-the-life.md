@@ -401,7 +401,7 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `verification incomplete` | A yolo loop paused: verify-pr could not run every step, and a yolo ticket merges only when it passed them all. | `/check ID`, run the rest, and merge it yourself. |
 | `post-merge CI failed` | A yolo ticket merged, and the checks on the base failed after it. | `/show ID` for finish-ticket's report, then fix the base. |
 | `merged` | The pull request merged. tkt watch removes the ticket once finish-ticket ends with `Status: DONE`. | Nothing while tkt watch runs; otherwise `/done ID`. |
-| `auto stalled` | The ticket is marked for auto, but no tkt auto loop runs, as after a reboot. | `/auto ID on`. |
+| `auto stalled` | The ticket is marked for auto, but no tkt auto loop runs, as after a reboot, and no tkt watch runs to start it again. | `/auto ID on`. |
 | `max rounds reached` | tkt auto or tkt watch made `[auto] max_rounds` fix runs since the plan's approval. | Read the review, then `Run STAGE once more` in `/inbox`, or take over. |
 | `no progress` | The last step changed nothing on the same head. | `/show ID`, then `Run STAGE again` in `/inbox`. |
 | `review bot silent` | The bot has not reviewed the head within `[review] bot_wait`. | Check its CI job, or `Run review-pr instead`, which the board leaves out where workflow.md turns `CI review` on in `/inbox`. |

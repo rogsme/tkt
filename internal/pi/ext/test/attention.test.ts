@@ -60,6 +60,8 @@ test("a ticket marked for auto with no loop has stalled", () => {
 	const a = attentionOf(row({ phase: "building", auto: auto({ running: false }) }), false);
 	assert.equal(a?.kind, "stalled");
 	assert.match(a?.text ?? "", /\/auto ACM-12 on/);
+	// A running tkt watch starts the loop again by itself.
+	assert.equal(attentionOf(row({ phase: "building", auto: auto({ running: false }) }), false, true), undefined);
 });
 
 test("the key stays while the situation does, and changes with it", () => {

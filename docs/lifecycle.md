@@ -141,7 +141,7 @@ sequenceDiagram
   tkt-->>you: worktree, tab, agent
 ```
 
-Then tkt start starts a `tkt auto` loop for the ticket, which outlives it. In auto, the default, the loop waits at the plan for you: it never approves a plan itself. Once you approve it, in the plan viewer or with `tkt approve`, the loop drives the ticket until it is ready for human verification. `--manual` starts no loop, `--auto-plan` starts one that approves the plan too, and `--yolo` one that carries the ticket to the merge. `[start] mode = "manual"` in `config.toml` makes manual the default.
+Then tkt start starts a `tkt auto` loop for the ticket, which outlives it, and `tkt watch` starts the loop again when it is gone, as after a reboot. In auto, the default, the loop waits at the plan for you: it never approves a plan itself. Once you approve it, in the plan viewer or with `tkt approve`, the loop drives the ticket until it is ready for human verification. `--manual` starts no loop, `--auto-plan` starts one that approves the plan too, and `--yolo` one that carries the ticket to the merge. `[start] mode = "manual"` in `config.toml` makes manual the default.
 
 The new branch starts from the base on the remote: tkt fetches it first, so the plan starts from the code the base holds now, not from a local `main` that nobody pulled. When the fetch fails, it warns and starts from the local base.
 
