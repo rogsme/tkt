@@ -18,7 +18,8 @@ decides. It reads the same facts as tkt ls, then:
     session;
   - once the head is reviewed clean (the bot's CLEAR, or review-pr's
     READY_FOR_HUMAN; review-pr runs only in a repository with no review bot,
-    [review] bot_wait = "0s"), runs verify where workflow.md turns agent
+    [review] bot_wait = "0s", and never where workflow.md turns CI review
+    on), runs verify where workflow.md turns agent
     verification on: verify-pr runs the human verification steps and posts
     what it saw. A step it reports failed gets an address run, which counts
     as a fix round, then a new review and a new verify;

@@ -56,6 +56,9 @@ export interface Row {
 	/** sync is the last tkt sync that failed on the head: why, when, and the
 	 * log with everything git and its hooks printed. */
 	sync?: { reason: string; kind: string; at: string; log: string } | null;
+	/** ci_review says workflow.md turns CI review on: the review bot's
+	 * CLEAR counts as review-pr's, and tkt never starts review-pr. */
+	ci_review?: boolean;
 	/** fix is the session fixing the ticket in a split beside its agent:
 	 * its pane, its agent's status, the stage it runs, and the status line
 	 * it ended with. */
@@ -207,7 +210,7 @@ export interface MergeResult {
 	verified?: string;
 	steps: number[];
 	action: "merging" | "ordered" | "cancelled" | "none";
-	waits?: "sync" | "review" | "checks" | "turn" | "";
+	waits?: "sync" | "review" | "bot" | "checks" | "turn" | "";
 	after?: string;
 	sent?: string;
 }
@@ -230,6 +233,7 @@ export function mergeText(r: MergeResult): string {
 		const once = {
 			sync: "tkt watch merged its base and a review cleared the new head; your steps carry over the clean merge",
 			review: r.verified && r.verified !== r.head ? "a review clears the head a sync made; your steps carry over the clean merge" : "review-pr, which tkt watch starts, clears its head, since finish-ticket merges on review-pr's verdict",
+			bot: "the review bot clears the head a sync made; your steps carry over the clean merge",
 			turn: `${r.after || "the other ticket"} merged first, since one merge goes at a time`,
 			checks: "its checks pass",
 			"": "its checks pass",

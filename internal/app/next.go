@@ -113,7 +113,9 @@ func human(reason, text string) Next {
 // merge with nobody watching. Fix is the status of the agent fixing the
 // ticket in a split, "" without one, and FixStatus the status line it
 // ended with. SyncFail is the kind of the sync that failed on the head:
-// conflict, failed, or "".
+// conflict, failed, or "". CIReview says workflow.md turns CI review on: a
+// reviewer in CI stands in for review-pr, its CLEAR at the head counts as
+// ReviewReady, and tkt never starts review-pr.
 type Facts struct {
 	ID           string
 	Chore        string
@@ -151,6 +153,7 @@ type Facts struct {
 	Fix          string
 	FixStatus    string
 	SyncFail     string
+	CIReview     bool
 }
 
 // NextStep applies the rules in order and returns the first that matches.
@@ -235,15 +238,20 @@ func NextStep(f Facts) Next {
 			argv = append(argv, "--as", f.MergeAs)
 		}
 		return command(ReasonMergeDue, argv...)
-	case f.MergeSteps != "" && f.AtHead && f.Verdict == contract.VerdictClear:
+	case f.MergeSteps != "" && f.AtHead && f.Verdict == contract.VerdictClear && !f.CIReview:
 		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone.
 		return command(ReasonNeedsReview, "tkt", "run", id, "review")
 	case f.AtHead && (f.Verdict == contract.VerdictClear || f.Verdict == contract.VerdictReadyForHuman):
 		return cleared(f)
+	case f.CIReview && (f.BotWait == 0 || f.Waited < f.BotWait):
+		// The reviewer in CI reviews every head; nothing else does.
+		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
 	case f.BotWait == 0:
 		return command(ReasonNeedsReview, "tkt", "run", id, "review")
 	case f.Waited < f.BotWait:
 		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
+	case f.CIReview:
+		return human(ReasonBotSilent, "the review bot has not reviewed this head; check its CI job")
 	}
 	return human(ReasonBotSilent, "the review bot has not reviewed this head; check its CI job, or run tkt run "+id+" review")
 }
@@ -396,6 +404,7 @@ func factsFor(r Row) Facts {
 	if r.Fix != nil {
 		f.Fix, f.FixStatus = r.Fix.Status, r.Fix.LastStatus
 	}
+	f.CIReview = r.CIReview
 	if r.Sync != nil && r.PR != nil && r.PR.State == "OPEN" {
 		f.SyncFail = r.Sync.Kind
 	}

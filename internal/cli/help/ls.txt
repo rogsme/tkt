@@ -37,7 +37,10 @@ The next step is the first of these rules that matches:
      merges of the base after it.
  10. No review at the head yet: without a bot ([review] bot_wait = "0s"),
      tkt run ID review. With one, wait bot_wait for it, counted from when tkt
-     first saw the head waiting; after that, check the bot's CI job.
+     first saw the head waiting; after that, check the bot's CI job. Where
+     workflow.md turns CI review on, tkt waits for the bot however long it
+     takes and never names review-pr, and the bot's CLEAR is what a merge
+     order merges on.
 
 A verdict on an older head does not count, so after every push the next step
 waits for a new review.

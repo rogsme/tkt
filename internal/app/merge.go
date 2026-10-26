@@ -87,6 +87,9 @@ const (
 const (
 	WaitSync   = "sync"
 	WaitReview = "review"
+	// WaitBot is a head a sync made where CI review is on: the reviewer in
+	// CI reviews it, and nothing else does.
+	WaitBot    = "bot"
 	WaitChecks = "checks"
 	WaitTurn   = "turn"
 )
@@ -125,6 +128,8 @@ func (r *MergeResult) waitText() string {
 		return "tkt watch merged " + r.base + " into it, and a review cleared the new head"
 	case WaitReview:
 		return "review-pr cleared its head " + short(r.Head)
+	case WaitBot:
+		return "the review bot cleared its head " + short(r.Head)
 	case WaitTurn:
 		return or(r.After, "the merge another tkt sends now") + " went first"
 	}
@@ -254,7 +259,9 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	}
 	// finish-ticket merges on review-pr's READY_FOR_HUMAN at the head it
 	// merges. A head only the review bot cleared, or one a sync made, waits
-	// for that review, which tkt watch starts.
+	// for that review, which tkt watch starts. With CI review on, the bot's
+	// CLEAR at the head counts as that review, and a head a sync made
+	// waits for the bot.
 	ready := row.reviewReady
 	waitsReview := !ready && (f.AtHead && f.Verdict == contract.VerdictClear || !f.AtHead && res.Verified != res.Head)
 	if !ready && !waitsReview {
@@ -292,6 +299,8 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		res.Waits = WaitSync
 	case f.Checks == "fail":
 		return nil, apperr.New(apperr.MergeChecksFail, "the checks fail at %s's head %s", id, short(res.Head)).WithHint("tkt run %s ci", id)
+	case waitsReview && row.CIReview:
+		res.Waits = WaitBot
 	case waitsReview:
 		res.Waits = WaitReview
 	case f.Checks == "pending":

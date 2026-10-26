@@ -130,7 +130,7 @@ func TestWorkflowFeatureRowsTurnFeaturesOn(t *testing.T) {
 	os.MkdirAll(dir, 0o755)
 	os.WriteFile(filepath.Join(dir, "issue-tracker.md"), []byte(read(t, "issue-tracker.md")), 0o644)
 	os.WriteFile(filepath.Join(dir, "forge.md"), []byte(read(t, "forge.md")), 0o644)
-	features := []string{contract.FeatureAgentVerification, contract.FeatureAutonomousRuns, contract.FeaturePlanReview}
+	features := []string{contract.FeatureAgentVerification, contract.FeatureAutonomousRuns, contract.FeaturePlanReview, contract.FeatureCIReview}
 	// Without workflow.md, as in an older configuration, every feature is
 	// off.
 	if c, err := lifecycle.Load(root); err != nil || c.On(contract.FeatureAgentVerification) {
@@ -154,6 +154,31 @@ func TestWorkflowFeatureRowsTurnFeaturesOn(t *testing.T) {
 			if c.On(f) != (state == "on") {
 				t.Errorf("%s with every row %s: %v", f, state, c.On(f))
 			}
+		}
+	}
+}
+
+func TestCIReviewMakesTheBotsClearCount(t *testing.T) {
+	seed := read(t, "workflow-ci-review.md")
+	for _, want := range []string{
+		"## CI review",
+		"`Automated review: CLEAR`",
+		"counts as `review-pr`'s summary with `Verdict: READY_FOR_HUMAN` for that head",
+		"the pull request body's `## Human verification` section",
+		"A runner never starts `review-pr` here.",
+	} {
+		if !strings.Contains(seed, want) {
+			t.Errorf("the CI review section no longer says %q", want)
+		}
+	}
+	// The verdict line the section names is the one tkt reads.
+	if v := contract.AutomatedReviewRE.FindStringSubmatch("**Automated review: CLEAR** · head `abc1234`"); v == nil || v[1] != contract.VerdictClear {
+		t.Errorf("AutomatedReviewRE no longer reads the CI reviewer's CLEAR")
+	}
+	finish := read(t, "finish-ticket-ci-review.md")
+	for _, want := range []string{"`Automated review: CLEAR` for that same head SHA is the final review summary", "require it to be an ancestor of the reviewed head"} {
+		if !strings.Contains(finish, want) {
+			t.Errorf("finish-ticket no longer says %q", want)
 		}
 	}
 }

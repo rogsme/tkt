@@ -192,7 +192,7 @@ function paused(row: Row, item: Make): Attention {
 		case "plan_awaits_approval":
 			return item("plan", "plan ready", `${planText(id)} tkt auto goes on after it.`, true);
 		case "bot_silent":
-			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI; tkt auto goes on when it posts.`, true, [review]);
+			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI; tkt auto goes on when it posts.`, true, row.ci_review ? [] : [review]);
 		case "round_limit": {
 			// tkt run leaves the loop's round count alone, so the loop takes
 			// the run's outcome and pauses here again if the ticket still
@@ -244,7 +244,7 @@ function byReason(row: Row, reason: string, item: Make, byAuto = false): Attenti
 		case "review_awaits_approval":
 			return item("check", "review draft waits", `${id}: review-pr waits for you to post or drop its draft, in its tab.${after}`, byAuto, [reply]);
 		case "bot_silent":
-			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI.`, byAuto, [review]);
+			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI.`, byAuto, row.ci_review ? [] : [review]);
 		case "fix_blocked":
 			return item("question", "the fix asks", `${id}: the session fixing it in a split asks a question. Answer it in pane ${row.fix?.pane ?? "its split"}.${after}`, byAuto);
 		case "fix_stopped":

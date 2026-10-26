@@ -181,6 +181,8 @@ tkt run ACM-123 review
 
 When the forge runs an automated reviewer in CI instead, it posts an `Automated review: CLEAR`, `FINDINGS` or `STALE_BASE` line, and tkt reads that the same way: the bot's `CLEAR` counts like `READY_FOR_HUMAN`, and the steps to verify are then the pull request's own Human verification section. A verdict counts only for the head it names, so after every push the ticket waits for a new review.
 
+Where `docs/agents/workflow.md` turns `CI review` on, which `/setup-rogs` does when it finds such a reviewer, the bot stands in for review-pr all the way to the merge: finish-ticket merges on its `CLEAR` for the exact head, and tkt never starts review-pr, not for a merge order on a head a sync made, and not when the bot goes silent. Without the row, finish-ticket merges only on review-pr's verdict, so tkt watch has review-pr review a head only the bot cleared before it carries out a merge order.
+
 ### 6. The review loop
 
 Act on the verdict, then review again:
@@ -281,7 +283,7 @@ Status: DONE
 | Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head, with agent verification on | Runs `tkt run ACM-123 verify`, which spends no fix round. |
 | verify-pr's `Verification: FAILED` | Runs `tkt run ACM-123 address`, a fix round. |
 | Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head, and verify-pr passed every step or could not run some, or agent verification is off | Stops: the ticket is yours to confirm and merge. |
-| No bot review after `[review] bot_wait` (15 minutes) | Pauses for you. With no bot (`bot_wait = "0s"`) it runs `tkt run ACM-123 review` instead. |
+| No bot review after `[review] bot_wait` (15 minutes) | Pauses for you, and with `CI review` on it never offers review-pr instead. With no bot (`bot_wait = "0s"`) it runs `tkt run ACM-123 review` instead. |
 | A status page reports an incident (see [tkt watch keeps the tickets moving](#tkt-watch-keeps-the-tickets-moving)) | Waits: it starts, approves and runs nothing, and spends no round, until the incident ends. A sync goes on. |
 
 Where a person decides, it pauses rather than ends: when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. It notifies once, shows the ticket as paused, and goes on by itself when the ticket moves, such as after you answer the agent in its tab. While it drives a ticket, the tab reads `ACM-123 (claude, auto)`. After `tkt update`, a loop restarts on the new tkt at its next look, once its agent stops working, and keeps the pause it notified about. `tkt hold ACM-123` pauses the loop until `tkt hold ACM-123 --off`, without a notification, for a ticket you want to park or drive by hand. At most `[auto] max_parallel` tkt auto agents (3) work at once in a repository; a loop gives up its slot while it waits for CI, the bot or you, and the others wait, queued.

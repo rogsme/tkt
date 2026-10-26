@@ -18,6 +18,7 @@ import (
 
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/config"
+	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/gitx"
 	"gitlab.com/rogs/tkt/internal/lifecycle"
 	"gitlab.com/rogs/tkt/internal/lock"
@@ -289,6 +290,12 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 		if len(cfg.IgnoredLegacy) > 0 {
 			return Check{ID: "config", Status: CheckWarn, Message: msg + "; ignoring " + strings.Join(cfg.IgnoredLegacy, " and "),
 				Hint: "delete " + strings.Join(cfg.IgnoredLegacy, " and ")}
+		}
+		if lcErr == nil && lc.On(contract.FeatureCIReview) && cfg.Review.BotWait == 0 {
+			// With CI review on, tkt waits for the bot however long it
+			// takes, and never says it went silent.
+			return Check{ID: "config", Status: CheckWarn, Message: msg + "; workflow.md turns CI review on, but [review] bot_wait = \"0s\" says the repository has no review bot",
+				Hint: "remove bot_wait, or set it to how long the bot may take, such as \"15m\""}
 		}
 		return Check{ID: "config", Status: CheckOK, Message: msg}
 	})

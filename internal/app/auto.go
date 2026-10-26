@@ -325,6 +325,10 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 	case ReasonChecksFail:
 		return fix("ci")
 	case ReasonNeedsReview:
+		if f.CIReview {
+			// The reviewer in CI reviews every head; nothing else does.
+			return autoAct{Kind: actPoll}
+		}
 		return act(actRun, "review")
 	case ReasonVerifyIncomplete:
 		if p.Yolo {

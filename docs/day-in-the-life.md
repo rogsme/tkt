@@ -404,7 +404,7 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `auto stalled` | The ticket is marked for auto, but no tkt auto loop runs, as after a reboot. | `/auto ID on`. |
 | `max rounds reached` | tkt auto or tkt watch made `[auto] max_rounds` fix runs since the plan's approval. | Read the review, then `Run STAGE once more` in `/inbox`, or take over. |
 | `no progress` | The last step changed nothing on the same head. | `/show ID`, then `Run STAGE again` in `/inbox`. |
-| `review bot silent` | The bot has not reviewed the head within `[review] bot_wait`. | Check its CI job, or `Run review-pr instead` in `/inbox`. |
+| `review bot silent` | The bot has not reviewed the head within `[review] bot_wait`. | Check its CI job, or `Run review-pr instead`, which the board leaves out where workflow.md turns `CI review` on in `/inbox`. |
 | `sync failed` | tkt sync cannot merge the base for now, such as with uncommitted changes in the worktree. A failure after the fetch, such as a push a pre-push hook refused, never shows here: a fresh session in a split beside the agent fixes it. | Fix what it names; tkt auto tries again at each look. |
 | `the fix asks`, `fix: BLOCKED` | The session fixing a failed sync or failing checks in a split asks a question, or stopped without fixing it. | Answer it, or read why, in its split. |
 | `auto paused` | tkt auto paused for another reason, such as an agent in a state tkt does not know. | `/peek ID` shows its screen. |

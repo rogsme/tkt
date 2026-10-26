@@ -53,6 +53,11 @@ func TestAutoStepTable(t *testing.T) {
 		{with(open, func(f *Facts) { f.SyncFail = "conflict" }), AutoPolicy{MaxRounds: 2}, autoMemory{}, autoAct{Kind: actRun, Stage: "resolve"}},
 		{with(open, func(f *Facts) { f.SyncFail = "failed" }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, pause(StopRoundLimit)},
 		{with(open, func(f *Facts) { f.Fix = "working" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actPoll}},
+		// With CI review on, the loop waits for the bot and never reviews.
+		{with(open, func(f *Facts) { f.CIReview = true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actPoll}},
+		{with(open, func(f *Facts) {
+			f.CIReview, f.Verdict, f.AtHead, f.ReviewReady, f.Yolo = true, "CLEAR", true, true, true
+		}), AutoPolicy{Yolo: true}, autoMemory{}, autoAct{Kind: actRun, Stage: "verify"}},
 		{with(open, func(f *Facts) { f.Fix, f.FixStatus = "idle", "BLOCKED" }), AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		// A moved base that merges clean is tkt sync's, with no agent and
 		// no round, even past the round limit; a conflict needs resolve.

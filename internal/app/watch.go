@@ -276,8 +276,9 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		return act(actMerge, "")
 	case ReasonNeedsReview:
 		// A sync moved the head of a ticket you ordered merged: finish-ticket
-		// merges only a head reviewed clean, and the steps carry over.
-		if f.MergeSteps != "" {
+		// merges only a head reviewed clean, and the steps carry over. With
+		// CI review on, the reviewer in CI reviews it, never review-pr.
+		if f.MergeSteps != "" && !f.CIReview {
 			return run("review")
 		}
 	}
@@ -921,6 +922,8 @@ func (w orderWaits) reason() string {
 		return ReasonBaseMoved
 	case WaitReview:
 		return ReasonNeedsReview
+	case WaitBot:
+		return ReasonAwaitingBot
 	case WaitTurn:
 		return WatchTurn
 	}

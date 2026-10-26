@@ -185,6 +185,9 @@ type Row struct {
 	// alone (tkt hold).
 	Hold  bool      `json:"hold"`
 	Watch *RowWatch `json:"watch"`
+	// CIReview says workflow.md turns CI review on: the review bot's CLEAR
+	// at the head counts as review-pr's, and tkt never starts review-pr.
+	CIReview bool `json:"ci_review"`
 	// Sync is the last failed tkt sync, while the head is the one it failed
 	// on, or null.
 	Sync *RowSync `json:"sync"`
@@ -199,6 +202,7 @@ type Row struct {
 	orderVoid   string
 	orderHead   string
 	reviewReady bool
+
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
 	PhaseSince string `json:"phase_since"`
@@ -668,6 +672,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
 	row.Hold, row.Chore = st["hold"] != "", or(t.Chore, st["chore"])
+	row.CIReview = c.LC.On(contract.FeatureCIReview)
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan || st["auto"] == autoYolo, Yolo: st["yolo"] != "", Rounds: atoi(st["rounds"]),
 		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"], Note: st["auto_note"]}
 	if !row.Auto.Running {
@@ -723,6 +728,11 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			row.PR = &RowPR{Number: p.Number, State: "OPEN", Mergeable: p.Mergeable, Head: p.HeadRefOid, URL: p.URL}
 			row.Checks, row.Review = &checks, verdict
 			row.reviewReady = forge.HumanVerification(p) != nil
+			if row.CIReview && verdict != nil && verdict.AtHead && verdict.Value == contract.VerdictClear {
+				// The reviewer in CI stands in for review-pr: its CLEAR at
+				// the head is what finish-ticket merges on.
+				row.reviewReady = true
+			}
 			row.Verification = forge.LatestVerification(p)
 			row.Title = prTitle(p.Title, t.ID)
 		} else if p, ok := closedPR(l.gh.Mine(l.all, t.ID)); ok {

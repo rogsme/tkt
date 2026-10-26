@@ -27,11 +27,13 @@ const (
 // The rows of workflow.md's feature table that tkt reads. A row reads
 // "| Name | on |"; a missing row means off. tkt runs verify-pr after a clean
 // review only with agent verification on, and tkt auto --yolo needs all
-// three on.
+// three on. With CI review on, a reviewer in CI stands in for review-pr,
+// and tkt never starts review-pr.
 const (
 	FeatureAgentVerification = "Agent verification"
 	FeatureAutonomousRuns    = "Autonomous runs"
 	FeaturePlanReview        = "Plan review"
+	FeatureCIReview          = "CI review"
 )
 
 var markerRE = regexp.MustCompile(`^<!-- rogs-skills config v(\d+): (\S+) -->$`)
