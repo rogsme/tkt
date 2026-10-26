@@ -319,7 +319,7 @@ flowchart TD
 
 A yolo run starts with the ticket: `--yolo` refuses a ticket you started another way, which has no `## Autonomous run` comment. The ticket stays a yolo one, and every stage line tkt sends it says so, until `tkt auto ACM-123 --stop` hands it back to you and drops any merge order the loop left. A merge line you send yourself, such as after the loop paused on steps verify-pr could not run, never says the run is autonomous, so finish-ticket takes your word. tkt merge refuses to merge over verify-pr's report of a failed step, since finish-ticket merges no head with open feedback. `tkt ls` shows `auto.yolo`, the AUTO column reads `yolo` while the loop drives it, and the tkt agent's board marks it.
 
-`tkt agent` opens a chat that does all of this for many tickets at once: you say "start ACM-123 in auto", get the prompt back, and hear from it only when a ticket needs you.
+`tkt agent` opens a chat that does all of this for many tickets at once: you say "start ACM-123 in auto", get the prompt back, and hear from it only when a ticket needs you. `tkt web`, or `/web` in the chat, opens the same chat in a browser, mirrored both ways: what you type in either place, and your answers to its questions, count in both.
 
 ## tkt watch keeps the tickets moving
 

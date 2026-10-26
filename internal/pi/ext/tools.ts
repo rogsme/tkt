@@ -10,7 +10,7 @@ import * as act from "./actions.ts";
 import { phaseLabel, statusText } from "./board.ts";
 import type { Hub } from "./hub.ts";
 import { expandIds, mentions } from "./model.ts";
-import { ask } from "./ui.ts";
+import { ask, confirm } from "./dialog.ts";
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }], details: undefined });
 
@@ -20,7 +20,7 @@ const text = (t: string) => ({ content: [{ type: "text" as const, text: t }], de
 async function guard(hub: Hub, ctx: ExtensionContext, ids: string[], question: string, what: string): Promise<boolean> {
 	if (ids.length > 0 && ids.every((i) => mentions(hub.lastInput, i))) return true;
 	if (!ctx.hasUI) return false;
-	return ctx.ui.confirm(question, what);
+	return confirm(ctx, question, what);
 }
 
 /** list names tickets for a sentence: ACM-1, ACM-2 and ACM-3. */
@@ -171,7 +171,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!ctx.hasUI || !(await ctx.ui.confirm(`Send this to ${t}?`, p.text))) return text("The user did not confirm; nothing was sent.");
+			if (!ctx.hasUI || !(await confirm(ctx, `Send this to ${t}?`, p.text))) return text("The user did not confirm; nothing was sent.");
 			return text(await act.send(hub, t, p.text, p.hold));
 		},
 	});
@@ -253,7 +253,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!ctx.hasUI || !(await ctx.ui.confirm(`Remove ${t}?`, `Close its tabs and remove its worktree. tkt checks that its pull request is merged first.`))) return text("The user did not confirm; nothing was removed.");
+			if (!ctx.hasUI || !(await confirm(ctx, `Remove ${t}?`, `Close its tabs and remove its worktree. tkt checks that its pull request is merged first.`))) return text("The user did not confirm; nothing was removed.");
 			return text(await act.done(hub, t));
 		},
 	});

@@ -1,7 +1,9 @@
-// The extension's views: a question with fixed answers, the board pinned
-// to the top, the times in the chat, and the overlays: /board, the /peek
-// screen and the verification checklist. The question view follows pi's
-// examples/extensions/question.ts (MIT, Mario Zechner).
+// The extension's views: a question with fixed answers, a text editor, the
+// board pinned to the top, the times in the chat, and the overlays: /board,
+// the /peek screen and the verification checklist. The question view
+// follows pi's examples/extensions/question.ts (MIT, Mario Zechner). The
+// question and the editor close when their signal aborts, as when you
+// answer on the web page instead; dialog.ts asks in both places.
 
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
@@ -14,13 +16,14 @@ export interface Option {
 	description?: string;
 }
 
-/** ask shows a question with fixed answers and, when other is set, a last
- * answer you type yourself. It returns the label you picked or the text you
- * typed, or undefined when you pressed Escape. */
-export async function ask(ctx: ExtensionContext, question: string, options: Option[], other = true): Promise<{ answer: string; typed: boolean } | undefined> {
-	if (!ctx.hasUI) return undefined;
+/** question shows a question with fixed answers and, when other is set, a
+ * last answer you type yourself. It returns the label you picked or the text
+ * you typed, or undefined when you pressed Escape or signal aborted. */
+export async function question(ctx: ExtensionContext, question: string, options: Option[], other: boolean, signal?: AbortSignal): Promise<{ answer: string; typed: boolean } | undefined> {
+	if (!ctx.hasUI || signal?.aborted) return undefined;
 	const all: (Option & { isOther?: boolean })[] = other ? [...options, { label: "Type something.", isOther: true }] : options;
 	return ctx.ui.custom<{ answer: string; typed: boolean } | undefined>((tui, theme, _kb, done) => {
+		closeOn(signal, () => done(undefined));
 		let index = 0;
 		let editing = false;
 		let cached: string[] | undefined;
@@ -97,6 +100,51 @@ export async function ask(ctx: ExtensionContext, question: string, options: Opti
 			},
 		};
 	});
+}
+
+/** textEditor asks for a text of several lines, such as feedback on a
+ * plan. It returns the text, or undefined when you pressed Escape or signal
+ * aborted. */
+export async function textEditor(ctx: ExtensionContext, title: string, prefill: string, signal?: AbortSignal): Promise<string | undefined> {
+	if (!ctx.hasUI || signal?.aborted) return undefined;
+	return ctx.ui.custom<string | undefined>((tui, theme, _kb, done) => {
+		closeOn(signal, () => done(undefined));
+		const editor = new Editor(tui, {
+			borderColor: (s) => theme.fg("accent", s),
+			selectList: {
+				selectedPrefix: (t) => theme.fg("accent", t),
+				selectedText: (t) => theme.fg("accent", t),
+				description: (t) => theme.fg("muted", t),
+				scrollInfo: (t) => theme.fg("dim", t),
+				noMatch: (t) => theme.fg("warning", t),
+			},
+		});
+		editor.setText(prefill);
+		editor.onSubmit = (value) => done(value);
+		return {
+			handleInput(data: string) {
+				if (matchesKey(data, Key.escape)) return done(undefined);
+				editor.handleInput(data);
+				tui.requestRender();
+			},
+			render(width: number): string[] {
+				const w = Math.max(1, width);
+				const lines = [theme.fg("accent", "-".repeat(w))];
+				for (const l of wrapTextWithAnsi(theme.fg("text", title), w - 1)) lines.push(` ${l}`);
+				lines.push("");
+				for (const l of editor.render(Math.max(1, w - 2))) lines.push(` ${l}`);
+				lines.push("", ` ${theme.fg("dim", "Enter to send, Shift+Enter for a new line, Esc to cancel")}`);
+				lines.push(theme.fg("accent", "-".repeat(w)));
+				return lines;
+			},
+			invalidate() {},
+		};
+	});
+}
+
+/** closeOn calls close once signal aborts. */
+function closeOn(signal: AbortSignal | undefined, close: () => void): void {
+	signal?.addEventListener("abort", close, { once: true });
 }
 
 /** frame draws a box around lines, with a title in its top border and a

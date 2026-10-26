@@ -27,6 +27,7 @@ The fakes in `internal/fake` stand in for the real tools on `PATH`:
 - `claude` fails if anything calls it, because tkt starts agents through herdr only.
 - `git` logs each call, then runs the real git.
 - `systemctl` keeps the user units' states in `$FAKE_DIR/systemd.json` (enabled and active) and answers `--user` commands. Like systemd, it refuses to enable or start a unit whose file, or template's file, is not in `$XDG_CONFIG_HOME/systemd/user`. It runs nothing: a started unit only counts as active. `systemd-escape --path` names a path with systemd's rules, and `loginctl` reads and writes `$FAKE_DIR/linger`. `launchctl` keeps the loaded agents in `$FAKE_DIR/launchd.json` as `enabled`, and the running ones as `active`; like launchd, it refuses to bootstrap an agent that is loaded already.
+- `xdg-open` and `open` log the address they were asked to open in a browser, and open nothing.
 - `pi` answers `--version` with `1.3.0`. Any other call appends the variables tkt agent sets (`PI_CODING_AGENT_DIR`, `PI_SKIP_VERSION_CHECK`, `PI_TELEMETRY`, `TKT_BIN`) to `$FAKE_DIR/pi-env` and exits. The test binary has no bundled pi, so the `agent_` scripts set `TKT_PI=pi`; the condition `[bundled_pi]` holds when `go test -tags bundled_pi` built one in. A script has no terminal, so `tkt agent` never gets past its terminal check there: the scripts check its dry run, and unit tests in `internal/pi` and `internal/runner` cover the command line and the process replacement.
 
 The `update_` scripts point `TKT_RELEASES` and `TKT_RELEASES_API` at `file://` URLs under `$WORK`, and set `TKT_UPDATE_TARGET` to the file `tkt update` replaces. Only the tests set `TKT_UPDATE_TARGET`: without it, `tkt update` would replace the shared test binary.
@@ -60,6 +61,7 @@ The scripts use these commands beyond testscript's own:
 | `envelope [EXPR WANT]` | stdout holds exactly one JSON envelope, and EXPR applied to it gives WANT. |
 | `unitvar VAR PATH` | Sets VAR to PATH as `systemd-escape --path` names it. |
 | `expand FILE` | Replaces `$WORK`, `$REPO`, `$HOME` and `$FAKE_DIR` in FILE with their values, for an archive file that names a path, such as a `config.toml`. |
+| `webserve FILE` | Stands in for a tkt agent chat that serves the web page: a server on 127.0.0.1 that answers `/health` as the extension does, named in FILE with its port and token. |
 
 ## Manual check in herdr
 
@@ -153,3 +155,15 @@ After a change to the extension in `internal/pi/ext`, run `just install`, then `
 13. Ask "how did ACM-1 go?": the answer names the reviews' findings and the commits that fixed them, from `tkt history`. `/board` and `/peek` draw on a solid panel on a transparent terminal.
 14. On a dark transparent terminal, the whole chat sits on a solid dark background, empty rows too, in fullscreen mode and again after `/reload` and `/new`. After a switch to regular mode in `/settings`, the terminal's own background shows. Quit: the shell below the chat has the terminal's background, not the chat's.
 15. Build a tkt that claims an old release: `just fetch-pi`, then `go build -tags bundled_pi -ldflags '-X main.version=v0.0.1' -o DIR/tkt .`, and run `DIR/tkt agent`. A note says the latest release is available, and the line under the board starts with `/update to vNEW`. `/update` asks first, downloads, and says it updated; answer yes to `Quit now?`. The last line says `tkt agent --session ID`; that command, with `DIR/tkt`, opens the same chat, and `DIR/tkt --version` prints vNEW. With a `just install` build, nothing names an update, and `/update` says it is a development build. Then `/version` says the chat runs v0.0.1 and that the tkt at `DIR/tkt` is the same; rebuild it without the `-X` and `/version` says the tkt there is a dev build now, and to reopen the chat.
+
+After a change to the web page (`web.ts`, `mirror.ts`, `chat.ts`, `gate.ts`, `dialog.ts` or `ext/web/`), run `just install`, then `tkt agent` in a herdr pane inside a configured scratch repository:
+
+1. `/web` opens the page in your browser and says so in the chat, without the address. `tkt web --no-open` in another pane prints `http://127.0.0.1:PORT/?token=...`; the page you open from it drops the token from the address bar.
+2. Send "what is on the board?" from the page: the terminal shows the prompt, and both show the answer as it streams in, with the `tkt_status` call and the times. Send a message from the terminal: the page shows it.
+3. Send `/done ACM-1` from the page. "Remove ACM-1?" shows in both places, and no button on the page has the focus. Answer No on the page: the terminal's question closes. Send it again and press Escape in the terminal: the page's closes. `/auto ACM-1 yolo` does the same with fixed answers, and `2` on the page picks the second.
+4. Type `/ap` on the page: it offers `/approve`, and Tab completes it. Send `/model`: a notice says it opens in the terminal only, and nothing reaches the model.
+5. Paste a screenshot into the page's message box, ask what it shows, and send: the model answers about it, and the terminal shows the prompt.
+6. Press the sun and moon button: the page turns dark or light, `~/.local/state/tkt/web.json` records it, and a reload keeps it. With no choice saved, the page follows the system's setting.
+7. Open `tkt agent` in a second pane of the same repository: it says another chat serves the page. Quit it; the page stays up. Quit the first chat: the page says the chat is closed. Open `tkt agent` again: the page comes back by itself, on the same address.
+8. `curl -H 'Host: evil.example.com' http://127.0.0.1:PORT/` and a request without the cookie get 403 and 401.
+9. Quit every chat, then run `tkt web` in a herdr pane: it opens `tkt agent` in a new tab labeled `tkt agent`, waits for its page, and opens it.

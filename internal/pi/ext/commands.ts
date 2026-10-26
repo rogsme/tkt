@@ -4,11 +4,13 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import * as act from "./actions.ts";
-import type { Hub } from "./hub.ts";
+import { type Hub, reasonOf } from "./hub.ts";
 import { expandIds } from "./model.ts";
-import { ask, board } from "./ui.ts";
+import { ask, confirm, input, notify } from "./dialog.ts";
+import { board } from "./ui.ts";
+import type { Web } from "./web.ts";
 
-export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
+export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 	const ids = (prefix: string): AutocompleteItem[] | null => {
 		const words = prefix.split(/\s+/);
 		const last = (words.pop() ?? "").toUpperCase();
@@ -19,7 +21,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	const one = (args: string, ctx: ExtensionCommandContext, usage: string): string | undefined => {
 		const raw = args.trim().split(/\s+/)[0];
 		if (!raw) {
-			ctx.ui.notify(`usage: ${usage}`, "warning");
+			notify(ctx, `usage: ${usage}`, "warning");
 			return undefined;
 		}
 		return hub.idOf(raw);
@@ -42,9 +44,9 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 			const list = expandIds(words.filter((w) => w.toLowerCase() !== modeWord).join(" "), hub.key);
 			const rest = words.filter((w) => w.toLowerCase() !== modeWord && /^\d+$/.test(w)).map((w) => hub.idOf(w));
 			const all = [...new Set([...list, ...rest])];
-			if (all.length === 0) return ctx.ui.notify("usage: /start ACM-12 [ACM-13 ...] [auto | after-plan] [as PRESET]", "warning");
+			if (all.length === 0) return notify(ctx, "usage: /start ACM-12 [ACM-13 ...] [auto | after-plan] [as PRESET]", "warning");
 			const mode: act.Mode = modeWord === "auto" || modeWord === "full" ? "auto" : modeWord === "after-plan" ? "auto_after_plan" : "manual";
-			if (all.length > 1 && !(await ctx.ui.confirm(`Start ${all.join(", ")}?`, "Each ticket starts in its own tab."))) return;
+			if (all.length > 1 && !(await confirm(ctx, `Start ${all.join(", ")}?`, "Each ticket starts in its own tab."))) return;
 			say(act.start(hub, all, mode, as));
 		},
 	});
@@ -59,11 +61,11 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 			let request = words.join(" ");
 			// Without words, you type the request; a number there is a count too.
 			if (!request) {
-				if (!ctx.hasUI) return ctx.ui.notify("usage: /suggest [1 to 10 | what you want] [as PRESET]", "warning");
-				request = (await ctx.ui.input("What should suggest-tickets look for?", "five tickets tagged feedback, or a number"))?.trim() ?? "";
-				if (!request) return ctx.ui.notify("Nothing sent to suggest-tickets.", "info");
+				if (!ctx.hasUI) return notify(ctx, "usage: /suggest [1 to 10 | what you want] [as PRESET]", "warning");
+				request = (await input(ctx, "What should suggest-tickets look for?", "five tickets tagged feedback, or a number"))?.trim() ?? "";
+				if (!request) return notify(ctx, "Nothing sent to suggest-tickets.", "info");
 			}
-			if (/^\d+$/.test(request) && (Number(request) < 1 || Number(request) > 10)) return ctx.ui.notify("usage: /suggest [1 to 10 | what you want] [as PRESET]", "warning");
+			if (/^\d+$/.test(request) && (Number(request) < 1 || Number(request) > 10)) return notify(ctx, "usage: /suggest [1 to 10 | what you want] [as PRESET]", "warning");
 			say(act.suggest(hub, request, as));
 		},
 	});
@@ -73,7 +75,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		handler: async (args, ctx) => {
 			const words = args.trim().split(/\s+/).filter(Boolean);
 			if (words[0]?.toLowerCase() !== "run") return say(await act.chores(hub));
-			if (!words[1]) return ctx.ui.notify("usage: /chores run NAME", "warning");
+			if (!words[1]) return notify(ctx, "usage: /chores run NAME", "warning");
 			say(act.choreRun(hub, words[1]));
 		},
 	});
@@ -140,7 +142,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		handler: async (args, ctx) => {
 			const id = one(args, ctx, "/send ACM-12 TEXT");
 			const text = args.trim().split(/\s+/).slice(1).join(" ");
-			if (!id || !text) return ctx.ui.notify("usage: /send ACM-12 TEXT", "warning");
+			if (!id || !text) return notify(ctx, "usage: /send ACM-12 TEXT", "warning");
 			say(await act.send(hub, id, text));
 		},
 	});
@@ -177,7 +179,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const id = one(args, ctx, "/done ACM-12");
-			if (id && (await ctx.ui.confirm(`Remove ${id}?`, "Close its tabs and remove its worktree, once tkt done confirms the merge."))) say(await act.done(hub, id));
+			if (id && (await confirm(ctx, `Remove ${id}?`, "Close its tabs and remove its worktree, once tkt done confirms the merge."))) say(await act.done(hub, id));
 		},
 	});
 
@@ -213,7 +215,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 					return say(await act.auto(hub, a.ticket, !(r?.auto?.running || r?.auto?.wanted), false));
 				}
 				case "done":
-					if (await ctx.ui.confirm(`Remove ${a.ticket}?`, "Close its tabs and remove its worktree, once tkt done confirms the merge.")) say(await act.done(hub, a.ticket));
+					if (await confirm(ctx, `Remove ${a.ticket}?`, "Close its tabs and remove its worktree, once tkt done confirms the merge.")) say(await act.done(hub, a.ticket));
 					return;
 				case "inbox":
 					return say(await act.inbox(hub, ctx));
@@ -226,7 +228,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const list = hub.idsIn(args);
-			if (list.length === 0) return ctx.ui.notify("usage: /history ACM-12 [ACM-13 ...]", "warning");
+			if (list.length === 0) return notify(ctx, "usage: /history ACM-12 [ACM-13 ...]", "warning");
 			say(await act.history(hub, list, false));
 		},
 	});
@@ -240,6 +242,19 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerCommand("version", {
 		description: "Say which tkt and pi this chat runs, and whether a newer tkt is installed",
 		handler: async () => say(await act.version(hub)),
+	});
+
+	pi.registerCommand("web", {
+		description: "Open the chat's web page in your browser, mirrored both ways",
+		handler: async (_args, ctx) => {
+			if (web.why && !web.other) return say(`This chat serves no web page: ${web.why}.`);
+			const env = await hub.tkt<{ url: string; opened: boolean }>(["web"]);
+			if (!env.ok || !env.result) return say(`tkt web failed: ${reasonOf(env)}`);
+			// The address holds the page's token, so it goes to you alone,
+			// never into the session the model reads.
+			if (!env.result.opened) return notify(ctx, `Open the web page at ${env.result.url}`);
+			say(web.other ? "Opened the web page of the chat that serves it, which mirrors that chat." : "Opened the web page in your browser. What you type there shows here too.");
+		},
 	});
 
 	pi.registerCommand("update", {

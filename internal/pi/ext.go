@@ -6,14 +6,15 @@ import (
 	"encoding/hex"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
+	"strings"
 )
 
-// extFiles is tkt's pi extension, the system prompt it starts pi with, and
-// its themes. Tests under ext/test stay out.
+// extFiles is tkt's pi extension, the system prompt it starts pi with, its
+// themes, and the web page it serves under web/. Tests under ext/test stay
+// out.
 //
-//go:embed ext/*.ts ext/system.md ext/*.json
+//go:embed ext/*.ts ext/system.md ext/*.json ext/web
 var extFiles embed.FS
 
 // WriteExt writes tkt's pi extension under dataDir/ext/SHA12, named after
@@ -38,7 +39,12 @@ func WriteExt(dataDir string) (string, error) {
 	}
 	for _, n := range names {
 		b, _ := extFiles.ReadFile(n)
-		if err := os.WriteFile(filepath.Join(tmp, path.Base(n)), b, 0o644); err != nil {
+		dst := filepath.Join(tmp, filepath.FromSlash(strings.TrimPrefix(n, "ext/")))
+		err := os.MkdirAll(filepath.Dir(dst), 0o755)
+		if err == nil {
+			err = os.WriteFile(dst, b, 0o644)
+		}
+		if err != nil {
 			os.RemoveAll(tmp)
 			return "", unpackErr(dataDir, "cannot write the extension: %v", err)
 		}

@@ -72,6 +72,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | Command | What it does |
 |---|---|
 | `tkt agent` | Opens the tkt agent, a chat in your pane that drives your tickets. |
+| `tkt web` | Opens the tkt agent's web page in your browser: the same chat, mirrored both ways. It opens `tkt agent` in a new tab when no chat runs. |
 | `tkt suggest [N \| REQUEST]` | Has suggest-tickets pick the next tickets to start, in a suggest tab at the repository's root: the ones a request asks for, such as `tkt suggest five tickets tagged feedback`, or N tickets that can run side by side, 3 by default. The picks stay in that tab, for you to read and start. |
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
@@ -167,6 +168,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/done ID` | Removes a merged ticket. |
 | `/version` | Says which tkt and pi the chat runs, and whether the tkt on disk is another one now. |
 | `/update` | Installs a newer tkt, then offers to quit. Reopen the chat with the `tkt agent --session ID` it prints to run the new tkt. The board names a newer release when the chat finds one. |
+| `/web` | Opens the chat's web page in your browser, as `tkt web` does. |
 
 Without an `[agent]` model, pi starts on its own default: in `/model`, press Ctrl+S on a model to make it the default for new chats. An `[agent]` table in `config.toml` picks the model and loads more pi extensions, such as one that adds a model provider:
 
@@ -175,6 +177,14 @@ Without an `[agent]` model, pi starts on its own default: in `/model`, press Ctr
 model = "acme/large"
 extensions = ["~/.pi/agent/extensions/acme-provider.ts"]
 ```
+
+#### The web page
+
+`tkt web`, or `/web` in the chat, opens the same chat in your browser. It is the chat itself, mirrored both ways: a message you send in either place shows in both, with the model's answer as it streams in, its tool calls and the times. A question the chat asks, such as "Remove ACM-12?" or `/check`'s "how do you want to verify?", shows in both, and the first answer wins and closes the other. Slash commands work in the page, which offers them as you type `/`, and you can paste an image into a message. pi's own screens, such as `/model`, `/login` and `/resume`, open in the terminal only. `/board`, `/peek` and `/check`'s checklist still draw in the terminal only.
+
+The chat serves the page itself, on `127.0.0.1` only, so it lives as long as the chat does. The first chat in a repository serves it; a second one says it serves none. When no chat serves the page, `tkt web` opens `tkt agent` in a new tab of the herdr workspace and waits for it. When you quit the chat, the page says so and comes back by itself once a chat serves it again. The address `tkt web` prints carries a token, which the page keeps in a cookie, and the server answers only its own address and its own page, so another site in your browser cannot drive the chat.
+
+The page follows your system's light or dark setting until you pick one with its sun and moon button, and keeps that choice in `~/.local/state/tkt/web.json` for every repository. Its fonts come from Google Fonts; offline it falls back to the system's.
 
 `tkt help lifecycle` walks through each step. [`docs/lifecycle.md`](docs/lifecycle.md) follows a ticket from the tracker to a merged pull request, with diagrams of how tkt, the skills, herdr, worktrunk, the tracker and the forge fit together. [`docs/day-in-the-life.md`](docs/day-in-the-life.md) follows a whole day with several tickets at once. `tkt COMMAND --help` explains when to use a command and what it refuses.
 
