@@ -26,6 +26,9 @@ export interface Attention {
 	/** chore marks an item of a chore's run, which tkt auto does not drive
 	 * and which has no plan to approve. */
 	chore?: boolean;
+	/** parked marks a blocked ticket's item: it notifies once, then waits in
+	 * the board's Blocked column, out of what needs you. */
+	parked?: boolean;
 }
 
 /** Choice is one answer /inbox offers for an item. do names the action, and
@@ -134,6 +137,14 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: keyOf(kind), ticket: id, kind, title, text, byAuto, offers, chore: !!row.chore });
 	if (row.phase === "merged" && a?.stop === "post_merge_failed") return item("failed", "post-merge CI failed", `${id} merged in yolo, but the checks on the base failed after it. /show ${id} for finish-ticket's report; tkt leaves the ticket as it is.`);
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
+	// A ticket that waits on something outside it sits in the Blocked
+	// column: one you put on hold says nothing, and one whose agent stopped
+	// with Status: BLOCKED tells you once why.
+	if (row.phase === "blocked") {
+		if (row.hold) return undefined;
+		const why = row.blocked_reason ? `: ${row.blocked_reason}` : "";
+		return { ...item("blocked", "blocked", `${id} is blocked${why}. Reply to its agent once that clears.`, !!a?.running, [reply]), parked: true };
+	}
 	if (a?.running && !row.hold) {
 		// A pause stays in the loop's state until its next look. Once the
 		// agent works again, you acted, such as approving the plan.

@@ -163,6 +163,12 @@ func TestPhaseOf(t *testing.T) {
 		{Facts{Agent: "working", Stage: "verify"}, PhaseVerifying},
 		{Facts{Agent: "working", Stage: "custom"}, PhaseWorking},
 		{Facts{PRState: "OPEN", Agent: "idle", Fix: "working"}, PhaseFixing},
+		// A ticket that waits on something outside it is blocked; one that
+		// waits on its setup needs you.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED"}, PhaseBlocked},
+		{Facts{Agent: "idle", LastStatus: "SETUP_REQUIRED"}, PhaseNeedsYou},
+		{Facts{Agent: "idle", Hold: true}, PhaseBlocked},
+		{Facts{Agent: "working", Stage: "work", Hold: true}, PhaseBuilding},
 		{Facts{PRState: "OPEN", Agent: "idle", Fix: "idle", FixStatus: "BLOCKED"}, PhaseNeedsYou},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", SyncFail: "failed"}, PhaseNeedsFix},
 		{Facts{Agent: "blocked"}, PhaseNeedsYou},

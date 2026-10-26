@@ -562,6 +562,11 @@ code {
 	color: var(--dim);
 }
 
+.phase.blocked {
+	border-color: var(--error);
+	color: var(--error);
+}
+
 .views {
 	display: flex;
 	flex-wrap: wrap;
@@ -1050,6 +1055,11 @@ dd {
 	flex-basis: 100%;
 	font-size: 0.82rem;
 	color: var(--muted);
+}
+
+.cell .why {
+	flex-basis: 100%;
+	color: var(--error);
 }
 
 .form {

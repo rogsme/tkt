@@ -72,8 +72,11 @@ the status pages report while a tkt watch reads them.
 
 The phase names where a ticket stands: queued, starting, planning,
 awaiting_approval, building, ci, waiting_review, reviewing, needs_fix, fixing,
-verifying, working, needs_you, ready_for_human, merged, closed, no_agent, or
-finished for a chore's run that found nothing to change.
+verifying, working, needs_you, blocked, ready_for_human, merged, closed,
+no_agent, or finished for a chore's run that found nothing to change. blocked
+is a ticket that waits on something outside it: its agent stopped with
+Status: BLOCKED, whose Reason: line --json gives as blocked_reason, or you put
+it on hold.
 tkt ls records a phase when it sees it change, in the worktree and in the
 history tkt stats reads, so the time in a phase is as exact as how often
 something runs tkt ls or tkt auto. An agent that sits idle with no status line

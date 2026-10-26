@@ -16,6 +16,9 @@ func TestLastStatus(t *testing.T) {
 			t.Errorf("LastStatus(%q) = %q, want %q", c.text, got, c.want)
 		}
 	}
+	if got := Reason("Steps 4 to 9 wait.\n\nStatus: BLOCKED\nReason: Albee adds the DNS records.\n"); got != "Albee adds the DNS records." {
+		t.Errorf("Reason = %q", got)
+	}
 	if !HasStatus("x\nStatus: PLAN_APPROVED\ny", "PLAN_APPROVED") || HasStatus("Status: AWAITING_APPROVAL", "PLAN_APPROVED") {
 		t.Error("HasStatus")
 	}

@@ -158,15 +158,17 @@ type Row struct {
 	Chore  string `json:"chore"`
 	// Title is the open pull request's, without the ticket id it starts
 	// with, or "" before there is one.
-	Title      string         `json:"title"`
-	Path       string         `json:"path"`
-	Diff       *RowDiff       `json:"diff"`
-	Tabs       []herdr.Tab    `json:"tabs"`
-	Agent      *RowAgent      `json:"agent"`
-	LastStatus string         `json:"last_status"`
-	PR         *RowPR         `json:"pr"`
-	Checks     *forge.Checks  `json:"checks"`
-	Review     *forge.Verdict `json:"review"`
+	Title      string      `json:"title"`
+	Path       string      `json:"path"`
+	Diff       *RowDiff    `json:"diff"`
+	Tabs       []herdr.Tab `json:"tabs"`
+	Agent      *RowAgent   `json:"agent"`
+	LastStatus string      `json:"last_status"`
+	// BlockedReason is the Reason: line of the agent's Status: BLOCKED.
+	BlockedReason string         `json:"blocked_reason"`
+	PR            *RowPR         `json:"pr"`
+	Checks        *forge.Checks  `json:"checks"`
+	Review        *forge.Verdict `json:"review"`
 	// Verification is verify-pr's newest report, and whether it holds for
 	// the head.
 	Verification *forge.Verification `json:"verification"`
@@ -352,7 +354,7 @@ func phaseStyle(phase string, you, ready, busy, faint lipgloss.Style) lipgloss.S
 		return you
 	case PhaseReadyForHuman:
 		return ready
-	case PhaseMerged, PhaseClosed, PhaseQueued:
+	case PhaseMerged, PhaseClosed, PhaseQueued, PhaseBlocked:
 		return faint
 	}
 	return busy
@@ -712,6 +714,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			}
 			if idle {
 				row.LastStatus = agent.LastStatus(turn.All)
+				if row.LastStatus == contract.StatusBlocked {
+					row.BlockedReason = agent.Reason(turn.All)
+				}
 				if !turn.At.IsZero() {
 					row.IdleSince = turn.At.UTC().Format(history.TimeFormat)
 				}

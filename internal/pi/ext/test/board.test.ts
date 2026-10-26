@@ -69,6 +69,7 @@ test("an empty board says how to begin", () => {
 test("the columns hold each phase once", () => {
 	assert.equal(columnOf(row({ phase: "fixing" })), "Review");
 	assert.equal(columnOf(row({ phase: "no_agent" })), "Needs you");
+	assert.equal(columnOf(row({ phase: "blocked" })), "Blocked");
 	assert.equal(columnOf(row({ phase: "something new" })), "Needs you");
 	const cols = boardColumns([row({ ticket: "ACM-2", phase: "ci" }), row({ ticket: "ACM-10", phase: "ci" }), row({ ticket: "ACM-1", phase: "merged" })], now);
 	assert.deepEqual(order(cols), ["ACM-2", "ACM-10", "ACM-1"]);

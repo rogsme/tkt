@@ -296,12 +296,16 @@ const (
 	PhaseVerifying        = "verifying"
 	PhaseWorking          = "working"
 	PhaseNeedsYou         = "needs_you"
-	PhaseReadyForHuman    = "ready_for_human"
-	PhaseMerging          = "merging"
-	PhaseMerged           = "merged"
-	PhaseClosed           = "closed"
-	PhaseNoAgent          = "no_agent"
-	PhaseUnknown          = "unknown"
+	// PhaseBlocked is a ticket that waits on something outside it: its
+	// agent stopped with Status: BLOCKED and a Reason: line, such as a
+	// person's answer, or you put it on hold.
+	PhaseBlocked       = "blocked"
+	PhaseReadyForHuman = "ready_for_human"
+	PhaseMerging       = "merging"
+	PhaseMerged        = "merged"
+	PhaseClosed        = "closed"
+	PhaseNoAgent       = "no_agent"
+	PhaseUnknown       = "unknown"
 	// PhaseFinished is a chore's run that ended with nothing to change.
 	PhaseFinished = "finished"
 )
@@ -317,6 +321,8 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseMerged
 	case f.PRState == "CLOSED":
 		return PhaseClosed
+	case f.Hold && f.Agent != herdr.Working:
+		return PhaseBlocked
 	case f.Agent != herdr.Working && (f.Launch == "tab" || f.Launch == "launching"):
 		return PhaseStarting
 	case f.Agent != herdr.Working && (f.Launch == "not_ready" || f.Launch == "prompt_uncertain"):
@@ -346,7 +352,12 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseWorking
 	case ReasonFixing:
 		return PhaseFixing
-	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval, ReasonBotSilent, ReasonChoreFindings, ReasonFixBlocked, ReasonFixStopped:
+	case ReasonStatusBlocked:
+		if f.LastStatus == contract.StatusBlocked {
+			return PhaseBlocked
+		}
+		return PhaseNeedsYou
+	case ReasonAgentBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval, ReasonBotSilent, ReasonChoreFindings, ReasonFixBlocked, ReasonFixStopped:
 		return PhaseNeedsYou
 	case ReasonNoChanges:
 		return PhaseFinished

@@ -30,6 +30,7 @@ export function BoardView({ board, g, now }: { board?: Board; g: Go; now: number
 							<span class="id">${cell.ticket}</span>
 							<span class="muted small">${since(r?.phase_since ?? "", now)}</span>
 							${r?.title && html`<span class="title">${r.title}</span>`}
+							${r?.phase === "blocked" && html`<span class="why small">${r.hold ? "on hold" : r.blocked_reason || "Status: BLOCKED"}</span>`}
 						</button>`;
 					})}
 				</div>`,

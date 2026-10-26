@@ -30,6 +30,8 @@ export interface Row {
 	 * watcher; it goes on by itself when they finish. */
 	agent: { pane_id: string; name: string; harness: string; status: string; background?: number } | null;
 	last_status: string;
+	/** blocked_reason is the Reason: line of the agent's Status: BLOCKED. */
+	blocked_reason?: string;
 	/** url is the open pull request's page on the forge. */
 	pr: { number: number; state: string; mergeable?: string; head?: string; url?: string } | null;
 	checks: { state: string; total: number; failing: string[]; pending: number } | null;
