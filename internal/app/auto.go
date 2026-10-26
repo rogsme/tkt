@@ -893,9 +893,10 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 		actions = res.Actions
 	case actRun:
 		as := w.as
-		if a.Stage == "verify" && c.Cfg.Verify.As != "" {
-			// [verify] as wins over --as: the verifier should not be the
-			// model that built the change.
+		if c.stageAs(a.Stage) != "" {
+			// [verify] as wins over --as, since the verifier should not be
+			// the model that built the change, and [fixes] as does too,
+			// since a small fix needs no model as strong.
 			as = ""
 		}
 		res, err := c.App.Run(ctx, RunOpts{ID: w.id, Stage: a.Stage, As: as, Dry: c.Dry})

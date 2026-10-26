@@ -125,11 +125,11 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		preset, _ = c.Cfg.Preset(st["preset"])
 	}
 	// [verify] as runs verify-pr on a preset of its own, such as another
-	// vendor's, for that run only: the ticket keeps its preset for the
-	// stages after it.
+	// vendor's, and [fixes] as the small fixes on a cheap one, for that run
+	// only: the ticket keeps its preset for the stages after it.
 	own := preset.Name
-	if o.Stage == "verify" && o.As == "" && o.line == "" && c.Cfg.Verify.As != "" {
-		preset, _ = c.Cfg.Preset(c.Cfg.Verify.As)
+	if as := c.stageAs(o.Stage); as != "" && o.As == "" && o.line == "" {
+		preset, _ = c.Cfg.Preset(as)
 		if c.Cfg.Has(st["preset"]) {
 			own = st["preset"]
 		} else {
@@ -286,4 +286,16 @@ func (c *Ctx) pickPane(id, path, want string, ts *ticketState, preset config.Pre
 	}
 	c.Agent.WaitPaneFree(c.Ctx, pane, 40)
 	return tab, pane, nil
+}
+
+// stageAs is the preset a stage runs on by the settings, whatever the
+// ticket's: [verify] as for verify, [fixes] as for the small fixes, or "".
+func (c *Ctx) stageAs(stage string) string {
+	switch {
+	case stage == "verify":
+		return c.Cfg.Verify.As
+	case slices.Contains(config.FixStages, stage):
+		return c.Cfg.Fixes.As
+	}
+	return ""
 }

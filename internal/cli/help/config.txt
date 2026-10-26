@@ -69,6 +69,14 @@ The ticket keeps its preset for the stages after it:
   [verify]
   as = "opencode"
 
+A [fixes] table names the preset the small fixes run on: the session that
+fixes failing checks (the ci stage), and the ones that take over a failed
+sync (resolve and sync-fix). A cheaper model does them well. Without it, the
+ticket's own preset runs them, and the ticket keeps its preset either way:
+
+  [fixes]
+  as = "cheap"
+
 A repository's own settings go in a .tkt directory at the root of its main
 checkout, next to .git, in two files:
 

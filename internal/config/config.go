@@ -60,6 +60,7 @@ type Config struct {
 	Watch         Watch
 	Suggest       Suggest
 	Verify        Verify
+	Fixes         Fixes
 	// Chores are the repository's scheduled runs, by name.
 	Chores []Chore
 	// Status lists the status pages tkt watch reads, by name.
@@ -79,6 +80,17 @@ type Verify struct {
 	// than the one that built the change; empty means the ticket's own.
 	As string
 }
+
+// Fixes holds the [fixes] settings for the small fixes: a failed sync, a
+// conflict with the base, and failing checks.
+type Fixes struct {
+	// As is the preset those sessions run on, such as a cheap one; empty
+	// means the ticket's own.
+	As string
+}
+
+// FixStages are the stages [fixes] as runs on.
+var FixStages = []string{"ci", "resolve", "sync-fix"}
 
 // Watch holds tkt watch's settings.
 type Watch struct {
