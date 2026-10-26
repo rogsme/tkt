@@ -91,6 +91,42 @@
       }
     },
     {
+      "path": "web",
+      "use": "web",
+      "short": "Open the tkt agent's web page, a browser view of the chat",
+      "long": "tkt web opens the tkt agent's web page in your browser: the same chat as tkt\nagent, mirrored both ways. A message you send in either place shows in both,\nwith the model's answer as it streams in, its tool calls, and the times. A\nquestion the chat asks, such as \"Remove ACM-12?\", shows in both, and the first\nanswer wins. Slash commands work in the page as in the terminal.\n\nThe page lives inside a running chat, which serves it on 127.0.0.1 only. The\nfirst chat in a repository serves it; a second one says it serves none. When\nno chat serves the page, tkt web opens tkt agent in a new tab of this herdr\nworkspace, waits for its page, and opens that. Outside herdr it refuses: run\ntkt agent in a herdr pane, then /web in the chat. When you quit the chat, the\npage says so and comes back by itself once a chat serves it again.\n\nThe address carries a token, which the page keeps in a cookie, so another web\npage in your browser cannot drive the chat. tkt web prints the address, so\n--no-open gives it to you without a browser.\n\nThe page follows your system's light or dark setting until you pick one with\nits sun and moon button. It keeps that choice in\n${XDG_STATE_HOME:-~/.local/state}/tkt/web.json for every repository.\n\npi's own screens, such as /model, /login, /settings, /resume and /tree, open\nin the terminal only. Text you have typed but not sent stays where you typed\nit.",
+      "example": "  tkt web\n  tkt web --no-open --json\n  tkt web --dry-run",
+      "group": "lifecycle",
+      "args": [],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print what tkt web would run instead of running it"
+        },
+        {
+          "name": "no-open",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the page's address without opening a browser"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "dry_run": "boolean",
+        "opened": "boolean",
+        "pane": "string",
+        "started": "boolean",
+        "url": "string"
+      }
+    },
+    {
       "path": "suggest",
       "use": "suggest [COUNT | REQUEST...]",
       "short": "Ask a fresh agent in the suggest tab which tickets to start next",
@@ -2156,6 +2192,11 @@
       "summary": "the chore's last run is still open: its agent works, or its pull request waits for a merge"
     },
     {
+      "code": "web_not_running",
+      "exit": 4,
+      "summary": "no tkt agent chat serves the repository's web page, and tkt web cannot open one outside herdr"
+    },
+    {
       "code": "wt_failed",
       "exit": 1,
       "summary": "worktrunk failed or printed output tkt cannot read"
@@ -2251,6 +2292,11 @@
       "summary": "the old agent did not exit; nothing was sent"
     },
     {
+      "code": "web_start_timeout",
+      "exit": 5,
+      "summary": "tkt web opened tkt agent in a new tab, but its web page did not answer in time; look at the chat in that tab"
+    },
+    {
       "code": "interrupted",
       "exit": 5,
       "summary": "tkt was interrupted; check the ticket's pane before retrying"
@@ -2267,7 +2313,7 @@
     },
     {
       "name": "XDG_STATE_HOME",
-      "description": "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it (default ~/.local/state/tkt)"
+      "description": "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it, and the light or dark choice of the tkt agent's web page in web.json (default ~/.local/state/tkt)"
     },
     {
       "name": "XDG_DATA_HOME",

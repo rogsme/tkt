@@ -761,6 +761,32 @@ func updateCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func webCmd(g *globals) *cobra.Command {
+	var o app.WebOpts
+	cmd := &cobra.Command{
+		Use:   "web",
+		Short: "Open the tkt agent's web page, a browser view of the chat",
+		Long:  helpText("web"),
+		Example: `  tkt web
+  tkt web --no-open --json
+  tkt web --dry-run`,
+		SuggestFor: []string{"browser", "ui"},
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return usage("tkt web takes no arguments")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			res, err := g.app().Web(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.NoOpen, "no-open", false, "print the page's address without opening a browser")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print what tkt web would run instead of running it")
+	return cmd
+}
+
 func agentCmd(g *globals) *cobra.Command {
 	var o app.FrontOpts
 	cmd := &cobra.Command{

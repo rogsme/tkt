@@ -1,0 +1,24 @@
+tkt web opens the tkt agent's web page in your browser: the same chat as tkt
+agent, mirrored both ways. A message you send in either place shows in both,
+with the model's answer as it streams in, its tool calls, and the times. A
+question the chat asks, such as "Remove ACM-12?", shows in both, and the first
+answer wins. Slash commands work in the page as in the terminal.
+
+The page lives inside a running chat, which serves it on 127.0.0.1 only. The
+first chat in a repository serves it; a second one says it serves none. When
+no chat serves the page, tkt web opens tkt agent in a new tab of this herdr
+workspace, waits for its page, and opens that. Outside herdr it refuses: run
+tkt agent in a herdr pane, then /web in the chat. When you quit the chat, the
+page says so and comes back by itself once a chat serves it again.
+
+The address carries a token, which the page keeps in a cookie, so another web
+page in your browser cannot drive the chat. tkt web prints the address, so
+--no-open gives it to you without a browser.
+
+The page follows your system's light or dark setting until you pick one with
+its sun and moon button. It keeps that choice in
+${XDG_STATE_HOME:-~/.local/state}/tkt/web.json for every repository.
+
+pi's own screens, such as /model, /login, /settings, /resume and /tree, open
+in the terminal only. Text you have typed but not sent stays where you typed
+it.

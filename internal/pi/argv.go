@@ -68,18 +68,22 @@ func Argv(bin, extDir string, o Launch) []string {
 var dropped = []string{"PI_CODING_AGENT_SESSION_DIR", "PI_PACKAGE_DIR"}
 
 // Host is the tkt that starts pi: the directory for pi's settings, logins
-// and sessions, the tkt binary, and the versions of tkt and of pi.
+// and sessions, the tkt binary, the versions of tkt and of pi, and the file
+// where the chat that serves the repository's web page names it.
 type Host struct {
 	AgentDir  string
 	Bin       string
 	Version   string
 	PiVersion string
+	WebFile   string
 }
 
 // EnvVars are the variables tkt sets for pi, as KEY=VALUE: pi keeps its
 // settings, logins and sessions in AgentDir, asks no server for updates or
 // telemetry, and finds tkt at Bin. The versions tell the extension what it
 // runs on, which the binary at Bin no longer says once tkt is replaced.
+// TKT_WEB_FILE is where the extension names the web page it serves, for
+// tkt web to find.
 func EnvVars(h Host) []string {
 	return []string{
 		"PI_CODING_AGENT_DIR=" + h.AgentDir,
@@ -88,6 +92,7 @@ func EnvVars(h Host) []string {
 		"TKT_BIN=" + h.Bin,
 		"TKT_VERSION=" + h.Version,
 		"TKT_PI_VERSION=" + h.PiVersion,
+		"TKT_WEB_FILE=" + h.WebFile,
 	}
 }
 

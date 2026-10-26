@@ -317,8 +317,14 @@ func (c Client) Rename(ctx context.Context, pane, name string) error {
 	return err
 }
 
+// PaneRunArgv is the herdr command that types a command into a pane's
+// shell and presses Enter.
+func PaneRunArgv(pane, command string) []string {
+	return []string{"herdr", "pane", "run", pane, command}
+}
+
 // PaneRun types a command into a pane's shell and presses Enter.
 func (c Client) PaneRun(ctx context.Context, pane, command string) error {
-	_, err := c.call(ctx, false, "pane", "run", pane, command)
+	_, err := c.call(ctx, false, PaneRunArgv(pane, command)[1:]...)
 	return err
 }

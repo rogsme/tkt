@@ -105,6 +105,7 @@ const (
 	MergeChecksFail     Code = "merge_checks_fail"
 	PullRequestMerged   Code = "pull_request_merged"
 	ChoreRunning        Code = "chore_running"
+	WebNotRunning       Code = "web_not_running"
 
 	WtFailed          Code = "wt_failed"
 	WtSwitchFailed    Code = "wt_switch_failed"
@@ -126,6 +127,7 @@ const (
 	AgentNotReady   Code = "agent_not_ready"
 	PromptUncertain Code = "prompt_uncertain"
 	AgentExitFailed Code = "agent_exit_failed"
+	WebStartTimeout Code = "web_start_timeout"
 	Interrupted     Code = "interrupted"
 )
 
@@ -214,6 +216,7 @@ var Registry = []Info{
 	{MergeChecksFail, ExitState, "the checks fail at the pull request's head"},
 	{PullRequestMerged, ExitState, "the ticket's pull request is merged already"},
 	{ChoreRunning, ExitState, "the chore's last run is still open: its agent works, or its pull request waits for a merge"},
+	{WebNotRunning, ExitState, "no tkt agent chat serves the repository's web page, and tkt web cannot open one outside herdr"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},
@@ -235,6 +238,7 @@ var Registry = []Info{
 	{AgentNotReady, ExitUncertain, "the agent stopped at a startup dialog; answer it in its pane"},
 	{PromptUncertain, ExitUncertain, "tkt cannot confirm the agent received the prompt; check before sending it again"},
 	{AgentExitFailed, ExitUncertain, "the old agent did not exit; nothing was sent"},
+	{WebStartTimeout, ExitUncertain, "tkt web opened tkt agent in a new tab, but its web page did not answer in time; look at the chat in that tab"},
 	{Interrupted, ExitUncertain, "tkt was interrupted; check the ticket's pane before retrying"},
 }
 

@@ -19,6 +19,7 @@ import (
 // resultTypes names each command's result, for tkt schema.
 var resultTypes = map[string]any{
 	"agent":     app.FrontResult{},
+	"web":       app.WebResult{},
 	"start":     app.StartResult{},
 	"approve":   app.SendResult{},
 	"send":      app.SendResult{},
@@ -113,7 +114,7 @@ func writeJSON(w io.Writer, v any) error {
 var environment = []SchemaVariable{
 	{"TKT_FORMAT", "json makes every command print the JSON envelope; text, or unset, prints text"},
 	{"XDG_CONFIG_HOME", "tkt reads $XDG_CONFIG_HOME/tkt/config.toml (default ~/.config/tkt/config.toml), then the repository's .tkt/tkt.toml and .tkt/tkt.local.toml"},
-	{"XDG_STATE_HOME", "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it (default ~/.local/state/tkt)"},
+	{"XDG_STATE_HOME", "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it, and the light or dark choice of the tkt agent's web page in web.json (default ~/.local/state/tkt)"},
 	{"XDG_DATA_HOME", "tkt unpacks its bundled pi and its extension under $XDG_DATA_HOME/tkt (default ~/.local/share/tkt)"},
 	{"HERDR_ENV", "herdr sets it to 1 inside its panes; agent, start, approve, send, auto, run, resume, done, show and wait need it, and tkt alone opens the agent only there"},
 	{"HERDR_WORKSPACE_ID", "the herdr workspace where tkt opens tabs"},
