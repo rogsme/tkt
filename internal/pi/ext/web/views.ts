@@ -80,8 +80,8 @@ export function SuggestView({ g, now }: { g: Go; now: number }) {
 	return html`<div class="view form">
 		<h2>Suggest tickets</h2>
 		<p class="muted">suggest-tickets reads the tracker in a suggest tab, and picks tickets that can run side by side. It changes nothing: read its picks below, then start the ones you want.</p>
-		<label>What to look for <input value=${request} placeholder="a number such as 3, or what you want, such as five tickets tagged feedback" onInput=${(e: InputEvent) => setRequest((e.target as HTMLInputElement).value)} /></label>
-		<label>Preset <input value=${as} placeholder="the default" onInput=${(e: InputEvent) => setAs((e.target as HTMLInputElement).value)} /></label>
+		<label>What to look for <input value=${request} placeholder="empty for 3 tickets of any kind; or a number, or what you want, such as five tickets tagged feedback" onInput=${(e: InputEvent) => setRequest((e.target as HTMLInputElement).value)} /></label>
+		<label>Run it on <input value=${as} placeholder="the [suggest] preset, or the default one" onInput=${(e: InputEvent) => setAs((e.target as HTMLInputElement).value)} /><span class="muted small">The preset, from config.toml, whose agent and model run suggest-tickets. It does not filter the tickets: say that in what to look for.</span></label>
 		<${Line} line=${suggestLine(request, as)} g=${g} label="Suggest" onSent=${() => setRequest("")} />
 		<h3>Last run</h3>
 		${!q.env ? html`<${Loading} />` : !q.env.ok || !q.env.result ? q.env.error?.code === "agent_missing" ? html`<p class="muted">${q.env.error.message}.</p>` : html`<${Failure} env=${q.env} />` : html`<${SuggestAnswer} r=${q.env.result} now=${now} loading=${q.loading} reload=${q.reload} />`}
