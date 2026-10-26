@@ -91,6 +91,14 @@ type RowWatch struct {
 	Paused string `json:"paused"`
 }
 
+// RowSync is the last tkt sync that failed on the pull request's head: why,
+// when, and the log that holds everything git and its hooks printed.
+type RowSync struct {
+	Reason string `json:"reason"`
+	At     string `json:"at"`
+	Log    string `json:"log"`
+}
+
 // RowMerge is a merge order: the human verification steps passed on Head,
 // and tkt watch sends finish-ticket the merge line, naming Steps as passed,
 // once the checks pass and a review clears the pull request's head. The
@@ -163,6 +171,9 @@ type Row struct {
 	// alone (tkt hold).
 	Hold  bool      `json:"hold"`
 	Watch *RowWatch `json:"watch"`
+	// Sync is the last failed tkt sync, while the head is the one it failed
+	// on, or null.
+	Sync *RowSync `json:"sync"`
 	// Merge is the ticket's merge order when it holds at the pull request's
 	// head, or null.
 	Merge *RowMerge `json:"merge"`
@@ -694,6 +705,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		row.BaseMerge = c.probeBaseMerge(rctx, t.Path, row.PR.Head, l.baseRef)
 	}
 	row.Watch = &RowWatch{Last: st["watch_last"]}
+	if why := st[keySyncFail]; why != "" && (row.PR == nil || st[keySyncFailHead] == row.PR.Head) {
+		row.Sync = &RowSync{Reason: why, At: st[keySyncFailAt], Log: st[keySyncFailLog]}
+	}
 	base := ""
 	if l.hasBase {
 		base = l.baseRef

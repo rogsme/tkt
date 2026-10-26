@@ -391,6 +391,8 @@ flowchart LR
 
 `git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge. A conflict goes to the `resolve` stage, which merges the base, resolves each conflict from what both sides meant, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
 
+When a sync fails after its fetch, as when a pre-push hook refuses the push, tkt keeps why: `tkt ls --json` shows the reason under the row's `sync` while the head is the one it failed on, `tkt history` lists it, and a log in the ticket's temporary directory holds everything git and its hooks printed. The tkt agent's chat reads it from there when you ask why a sync failed.
+
 A clean merge does not make the pull request's review brief stale: the merge commit's tree equals what `git merge-tree` gives for its two parents, and review-pr checks that for itself instead of trusting tkt.
 
 A sync costs a CI run and a review, so tkt syncs a ticket that is behind only at the moments that need it:

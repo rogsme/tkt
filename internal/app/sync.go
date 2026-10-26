@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -152,8 +154,8 @@ func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
 	if c.Dry {
 		c.UI.Warn("dry run: not fetching, so the base is as of the last fetch")
 	} else if r := c.Git.Fetch(c.Ctx, c.Repo.Root, f.Remote); !r.OK() {
-		return nil, apperr.New(apperr.GitFailed, "git fetch %s failed: %s", f.Remote, oneLine(r.ErrText())).
-			WithHint("check that %s is reachable, then tkt sync %s", f.Remote, id)
+		return nil, c.syncFailed(id, path, c.Git.Head(c.Ctx, path), apperr.New(apperr.GitFailed, "git fetch %s failed: %s", f.Remote, oneLine(r.ErrText())).
+			WithHint("check that %s is reachable, then tkt sync %s", f.Remote, id), r.ErrText()+r.Out())
 	}
 	remote := c.Git.Rev(c.Ctx, path, "refs/remotes/"+f.Remote+"/"+id+"^{commit}")
 	if remote == "" {
@@ -174,7 +176,7 @@ func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
 		if c.Dry {
 			c.Would(ff)
 		} else if r := c.Git.Do(c.Ctx, time.Minute, ff); !r.OK() {
-			return nil, apperr.New(apperr.GitFailed, "git merge --ff-only %s failed in %s: %s", short(remote), path, oneLine(r.ErrText()))
+			return nil, c.syncFailed(id, path, remote, apperr.New(apperr.GitFailed, "git merge --ff-only %s failed in %s: %s", short(remote), path, oneLine(r.ErrText())), r.ErrText()+r.Out())
 		}
 		head, res.Head = remote, remote
 	default:
@@ -183,14 +185,16 @@ func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
 	}
 	if c.Git.IsAncestor(c.Ctx, path, base, head) {
 		res.Outcome = SyncUpToDate
+		c.syncCleared(path)
 		return res, nil
 	}
 	m, err := c.Git.MergeTree(c.Ctx, path, head, base)
 	if err != nil {
-		return nil, err
+		return nil, c.syncFailed(id, path, head, err, "")
 	}
 	if !m.Clean() {
 		res.Outcome, res.Conflicts = SyncConflict, m.Conflicts
+		c.syncFailed(id, path, head, fmt.Errorf("merging %s %s", res.base, res.conflictText()), "")
 		return res, nil
 	}
 	msg := fmt.Sprintf("Merge remote-tracking branch '%s' into %s", res.base, id)
@@ -208,6 +212,7 @@ func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
 		c.abortMerge(path)
 		c.UI.Warn("git merge stopped in %s: %s", path, oneLine(r.ErrText()+"\n"+r.Out()))
 		res.Outcome = SyncConflict
+		c.syncFailed(id, path, head, fmt.Errorf("git merge stopped: %s", oneLine(r.ErrText()+"\n"+r.Out())), r.ErrText()+r.Out())
 		return res, nil
 	}
 	next := c.Git.Head(c.Ctx, path)
@@ -215,21 +220,74 @@ func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
 	// and the tree git merge-tree computed. Otherwise the branch moved
 	// meanwhile, or a hook changed the commit.
 	if c.Git.Rev(c.Ctx, path, next+"^1") != head || c.Git.Rev(c.Ctx, path, next+"^2") != base {
-		return nil, apperr.New(apperr.GitFailed, "%s moved while tkt sync merged the base, so tkt left it as it is", id).
-			WithHint("check git -C %s log, then tkt sync %s", path, id)
+		return nil, c.syncFailed(id, path, head, apperr.New(apperr.GitFailed, "%s moved while tkt sync merged the base, so tkt left it as it is", id).
+			WithHint("check git -C %s log, then tkt sync %s", path, id), "")
 	}
 	if tree := c.Git.Rev(c.Ctx, path, next+"^{tree}"); tree != m.Tree {
-		return nil, c.undo(path, next, head, apperr.New(apperr.GitFailed, "the merge commit's tree %s differs from the %s git merge-tree computed", short(tree), short(m.Tree)))
+		return nil, c.syncFailed(id, path, head, c.undo(path, next, head, apperr.New(apperr.GitFailed, "the merge commit's tree %s differs from the %s git merge-tree computed", short(tree), short(m.Tree))), "")
 	}
 	// Push the merge tkt checked, not whatever HEAD is by now.
 	push := gitx.Argv(path, "push", "--quiet", f.Remote, next+":refs/heads/"+id)
 	if r := c.Git.Do(c.Ctx, 10*time.Minute, push); !r.OK() {
-		return nil, c.undo(path, next, head, apperr.New(apperr.GitFailed, "git push to %s failed: %s", f.Remote, oneLine(r.ErrText())).
-			WithHint("tkt sync %s tries again", id))
+		return nil, c.syncFailed(id, path, head, c.undo(path, next, head, apperr.New(apperr.GitFailed, "git push to %s failed: %s", f.Remote, oneLine(r.ErrText())).
+			WithHint("tkt sync %s tries again", id)), r.ErrText()+r.Out())
 	}
 	res.Outcome, res.NewHead = SyncMerged, next
 	c.record(history.Event{Ticket: id, Event: history.Sync, Action: SyncMerged})
+	c.syncCleared(path)
 	return res, nil
+}
+
+// The ticket state's keys for the last sync that failed: why, in short; the
+// branch's head it failed on; the file that holds every line git and its
+// hooks printed; and when.
+const (
+	keySyncFail     = "sync_fail"
+	keySyncFailHead = "sync_fail_head"
+	keySyncFailLog  = "sync_fail_log"
+	keySyncFailAt   = "sync_fail_at"
+)
+
+// syncFailed keeps why a sync failed once it got as far as the fetch, and
+// returns err: a push a hook refused leaves nothing on the forge, so
+// without this nobody could say why. The reason goes into the ticket's
+// state, where tkt ls shows it while the branch's head is the one it failed
+// on, and into the history; git's and its hooks' whole output goes into a
+// log in the ticket's temporary directory.
+func (c *Ctx) syncFailed(id, path, head string, err error, out string) error {
+	if c.Dry || err == nil {
+		return err
+	}
+	ts, rerr := c.readState(path)
+	if rerr != nil {
+		return err
+	}
+	now := c.Now().UTC()
+	why := runner.Head(err.Error(), 1000)
+	log := ""
+	if dir := c.ticketTmp(id, ts); dir != "" {
+		log = filepath.Join(dir, "sync-"+now.Format("20060102T150405Z")+".log")
+		body := err.Error() + "\n"
+		if out = strings.TrimSpace(out); out != "" {
+			body += "\n" + out + "\n"
+		}
+		if werr := os.WriteFile(log, []byte(body), 0o600); werr != nil {
+			c.UI.Warn("cannot write %s: %v", log, werr)
+			log = ""
+		}
+	}
+	c.save(ts, keySyncFail, why, keySyncFailHead, head, keySyncFailLog, log, keySyncFailAt, now.Format(history.TimeFormat))
+	c.record(history.Event{Ticket: id, Event: history.Sync, Action: "failed", Note: why})
+	return err
+}
+
+// syncCleared forgets the last failed sync once the branch holds the base.
+func (c *Ctx) syncCleared(path string) {
+	ts, err := c.readState(path)
+	if err != nil || ts.st[keySyncFail] == "" {
+		return
+	}
+	c.save(ts, keySyncFail, "", keySyncFailHead, "", keySyncFailLog, "", keySyncFailAt, "")
 }
 
 // undo takes tkt's merge back off the branch after a later step failed, and

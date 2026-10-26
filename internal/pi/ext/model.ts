@@ -53,6 +53,9 @@ export interface Row {
 	 * run:ci@HEAD; paused says why it waits for you, round_limit or
 	 * no_progress. */
 	watch?: { last: string; paused: string } | null;
+	/** sync is the last tkt sync that failed on the head: why, when, and the
+	 * log with everything git and its hooks printed. */
+	sync?: { reason: string; at: string; log: string } | null;
 	/** merge is the merge order tkt merge left once the steps passed on
 	 * head: tkt watch hands them to finish-ticket once the head is synced,
 	 * reviewed and green. It holds across clean merges of the base, and sent

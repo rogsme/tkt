@@ -23,6 +23,12 @@ merge commit it checked, and when the push fails, or you press Ctrl-C, it
 takes its merge back off the branch, unless a commit came on top of it
 meanwhile: then it leaves the branch alone and says how to drop the merge.
 
+When a sync fails after its fetch, as when a pre-push hook refuses the push,
+tkt keeps why. tkt ls --json shows the reason under the row's sync while the
+head is the one it failed on, tkt history lists it, and a log in the
+ticket's temporary directory holds everything git and its hooks printed. A
+sync that works forgets it.
+
 Sync at the moments a ticket needs it: the pull request conflicts, a review
 cannot happen because the base moved (the bot's STALE_BASE, or review-pr's
 BLOCKED_FOR_SYNC), or a merge is due and finish-ticket stopped with

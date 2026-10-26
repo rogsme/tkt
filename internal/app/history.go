@@ -54,6 +54,8 @@ type HistoryEvent struct {
 	Unblocked []string `json:"unblocked,omitempty"`
 	// Chore names the chore whose run started, on its start.
 	Chore string `json:"chore,omitempty"`
+	// Note says why a step failed.
+	Note string `json:"note,omitempty"`
 }
 
 // PRHistory is a pull request of the ticket's branch.
@@ -167,11 +169,16 @@ func (e HistoryEvent) line() string {
 		}
 		return "put on hold"
 	case history.Sync:
+		if e.Action == "failed" {
+			return "sync failed: " + e.Note
+		}
 		return "merged the base, with no agent"
 	case history.Watch:
 		switch {
 		case e.Action == actPause:
 			return "tkt watch waits for you: " + e.Stop
+		case e.Stop == "failed" && e.Note != "":
+			return "tkt watch could not " + strings.TrimSpace(e.Action+" "+e.Stage) + ": " + e.Note
 		case e.Stop == "failed":
 			return "tkt watch could not " + strings.TrimSpace(e.Action+" "+e.Stage)
 		case e.Action == actMerge:
@@ -250,7 +257,7 @@ func (a *App) History(ctx context.Context, o HistoryOpts) (*HistoryResult, error
 		th := TicketHistory{Ticket: id, Events: []HistoryEvent{}, PullRequests: []PRHistory{}}
 		for _, e := range events {
 			if e.Repo == res.Repo && e.Ticket == id {
-				th.Events = append(th.Events, HistoryEvent{At: e.At, Event: e.Event, Phase: e.Phase, From: e.From, Stage: e.Stage, Action: e.Action, Stop: e.Stop, PR: e.PR, Unblocked: e.Unblocked, Chore: e.Chore})
+				th.Events = append(th.Events, HistoryEvent{At: e.At, Event: e.Event, Phase: e.Phase, From: e.From, Stage: e.Stage, Action: e.Action, Stop: e.Stop, PR: e.PR, Unblocked: e.Unblocked, Chore: e.Chore, Note: e.Note})
 			}
 		}
 		sort.SliceStable(th.Events, func(i, j int) bool { return th.Events[i].At < th.Events[j].At })

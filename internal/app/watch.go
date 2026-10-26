@@ -988,7 +988,7 @@ func (w *watcher) failed(c *Ctx, ts *ticketState, id string, act watchAct, head,
 		what += " " + act.Stage
 	}
 	c.UI.Warn("%s: tkt watch could not %s: %s", id, what, msg)
-	c.record(history.Event{Ticket: id, Event: history.Watch, Action: act.Kind, Stage: act.Stage, Stop: "failed"})
+	c.record(history.Event{Ticket: id, Event: history.Watch, Action: act.Kind, Stage: act.Stage, Stop: "failed", Note: runner.Head(msg, 1000)})
 	c.notify(id, notice{"tkt watch could not " + what, msg, "request"})
 }
 
