@@ -4,6 +4,13 @@ remembers nothing of the old conversation and does not need to: every stage
 reads what it needs from the branch, the pull request and the tracker. Use it
 to begin the next stage with a clean context.
 
+The small fixes, ci, resolve and sync-fix, run in a split beside the ticket's
+agent instead, which keeps its pane and its conversation. The split closes
+once the fix ends with Status: READY_FOR_REVIEW and tkt watch or tkt auto
+looks again; a fix that stops otherwise keeps it, so you can read why.
+[fixes] as runs them on a preset of their own (tkt help config). --pane
+runs one in a pane you pick instead.
+
 Stages:
   review   review-pr reviews the pull request at its head and posts a verdict.
            Run it when the agent ends with Status: READY_FOR_REVIEW.
@@ -17,6 +24,10 @@ Stages:
            instead, which merges a clean one with no agent.
   sync     the same line as address, under its old name. tkt run warns, and
            the next release drops it: use tkt sync or address.
+  sync-fix takes over a sync that failed another way, such as a push a
+           pre-push hook refused: it merges the base, fixes the cause the
+           hook or git reports and pushes once. tkt sync starts it, with the
+           reason and the log of git's output in its line.
   ci       finds why the checks fail at the head, fixes it and pushes once.
   verify   verify-pr runs the pull request's human verification steps at its
            head, in a browser or with each step's commands, and posts what

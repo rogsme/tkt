@@ -46,6 +46,14 @@ func TestAutoStepTable(t *testing.T) {
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 1}, autoAct{Kind: actRun, Stage: "address"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, pause(StopRoundLimit)},
+		// A failed sync goes to a fresh session in a split, which spends a
+		// round: sync-fix, or resolve for a conflict. The loop polls while
+		// it works, since it waits on the ticket's own pane.
+		{with(open, func(f *Facts) { f.SyncFail = "failed" }), AutoPolicy{MaxRounds: 2}, autoMemory{}, autoAct{Kind: actRun, Stage: "sync-fix"}},
+		{with(open, func(f *Facts) { f.SyncFail = "conflict" }), AutoPolicy{MaxRounds: 2}, autoMemory{}, autoAct{Kind: actRun, Stage: "resolve"}},
+		{with(open, func(f *Facts) { f.SyncFail = "failed" }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, pause(StopRoundLimit)},
+		{with(open, func(f *Facts) { f.Fix = "working" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actPoll}},
+		{with(open, func(f *Facts) { f.Fix, f.FixStatus = "idle", "BLOCKED" }), AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		// A moved base that merges clean is tkt sync's, with no agent and
 		// no round, even past the round limit; a conflict needs resolve.
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), AutoPolicy{MaxRounds: 5}, autoMemory{}, autoAct{Kind: actSync}},

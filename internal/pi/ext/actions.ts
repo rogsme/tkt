@@ -113,10 +113,11 @@ export function stage(hub: Hub, id: string, name: string, as = ""): string {
 }
 
 /** sync merges the base into the ticket's branch in the background: tkt
- * itself when the merge is clean, a fresh session on a conflict. */
+ * itself when the merge is clean, a fresh session in a split on any
+ * failure. */
 export function sync(hub: Hub, id: string): string {
 	hub.add({ ticket: id, label: "sync", args: ["sync", id] });
-	return `Queued: tkt sync for ${id}. It merges the base itself when the merge is clean, and hands a conflict to a fresh session.`;
+	return `Queued: tkt sync for ${id}. It merges the base itself when the merge is clean, and hands a conflict or any other failure to a fresh session in a split beside the agent.`;
 }
 
 /** merge hands a ticket whose steps all passed on head to finish-ticket:

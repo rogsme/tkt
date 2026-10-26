@@ -405,7 +405,8 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `max rounds reached` | tkt auto or tkt watch made `[auto] max_rounds` fix runs since the plan's approval. | Read the review, then `Run STAGE once more` in `/inbox`, or take over. |
 | `no progress` | The last step changed nothing on the same head. | `/show ID`, then `Run STAGE again` in `/inbox`. |
 | `review bot silent` | The bot has not reviewed the head within `[review] bot_wait`. | Check its CI job, or `Run review-pr instead` in `/inbox`. |
-| `sync failed` | tkt sync cannot merge the base for now, such as with uncommitted changes in the worktree. | Fix what it names; tkt auto tries again at each look. |
+| `sync failed` | tkt sync cannot merge the base for now, such as with uncommitted changes in the worktree. A failure after the fetch, such as a push a pre-push hook refused, never shows here: a fresh session in a split beside the agent fixes it. | Fix what it names; tkt auto tries again at each look. |
+| `the fix asks`, `fix: BLOCKED` | The session fixing a failed sync or failing checks in a split asks a question, or stopped without fixing it. | Answer it, or read why, in its split. |
 | `auto paused` | tkt auto paused for another reason, such as an agent in a state tkt does not know. | `/peek ID` shows its screen. |
 | `unblocked` | A merge freed a ticket that has no worktree yet. | `/start ID`, or a start in auto from `/inbox`. |
 | `ready to merge`, `review found something` | A chore's pull request is ready, or its review found something. | Merge it on the forge, or tell its agent what to fix. |

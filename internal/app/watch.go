@@ -264,6 +264,10 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		return act(actSync, "")
 	case ReasonChecksFail:
 		return fix("ci")
+	case ReasonSyncFailed:
+		return fix(syncFixStage(f.SyncFail))
+	case ReasonFixBlocked, ReasonFixStopped:
+		return pause(StopNeedsYou)
 	case ReasonMergeDue:
 		// You left the order, so no settling: the session goes for the merge.
 		if p.Hold != "" {
@@ -661,6 +665,9 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, []WatchChore, error)
 			out = append(out, WatchTicket{Ticket: t.ID, Reason: WatchGone})
 			continue
 		}
+		if ts, err := c.readState(t.Path); err == nil {
+			c.reapFix(t.ID, t.Path, ts)
+		}
 		row, f := c.row(ctx, l, t)
 		// A stop during the reads leaves facts that may be wrong.
 		if ctx.Err() != nil {
@@ -964,9 +971,10 @@ func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *t
 		return nil, err
 	case actSync:
 		_, err := a.Sync(ctx, SyncOpts{ID: id, NoAgent: true})
-		// The base moved again since the look, and now conflicts: the next
-		// pass sees the conflict and runs resolve.
-		if err != nil && apperr.As(err).Code == apperr.SyncConflict {
+		// The base moved again since the look, and now conflicts, or the
+		// sync failed another way: tkt sync kept why, and the next pass
+		// hands it to a fresh session.
+		if err != nil && (apperr.As(err).Code == apperr.SyncConflict || fixable(err)) {
 			return nil, nil
 		}
 		return nil, err

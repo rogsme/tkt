@@ -316,6 +316,22 @@ func (c *Ctx) openTab(id, path, label string, ts *ticketState) (tab, pane string
 	return tab, pane, herdrErr(err)
 }
 
+// openSplit splits the ticket's pane beside to its right, for a session
+// that works next to the ticket's own agent, or reports it in a dry run. The
+// split's TMPDIR is the ticket's own directory, as a tab's is.
+func (c *Ctx) openSplit(id, path, beside string, ts *ticketState) (string, error) {
+	var env []string
+	if d := c.ticketTmp(id, ts); d != "" {
+		env = append(env, "TMPDIR="+d)
+	}
+	if c.Dry {
+		c.Would(herdr.PaneSplitArgv(beside, path, env...))
+		return "<pane>", nil
+	}
+	pane, err := c.H.PaneSplit(c.Ctx, beside, path, env...)
+	return pane, herdrErr(err)
+}
+
 // newSession picks the session id for a fresh agent: a UUID for Claude Code,
 // a session created through the API for OpenCode.
 func (c *Ctx) newSession(path, title string, p config.Preset) (string, error) {

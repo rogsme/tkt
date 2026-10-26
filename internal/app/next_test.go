@@ -38,6 +38,18 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 address", "command", ReasonFindings},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CHANGES_REQUESTED", AtHead: true}, "tkt run ACM-1 address", "command", ReasonFindings},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 ci", "command", ReasonChecksFail},
+		// A small fix in a split: its session works, waits on you, or
+		// stopped with a status other than READY_FOR_REVIEW. One that ended
+		// with READY_FOR_REVIEW changes nothing until tkt watch closes it.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Fix: "working"}, "wait (a fresh session fixes it beside the agent)", "wait", ReasonFixing},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Fix: "blocked"}, "answer the fix's session in its split", "human", ReasonFixBlocked},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Fix: "idle", FixStatus: "BLOCKED"}, "read why the fix stopped, in its split", "human", ReasonFixStopped},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Fix: "idle", FixStatus: "READY_FOR_REVIEW"}, "tkt run ACM-1 ci", "command", ReasonChecksFail},
+		// The ticket's own agent working comes first.
+		{Facts{PRState: "OPEN", Agent: "working", Fix: "working"}, "wait (agent working)", "wait", ReasonAgentWorking},
+		// A sync that failed on the head goes to a fresh session.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "STALE_BASE", AtHead: true, SyncFail: "failed"}, "tkt sync ACM-1", "command", ReasonSyncFailed},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending", SyncFail: "failed"}, "wait for CI", "wait", ReasonCIPending},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 verify", "command", ReasonBotClear},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true}, "tkt run ACM-1 verify", "command", ReasonReviewClear},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: false, Mergeable: "MERGEABLE"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
@@ -143,6 +155,9 @@ func TestPhaseOf(t *testing.T) {
 		{Facts{Agent: "working", Stage: "address"}, PhaseFixing},
 		{Facts{Agent: "working", Stage: "verify"}, PhaseVerifying},
 		{Facts{Agent: "working", Stage: "custom"}, PhaseWorking},
+		{Facts{PRState: "OPEN", Agent: "idle", Fix: "working"}, PhaseFixing},
+		{Facts{PRState: "OPEN", Agent: "idle", Fix: "idle", FixStatus: "BLOCKED"}, PhaseNeedsYou},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", SyncFail: "failed"}, PhaseNeedsFix},
 		{Facts{Agent: "blocked"}, PhaseNeedsYou},
 		{Facts{Agent: "idle", LastStatus: "AWAITING_APPROVAL"}, PhaseAwaitingApproval},
 		{Facts{Agent: "idle"}, PhaseNeedsYou},

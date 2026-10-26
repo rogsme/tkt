@@ -4,10 +4,16 @@ merge-tree, which touches neither the worktree nor the branch:
 
   - When the merge is clean, tkt makes the merge commit itself and pushes it,
     in seconds. CI and the review bot then run on the new head.
-  - When it conflicts, a fresh session runs the resolve stage: it merges the
-    base, resolves each conflict from what both sides meant, changes nothing
-    else, and pushes once. Review findings stay for address. --no-agent
-    stops at the conflict instead, with exit 4.
+  - When it conflicts, a fresh session runs the resolve stage, in a split
+    beside the ticket's agent: it merges the base, resolves each conflict
+    from what both sides meant, changes nothing else, and pushes once.
+    Review findings stay for address. --no-agent stops at the conflict
+    instead, with exit 4.
+  - When the sync fails another way after its fetch, as when a pre-push
+    hook refuses the push, a fresh session runs the sync-fix stage in a
+    split: its line says why the sync failed and names the log of git's
+    output, and it fixes the cause and pushes once. --no-agent stops with
+    the error instead.
   - When the branch already contains the base, it does nothing.
 
 It never rebases and never force-pushes. A merge commit tkt made counts as
@@ -23,8 +29,7 @@ merge commit it checked, and when the push fails, or you press Ctrl-C, it
 takes its merge back off the branch, unless a commit came on top of it
 meanwhile: then it leaves the branch alone and says how to drop the merge.
 
-When a sync fails after its fetch, as when a pre-push hook refuses the push,
-tkt keeps why. tkt ls --json shows the reason under the row's sync while the
+Whenever a sync fails after its fetch, tkt keeps why. tkt ls --json shows the reason under the row's sync while the
 head is the one it failed on, tkt history lists it, and a log in the
 ticket's temporary directory holds everything git and its hooks printed. A
 sync that works forgets it.

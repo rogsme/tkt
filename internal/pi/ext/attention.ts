@@ -101,7 +101,7 @@ function rerun(row: Row, label: (stage: string) => string, description: string):
 
 /** The next steps tkt watch takes by itself while it runs. It reviews too,
  * but only the head a sync made for a merge order. */
-const watchTakes = new Set(["base_moved", "checks_fail", "merge_due"]);
+const watchTakes = new Set(["base_moved", "checks_fail", "merge_due", "sync_failed_fix"]);
 const watchTakesFor = (row: Row, reason: string) => watchTakes.has(reason) || (reason === "needs_review" && !!row.merge);
 
 /** The next steps of a manual ticket that wait for your go. */
@@ -113,6 +113,7 @@ const nextSteps: Record<string, string> = {
 	qa_failed: "human verification failed",
 	verify_failed: "verify-pr found a step that fails",
 	merge_due: "the checks passed, and its merge order is due",
+	sync_failed_fix: "the sync failed; tkt sync hands it to a fresh session",
 };
 
 /** attentionOf says whether a ticket needs you now. It says nothing while a
@@ -244,6 +245,10 @@ function byReason(row: Row, reason: string, item: Make, byAuto = false): Attenti
 			return item("check", "review draft waits", `${id}: review-pr waits for you to post or drop its draft, in its tab.${after}`, byAuto, [reply]);
 		case "bot_silent":
 			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI.`, byAuto, [review]);
+		case "fix_blocked":
+			return item("question", "the fix asks", `${id}: the session fixing it in a split asks a question. Answer it in pane ${row.fix?.pane ?? "its split"}.${after}`, byAuto);
+		case "fix_stopped":
+			return item("blocked", `fix: ${row.fix?.last_status || "stopped"}`, `${id}: the session fixing ${row.fix?.stage || "it"} in a split stopped with Status: ${row.fix?.last_status || "BLOCKED"}. Read why in pane ${row.fix?.pane ?? "its split"}.${after}`, byAuto);
 		case "verify_incomplete":
 			return item("paused", "verification incomplete", `${id}: verify-pr could not run every step, so the yolo run cannot merge it. /check ${id} shows the rest; run them, and merge it yourself.`, byAuto);
 	}

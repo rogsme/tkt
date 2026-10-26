@@ -4,7 +4,7 @@ How a ticket moves:
 
 1. Start: start-ticket investigates and writes a plan, then ends with Status: AWAITING_APPROVAL.
 2. The user approves the plan, or asks for changes. work-ticket then builds it in the same session, opens a pull request, and ends with Status: READY_FOR_REVIEW.
-3. Review: the review bot in CI reviews each new head. Its findings go to address; a moved base or a conflict goes to tkt sync, which merges a clean base itself and hands a conflict to a fresh session; failing checks go to ci; and the loop runs again.
+3. Review: the review bot in CI reviews each new head. Its findings go to address; a moved base or a conflict goes to tkt sync, which merges a clean base itself and hands a conflict or any other failure to a fresh session in a split beside the agent; failing checks go to ci, also in a split; and the loop runs again.
 4. Reviewed clean (the bot's CLEAR, or review-pr's READY_FOR_HUMAN): where the repository turns on agent verification, verify-pr runs the human verification steps in a fresh session and posts what it saw; a step it reports failed goes back to address, and the loop runs again. Then the user confirms the steps, from verify-pr's evidence or by running them. /check walks them, and once every step passed it hands the merge to finish-ticket with tkt merge: now, or once the checks pass.
 5. Done: once finish-ticket ends with Status: DONE, tkt watch removes the merged ticket's tabs and worktree; tkt done does it by hand.
 

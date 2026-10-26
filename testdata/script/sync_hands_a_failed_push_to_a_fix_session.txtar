@@ -1,0 +1,68 @@
+# When a sync fails after its fetch, as when a pre-push hook refuses the
+# push, tkt sync hands the failure to a fresh session in a split beside the
+# ticket's agent, with the reason and the log in its line. The ticket's
+# agent keeps its pane and its session. Once the fix ends with
+# READY_FOR_REVIEW, tkt watch closes the split.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'ACM-12 work'
+realgit -C $WT push -q origin ACM-12
+gitvar H1 $WT HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+cp $WORK/pre-push $REPO/.git/hooks/pre-push
+chmod 755 $REPO/.git/hooks/pre-push
+statevar $WT session SID
+
+resetlog
+exec tkt sync ACM-12
+stdout '^ACM-12  the sync failed: git push to origin failed: .*; a fresh session fixes it in pane w1:p[0-9]+$'
+logged herdr pane split w1:p10 --direction right --cwd $WT --env
+statevar $WT fix_pane FIX
+logged herdr agent start acm-12-fix --kind claude --pane $FIX
+grep '^tkt sync could not bring this branch up to date with origin/main: git push to origin failed: .* Everything git and its hooks printed is in .*/sync-[0-9TZ]*\.log\. Fetch origin and merge origin/main into this branch' $FAKE_DIR/prompts
+state $WT fix_stage sync-fix
+state $WT pane w1:p10
+state $WT session $SID
+! logcontains 'herdr agent prompt w1:p10 /exit'
+exec tkt history ACM-12
+stdout 'sync failed: git push to origin failed'
+stdout 'ran sync-fix'
+
+# The board shows the fix apart from the ticket's agent.
+jqedit $FAKE_DIR/herdr.json '(.agents[] | select(.name == "acm-12-fix") | .agent_status) = "working"'
+exec tkt ls --json
+envelope '.result.rows[0] | [.agent.pane_id, .fix.stage, .next.reason, .phase]' '["w1:p10","sync-fix","fixing","fixing"]'
+
+# The fix ends with READY_FOR_REVIEW: tkt watch closes its split, and the
+# ticket's agent stays.
+rm $REPO/.git/hooks/pre-push
+realgit -C $WT fetch -q origin
+realgit -C $WT merge -q --no-edit origin/main
+realgit -C $WT push -q origin ACM-12
+gitvar H2 $WT HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H2'
+jqedit $FAKE_DIR/herdr.json '(.agents[] | select(.name == "acm-12-fix") | .agent_status) = "idle"'
+cp $WORK/ready.txt $FAKE_DIR/screen
+resetlog
+exec tkt watch --once
+logged herdr pane close $FIX
+state $WT fix_pane ''
+jqeq $FAKE_DIR/herdr.json '[.panes[].pane_id]' '["w1:p1","w1:p10"]'
+exec tkt history ACM-12
+stdout 'sync-fix ended with READY_FOR_REVIEW; its split closed'
+! logged herdr agent start
+houserules
+
+-- pre-push --
+#!/bin/sh
+echo "backend tests failed: 2 of 310" >&2
+exit 1
+-- ready.txt --
+Merged origin/main and fixed the failing test.
+Status: READY_FOR_REVIEW
+-- prs.json --
+[{"number": 12, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+  "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": []}]

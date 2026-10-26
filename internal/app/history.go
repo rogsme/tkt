@@ -150,6 +150,9 @@ func (e HistoryEvent) line() string {
 	case history.Approved:
 		return "plan approved"
 	case history.Stage:
+		if e.Stop != "" {
+			return e.Stage + " ended with " + e.Stop + "; its split closed"
+		}
 		return "ran " + e.Stage
 	case history.Phase:
 		return "phase " + e.Phase

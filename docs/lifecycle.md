@@ -384,12 +384,14 @@ When another ticket merges, the base moves, and the branches still open fall beh
 flowchart LR
   moved["the base moved"] --> probe{"git merge-tree<br/>HEAD origin/main"}
   probe -->|clean| merge["tkt merges and pushes<br/>in seconds, no agent"]
-  probe -->|conflict| agent["fresh session merges<br/>and resolves, pushes once"]
+  probe -->|conflict| agent["fresh session in a split<br/>merges and resolves, pushes once"]
   merge --> next["CI and the review bot<br/>run on the new head"]
   agent --> next
 ```
 
-`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge. A conflict goes to the `resolve` stage, which merges the base, resolves each conflict from what both sides meant, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
+`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge and hands the failure to the `sync-fix` stage, whose line says why and names the log of git's output. A conflict goes to the `resolve` stage, which merges the base, resolves each conflict from what both sides meant, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
+
+Both fixes run in a split beside the ticket's agent, which keeps its pane and its conversation, and so does a `ci` run for failing checks. `[fixes] as` runs them on a cheaper preset. The split closes once the fix ends with `Status: READY_FOR_REVIEW` and `tkt watch` or `tkt auto` looks again; a fix that stops otherwise keeps its split, and the board says so.
 
 When a sync fails after its fetch, as when a pre-push hook refuses the push, tkt keeps why: `tkt ls --json` shows the reason under the row's `sync` while the head is the one it failed on, `tkt history` lists it, and a log in the ticket's temporary directory holds everything git and its hooks printed. The tkt agent's chat reads it from there when you ask why a sync failed.
 

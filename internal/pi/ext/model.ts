@@ -55,7 +55,11 @@ export interface Row {
 	watch?: { last: string; paused: string } | null;
 	/** sync is the last tkt sync that failed on the head: why, when, and the
 	 * log with everything git and its hooks printed. */
-	sync?: { reason: string; at: string; log: string } | null;
+	sync?: { reason: string; kind: string; at: string; log: string } | null;
+	/** fix is the session fixing the ticket in a split beside its agent:
+	 * its pane, its agent's status, the stage it runs, and the status line
+	 * it ended with. */
+	fix?: { pane: string; status: string; stage: string; last_status: string } | null;
 	/** merge is the merge order tkt merge left once the steps passed on
 	 * head: tkt watch hands them to finish-ticket once the head is synced,
 	 * reviewed and green. It holds across clean merges of the base, and sent

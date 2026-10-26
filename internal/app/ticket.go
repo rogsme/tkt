@@ -137,6 +137,9 @@ func (c *Ctx) ticketAgent(id, path, want string, st state.State) (herdr.Agent, e
 		return herdr.Agent{}, herdrErr(err)
 	}
 	inPath := herdr.AgentsInPath(agents, path)
+	if want == "" {
+		inPath = withoutFix(inPath, st)
+	}
 	switch {
 	case want != "":
 		i := slices.IndexFunc(inPath, func(ag herdr.Agent) bool { return ag.PaneID == want })

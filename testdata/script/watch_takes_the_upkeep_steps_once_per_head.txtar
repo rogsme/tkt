@@ -19,12 +19,12 @@ exec tkt watch --once --json
 envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1:run:checks_fail","ACM-2:sync:base_moved"]'
 stderr 'ACM-2: synced with the base, with no agent'
 logged git -C $REPO fetch --prune --quiet origin
-logged herdr agent start acm-1 --kind claude
+logged herdr agent start acm-1-fix --kind claude
 grep 'The checks on this branch''s pull request fail at its head.' $FAKE_DIR/prompts
 logged herdr notification show 'ACM-1: tkt watch runs ci'
 state $FAKE_WT_ROOT/ACM-1 rounds 1
 state $FAKE_WT_ROOT/ACM-1 watch_last run:ci@$H1
-state $FAKE_WT_ROOT/ACM-1 stage ci
+state $FAKE_WT_ROOT/ACM-1 fix_stage ci
 grep '"ticket":"ACM-1","event":"watch","stage":"ci","action":"run"' $HOME/.local/state/tkt/history.jsonl
 ! logged herdr agent start acm-2
 gitvar M2 $FAKE_WT_ROOT/ACM-2 HEAD

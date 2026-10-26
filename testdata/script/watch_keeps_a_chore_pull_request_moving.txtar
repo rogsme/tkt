@@ -18,9 +18,9 @@ jqedit $FAKE_DIR/prs.json '.[0].statusCheckRollup[0].conclusion = "FAILURE"'
 resetlog
 exec tkt watch --once --json
 envelope '.result.tickets' '[{"action":"run","reason":"checks_fail","stage":"ci","ticket":"deps-run"}]'
-logged herdr agent start deps-run --kind claude
+logged herdr agent start deps-run-fix --kind claude
 grep 'The checks on this branch''s pull request fail at its head.' $FAKE_DIR/prompts
-state $WT stage ci
+state $WT fix_stage ci
 
 # Green, with no review yet: it waits for the bot, then is yours to merge.
 jqedit $FAKE_DIR/prs.json '.[0].statusCheckRollup[0].conclusion = "SUCCESS"'

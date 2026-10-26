@@ -91,12 +91,25 @@ type RowWatch struct {
 	Paused string `json:"paused"`
 }
 
+// RowFix is the session that makes a small fix in a split beside the
+// ticket's agent: its pane, its agent's status, the stage it runs, and the
+// status line it ended with, once idle.
+type RowFix struct {
+	Pane       string `json:"pane"`
+	Status     string `json:"status"`
+	Stage      string `json:"stage"`
+	LastStatus string `json:"last_status"`
+}
+
 // RowSync is the last tkt sync that failed on the pull request's head: why,
 // when, and the log that holds everything git and its hooks printed.
 type RowSync struct {
 	Reason string `json:"reason"`
-	At     string `json:"at"`
-	Log    string `json:"log"`
+	// Kind is conflict, which the resolve stage takes, or failed, which
+	// sync-fix takes.
+	Kind string `json:"kind"`
+	At   string `json:"at"`
+	Log  string `json:"log"`
 }
 
 // RowMerge is a merge order: the human verification steps passed on Head,
@@ -174,6 +187,8 @@ type Row struct {
 	// Sync is the last failed tkt sync, while the head is the one it failed
 	// on, or null.
 	Sync *RowSync `json:"sync"`
+	// Fix is the session fixing the ticket in a split, or null.
+	Fix *RowFix `json:"fix"`
 	// Merge is the ticket's merge order when it holds at the pull request's
 	// head, or null.
 	Merge *RowMerge `json:"merge"`
@@ -662,7 +677,14 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		if row.Tabs == nil {
 			row.Tabs = []herdr.Tab{}
 		}
-		if in := herdr.AgentsInPath(l.agents, t.Path); len(in) > 0 {
+		if ag, ok := fixAgent(l.agents, st); ok {
+			row.Fix = &RowFix{Pane: ag.PaneID, Status: ag.Status, Stage: st[keyFixStage]}
+			if ag.Status == herdr.Idle || ag.Status == herdr.Done {
+				turn, _ := c.lastTurn(rctx, &ag, fixState(st), t.Path)
+				row.Fix.LastStatus = agent.LastStatus(turn.All)
+			}
+		}
+		if in := withoutFix(herdr.AgentsInPath(l.agents, t.Path), st); len(in) > 0 {
 			ag := in[0]
 			if i := slices.IndexFunc(in, func(a herdr.Agent) bool { return a.PaneID == st["pane"] }); i >= 0 {
 				ag = in[i]
@@ -706,7 +728,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	row.Watch = &RowWatch{Last: st["watch_last"]}
 	if why := st[keySyncFail]; why != "" && (row.PR == nil || st[keySyncFailHead] == row.PR.Head) {
-		row.Sync = &RowSync{Reason: why, At: st[keySyncFailAt], Log: st[keySyncFailLog]}
+		row.Sync = &RowSync{Reason: why, Kind: or(st[keySyncFailKind], syncFailure), At: st[keySyncFailAt], Log: st[keySyncFailLog]}
 	}
 	base := ""
 	if l.hasBase {

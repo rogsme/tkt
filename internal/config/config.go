@@ -235,7 +235,8 @@ func AutonomousMergeLine(verified, head string) string {
 }
 
 // BuiltinStages are the stage lines tkt run sends. {id} becomes the ticket,
-// and {remote} and {base} the forge's remote and base branch.
+// {remote} and {base} the forge's remote and base branch, and {reason} why
+// the last sync failed.
 var BuiltinStages = map[string]string{
 	"start":   "Use the start-ticket skill to start ticket {id}.",
 	"address": "Use the address-pr-review skill to address the review on this branch's pull request.",
@@ -247,9 +248,13 @@ var BuiltinStages = map[string]string{
 	// It leaves the review's findings to address, so a sync never fixes
 	// what nobody asked it to.
 	"resolve": "Fetch {remote} and merge {remote}/{base} into this branch. The merge conflicts: resolve each conflict from what both sides meant, keep it a merge, and change nothing the merge does not need. Stage only the paths you resolved, and ask the user about any hunk that decides product behavior. Run the focused checks for the code it touched, commit the merge, and push once, never with force. Then refresh the Review brief in the pull request's body for the new head and base, when it has one, and end with Status: READY_FOR_REVIEW.",
-	"verify":  "Use the verify-pr skill to verify the current PR.",
-	"ci":      "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code.",
-	"review":  "Use the review-pr skill to review the current PR.",
+	// sync-fix is the session tkt sync starts when a sync fails for any
+	// other reason, such as a pre-push hook that refuses the push. {reason}
+	// says why, and where git's whole output is.
+	"sync-fix": "tkt sync could not bring this branch up to date with {remote}/{base}: {reason} Fetch {remote} and merge {remote}/{base} into this branch, fix the cause of that failure, such as a check a hook runs or a setup step it needs, and change nothing else. Keep it a merge, never bypass a hook, and push once, never with force. Then refresh the Review brief in the pull request's body for the new head and base, when it has one, and end with Status: READY_FOR_REVIEW. When the fix needs a person's decision, end with Status: BLOCKED and a Reason: line instead.",
+	"verify":   "Use the verify-pr skill to verify the current PR.",
+	"ci":       "The checks on this branch's pull request fail at its head. Find the cause and fix it, then push once. When a failure is infrastructure, such as an API quota error, rerun the job instead of changing code. End with Status: READY_FOR_REVIEW, or with Status: BLOCKED and a Reason: line when the fix needs a person.",
+	"review":   "Use the review-pr skill to review the current PR.",
 }
 
 // BuiltinPresets apply when the settings define none.

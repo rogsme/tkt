@@ -65,6 +65,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 					`auto: ${auto}; rounds ${a?.rounds ?? 0}`,
 					`tkt watch: ${hub.watching === "off" ? "not running" : hub.watching === "failing" ? "running, but its passes fail" : r.watch?.paused ? `waits for the user (${r.watch.paused})` : r.hold ? "leaves it alone, on hold" : "keeps it moving"}`,
 					...(r.sync ? [`last sync failed at ${r.sync.at}: ${r.sync.reason}${r.sync.log ? `; git's whole output is in ${r.sync.log}` : ""}`] : []),
+					...(r.fix ? [`fix: a fresh session runs ${r.fix.stage} in pane ${r.fix.pane}, beside the agent: ${r.fix.status}${r.fix.last_status ? `, ended with ${r.fix.last_status}` : ""}`] : []),
 					`next: ${r.next.text} (${r.next.reason})`,
 					item ? `needs the user: ${item.text}` : "needs the user: nothing",
 				];
@@ -206,12 +207,12 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_sync",
 		label: "tkt sync",
-		description: "Queue tkt sync, which merges the base into a ticket's branch: tkt makes and pushes the merge itself when it is clean, and a fresh session resolves a conflict. Use it when the user asks to sync a ticket, or to bring it up to date with main.",
+		description: "Queue tkt sync, which merges the base into a ticket's branch: tkt makes and pushes the merge itself when it is clean, and any failure, a conflict or a push a hook refused, goes to a fresh session in a split beside the ticket's agent. Use it when the user asks to sync a ticket, or to bring it up to date with main.",
 		parameters: Type.Object({ ticket }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!(await guard(hub, ctx, [t], `Sync ${t} with its base?`, "tkt merges and pushes a clean merge itself; a conflict goes to a fresh session."))) return text("The user did not confirm; nothing ran.");
+			if (!(await guard(hub, ctx, [t], `Sync ${t} with its base?`, "tkt merges and pushes a clean merge itself; a failure goes to a fresh session beside the agent."))) return text("The user did not confirm; nothing ran.");
 			return text(act.sync(hub, t));
 		},
 	});
