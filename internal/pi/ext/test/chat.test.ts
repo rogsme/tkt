@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Entry, itemsOf, messageItems, patch, slashName } from "../chat.ts";
+import { type Entry, itemsOf, messageItems, pageView, patch, slashName } from "../chat.ts";
 
 const at = Date.parse("2026-10-25T10:00:00");
 
@@ -76,4 +76,14 @@ test("slashName reads the command a line names", () => {
 	assert.equal(slashName("/scoped-models"), "scoped-models");
 	assert.equal(slashName("/tmp/x is full"), "");
 	assert.equal(slashName("start ACM-12"), "");
+});
+
+test("the commands that open an overlay in the terminal open the page's own view there", () => {
+	const idOf = (raw: string) => (raw === "12" ? "ACM-12" : raw);
+	assert.deepEqual(pageView("/peek 12", idOf), { ticket: "ACM-12", tab: "screen" });
+	assert.deepEqual(pageView("/board", idOf), { ticket: "", tab: "" });
+	assert.equal(pageView("/board hide", idOf), undefined);
+	assert.equal(pageView("/peek", idOf), undefined);
+	assert.equal(pageView("/approve ACM-12", idOf), undefined);
+	assert.equal(pageView("peek ACM-12", idOf), undefined);
 });

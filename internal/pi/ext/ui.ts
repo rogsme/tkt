@@ -279,10 +279,13 @@ export interface Step {
 }
 
 /** checklist lets you mark each human verification step passed, failed or
- * skipped. It returns the marks when you close it. */
-export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], start: Mark[], from = ""): Promise<Mark[]> {
-	return ctx.ui.custom<Mark[]>(
+ * skipped. It returns the marks when you close it, or undefined when
+ * signal aborted. */
+export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], start: Mark[], from = "", signal?: AbortSignal): Promise<Mark[] | undefined> {
+	if (signal?.aborted) return Promise.resolve(undefined);
+	return ctx.ui.custom<Mark[] | undefined>(
 		(tui, theme, _kb, done) => {
+			closeOn(signal, () => done(undefined));
 			const marks = steps.map((_, i) => start[i] ?? "");
 			let index = 0;
 			const sign = (m: Mark) => (m === "pass" ? theme.fg("success", "[pass]") : m === "fail" ? theme.fg("error", "[FAIL]") : m === "skip" ? theme.fg("muted", "[skip]") : "[    ]");

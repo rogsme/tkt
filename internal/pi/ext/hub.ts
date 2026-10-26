@@ -49,6 +49,8 @@ export class Hub {
 	watching?: "on" | "off" | "failing";
 	ctx?: ExtensionContext;
 	render: () => void = () => {};
+	/** changed tells the web pages that the board changed. */
+	changed: () => void = () => {};
 	readonly jobs: Jobs;
 	readonly labels = new Map<string, string>();
 	tick = 0;
@@ -120,7 +122,7 @@ export class Hub {
 		const tag = updateNotice(env.result);
 		if (tag && tag !== this.newer) notify(this.ctx, `tkt ${tag} is available (this tkt is ${env.result.from}): /update installs it`);
 		this.newer = tag;
-		this.render();
+		this.redraw();
 	}
 
 	stop(): void {
@@ -178,10 +180,16 @@ export class Hub {
 		this.render = () => {};
 	}
 
+	/** redraw draws the board again, in the terminal and on the pages. */
+	redraw(): void {
+		this.render();
+		this.changed();
+	}
+
 	/** showBoard hides the pinned board, or shows it again. */
 	showBoard(on: boolean): void {
 		this.boardHidden = !on;
-		this.render();
+		this.redraw();
 	}
 
 	/** state is what the board draws. */
@@ -243,7 +251,7 @@ export class Hub {
 			if (!this.announced.has(a.key)) this.announce(a);
 		}
 		this.status();
-		this.render();
+		this.redraw();
 	}
 
 	/** announce tells about an item once with a herdr notification, unless
@@ -296,7 +304,7 @@ export class Hub {
 	add(job: Job): void {
 		this.labels.set(job.ticket, job.label);
 		this.jobs.add(job);
-		this.render();
+		this.redraw();
 	}
 
 	/** run runs a job in its ticket's queue and waits for its envelope, for

@@ -3,7 +3,7 @@
 // it covers the extension's own modules.
 
 import type { Item } from "../chat.ts";
-import type { Command, Dialog, Level, Theme, ToPage } from "../mirror.ts";
+import type { Board, Command, Dialog, Level, Theme, ToPage } from "../mirror.ts";
 
 export interface Toast {
 	id: number;
@@ -25,9 +25,13 @@ export interface State {
 	dialogs: Dialog[];
 	commands: Command[];
 	toasts: Toast[];
+	/** board is the board as the chat last sent it; seen holds the keys of
+	 * the items the page told about, so each new one gets a toast once. */
+	board?: Board;
+	seen: string[];
 }
 
-export const initial: State = { link: "connecting", repo: "", theme: "", busy: false, items: [], live: [], dialogs: [], commands: [], toasts: [] };
+export const initial: State = { link: "connecting", repo: "", theme: "", busy: false, items: [], live: [], dialogs: [], commands: [], toasts: [], seen: [] };
 
 export type Event = { t: "link"; link: Link } | { t: "dismiss"; id: number } | { t: "theme-local"; theme: Theme } | ToPage;
 
@@ -44,7 +48,15 @@ export function apply(s: State, e: Event): State {
 		case "theme-local":
 			return { ...s, theme: e.theme };
 		case "hello":
-			return { ...s, link: "open", repo: e.repo, theme: e.theme, busy: e.busy, items: e.items, live: e.live, dialogs: e.dialogs, commands: e.commands };
+			return { ...s, link: "open", repo: e.repo, theme: e.theme, busy: e.busy, items: e.items, live: e.live, dialogs: e.dialogs, commands: e.commands, board: e.board, seen: e.board?.items.map((a) => a.key) ?? [] };
+		case "board": {
+			// What needed you when the page opened is on the board already;
+			// what comes after gets a toast, as herdr's notification does.
+			const fresh = e.board.items.filter((a) => !s.seen.includes(a.key));
+			let toasts = s.toasts;
+			for (const text of new Set(fresh.map((a) => `${a.ticket}: ${a.title}`))) toasts = [...toasts, { id: ++toastId, text, level: "warning" as const }];
+			return { ...s, board: e.board, seen: [...s.seen, ...fresh.map((a) => a.key)], toasts: toasts.slice(-5) };
+		}
 		case "items":
 			return { ...s, items: [...s.items.slice(0, e.from), ...e.items] };
 		case "live":
@@ -72,9 +84,16 @@ export function completions(text: string, commands: Command[]): Command[] {
 	return commands.filter((c) => c.name.toLowerCase().startsWith(word)).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** title is the browser tab's title. */
+/** title is the browser tab's title, with how many tickets need you and
+ * how many questions wait for an answer. */
 export function title(s: State): string {
 	const name = s.repo ? `tkt ${s.repo}` : "tkt";
 	if (s.link === "closed" || s.link === "denied") return `${name} (closed)`;
-	return s.dialogs.length > 0 ? `(${s.dialogs.length}) ${name}` : name;
+	const n = needs(s.board) + s.dialogs.length;
+	return n > 0 ? `(${n}) ${name}` : name;
+}
+
+/** needs counts the tickets that need you. */
+export function needs(b: Board | undefined): number {
+	return new Set(b?.items.map((a) => a.ticket) ?? []).size;
 }

@@ -5,7 +5,8 @@
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Dialog, Level, Mirror, Option } from "./mirror.ts";
-import { question, textEditor } from "./ui.ts";
+import type { Mark } from "./report.ts";
+import { checklist as checklistView, question, type Step, textEditor } from "./ui.ts";
 
 let mirror: Mirror | undefined;
 
@@ -46,6 +47,14 @@ export function editor(ctx: ExtensionContext, title: string, prefill = ""): Prom
  * typed, or undefined when you cancelled. */
 export function ask(ctx: ExtensionContext, title: string, options: Option[], other = true): Promise<{ answer: string; typed: boolean } | undefined> {
 	return race(ctx, { kind: "ask", title, options, other }, (signal) => question(ctx, title, options, other, signal), (v) => v as { answer: string; typed: boolean } | undefined);
+}
+
+/** checklist lets you mark each human verification step, and returns the
+ * marks when you close it, in the terminal or on a page. */
+export async function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], start: Mark[], from = ""): Promise<Mark[]> {
+	const marks = steps.map((_, i) => start[i] ?? "");
+	const got = await race(ctx, { kind: "checklist", title: `${ticket}: human verification`, message: from, steps, marks }, (signal) => checklistView(ctx, ticket, steps, marks, from, signal), (v) => v as Mark[] | undefined);
+	return got ?? marks;
 }
 
 /** notify shows a notice in the terminal and on the pages. */

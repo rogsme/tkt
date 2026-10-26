@@ -1,6 +1,8 @@
 // The web page: an HTTP server inside the chat, on 127.0.0.1 only, that
 // serves the page under web/ and carries the mirror's messages over a
-// WebSocket. The first chat in a repository serves it and names its pid,
+// WebSocket. The page reads its views, such as a ticket's diff, through
+// queries that run tkt with --json and change nothing; every change it makes
+// is a slash command. The first chat in a repository serves it and names its pid,
 // port and token in the file TKT_WEB_FILE names, where tkt web finds them.
 // A chat that comes back after one quit takes the same port and token, so
 // an open page reconnects by itself. pi runs on
@@ -13,11 +15,13 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type Entry, type Item, itemsOf, messageItems, slashName, terminalOnly } from "./chat.ts";
+import { marksAt } from "./actions.ts";
+import { type Entry, type Item, itemsOf, messageItems, pageView, slashName, terminalOnly } from "./chat.ts";
 import { mirrorTo, notify } from "./dialog.ts";
 import { gate } from "./gate.ts";
 import type { Hub } from "./hub.ts";
-import { type Command, type Image, Mirror, type Page, type Theme } from "./mirror.ts";
+import { type Board, type Command, type Image, Mirror, type Page, type Query, type Theme } from "./mirror.ts";
+import type { Envelope } from "./model.ts";
 
 /** Bun is the runtime pi runs on; only what the server uses is named. */
 declare const Bun: {
@@ -34,8 +38,13 @@ interface Socket {
 	send(text: string): void;
 }
 
-/** pageDir holds the page's files beside the extension. */
-const pageDir = join(dirname(fileURLToPath(import.meta.url)), "web");
+/** extDir holds the extension, and pageDir the page's files beside it. */
+const extDir = dirname(fileURLToPath(import.meta.url));
+const pageDir = join(extDir, "web");
+
+/** shared are the extension's modules the page imports too. They import
+ * nothing from pi, so the browser runs them as the board does. */
+const shared = new Set(["model.ts", "attention.ts", "board.ts", "report.ts"]);
 
 /** streamMs paces the answer streaming in, so a fast model does not send a
  * page a message per token. */
@@ -66,12 +75,16 @@ export class Web {
 		this.pi = pi;
 		this.hub = hub;
 		this.mirror = new Mirror(hub.repo, {
-			send: (text, images) => this.send(text, images),
+			send: (text, images, page) => this.send(text, images, page),
 			stop: () => this.ctx?.abort(),
 			theme: (t) => saveTheme(t),
 			commands: () => this.commands(),
+			query: (q) => this.query(q),
 		});
 		this.mirror.theme = loadTheme();
+		hub.changed = () => {
+			if (this.server) this.mirror.setBoard(this.board());
+		};
 		pi.on("message_update", (e) => {
 			if (e.message.role === "assistant") this.stream(messageItems(e.message, "live"));
 		});
@@ -122,6 +135,7 @@ export class Web {
 		mirrorTo(this.mirror);
 		this.mirror.setBusy(!ctx.isIdle());
 		this.mirror.reset(this.items());
+		this.mirror.setBoard(this.board());
 		this.poll = setInterval(() => {
 			if (this.mirror.pages.size > 0) this.sync();
 		}, 1000);
@@ -176,9 +190,10 @@ export class Web {
 					ws.data.page = page;
 					this.mirror.join(page);
 				},
-				message: (_ws: Socket, msg: string | Uint8Array) => {
+				message: (ws: Socket, msg: string | Uint8Array) => {
+					if (!ws.data.page) return;
 					try {
-						this.mirror.receive(JSON.parse(String(msg)));
+						this.mirror.receive(JSON.parse(String(msg)), ws.data.page);
 					} catch {
 						// A page sent something other than JSON; nothing to do.
 					}
@@ -202,7 +217,10 @@ export class Web {
 		if (url.pathname === "/ws") return server.upgrade(req, { data: {} }) ? undefined : new Response("tkt: expected a WebSocket\n", { status: 400, headers });
 		if (req.method !== "GET") return new Response(null, { status: 405, headers });
 		if (url.pathname === "/") return this.index(server.port);
-		if (url.pathname.startsWith("/app/")) return this.asset(url.pathname.slice("/app/".length));
+		if (url.pathname.startsWith("/app/")) return this.asset(url.pathname.slice("/app/".length), pageDir);
+		// The page imports these as ../model.ts and the like, as the
+		// extension's tests do.
+		if (shared.has(url.pathname.slice(1))) return this.asset(url.pathname.slice(1), extDir);
 		return new Response(null, { status: 404, headers });
 	}
 
@@ -216,34 +234,41 @@ export class Web {
 		return new Response(html, { headers: { ...headers, "content-type": "text/html; charset=utf-8", "content-security-policy": csp } });
 	}
 
-	/** asset serves one of the page's scripts or stylesheets. */
-	private asset(rel: string): Response {
+	/** asset serves one of the page's scripts or stylesheets from dir. */
+	private asset(rel: string, dir: string): Response {
 		const type = rel.endsWith(".css") ? "text/css" : /\.(ts|js)$/.test(rel) ? "text/javascript" : "";
 		if (!type || !/^[\w./-]+$/.test(rel) || rel.split("/").some((p) => p === "" || p === "." || p === "..")) return new Response(null, { status: 404, headers });
-		let body = this.js.get(rel);
+		const file = join(dir, rel);
+		let body = this.js.get(file);
 		if (body === undefined) {
 			try {
-				body = readFileSync(join(pageDir, rel), "utf8");
+				body = readFileSync(file, "utf8");
 			} catch {
 				return new Response(null, { status: 404, headers });
 			}
 			if (rel.endsWith(".ts")) body = new Bun.Transpiler({ loader: "ts" }).transformSync(body);
 			// The extension's directory is named after its content, so a file
 			// never changes under a running chat.
-			this.js.set(rel, body);
+			this.js.set(file, body);
 		}
 		return new Response(body, { headers: { ...headers, "content-type": `${type}; charset=utf-8` } });
 	}
 
 	/** send takes what you typed on a page: one of tkt's slash commands
-	 * runs as if typed in the terminal; pi's own commands open screens only
-	 * the terminal draws; anything else goes to the model, as text typed
-	 * while it works does. */
-	private send(text: string, images: Image[]): void {
+	 * runs as if typed in the terminal, except the ones that open a view,
+	 * which open the page's own; pi's own commands open screens only the
+	 * terminal draws; anything else goes to the model, as text typed while
+	 * it works does. */
+	private send(text: string, images: Image[], page: Page): void {
 		const ctx = this.ctx;
 		if (!ctx) return;
 		const name = slashName(text);
 		if (name && images.length === 0) {
+			const view = pageView(text, (raw) => this.hub.idOf(raw));
+			if (view) {
+				page.send({ t: "open", ...view });
+				return;
+			}
 			if (this.commands().some((c) => c.name === name)) {
 				this.pi.sendUserMessage(text.trim(), ctx.isIdle() ? { expandPromptTemplates: true } : { expandPromptTemplates: true, deliverAs: "steer" });
 				return;
@@ -257,6 +282,38 @@ export class Web {
 		const content = images.length > 0 ? [{ type: "text" as const, text }, ...images] : text;
 		if (ctx.isIdle()) this.pi.sendUserMessage(content);
 		else this.pi.sendUserMessage(content, { deliverAs: "steer" });
+	}
+
+	/** query reads a view for a page: tkt with --json, which changes
+	 * nothing. The checklist's marks come with the steps. */
+	private async query(q: Query): Promise<unknown> {
+		const id = q.ticket ? this.hub.idOf(q.ticket) : "";
+		switch (q.what) {
+			case "message":
+				return this.hub.tkt(["show", id]);
+			case "screen":
+				return this.hub.tkt(["show", id, "--screen", "--ansi"]);
+			case "diff":
+				return this.hub.tkt(["show", id, "--diff"]);
+			case "steps": {
+				const env = (await this.hub.tkt(["show", id, "--steps"])) as Envelope<Record<string, unknown>>;
+				const head = this.hub.row(id)?.pr?.head ?? "";
+				return env.ok && env.result ? { ...env, result: { ...env.result, head, marks: marksAt(id, head) } } : env;
+			}
+			case "history":
+				return this.hub.tkt(["history", id]);
+			case "stats":
+				return this.hub.tkt(["stats"]);
+			case "chores":
+				return this.hub.tkt(["chores"]);
+			case "version":
+				return { ok: true, result: { tkt: process.env.TKT_VERSION ?? "", pi: process.env.TKT_PI_VERSION ?? "", bin: this.hub.bin, update: this.hub.newer ?? "" } };
+		}
+	}
+
+	private board(): Board {
+		const h = this.hub;
+		return { rows: h.rows, items: h.items, jobs: Object.fromEntries(h.labels), incidents: h.incidents, watch: h.watching, update: h.newer };
 	}
 
 	private commands(): Command[] {

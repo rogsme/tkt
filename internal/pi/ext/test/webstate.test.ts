@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { Attention } from "../attention.ts";
+import type { Board } from "../mirror.ts";
 import { apply, completions, initial, title } from "../web/state.ts";
 
 const note = (id: string, text: string) => ({ kind: "note" as const, id, text });
@@ -61,4 +63,23 @@ test("completions offer the commands a line starts to name", () => {
 	assert.equal(completions("/", cmds).length, 3);
 	assert.deepEqual(completions("/approve ACM-12", cmds), []);
 	assert.deepEqual(completions("start", cmds), []);
+});
+
+test("a new item on the board gets a toast once, and the title counts what needs you", () => {
+	const item = (ticket: string, key: string): Attention => ({ key, ticket, kind: "plan", title: "plan ready", text: `${ticket}: the plan is ready.`, byAuto: false });
+	const board = (items: Attention[]): Board => ({ rows: [], items, jobs: {}, incidents: [] });
+	let s = apply(initial, { t: "hello", repo: "app", theme: "", busy: false, items: [], live: [], dialogs: [], commands: [], board: board([item("ACM-12", "a")]) });
+	assert.deepEqual(s.toasts, []);
+	assert.equal(title(s), "(1) tkt app");
+	s = apply(s, { t: "board", board: board([item("ACM-12", "a"), item("ACM-13", "b"), item("ACM-13", "c")]) });
+	assert.deepEqual(
+		s.toasts.map((t) => t.text),
+		["ACM-13: plan ready"],
+	);
+	assert.equal(title(s), "(2) tkt app");
+	s = apply(s, { t: "board", board: board([item("ACM-13", "b")]) });
+	s = apply(s, { t: "board", board: board([item("ACM-13", "b"), item("ACM-12", "a")]) });
+	assert.equal(s.toasts.length, 1);
+	s = apply(s, { t: "dialog", dialog: { id: "d1", kind: "confirm", title: "Remove ACM-12?" } });
+	assert.equal(title(s), "(3) tkt app");
 });

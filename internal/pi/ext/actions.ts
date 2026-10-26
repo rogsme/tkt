@@ -7,8 +7,8 @@ import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
 import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
-import { ask, confirm, editor, input } from "./dialog.ts";
-import { checklist, peek, type Step } from "./ui.ts";
+import { ask, checklist, confirm, editor, input } from "./dialog.ts";
+import { peek, type Step } from "./ui.ts";
 
 export type Mode = "manual" | "auto" | "auto_after_plan" | "yolo";
 
@@ -288,6 +288,12 @@ export function watchPeek(hub: Hub, ctx: ExtensionContext, id: string): Promise<
 /** marks keeps each ticket's checklist marks for its head, in this chat. */
 const marks = new Map<string, Mark[]>();
 
+/** marksAt returns the checklist marks for a ticket's head, as /check left
+ * them. */
+export function marksAt(id: string, head: string): Mark[] {
+	return marks.get(`${id}@${head}`) ?? [];
+}
+
 export function restoreMarks(entries: { type: string; customType?: string; data?: unknown }[]): void {
 	for (const e of entries) {
 		if (e.type !== "custom" || e.customType !== "tkt-check") continue;
@@ -485,7 +491,7 @@ export async function update(hub: Hub, ctx: ExtensionContext): Promise<void> {
 	if (r.dev) return hub.post(`This tkt is a development build (${r.from}), so /update does not replace it. Rebuild it, or run ${r.next || "tkt update --force"} in a shell.`);
 	if (!r.available) {
 		hub.newer = undefined;
-		hub.render();
+		hub.redraw();
 		return hub.post(`tkt ${r.from} is up to date.`);
 	}
 	if (!(await confirm(ctx, `Update tkt from ${r.from} to ${r.to}?`, "This chat runs the old tkt until you reopen it. tkt auto loops and tkt watch move to the new tkt by themselves."))) return;
@@ -493,7 +499,7 @@ export async function update(hub: Hub, ctx: ExtensionContext): Promise<void> {
 	const env = await hub.tkt<UpdateResult>(["update", r.to]).finally(() => ctx.ui.setStatus("tkt-update", undefined));
 	if (!env.ok) return hub.post(`tkt update failed: ${reasonOf(env)}`);
 	hub.newer = undefined;
-	hub.render();
+	hub.redraw();
 	hub.post(`Updated tkt from ${r.from} to ${r.to}. This chat still runs ${r.from}: quit and reopen it to run ${r.to}.`);
 	if (await confirm(ctx, "Quit now?", "pi prints the command that reopens this chat: tkt agent --session ID.")) ctx.shutdown();
 }

@@ -137,6 +137,18 @@ export function slashName(text: string): string {
 	return m ? m[1].toLowerCase() : "";
 }
 
+/** pageView is the page's own view a slash command opens, such as the
+ * agent's screen for /peek ACM-12, or undefined for a command that runs in
+ * the chat. The terminal draws these views as overlays, which a page
+ * cannot show. */
+export function pageView(text: string, idOf: (raw: string) => string): { ticket: string; tab: string } | undefined {
+	const words = text.trim().split(/\s+/);
+	const name = slashName(text);
+	if (name === "board" && words.length === 1) return { ticket: "", tab: "" };
+	if (name === "peek" && words.length === 2) return { ticket: idOf(words[1]), tab: "screen" };
+	return undefined;
+}
+
 function textOf(content: unknown): string {
 	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";

@@ -4,6 +4,13 @@ with the model's answer as it streams in, its tool calls, and the times. A
 question the chat asks, such as "Remove ACM-12?", shows in both, and the first
 answer wins. Slash commands work in the page as in the terminal.
 
+Beside the chat, the page shows the board: what needs you, as cards with
+/inbox's answers as buttons, and every ticket. Pick a ticket for its plan or
+the agent's last message, its pull request, its human verification steps,
+its diff, its agent's live screen and its history. Every button sends the
+slash command you could type, so the terminal shows what it did. /peek ID
+and /board typed in the page open the page's own views.
+
 The page lives inside a running chat, which serves it on 127.0.0.1 only. The
 first chat in a repository serves it; a second one says it serves none. When
 no chat serves the page, tkt web opens tkt agent in a new tab of this herdr

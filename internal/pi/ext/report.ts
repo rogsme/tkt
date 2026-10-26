@@ -121,7 +121,7 @@ export function historyText(r: HistoryResult, bodies: boolean): string {
 	return out.join("\n");
 }
 
-function eventText(e: HistoryEvent): string {
+export function eventText(e: HistoryEvent): string {
 	switch (e.event) {
 		case "approved":
 			return "plan approved";

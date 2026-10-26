@@ -162,7 +162,7 @@ From a terminal, `tkt suggest 3` opens the same tab and returns at once. A narro
 
 ## 09:40 Read the plans
 
-Plans arrive one at a time, each as `plan ready` on the board with a herdr notification, so you can wait in another tab. ACM-124's comes first. `/show ACM-124` prints it in the chat. It is long, so `/board hide` gives the chat the whole pane while you read, and `/board show` brings the board back. A long plan reads better in a browser: `/web` opens the same chat there, with the plan's headings, lists and code drawn as a page, and what you type there goes to the same chat.
+Plans arrive one at a time, each as `plan ready` on the board with a herdr notification, so you can wait in another tab. ACM-124's comes first. `/show ACM-124` prints it in the chat. It is long, so `/board hide` gives the chat the whole pane while you read, and `/board show` brings the board back. A long plan reads better in a browser: `/web` opens the same chat there, beside the board. ACM-124's card says `plan ready` with Approve and Ask for changes on it; picking the ticket draws its plan as a page, with headings, lists and code, and the Diff tab shows what the branch changes once work starts. Approve there sends `/approve ACM-124` through the chat, so the terminal shows it too.
 
 The plan holds up: the Unlock button shows only to admins of the account's own workspace, the API checks the same rule, and the audit log records each unlock. You approve it:
 

@@ -1,49 +1,118 @@
-// The tkt agent's web page: the chat, mirrored. It draws what the chat
-// sends over the WebSocket and sends back what you type, the answers to
-// the chat's questions, a stop, and your light or dark choice. Everything
-// you do here goes through the chat, as if you did it in the terminal.
+// The tkt agent's web page: the board on the left, a ticket or another
+// view in the middle, and the chat, mirrored, on the right. It draws what
+// the chat sends over the WebSocket and sends back what you type, the
+// answers to the chat's questions, a stop, your light or dark choice, and
+// queries for the views it reads. Every button sends a slash command
+// through the chat, as if you typed it in the terminal.
 
-import type { Item } from "../chat.ts";
-import type { Dialog, Image, Theme, ToPage } from "../mirror.ts";
-import { md } from "./md.ts";
-import { apply, completions, type Event, initial, type State, title } from "./state.ts";
-import { html, render, useEffect, useLayoutEffect, useReducer, useRef, useState } from "./vendor/preact.js";
-
-type Send = (msg: unknown) => void;
-
-/** maxImageBytes bounds one pasted image, so a message stays well inside
- * what the chat takes at once. */
-const maxImageBytes = 8 << 20;
+import type { Dialog, Theme, ToPage } from "../mirror.ts";
+import type { Incident } from "../model.ts";
+import type { Mark } from "../report.ts";
+import { hashOf, type Nav, navOf, type Tab } from "./acts.ts";
+import type { Go } from "./bits.ts";
+import { Left } from "./left.ts";
+import { dropAll, type Send, settle } from "./query.ts";
+import { apply, type Event, initial, type State, title } from "./state.ts";
+import { Composer, Transcript } from "./talk.ts";
+import { Ticket } from "./ticket.ts";
+import { BoardView, ChoresView, StartView, StatsView, SuggestView, VersionView } from "./views.ts";
+import { html, render, useEffect, useMemo, useReducer, useRef, useState } from "./vendor/preact.js";
 
 function App() {
 	const [s, dispatch] = useReducer(apply, initial) as [State, (e: Event) => void];
-	const send = useLink(dispatch);
+	const [nav, setNav] = useState<Nav>(() => navOf(location.hash));
+	const now = useNow();
+	const go = (n: Nav) => {
+		setNav(n);
+		const h = hashOf(n);
+		if (location.hash !== h) history.pushState(null, "", h === "#" ? location.pathname : h);
+	};
+	useEffect(() => {
+		const back = () => setNav(navOf(location.hash));
+		addEventListener("popstate", back);
+		return () => removeEventListener("popstate", back);
+	}, []);
+	const send = useLink(dispatch, (o) => go(o.ticket ? { ticket: o.ticket, tab: o.tab as Tab } : { board: true }));
+	const g: Go = useMemo(() => ({ send, run: (cmd: string) => void send({ t: "send", text: cmd, images: [] }), go }), [send]);
+	// asked counts the questions that closed, so a view that a question
+	// changes, such as the checklist's marks, reads again.
+	const asked = useClosed(s.dialogs);
 	useEffect(() => {
 		document.title = title(s);
-	}, [s.repo, s.link, s.dialogs.length]);
+	}, [s.repo, s.link, s.dialogs.length, s.board]);
 	useEffect(() => {
 		if (s.theme) document.documentElement.dataset.theme = s.theme;
 	}, [s.theme]);
 	const dialog = s.dialogs[0];
 	return html`<div class="app">
-		<${Top} s=${s} send=${send} dispatch=${dispatch} />
+		<${Top} s=${s} g=${g} dispatch=${dispatch} />
 		<${Banner} link=${s.link} />
-		<${Transcript} items=${s.items} live=${s.live} link=${s.link} />
-		<${Composer} s=${s} send=${send} />
+		<${Incidents} list=${s.board?.incidents ?? []} />
+		<div class="cols">
+			<aside class="left"><${Left} board=${s.board} nav=${nav} g=${g} now=${now} /></aside>
+			<main class="center"><${Center} s=${s} nav=${nav} g=${g} now=${now} asked=${asked} /></main>
+			<section class="right" aria-label="Chat">
+				<${Transcript} items=${s.items} live=${s.live} link=${s.link} />
+				<${Composer} s=${s} send=${send} />
+			</section>
+		</div>
 		${dialog && html`<${Ask} key=${dialog.id} d=${dialog} send=${send} />`}
 		<${Toasts} s=${s} dispatch=${dispatch} />
 	</div>`;
 }
 
+function Center({ s, nav, g, now, asked }: { s: State; nav: Nav; g: Go; now: number; asked: number }) {
+	if ("ticket" in nav) return html`<${Ticket} key=${nav.ticket} id=${nav.ticket} tab=${nav.tab} board=${s.board} g=${g} now=${now} asked=${asked} />`;
+	if ("view" in nav) {
+		switch (nav.view) {
+			case "start":
+				return html`<${StartView} g=${g} />`;
+			case "suggest":
+				return html`<${SuggestView} g=${g} />`;
+			case "chores":
+				return html`<${ChoresView} g=${g} now=${now} />`;
+			case "stats":
+				return html`<${StatsView} g=${g} />`;
+			case "version":
+				return html`<${VersionView} g=${g} />`;
+		}
+	}
+	return html`<${BoardView} board=${s.board} g=${g} now=${now} />`;
+}
+
+/** useNow is the time, a tick every ten seconds, for the ages the board
+ * shows. */
+function useNow(): number {
+	const [now, setNow] = useState(Date.now());
+	useEffect(() => {
+		const t = setInterval(() => setNow(Date.now()), 10_000);
+		return () => clearInterval(t);
+	}, []);
+	return now;
+}
+
+function useClosed(dialogs: Dialog[]): number {
+	const [n, setN] = useState(0);
+	const had = useRef(0);
+	useEffect(() => {
+		if (dialogs.length < had.current) setN((x) => x + 1);
+		had.current = dialogs.length;
+	}, [dialogs.length]);
+	return n;
+}
+
 /** useLink keeps the WebSocket to the chat open, and opens it again when
- * the chat goes away and comes back. */
-function useLink(dispatch: (e: Event) => void): Send {
+ * the chat goes away and comes back. Answers to queries go to whoever
+ * asked; a view a command opens goes to open. */
+function useLink(dispatch: (e: Event) => void, open: (o: { ticket: string; tab: string }) => void): Send {
 	const ws = useRef<WebSocket | null>(null);
+	const opener = useRef(open);
+	opener.current = open;
 	useEffect(() => {
 		let wait = 1000;
 		let stopped = false;
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		const open = () => {
+		const connect = () => {
 			const sock = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
 			ws.current = sock;
 			let opened = false;
@@ -52,30 +121,41 @@ function useLink(dispatch: (e: Event) => void): Send {
 				wait = 1000;
 			};
 			sock.onmessage = (ev) => {
+				let msg: ToPage;
 				try {
-					dispatch(JSON.parse(String(ev.data)) as ToPage);
+					msg = JSON.parse(String(ev.data)) as ToPage;
 				} catch {
 					// A message the page cannot read; the next hello sets it right.
+					return;
 				}
+				if (msg.t === "result") settle(msg.id, msg.value);
+				else if (msg.t === "open") opener.current(msg);
+				else dispatch(msg);
 			};
 			sock.onclose = async () => {
 				ws.current = null;
+				dropAll();
 				if (stopped) return;
 				dispatch({ t: "link", link: opened ? "closed" : await why() });
-				timer = setTimeout(open, wait);
+				timer = setTimeout(connect, wait);
 				wait = Math.min(wait * 2, 5000);
 			};
 		};
-		open();
+		connect();
 		return () => {
 			stopped = true;
 			clearTimeout(timer);
 			ws.current?.close();
 		};
 	}, []);
-	return (msg) => {
-		if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
-	};
+	return useMemo(
+		() => (msg: unknown) => {
+			if (ws.current?.readyState !== WebSocket.OPEN) return false;
+			ws.current.send(JSON.stringify(msg));
+			return true;
+		},
+		[],
+	);
 }
 
 /** why tells a chat that is gone from one that shuts this page out, as
@@ -89,18 +169,27 @@ async function why(): Promise<"closed" | "denied"> {
 	}
 }
 
-function Top({ s, send, dispatch }: { s: State; send: Send; dispatch: (e: Event) => void }) {
+function Top({ s, g, dispatch }: { s: State; g: Go; dispatch: (e: Event) => void }) {
 	const dark = s.theme ? s.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
 	const flip = () => {
 		const theme: Theme = dark ? "light" : "dark";
 		dispatch({ t: "theme-local", theme });
-		send({ t: "theme", theme });
+		g.send({ t: "theme", theme });
 	};
 	const state = s.link !== "open" ? "" : s.busy ? "working" : "ready";
+	const w = s.board?.watch;
 	return html`<header class="top">
-		<h1>${s.repo ? `tkt ${s.repo}` : "tkt"}</h1>
+		<h1><a href="#" class="plain" onClick=${(e: MouseEvent) => {
+			e.preventDefault();
+			g.go({ board: true });
+		}}>${s.repo ? `tkt ${s.repo}` : "tkt"}</a></h1>
+		${w && html`<span class=${`chip watch-${w}`} title="tkt watch keeps tickets moving: it syncs bases, fixes checks and carries out merge orders">watch ${w}</span>`}
+		${s.board?.update && html`<a href="#version" class="chip update" onClick=${(e: MouseEvent) => {
+			e.preventDefault();
+			g.go({ view: "version" });
+		}}>tkt ${s.board.update} is out</a>`}
 		<span class="spacer"></span>
-		${state && html`<span class="status"><span class=${`dot ${s.busy ? "busy" : "on"}`}></span>${state}</span>`}
+		${state && html`<span class="status" title="the model in the chat"><span class=${`dot ${s.busy ? "busy" : "on"}`}></span>model ${state}</span>`}
 		<button class="icon" onClick=${flip} title=${dark ? "Switch to light" : "Switch to dark"} aria-label=${dark ? "Switch to light" : "Switch to dark"}>
 			${dark ? sun : moon}
 		</button>
@@ -117,155 +206,14 @@ function Banner({ link }: { link: State["link"] }) {
 	return html`<div class="banner bad">The chat is closed. This page comes back by itself once a tkt agent chat serves it again.</div>`;
 }
 
-/** Transcript draws the items and the answer streaming in. It follows the
- * end while you are at the end, and stays put while you read further up. */
-function Transcript({ items, live, link }: { items: Item[]; live: Item[]; link: State["link"] }) {
-	const box = useRef<HTMLDivElement | null>(null);
-	const atEnd = useRef(true);
-	const onScroll = () => {
-		const el = box.current;
-		if (el) atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-	};
-	useLayoutEffect(() => {
-		const el = box.current;
-		if (el && atEnd.current) el.scrollTop = el.scrollHeight;
-	}, [items, live]);
-	// Times and notices such as the model's name are no conversation yet.
-	const empty = link === "open" && live.length === 0 && !items.some((it) => it.kind !== "info" && it.kind !== "stamp");
-	return html`<div class="scroll" ref=${box} onScroll=${onScroll}>
-		<div class="chat">
-			${empty && html`<p class="empty">Say what you want, such as "start ACM-12", or type / for the commands.</p>`}
-			${items.map((it) => html`<${ItemView} key=${it.id} it=${it} />`)}
-			${live.map((it) => html`<${ItemView} key=${`live-${it.id}`} it=${it} live=${true} />`)}
-		</div>
-	</div>`;
-}
-
-function ItemView({ it, live = false }: { it: Item; live?: boolean }) {
-	switch (it.kind) {
-		case "user":
-			return html`<div class="msg user">${it.text}${it.images > 0 && html`<div class="images">${it.images} image${it.images === 1 ? "" : "s"}</div>`}</div>`;
-		case "assistant":
-			return html`<div class=${`msg assistant${live ? " live" : ""}`}>
-				${it.thinking && html`<details class="thinking"><summary>thinking</summary><pre>${it.thinking}</pre></details>`}
-				${it.text && html`<div class="md" dangerouslySetInnerHTML=${{ __html: md(it.text) }}></div>`}
-				${it.error && html`<div class="error">${it.error}</div>`}
-			</div>`;
-		case "tool": {
-			const state = !it.done ? "running" : it.error ? "failed" : "";
-			return html`<details class=${`tool${it.error ? " failed" : ""}`}>
-				<summary><span class="name">${it.name}</span> ${it.args} ${state && html`<span class="state">${state}</span>`}</summary>
-				${it.done && html`<pre>${it.result || "(no output)"}</pre>`}
-			</details>`;
-		}
-		case "note":
-			return html`<div class="note">${it.text}</div>`;
-		case "stamp":
-			return html`<div class="stamp">${it.text}</div>`;
-		case "info":
-			return html`<div class="info">${it.text}</div>`;
-	}
-	return null;
-}
-
-/** Composer is where you type. Enter sends, Shift+Enter starts a new line,
- * a pasted image goes with the message, and / offers the commands. */
-function Composer({ s, send }: { s: State; send: Send }) {
-	const [text, setText] = useState("");
-	const [images, setImages] = useState<(Image & { url: string })[]>([]);
-	const [pick, setPick] = useState(0);
-	const area = useRef<HTMLTextAreaElement | null>(null);
-	const offers = completions(text, s.commands);
-	const open = s.link === "open";
-	useLayoutEffect(() => {
-		const el = area.current;
-		if (!el) return;
-		el.style.height = "auto";
-		el.style.height = `${el.scrollHeight + 2}px`;
-	}, [text]);
-	useEffect(() => setPick(0), [offers.length]);
-
-	const submit = () => {
-		if (!open || (!text.trim() && images.length === 0)) return;
-		send({ t: "send", text, images: images.map(({ type, data, mimeType }) => ({ type, data, mimeType })) });
-		setText("");
-		setImages([]);
-	};
-	const complete = (name: string) => {
-		setText(`/${name} `);
-		area.current?.focus();
-	};
-	const onKey = (e: KeyboardEvent) => {
-		if (offers.length > 0) {
-			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-				e.preventDefault();
-				setPick((p) => (p + (e.key === "ArrowDown" ? 1 : offers.length - 1)) % offers.length);
-				return;
-			}
-			if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && offers[pick] && `/${offers[pick].name}` !== text.trim())) {
-				e.preventDefault();
-				complete(offers[pick].name);
-				return;
-			}
-			if (e.key === "Escape") {
-				setText("");
-				return;
-			}
-		}
-		if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-			e.preventDefault();
-			submit();
-		}
-	};
-	const onPaste = (e: ClipboardEvent) => {
-		const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
-		if (files.length === 0) return;
-		e.preventDefault();
-		for (const f of files) {
-			if (f.size > maxImageBytes) continue;
-			const r = new FileReader();
-			r.onload = () => {
-				const url = String(r.result);
-				const data = url.slice(url.indexOf(",") + 1);
-				setImages((list) => [...list, { type: "image", data, mimeType: f.type, url }]);
-			};
-			r.readAsDataURL(f);
-		}
-	};
-
-	return html`<div class="composer">
-		<div class="inner">
-			${offers.length > 0 &&
-			html`<ul class="slash" role="listbox">
-				${offers.map(
-					(c, i) => html`<li class=${i === pick ? "on" : ""} role="option" aria-selected=${i === pick} onMouseDown=${(e: MouseEvent) => {
-						e.preventDefault();
-						complete(c.name);
-					}}><span class="name">/${c.name}</span><span class="desc">${c.description}</span></li>`,
-				)}
-			</ul>`}
-			${images.length > 0 &&
-			html`<div class="attached">
-				${images.map(
-					(im, i) => html`<figure><img src=${im.url} alt=${`pasted image ${i + 1}`} /><button title="Remove" aria-label="Remove image" onClick=${() => setImages((list) => list.filter((_, j) => j !== i))}>x</button></figure>`,
-				)}
-			</div>`}
-			<div class="row">
-				<textarea
-					ref=${area}
-					rows="1"
-					value=${text}
-					placeholder=${open ? "Message the tkt agent, or / for commands" : "The chat is not reachable"}
-					disabled=${!open}
-					onInput=${(e: InputEvent) => setText((e.target as HTMLTextAreaElement).value)}
-					onKeyDown=${onKey}
-					onPaste=${onPaste}
-				></textarea>
-				${s.busy && html`<button class="btn quiet" onClick=${() => send({ t: "stop" })} title="Stop the model, as Escape does in the terminal">Stop</button>`}
-				<button class="btn" onClick=${submit} disabled=${!open || (!text.trim() && images.length === 0)}>Send</button>
-			</div>
-			<div class="hint">${s.busy ? "The model works: what you send now reaches it at its next step." : "Enter sends, Shift+Enter starts a new line. Paste an image to send it along."}</div>
-		</div>
+/** Incidents is what the status pages report, which holds tkt watch's
+ * agent runs back until it ends. */
+function Incidents({ list }: { list: Incident[] }) {
+	if (list.length === 0) return null;
+	return html`<div class="banner bad">
+		${list.map(
+			(i) => html`<div>${i.service}: ${i.problem}. tkt watch and tkt auto start no agent until it ends. ${i.url && html`<a href=${i.url} target="_blank" rel="noopener noreferrer">${i.page}</a>`}</div>`,
+		)}
 	</div>`;
 }
 
@@ -274,6 +222,7 @@ function Composer({ s, send }: { s: State; send: Send }) {
 function Ask({ d, send }: { d: Dialog; send: Send }) {
 	const [text, setText] = useState(d.prefill ?? "");
 	const [typing, setTyping] = useState(false);
+	const [marks, setMarks] = useState<Mark[]>(d.marks ?? []);
 	const box = useRef<HTMLElement | null>(null);
 	const first = useRef<HTMLElement | null>(null);
 	const answer = (value: unknown) => send({ t: "answer", id: d.id, value });
@@ -335,9 +284,31 @@ function Ask({ d, send }: { d: Dialog; send: Send }) {
 						</div>
 						<div class="actions"><button class="btn quiet" onClick=${() => answer(null)}>Cancel</button></div>`;
 			break;
+		case "checklist": {
+			const set = (i: number, m: Mark) => setMarks((ms) => (d.steps ?? []).map((_, j) => (j === i ? m : (ms[j] ?? ""))));
+			body = html`${d.message && html`<p>${d.message}</p>`}
+				<ol class="checklist">
+					${(d.steps ?? []).map((st, i) => {
+						const m = marks[i] ?? "";
+						return html`<li value=${st.n} class=${m}>
+							<div class="step-text">${st.text}</div>
+							<div class="marks" role="group" aria-label=${`step ${st.n}`}>
+								${(["pass", "fail", "skip"] as Mark[]).map(
+									(k) => html`<button class=${`mark-btn ${k}${m === k ? " on" : ""}`} aria-pressed=${m === k} onClick=${() => set(i, m === k ? "" : k)}>${k}</button>`,
+								)}
+							</div>
+						</li>`;
+					})}
+				</ol>
+				<div class="actions">
+					<button class="btn quiet" onClick=${() => answer(null)} title="Close without keeping these marks">Cancel</button>
+					<button class="btn" onClick=${() => answer((d.steps ?? []).map((_, i) => marks[i] ?? ""))}>Done</button>
+				</div>`;
+			break;
+		}
 	}
 	return html`<div class="veil" onKeyDown=${onKey}>
-		<div class="dialog" role="dialog" aria-modal="true" aria-label=${d.title} tabindex="-1" ref=${box}>
+		<div class=${`dialog${d.kind === "checklist" ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label=${d.title} tabindex="-1" ref=${box}>
 			<h2>${d.title}</h2>
 			${body}
 			<div class="where">The chat's pane asks this too; the first answer counts.</div>
