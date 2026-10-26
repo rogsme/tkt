@@ -148,6 +148,9 @@ func (e HistoryEvent) line() string {
 			return "started, a run of chore " + e.Chore
 		}
 	case history.Approved:
+		if e.Action == "session" {
+			return "plan approved, in its session"
+		}
 		return "plan approved"
 	case history.Stage:
 		if e.Stop != "" {

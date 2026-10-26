@@ -126,7 +126,7 @@ export function historyText(r: HistoryResult, bodies: boolean): string {
 export function eventText(e: HistoryEvent): string {
 	switch (e.event) {
 		case "approved":
-			return "plan approved";
+			return e.action === "session" ? "plan approved, in its session" : "plan approved";
 		case "stage":
 			return `ran ${e.stage}`;
 		case "phase":

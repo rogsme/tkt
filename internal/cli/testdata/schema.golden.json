@@ -261,7 +261,7 @@
       "path": "approve",
       "use": "approve ID",
       "short": "Approve the plan in the ticket's own session, so work-ticket begins",
-      "long": "tkt approve tells the ticket's planning session that you approve its plan. The\nsame session then goes on with work-ticket, so the plan it wrote stays in its\ncontext. tkt run would start a fresh session and lose it.\n\nRead the plan first with tkt show ID. tkt approve refuses unless the agent is\nidle and its last status line since your last message is\nStatus: AWAITING_APPROVAL; --force sends the approval anyway. To ask for\nchanges instead, use tkt send ID \"what to change\".\n\ntkt approve resets the round count that tkt auto caps.",
+      "long": "tkt approve tells the ticket's planning session that you approve its plan. The\nsame session then goes on with work-ticket, so the plan it wrote stays in its\ncontext. tkt run would start a fresh session and lose it.\n\nRead the plan first with tkt show ID. tkt approve refuses unless the agent is\nidle and its last status line since your last message is\nStatus: AWAITING_APPROVAL; --force sends the approval anyway. To ask for\nchanges instead, use tkt send ID \"what to change\".\n\ntkt approve resets the round count that tkt auto caps.\n\nAn approval in the plan viewer needs no tkt approve: the session goes on by\nitself and prints Status: PLAN_APPROVED, and tkt ls then moves the ticket to\nthe work stage and resets the round count the same way.",
       "example": "  tkt show ACM-12\n  tkt approve ACM-12\n  tkt approve ACM-12 --dry-run",
       "group": "lifecycle",
       "args": [

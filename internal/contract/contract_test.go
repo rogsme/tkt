@@ -66,7 +66,7 @@ func TestReviewSummariesCarryVerdicts(t *testing.T) {
 
 func TestStatusLinesTktReadsAreRegistered(t *testing.T) {
 	registry := read(t, "status-lines.md")
-	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusBlocked, contract.StatusSetupRequired,
+	for _, s := range []string{contract.StatusAwaitingApproval, contract.StatusPlanApproved, contract.StatusBlocked, contract.StatusSetupRequired,
 		contract.StatusReadyForReview, contract.StatusBlockedForSync, contract.StatusHumanQAFailed, contract.StatusAwaitingPostApproval, contract.StatusDone,
 		contract.StatusBlockedPostMerge, contract.StatusVerified, contract.StatusVerificationFailed, contract.StatusVerificationIncomplete} {
 		if !strings.Contains(registry, "`Status: "+s+"`") {
@@ -154,6 +154,19 @@ func TestWorkflowFeatureRowsTurnFeaturesOn(t *testing.T) {
 			if c.On(f) != (state == "on") {
 				t.Errorf("%s with every row %s: %v", f, state, c.On(f))
 			}
+		}
+	}
+}
+
+func TestStartTicketMarksTheWorkPhaseBegun(t *testing.T) {
+	text := read(t, "start-ticket-plan-approved.md")
+	for _, want := range []string{
+		"with the viewer's Approve button",
+		"print `Status: " + contract.StatusPlanApproved + "` on a line of its own before the work phase begins",
+		"the run goes on after it",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("start-ticket no longer says %q:\n%s", want, text)
 		}
 	}
 }

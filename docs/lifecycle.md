@@ -154,7 +154,7 @@ The agent ends with `Status: AWAITING_APPROVAL`. When you drop the ticket instea
 
 ### 4. You approve, and work-ticket builds
 
-Read the plan with `tkt show ACM-123`, which prints the agent's last message from its session's record. Ask for changes with `tkt send ACM-123 "what to change"` until the plan is right, then approve it with `tkt approve ACM-123`. Both type into the planning session, as an answer in the tab would. Do not use `tkt run` here: it starts a fresh session, and the plan lives in this one. The same session goes on with `work-ticket`:
+Read the plan with `tkt show ACM-123`, which prints the agent's last message from its session's record. Ask for changes with `tkt send ACM-123 "what to change"` until the plan is right, then approve it with `tkt approve ACM-123`. Both type into the planning session, as an answer in the tab would. Do not use `tkt run` here: it starts a fresh session, and the plan lives in this one. With plan presentation on, you can approve in the browser instead: the agent goes on by itself and prints `Status: PLAN_APPROVED`, and `tkt ls` reads that line, moves the ticket to the work stage, and shows it building. The same session goes on with `work-ticket`:
 
 1. It posts the plan as an `## Approved implementation plan` comment, after moving the ticket to `in-progress` if it is not there yet.
 2. It implements the plan, test-first where the configuration says so, and commits each unit through `commit`.
