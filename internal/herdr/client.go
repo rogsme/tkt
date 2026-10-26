@@ -3,6 +3,7 @@
 package herdr
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -53,6 +54,10 @@ func (c Client) call(ctx context.Context, quiet bool, args ...string) (json.RawM
 	r := c.R.Run(ctx, runner.Cmd{Argv: append([]string{"herdr"}, args...), Quiet: quiet})
 	if !r.OK() {
 		return nil, &Error{Argv: args, Code: ErrorCode(r.Stderr), Stderr: strings.TrimSpace(r.ErrText())}
+	}
+	// Some commands, such as pane run, print nothing when they succeed.
+	if len(bytes.TrimSpace(r.Stdout)) == 0 {
+		return nil, nil
 	}
 	var env struct {
 		Result json.RawMessage `json:"result"`
