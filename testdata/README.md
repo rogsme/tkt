@@ -119,6 +119,7 @@ After a change to `tkt hook tmp` or its plugin, with a preset that runs OpenCode
 1. Run `tkt hook tmp --install`, then `opencode service restart` while no agent works. `tkt doctor` says the plugin is in place.
 2. Start an OpenCode ticket, and ask its agent to run `echo $TMPDIR` and to write `/tmp/acme-check.md` with its write tool, then to `cat /tmp/acme-check.md` in its shell. `$TMPDIR` names the ticket's directory, the file lands there, the `cat` finds it, and nothing named `acme-check.md` appears in `/tmp`. The agent mentions the move as expected rather than trying to undo it.
 3. Ask it to run `grep -rn "/tmp/acme-check.md" .` and to commit a message that names `/tmp/acme-check.md` in quotes: both keep the path as written.
+4. Present a plan and approve it in the viewer. Once the agent prints `Status: PLAN_APPROVED`, the ticket's state holds `oc_statuses` ending with `PLAN_APPROVED`, and `tkt ls` shows it building. Send it a new prompt: `oc_statuses` empties. This checks OpenCode's `session.inbox.delivered` and `session.text.ended` events, which the plugin relies on.
 4. Put a file in `/tmp` yourself and ask the agent to read it: it reads the real one.
 5. In an OpenCode session outside any ticket, `echo $TMPDIR` shows the service's own, and nothing moves.
 

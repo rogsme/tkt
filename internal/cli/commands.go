@@ -299,7 +299,18 @@ func hookCmd(g *globals) *cobra.Command {
 	}
 	tmp.Flags().BoolVar(&o.Install, "install", false, "write tkt's plugin into OpenCode's global plugins directory")
 	tmp.Flags().BoolVar(&o.Dry, "dry-run", false, "with --install, print the change instead of making it")
-	cmd.AddCommand(tmp)
+	event := &cobra.Command{
+		Use:     "event",
+		Short:   "Record a status line or a new prompt that tkt's OpenCode plugin saw in a ticket's session",
+		Long:    helpText("hook"),
+		Example: `  echo '{"directories": ["'$PWD'"], "session": "ses_1", "statuses": ["PLAN_APPROVED"]}' | tkt hook event`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().HookEvent(cmd.Context())
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.AddCommand(tmp, event)
 	return cmd
 }
 

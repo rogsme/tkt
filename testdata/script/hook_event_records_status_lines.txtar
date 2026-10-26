@@ -1,0 +1,55 @@
+# tkt's OpenCode plugin tells tkt hook event about each new prompt and each
+# status line in a ticket's session. tkt keeps them in the state and reads
+# them over the session's last 50 messages, which a long work phase
+# outgrows: a Status: PLAN_APPROVED that has scrolled out of them still
+# moves the ticket to the work stage.
+exec tkt start ACM-5 --as opencode
+env WT=$FAKE_WT_ROOT/ACM-5
+state $WT session ses_fake1
+expand $WORK/new.json
+expand $WORK/waiting.json
+expand $WORK/approved.json
+expand $WORK/other.json
+
+stdin $WORK/new.json
+exec tkt hook event --json
+envelope '.result | [.ticket, .statuses]' '["ACM-5",[]]'
+stdin $WORK/waiting.json
+exec tkt hook event --json
+stdin $WORK/approved.json
+exec tkt hook event --json
+envelope '.result.statuses' '["AWAITING_APPROVAL","PLAN_APPROVED"]'
+state $WT oc_statuses 'AWAITING_APPROVAL PLAN_APPROVED'
+
+# Another session in the worktree, such as a subagent's, changes nothing.
+stdin $WORK/other.json
+exec tkt hook event --json
+envelope '.result.ticket' ''
+state $WT oc_session ses_fake1
+
+# The API's 50 messages hold only the work phase's end; the plugin's record
+# says the plan was approved.
+env FAKE_OC_MESSAGES=$WORK/messages.json
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .stage]' '["building","work"]'
+exec tkt history ACM-5
+stdout 'plan approved, in its session'
+
+# A new prompt starts a new turn.
+stdin $WORK/new.json
+exec tkt hook event --json
+state $WT oc_statuses ''
+
+-- new.json --
+{"directories": ["$WORK/wt/ACM-5"], "session": "ses_fake1", "turn": "new"}
+-- waiting.json --
+{"directories": ["$WORK/wt/ACM-5"], "session": "ses_fake1", "statuses": ["AWAITING_APPROVAL"]}
+-- approved.json --
+{"directories": ["$WORK/wt/ACM-5"], "session": "ses_fake1", "statuses": ["PLAN_APPROVED"]}
+-- other.json --
+{"directories": ["$WORK/wt/ACM-5"], "session": "ses_subagent", "statuses": ["READY_FOR_REVIEW"]}
+-- messages.json --
+{"data":[
+ {"id":"m9","type":"assistant","finish":"stop","time":{"created":1767261600000},"content":[{"type":"text","text":"Running the full check."}]}
+]}

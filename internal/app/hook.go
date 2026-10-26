@@ -14,6 +14,9 @@ import (
 
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/config"
+	"gitlab.com/rogs/tkt/internal/contract"
+	"gitlab.com/rogs/tkt/internal/harness"
+	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/state"
 )
 
@@ -120,29 +123,35 @@ func (a *App) Hook(ctx context.Context, o HookOpts) (*HookResult, error) {
 }
 
 // ticketAt finds the ticket whose worktree holds dir, and its temporary
-// directory, from the worktree's state file. A linked worktree's .git is a
-// file naming its git directory; the primary worktree's is a directory, and
-// holds no ticket.
+// directory, from the worktree's state file.
 func ticketAt(dir string) (id, tmp string) {
+	_, st := stateAt(dir)
+	return st["ticket"], st["tmpdir"]
+}
+
+// stateAt finds the state file of the worktree that holds dir, and reads
+// it. A linked worktree's .git is a file naming its git directory; the
+// primary worktree's is a directory, and holds no ticket.
+func stateAt(dir string) (string, state.State) {
 	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
 		dot := filepath.Join(d, ".git")
 		if fi, err := os.Lstat(dot); err == nil {
 			if fi.IsDir() {
-				return "", ""
+				return "", state.State{}
 			}
 			b, err := os.ReadFile(dot)
 			gitdir, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir: ")
 			if err != nil || !ok {
-				return "", ""
+				return "", state.State{}
 			}
 			if !filepath.IsAbs(gitdir) {
 				gitdir = filepath.Join(d, gitdir)
 			}
-			st := state.Read(state.Path(gitdir))
-			return st["ticket"], st["tmpdir"]
+			p := state.Path(gitdir)
+			return p, state.Read(p)
 		}
 		if d == filepath.Dir(d) {
-			return "", ""
+			return "", state.State{}
 		}
 	}
 }
@@ -579,10 +588,28 @@ const pluginSource = `// tkt's OpenCode plugin. tkt hook tmp --install wrote it,
 // again each time it runs; change tkt, not this file. In a ticket's
 // worktree it gives each shell the ticket's own TMPDIR, moves the new /tmp
 // paths an agent types into that directory, and tells the agent so. tkt
-// hook tmp decides each call; elsewhere it does nothing.
-import { spawnSync } from "node:child_process"
+// hook tmp decides each call; elsewhere it does nothing. It also tells tkt
+// hook event about each new prompt and each status line in a session, in
+// order, so tkt need not read a long session back.
+import { spawn, spawnSync } from "node:child_process"
 
 const tkt = TKT_PATH
+
+// tell hands tkt hook event one event, after the ones before it, without
+// holding up the service while tkt runs.
+let told = Promise.resolve()
+function tell(ev) {
+	told = told.then(() => new Promise((resolve) => {
+		try {
+			const p = spawn(tkt, ["hook", "event", "--json"], { stdio: ["pipe", "ignore", "ignore"], timeout: 5000 })
+			p.on("error", resolve)
+			p.on("close", resolve)
+			p.stdin.end(JSON.stringify(ev))
+		} catch {
+			resolve()
+		}
+	}))
+}
 
 function ask(req) {
 	try {
@@ -634,6 +661,121 @@ export default {
 				if (r?.system && Array.isArray(event.system)) event.system.push({ type: "text", text: r.system })
 			})
 		}
+		if (!ctx.event?.subscribe) return
+		const controller = new AbortController()
+		void (async () => {
+			for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+				const data = event.data ?? {}
+				let ev
+				if (event.type === "session.inbox.delivered") ev = { turn: "new" }
+				else if (event.type === "session.text.ended") {
+					const statuses = [...String(data.text ?? "").matchAll(/Status: ([A-Z_]+)/g)].map((m) => m[1])
+					if (statuses.length > 0) ev = { statuses }
+				}
+				if (!ev || !data.sessionID) continue
+				const dir = await dirOf(data.sessionID)
+				if (dir) tell({ directories: [dir], session: data.sessionID, ...ev })
+			}
+		})().catch(() => {})
+		return () => controller.abort()
 	},
 }
 `
+
+// HookEventResult is tkt hook event's answer: the ticket whose session the
+// event came from, or "" for any other session, and the status lines its
+// current turn holds so far.
+type HookEventResult struct {
+	Ticket   string   `json:"ticket"`
+	Session  string   `json:"session"`
+	Statuses []string `json:"statuses"`
+}
+
+func (r *HookEventResult) Text(w io.Writer) {
+	if r.Ticket != "" {
+		fmt.Fprintf(w, "%s  %s\n", r.Ticket, strings.Join(r.Statuses, " "))
+	}
+}
+
+// hookEvent is what the plugin tells: the session's directories, the
+// session, and either that a new prompt reached it (turn "new") or the
+// status lines of a text it finished.
+type hookEvent struct {
+	Directories []string `json:"directories"`
+	Session     string   `json:"session"`
+	Turn        string   `json:"turn"`
+	Statuses    []string `json:"statuses"`
+}
+
+// The ticket state's keys for what tkt's OpenCode plugin saw in a session:
+// which session, the status lines of its current turn in order, and when it
+// last told. The fix's session keeps its own under fixOC.
+const (
+	keyOCSession  = "oc_session"
+	keyOCStatuses = "oc_statuses"
+	keyOCAt       = "oc_at"
+	fixOC         = "fix_"
+)
+
+// HookEvent records what tkt's OpenCode plugin saw in a ticket's session,
+// read as JSON from stdin: a new prompt starts a turn, and each text the
+// agent finishes adds its status lines. tkt reads them back in place of
+// the session's last 50 messages, which a long turn outgrows, as start-
+// ticket's Status: PLAN_APPROVED does once the work phase runs for an hour.
+// It reads and writes only the state file, so it stays fast.
+func (a *App) HookEvent(ctx context.Context) (*HookEventResult, error) {
+	var ev hookEvent
+	if err := json.NewDecoder(io.LimitReader(a.Stdin, 1<<20)).Decode(&ev); err != nil {
+		return nil, apperr.New(apperr.Usage, "tkt hook event reads a JSON event on stdin: %v", err).
+			WithHint(`echo '{"directories": ["DIR"], "session": "ses_...", "statuses": ["READY_FOR_REVIEW"]}' | tkt hook event`)
+	}
+	res := &HookEventResult{Session: ev.Session, Statuses: []string{}}
+	for _, d := range ev.Directories {
+		if d == "" || ev.Session == "" {
+			continue
+		}
+		path, st := stateAt(d)
+		if path == "" || st["ticket"] == "" {
+			continue
+		}
+		prefix := ""
+		switch ev.Session {
+		case st["session"]:
+		case st[keyFixSession]:
+			prefix = fixOC
+		default:
+			// Another session in the worktree, such as a subagent's.
+			return res, nil
+		}
+		var statuses []string
+		if ev.Turn != "new" && st[prefix+keyOCSession] == ev.Session {
+			statuses = strings.Fields(st[prefix+keyOCStatuses])
+		}
+		for _, s := range ev.Statuses {
+			if contract.StatusLineRE.MatchString("Status: " + s) {
+				statuses = append(statuses, s)
+			}
+		}
+		now := a.Now()
+		if _, err := state.Update(path, now, prefix+keyOCSession, ev.Session, prefix+keyOCStatuses, strings.Join(statuses, " "),
+			prefix+keyOCAt, now.UTC().Format(history.TimeFormat)); err != nil {
+			return nil, apperr.New(apperr.Internal, "cannot write %s: %v", path, err)
+		}
+		res.Ticket, res.Statuses = st["ticket"], append(res.Statuses, statuses...)
+		return res, nil
+	}
+	return res, nil
+}
+
+// withPluginStatuses adds the status lines tkt's OpenCode plugin saw in the
+// session's current turn after the turn's text, so the last of them counts:
+// the plugin saw every text, and the API only the last 50 messages.
+func withPluginStatuses(turn harness.Turn, st state.State, sid string) harness.Turn {
+	if sid == "" || st[keyOCSession] != sid || st[keyOCAt] == "" {
+		return turn
+	}
+	for _, s := range strings.Fields(st[keyOCStatuses]) {
+		turn.All += "\nStatus: " + s
+	}
+	return turn
+}

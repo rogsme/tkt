@@ -125,9 +125,11 @@ func (c *Ctx) fixPane(id, path string, ts *ticketState, preset config.Preset) (s
 	return pane, nil
 }
 
-// fixState is the ticket state as lastTurn reads it for the fix's session.
+// fixState is the ticket state as lastTurn reads it for the fix's session,
+// with what tkt's OpenCode plugin saw in it.
 func fixState(st state.State) state.State {
-	return state.State{"harness": st[keyFixHarness], "session": st[keyFixSession]}
+	return state.State{"harness": st[keyFixHarness], "session": st[keyFixSession],
+		keyOCSession: st[fixOC+keyOCSession], keyOCStatuses: st[fixOC+keyOCStatuses], keyOCAt: st[fixOC+keyOCAt]}
 }
 
 // fixAgent finds the fix's agent among the agents, by its pane.
