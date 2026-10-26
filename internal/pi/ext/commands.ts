@@ -141,9 +141,43 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const id = one(args, ctx, "/send ACM-12 TEXT");
-			const text = args.trim().split(/\s+/).slice(1).join(" ");
+			// The text keeps its lines, such as feedback on a plan.
+			const text = args.trim().replace(/^\S+\s*/, "");
 			if (!id || !text) return notify(ctx, "usage: /send ACM-12 TEXT", "warning");
 			say(await act.send(hub, id, text));
+		},
+	});
+
+	pi.registerCommand("run", {
+		description: "Run a stage for a ticket in a fresh session: /run ACM-12 review | fix | verify ... [as PRESET]",
+		getArgumentCompletions: ids,
+		handler: async (args, ctx) => {
+			const words = args.trim().split(/\s+/).filter(Boolean);
+			const as = preset(words);
+			if (words.length !== 2) return notify(ctx, "usage: /run ACM-12 STAGE [as PRESET]", "warning");
+			say(act.stage(hub, hub.idOf(words[0]), words[1], as));
+		},
+	});
+
+	pi.registerCommand("relaunch", {
+		description: "Relaunch a ticket's newest session when no agent runs for it, as tkt resume does: /relaunch ACM-12",
+		getArgumentCompletions: ids,
+		handler: async (args, ctx) => {
+			const id = one(args, ctx, "/relaunch ACM-12");
+			if (id) say(act.resume(hub, id));
+		},
+	});
+
+	pi.registerCommand("dismiss", {
+		description: "Set aside what a ticket needs from you, until its situation changes: /dismiss ACM-12",
+		getArgumentCompletions: ids,
+		handler: async (args, ctx) => {
+			// A failed job's item names its job, such as "chore nightly".
+			const raw = args.trim();
+			if (!raw) return notify(ctx, "usage: /dismiss ACM-12", "warning");
+			const id = hub.items.some((a) => a.ticket === raw) ? raw : hub.idOf(raw);
+			const n = hub.dismissTicket(id);
+			notify(ctx, n ? `Set aside what ${id} needs; it comes back once its situation changes.` : `${id} needs nothing from you now.`);
 		},
 	});
 

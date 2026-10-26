@@ -395,6 +395,15 @@ export class Hub {
 		this.dismissed.add(a.key);
 		this.update();
 	}
+
+	/** dismissTicket sets aside what a ticket needs from you now, and says
+	 * how many items that was. */
+	dismissTicket(id: string): number {
+		const set = this.items.filter((a) => a.ticket === id);
+		for (const a of set) this.dismissed.add(a.key);
+		if (set.length) this.update();
+		return set.length;
+	}
 }
 
 /** layoutRoot is the fullscreen layout the TUI draws. */

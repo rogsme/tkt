@@ -27,9 +27,11 @@ suggest tab where suggest-tickets picks tickets to start next; add what you
 want, such as /suggest five tickets tagged feedback, or type it when /suggest
 alone asks), /start (add "as
 PRESET" for a preset), /approve, /next, /auto, /hold, /sync, /send, /show,
-/peek (the agent's live screen), /check (the human verification checklist,
-which offers to sync a ticket that is behind first), /done, /inbox (what needs
-you, with fixed answers), /board (every ticket in columns), /chores (the
+/peek (the agent's live screen), /run (a stage in a fresh session),
+/relaunch (tkt resume), /check (the human verification checklist, which
+offers to sync a ticket that is behind first), /done, /inbox (what needs
+you, with fixed answers), /dismiss (set aside what a ticket needs from you),
+/board (every ticket in columns), /chores (the
 repository's chores; /chores run NAME starts a run now), /history, /stats,
 /version, /update and /web (the same chat in your browser, mirrored both
 ways; tkt help web). A tool that changes a ticket your message did
