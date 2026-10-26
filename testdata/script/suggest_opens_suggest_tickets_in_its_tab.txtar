@@ -82,6 +82,9 @@ envelope '.error.code' usage
 rc 2
 ! exec tkt suggest --as nope --json
 envelope '.error.code' unknown_preset
+# A dry run refuses it too, which the tkt agent runs before it queues one.
+! exec tkt suggest five tickets --as nope --dry-run --json
+envelope '.error.code' unknown_preset
 houserules
 
 -- config.toml --

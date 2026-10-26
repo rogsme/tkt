@@ -132,7 +132,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		}),
 		executionMode: "sequential",
 		async execute(_id, p) {
-			return text(act.suggest(hub, p.request?.trim() || String(p.count ?? 3), p.as ?? ""));
+			return text(await act.suggest(hub, p.request?.trim() || String(p.count ?? 3), p.as ?? ""));
 		},
 	});
 

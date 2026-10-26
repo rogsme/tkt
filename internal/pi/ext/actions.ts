@@ -41,13 +41,18 @@ export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
  * reads none of the answer: you read it in the tab or the web page's
  * Suggest view, talk it over with the agent, and start the tickets you
  * want. */
-export function suggest(hub: Hub, request: string, as = ""): string {
+export async function suggest(hub: Hub, request: string, as = ""): Promise<string> {
 	const ask = request.trim();
 	const count = /^\d+$/.test(ask) ? Number(ask) : ask ? 0 : 3;
+	const args = ["suggest", ...(ask ? [ask] : []), ...(as ? ["--as", as] : [])];
+	// A dry run fails at once on what the real run would fail on, such as an
+	// unknown preset or a run still at work, before the chat says queued.
+	const dry = await hub.tkt([...args, "--dry-run"]);
+	if (!dry.ok) return `Nothing queued: ${failure("suggest", dry)}`;
 	hub.add({
 		ticket: "suggest",
 		label: "suggest",
-		args: ["suggest", ...(ask ? [ask] : []), ...(as ? ["--as", as] : [])],
+		args,
 		then: (env) => {
 			if (!env.ok || !env.result) return;
 			const r = env.result as SuggestResult;
