@@ -14,7 +14,8 @@ func TestExtEmbedsTheExtensionOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(names, "ext/index.ts") || !slices.Contains(names, "ext/system.md") || !slices.Contains(names, "ext/tkt-dark.json") || !slices.Contains(names, "ext/tkt-light.json") {
+	if !slices.Contains(names, "ext/index.ts") || !slices.Contains(names, "ext/system.md") || !slices.Contains(names, "ext/tkt-dark.json") || !slices.Contains(names, "ext/tkt-light.json") ||
+		!slices.Contains(names, "ext/web/index.html") || !slices.Contains(names, "ext/web/vendor/preact.js") {
 		t.Errorf("embedded %q", names)
 	}
 	for _, n := range names {
@@ -33,9 +34,9 @@ func TestWriteExt(t *testing.T) {
 	if filepath.Dir(d) != filepath.Join(data, "ext") || !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(filepath.Base(d)) {
 		t.Errorf("extension directory %s", d)
 	}
-	for _, n := range []string{"index.ts", "system.md"} {
+	for _, n := range []string{"index.ts", "system.md", "web/index.html", "web/vendor/marked.js"} {
 		want, _ := extFiles.ReadFile("ext/" + n)
-		got, err := os.ReadFile(filepath.Join(d, n))
+		got, err := os.ReadFile(filepath.Join(d, filepath.FromSlash(n)))
 		if err != nil || string(got) != string(want) {
 			t.Errorf("%s: %v", n, err)
 		}

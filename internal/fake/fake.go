@@ -221,3 +221,9 @@ func counter(file string) int {
 	os.WriteFile(file, []byte(fmt.Sprint(n+1)), 0o644)
 	return n
 }
+
+// Open stands in for xdg-open and macOS's open: it logs the address it was
+// asked to open in a browser, and opens nothing.
+func Open() {
+	logCall(filepath.Base(os.Args[0]))
+}

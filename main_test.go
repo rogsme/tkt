@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +42,8 @@ func TestMain(m *testing.M) {
 		"claude":   fake.Claude,
 		"git":      fake.Git,
 		"pi":       fake.Pi,
+		"xdg-open": fake.Open,
+		"open":     fake.Open,
 		// The service managers and their helpers, for tkt watch --install.
 		"systemctl":      fake.Systemctl,
 		"systemd-escape": fake.SystemdEscape,
@@ -200,7 +204,33 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"mkrelease":   cmdMkRelease,
 	"unitvar":     cmdUnitVar,
 	"expand":      cmdExpand,
+	"webserve":    cmdWebServe,
 }
+
+// webserve FILE: stand in for a tkt agent chat that serves the web page: a
+// server on 127.0.0.1 that answers /health as the extension does, named in
+// FILE with this process's pid, its port and the token webToken.
+func cmdWebServe(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: webserve FILE")
+	}
+	file := ts.MkAbs(args[0])
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" || r.Header.Get("Authorization") != "Bearer "+webToken {
+			http.Error(w, "tkt: no token", http.StatusUnauthorized)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"file": file, "repo": "app"})
+	}))
+	ts.Defer(srv.Close)
+	_, port, _ := strings.Cut(strings.TrimPrefix(srv.URL, "http://"), ":")
+	st := state.State{"pid": strconv.Itoa(os.Getpid()), "port": port, "token": webToken}
+	ts.Check(st.Save(file, time.Now()))
+	ts.Setenv("WEB_PORT", port)
+}
+
+// webToken is the token webserve's page takes.
+const webToken = "0123456789abcdef0123456789abcdef0123456789abcdef"
 
 // expand FILE: replace $WORK, $REPO, $HOME and $FAKE_DIR in FILE with their
 // values, for an archive file that names a path, such as a config.toml.

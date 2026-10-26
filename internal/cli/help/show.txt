@@ -4,7 +4,13 @@ record, the Claude Code transcript or the OpenCode API, so nothing scrolls
 away. When tkt cannot read that record, it prints the agent's recent output.
 
 --screen prints the agent's live screen instead, such as a question it asks
-in a dialog.
+in a dialog. --ansi keeps the screen's colors as ANSI escapes, as the tkt
+agent's web page draws them.
+
+--diff prints what the branch changes since it left its base, as git diff
+prints it: the committed change its pull request shows, against the base as
+the last fetch left it. With --json, files lists each file with its status,
+the lines it adds and removes, and its hunks.
 
 --steps prints the human verification procedure from the review that says
 READY_FOR_HUMAN at the pull request's head, and with --json its numbered

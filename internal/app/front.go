@@ -106,7 +106,7 @@ func (a *App) Front(ctx context.Context, o FrontOpts) (*FrontResult, error) {
 	if c.Dry && res.Version == "" {
 		res.Version = c.piVersion(rt.Path)
 	}
-	host := pi.Host{AgentDir: agentDir, Bin: self, Version: a.Version, PiVersion: res.Version}
+	host := pi.Host{AgentDir: agentDir, Bin: self, Version: a.Version, PiVersion: res.Version, WebFile: webFilePath(c.Repo.Common)}
 	for _, kv := range pi.EnvVars(host) {
 		k, v, _ := strings.Cut(kv, "=")
 		res.Env[k] = v

@@ -1,0 +1,54 @@
+# tkt agent tells the chat where to name the web page it serves.
+env TKT_PI=pi
+exec tkt agent --dry-run --json
+envelope '.result.env.TKT_WEB_FILE == $REPO + "/.git/tkt/web"' true
+
+# A chat serves the page: tkt web asks it, prints the address with its
+# token, and opens it in a browser.
+webserve $REPO/.git/tkt/web
+exec tkt web --json
+envelope '.result.url | test("^http://127[.]0[.]0[.]1:[0-9]+/[?]token=0123456789abcdef0123456789abcdef0123456789abcdef$")' true
+envelope '[.result.started, .result.opened]' '[false,true]'
+waitgrep 'open http://127.0.0.1:[0-9]+/.*token=0123' $FAKE_LOG
+
+# --no-open prints the address and nothing more.
+resetlog
+exec tkt web --no-open
+stdout '^http://127.0.0.1:[0-9]+/\?token=0123456789abcdef0123456789abcdef0123456789abcdef$'
+! logcontains 'http://127.0.0.1'
+
+# A file that a crashed chat left, naming a port nothing answers on, is no
+# chat. Outside herdr, tkt web cannot open one, and says how.
+cp $WORK/stale $REPO/.git/tkt/web
+env HERDR_ENV=
+! exec tkt web --json
+rc 4
+envelope '.error.code' web_not_running
+envelope '.error.hint' 'run tkt agent in a herdr pane, then /web in the chat'
+
+# In herdr, a dry run shows the tab tkt web would open tkt agent in.
+env HERDR_ENV=1
+exec tkt web --dry-run --json
+envelope '.result.started' true
+envelope '[.result.actions[].argv[0:3]]' '[["herdr","tab","create"],["herdr","pane","run"]]'
+envelope '.result.actions[0].argv[3:]' '["--workspace","w1","--cwd","'$REPO'","--label","tkt agent","--no-focus"]'
+envelope '.result.actions[1].argv[4] | test("^.+ .agent.$")' true
+exec tkt web --dry-run
+stdout '^would open tkt agent in a new tab, then its web page$'
+
+# A real run opens the tab, starts tkt agent in it, and waits for the
+# chat's page.
+resetlog
+exec tkt web --json &
+waitgrep 'herdr pane run' $FAKE_LOG
+webserve $REPO/.git/tkt/web
+wait
+envelope '[.result.started, .result.opened]' '[true,true]'
+envelope '.result.pane | length > 0' true
+envelope '.result.url | startswith("http://127.0.0.1:")' true
+logged herdr tab create --workspace w1 --cwd $REPO --label 'tkt agent' --no-focus
+
+-- stale --
+pid=1
+port=1
+token=0123456789abcdef0123456789abcdef0123456789abcdef

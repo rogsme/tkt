@@ -649,7 +649,8 @@ func showCmd(g *globals) *cobra.Command {
 		Long:  helpText("show"),
 		Example: `  tkt show ACM-12
   tkt show ACM-12 --screen
-  tkt show ACM-12 --steps --json`,
+  tkt show ACM-12 --steps --json
+  tkt show ACM-12 --diff`,
 		SuggestFor:        []string{"plan", "peek", "cat"},
 		ValidArgsFunction: g.completeTickets(false),
 		Args: func(_ *cobra.Command, args []string) error {
@@ -660,13 +661,18 @@ func showCmd(g *globals) *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.ID = args[0]
+			if o.ANSI && !o.Screen {
+				return usage("usage: tkt show ID --screen --ansi")
+			}
 			res, err := g.app().Show(cmd.Context(), o)
 			return show(g, cmd, res, res == nil, err)
 		},
 	}
 	cmd.Flags().BoolVar(&o.Screen, "screen", false, "print the agent's live screen instead, such as a question it asks")
+	cmd.Flags().BoolVar(&o.ANSI, "ansi", false, "with --screen, keep the screen's colors as ANSI escapes")
 	cmd.Flags().BoolVar(&o.Steps, "steps", false, "print the human verification steps of the review at the pull request's head")
-	cmd.MarkFlagsMutuallyExclusive("screen", "steps")
+	cmd.Flags().BoolVar(&o.Diff, "diff", false, "print what the branch changes since it left its base")
+	cmd.MarkFlagsMutuallyExclusive("screen", "steps", "diff")
 	cmd.Flags().StringVar(&o.Pane, "pane", "", "show the agent in PANE when several run in the worktree")
 	cmd.RegisterFlagCompletionFunc("pane", g.completePanes)
 	return cmd
@@ -758,6 +764,32 @@ func updateCmd(g *globals) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&o.Check, "check", false, "report whether a release would replace tkt, and change nothing")
 	cmd.Flags().BoolVar(&o.Force, "force", false, "replace a development build, or reinstall the same version")
+	return cmd
+}
+
+func webCmd(g *globals) *cobra.Command {
+	var o app.WebOpts
+	cmd := &cobra.Command{
+		Use:   "web",
+		Short: "Open the tkt agent's web page, a browser view of the chat",
+		Long:  helpText("web"),
+		Example: `  tkt web
+  tkt web --no-open --json
+  tkt web --dry-run`,
+		SuggestFor: []string{"browser", "ui"},
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return usage("tkt web takes no arguments")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			res, err := g.app().Web(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.NoOpen, "no-open", false, "print the page's address without opening a browser")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print what tkt web would run instead of running it")
 	return cmd
 }
 

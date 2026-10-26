@@ -1,0 +1,44 @@
+# tkt show --diff prints what the branch changes since it left its base, as
+# its pull request shows it, and with --json each file with its hunks. A
+# change the base made since does not show.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+cp $WORK/app.txt $WT/app.txt
+realgit -C $WT add app.txt
+realgit -C $WT commit -q -m 'ACM-12 adds app.txt'
+cp $WORK/other.txt $REPO/other.txt
+realgit -C $REPO add other.txt
+realgit -C $REPO commit -q -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+realgit -C $REPO fetch -q origin
+
+exec tkt show ACM-12 --diff
+stdout '^\+\+\+ b/app\.txt$'
+stdout '^\+hello$'
+! stdout other\.txt
+logged git -C $WT diff --no-ext-diff --no-textconv --no-color refs/remotes/origin/main...HEAD
+
+exec tkt show ACM-12 --diff --json
+envelope '.result | [.view, .base, (.files | length)]' '["diff","origin/main",1]'
+envelope '.result.files[0] | [.path, .status, .added, .removed, .binary, .hunks[0].header, .hunks[0].lines]' '["app.txt","added",1,0,false,"@@ -0,0 +1 @@",["+hello"]]'
+
+# --ansi keeps the colors of the agent's screen, and goes with --screen
+# only.
+resetlog
+exec tkt show ACM-12 --screen --ansi
+logged herdr agent read w1:p10 --source visible --lines 120 --ansi
+! exec tkt show ACM-12 --ansi
+rc 2
+stderr 'usage: tkt show ID --screen --ansi'
+
+# Without the base to compare with, it says how to fetch it.
+realgit -C $REPO update-ref -d refs/remotes/origin/main
+! exec tkt show ACM-12 --diff --json
+rc 1
+envelope '.error.code' git_failed
+envelope '.error.hint' 'git -C '$WT' fetch origin'
+
+-- app.txt --
+hello
+-- other.txt --
+other

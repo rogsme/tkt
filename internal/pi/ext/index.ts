@@ -2,8 +2,8 @@
 // names the tkt that started pi. The extension gives the model tools that
 // run tkt and nothing else, slash commands for the same, a board pinned to
 // the top of the chat, the times of prompts and answers, a dark background
-// under a dark theme, and the watchers that tell you when a ticket needs
-// you.
+// under a dark theme, the watchers that tell you when a ticket needs you,
+// and the web page that mirrors the chat.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { backgroundAnsi, isViewportTUI, parseColor } from "@earendil-works/pi-tui";
@@ -14,6 +14,7 @@ import type { Stamp } from "./model.ts";
 import { painter } from "./paint.ts";
 import { registerTools } from "./tools.ts";
 import { stamp } from "./ui.ts";
+import { Web } from "./web.ts";
 
 /** page is the chat's background under a dark theme: the page tkt-dark
  * gives an exported chat. */
@@ -21,9 +22,11 @@ const page = parseColor("#0a0a0a");
 
 export default function (pi: ExtensionAPI) {
 	const hub = new Hub(pi);
+	const web = new Web(pi, hub);
 	const paint = painter();
+	let first = true;
 	registerTools(pi, hub);
-	registerCommands(pi, hub);
+	registerCommands(pi, hub, web);
 
 	pi.on("input", (event) => {
 		if (event.source !== "extension") hub.lastInput = event.text;
@@ -72,12 +75,15 @@ export default function (pi: ExtensionAPI) {
 			});
 		}
 		hub.start(ctx);
+		void web.start(ctx, first);
+		first = false;
 	});
 
 	pi.on("session_shutdown", (event) => {
 		// The session's ctx goes stale once it ends.
 		paint.background = () => undefined;
 		hub.stop();
+		web.stop(event.reason === "quit");
 		if (event.reason === "quit") nameTktInResumeLine();
 	});
 }

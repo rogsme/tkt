@@ -91,3 +91,11 @@ func TestNotify(t *testing.T) {
 		t.Errorf("error: %v", err)
 	}
 }
+
+// herdr's pane run prints nothing when it succeeds.
+func TestPaneRunPrintsNothing(t *testing.T) {
+	c := fake(map[string]runner.Result{"pane run w1:p2 'tkt' 'agent'": ok("")})
+	if err := c.PaneRun(context.Background(), "w1:p2", "'tkt' 'agent'"); err != nil {
+		t.Errorf("PaneRun = %v", err)
+	}
+}

@@ -7,6 +7,7 @@ import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, isViewportTUI, type TUI, VStack } from "@earendil-works/pi-tui";
 import { type Attention, attentionOf, sound, unblockedOf } from "./attention.ts";
+import { notify } from "./dialog.ts";
 import type { BoardState } from "./board.ts";
 import { Jobs, type Job } from "./jobs.ts";
 import { type Incident, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf, type Unblocked, type UpdateResult, updateNotice } from "./model.ts";
@@ -48,6 +49,8 @@ export class Hub {
 	watching?: "on" | "off" | "failing";
 	ctx?: ExtensionContext;
 	render: () => void = () => {};
+	/** changed tells the web pages that the board changed. */
+	changed: () => void = () => {};
 	readonly jobs: Jobs;
 	readonly labels = new Map<string, string>();
 	tick = 0;
@@ -117,9 +120,9 @@ export class Hub {
 		const env = await this.tkt<UpdateResult>(["update", "--check"]);
 		if (!env.ok || !env.result || this.stopped) return;
 		const tag = updateNotice(env.result);
-		if (tag && tag !== this.newer && this.ctx?.hasUI) this.ctx.ui.notify(`tkt ${tag} is available (this tkt is ${env.result.from}): /update installs it`, "info");
+		if (tag && tag !== this.newer) notify(this.ctx, `tkt ${tag} is available (this tkt is ${env.result.from}): /update installs it`);
 		this.newer = tag;
-		this.render();
+		this.redraw();
 	}
 
 	stop(): void {
@@ -177,10 +180,16 @@ export class Hub {
 		this.render = () => {};
 	}
 
+	/** redraw draws the board again, in the terminal and on the pages. */
+	redraw(): void {
+		this.render();
+		this.changed();
+	}
+
 	/** showBoard hides the pinned board, or shows it again. */
 	showBoard(on: boolean): void {
 		this.boardHidden = !on;
-		this.render();
+		this.redraw();
 	}
 
 	/** state is what the board draws. */
@@ -242,7 +251,7 @@ export class Hub {
 			if (!this.announced.has(a.key)) this.announce(a);
 		}
 		this.status();
-		this.render();
+		this.redraw();
 	}
 
 	/** announce tells about an item once with a herdr notification, unless
@@ -278,7 +287,7 @@ export class Hub {
 	post(text: string, details?: unknown): void {
 		const ctx = this.ctx;
 		if (ctx && !ctx.isIdle()) {
-			if (ctx.hasUI) ctx.ui.notify(text, "info");
+			notify(ctx, text);
 			this.pi.sendMessage({ customType: "tkt", content: text, display: false, details }, { deliverAs: "nextTurn" });
 			return;
 		}
@@ -295,7 +304,7 @@ export class Hub {
 	add(job: Job): void {
 		this.labels.set(job.ticket, job.label);
 		this.jobs.add(job);
-		this.render();
+		this.redraw();
 	}
 
 	/** run runs a job in its ticket's queue and waits for its envelope, for
@@ -393,6 +402,15 @@ export class Hub {
 	dismiss(a: Attention): void {
 		this.dismissed.add(a.key);
 		this.update();
+	}
+
+	/** dismissTicket sets aside what a ticket needs from you now, and says
+	 * how many items that was. */
+	dismissTicket(id: string): number {
+		const set = this.items.filter((a) => a.ticket === id);
+		for (const a of set) this.dismissed.add(a.key);
+		if (set.length) this.update();
+		return set.length;
 	}
 }
 

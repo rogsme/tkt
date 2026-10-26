@@ -3,6 +3,7 @@
 package herdr
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -53,6 +54,10 @@ func (c Client) call(ctx context.Context, quiet bool, args ...string) (json.RawM
 	r := c.R.Run(ctx, runner.Cmd{Argv: append([]string{"herdr"}, args...), Quiet: quiet})
 	if !r.OK() {
 		return nil, &Error{Argv: args, Code: ErrorCode(r.Stderr), Stderr: strings.TrimSpace(r.ErrText())}
+	}
+	// Some commands, such as pane run, print nothing when they succeed.
+	if len(bytes.TrimSpace(r.Stdout)) == 0 {
+		return nil, nil
 	}
 	var env struct {
 		Result json.RawMessage `json:"result"`
@@ -263,14 +268,20 @@ func (c Client) Read(ctx context.Context, pane string, lines int) string {
 	return c.read(ctx, pane, "visible", lines)
 }
 
+// ReadANSI returns the agent's visible screen with its colors, as ANSI
+// escapes.
+func (c Client) ReadANSI(ctx context.Context, pane string, lines int) string {
+	return c.read(ctx, pane, "visible", lines, "--ansi")
+}
+
 // ReadRecent returns the agent's recent output, which reaches further back
 // than its screen.
 func (c Client) ReadRecent(ctx context.Context, pane string, lines int) string {
 	return c.read(ctx, pane, "recent", lines)
 }
 
-func (c Client) read(ctx context.Context, pane, source string, lines int) string {
-	r := c.R.Run(ctx, runner.Cmd{Argv: []string{"herdr", "agent", "read", pane, "--source", source, "--lines", strconv.Itoa(lines)}})
+func (c Client) read(ctx context.Context, pane, source string, lines int, flags ...string) string {
+	r := c.R.Run(ctx, runner.Cmd{Argv: append([]string{"herdr", "agent", "read", pane, "--source", source, "--lines", strconv.Itoa(lines)}, flags...)})
 	if !r.OK() {
 		return ""
 	}
@@ -312,8 +323,14 @@ func (c Client) Rename(ctx context.Context, pane, name string) error {
 	return err
 }
 
+// PaneRunArgv is the herdr command that types a command into a pane's
+// shell and presses Enter.
+func PaneRunArgv(pane, command string) []string {
+	return []string{"herdr", "pane", "run", pane, command}
+}
+
 // PaneRun types a command into a pane's shell and presses Enter.
 func (c Client) PaneRun(ctx context.Context, pane, command string) error {
-	_, err := c.call(ctx, false, "pane", "run", pane, command)
+	_, err := c.call(ctx, false, PaneRunArgv(pane, command)[1:]...)
 	return err
 }

@@ -35,7 +35,7 @@
       "path": "agent",
       "use": "agent [-- PI_FLAGS...]",
       "short": "Open the tkt agent, a chat that drives your tickets",
-      "long": "tkt agent opens a chat in this pane about the repository's tickets. It runs\npi, a coding agent that release builds of tkt carry inside them (MIT licensed,\nhttps://github.com/earendil-works/pi), with only tkt's own extension. Running\ntkt with no arguments opens it too, when you type it at a terminal in a herdr\npane inside a repository with the lifecycle configuration.\n\nSay what you want in plain words: \"start ACM-12\", \"run ACM-13 to ACM-15 in\nauto with sol\", \"I approved the plan for ACM-12, continue\", \"ACM-12 is merged,\nremove it\". Starting tickets and stages runs in the background and the prompt\ncomes back at once, so you can start the next ticket while the first one\nplans. A board pinned to the top of the chat shows every ticket, and on top\nwhat needs you: a plan to approve, a question from its agent, a pull request\nready for human verification, or a tkt auto loop that paused for you. The chat\nscrolls below the board, so it covers nothing. An item leaves the board as\nsoon as its ticket moves on, and the chat stays free of them. Each new one\nalso shows a herdr notification. Each row shows what the branch changes,\nsuch as +293 -8, and the pull request's title, and marks a chore's run. When\na status page reports an incident, the board says so at its top. /board hide\nand /board show put the board away and back.\n\nAsk how a ticket went, merged ones too: \"how did ACM-12 go?\", \"what failed\nin ACM-12 and ACM-13?\". The chat reads tkt history: each step with its time,\nand the pull request's commits and reviews with the review bot's findings.\n\nThe same actions work without the model as slash commands: /suggest (a\nsuggest tab where suggest-tickets picks tickets to start next; add what you\nwant, such as /suggest five tickets tagged feedback, or type it when /suggest\nalone asks), /start (add \"as\nPRESET\" for a preset), /approve, /next, /auto, /hold, /sync, /send, /show,\n/peek (the agent's live screen), /check (the human verification checklist,\nwhich offers to sync a ticket that is behind first), /done, /inbox (what needs\nyou, with fixed answers), /board (every ticket in columns), /chores (the\nrepository's chores; /chores run NAME starts a run now), /history, /stats,\n/version and /update. A tool that changes a ticket your message did\nnot name asks first, and removing a ticket always asks. Text for a working\nagent goes in at once, and the agent reads it at its next step; text for an\nagent that asks a question waits until you answer it in its tab.\n\nThe chat checks for a newer tkt release when it opens and every six hours,\nand names it under the board. /update installs it with tkt update, then offers\nto quit: the chat runs the old tkt until you reopen it with the command it\nprints. A development build gets no notice, and /update does not replace it.\n/version says which tkt and pi the chat runs, and whether the tkt on disk is\nanother one now, as after tkt update or a new build.\n\nTickets in auto run in tkt auto loops that outlive the chat, so they keep\nmoving, and notify you, after you close it. A loop that pauses for you goes on\nby itself once you act, such as answering the agent in its tab. tkt agent also\nstarts tkt watch for the repository when none runs, which takes the upkeep\nsteps for every ticket: it syncs a moved base, fixes failing checks once per\nhead, and removes a ticket once finish-ticket merged it. The board's heading\nsays watch on or watch off.\n\nThe chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:\nnot your extensions, skills, prompt templates or themes, and not the project's\nAGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in\n${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with\n/login inside the chat.\n\nThe chat brings two themes of its own, tkt-dark and tkt-light, and picks the\none that suits the terminal's background. Overlays such as /board and /peek\ndraw on a panel of their own, so they read well on a transparent terminal. A\ntheme you pick in /settings wins from then on.\n\npi runs in the repository's root, where it keeps the sessions, so --continue\npicks up the last chat about this repository from any of its worktrees. When\nyou quit, the chat prints the command that resumes it: tkt agent --session\nID. Flags after -- go to pi as they are, such as tkt agent -- --thinking high;\npi --help lists them.\n\nIn config.toml, an [agent] table picks the model and loads more pi extensions,\nsuch as one that adds a model provider (tkt help config). --model overrides the\nmodel for one run. Without [agent] model, pi starts on its own default: in\n/model, press Ctrl+S on a model to make it the default for new chats.\n\ntkt unpacks the bundled pi the first time, under\n${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary\ninstead; tkt doctor shows which pi tkt agent runs.\n\ntkt agent replaces itself with pi, so it needs a terminal and prints no result.\n--dry-run prints how it would start pi, and with --json the exact command line\nand environment.",
+      "long": "tkt agent opens a chat in this pane about the repository's tickets. It runs\npi, a coding agent that release builds of tkt carry inside them (MIT licensed,\nhttps://github.com/earendil-works/pi), with only tkt's own extension. Running\ntkt with no arguments opens it too, when you type it at a terminal in a herdr\npane inside a repository with the lifecycle configuration.\n\nSay what you want in plain words: \"start ACM-12\", \"run ACM-13 to ACM-15 in\nauto with sol\", \"I approved the plan for ACM-12, continue\", \"ACM-12 is merged,\nremove it\". Starting tickets and stages runs in the background and the prompt\ncomes back at once, so you can start the next ticket while the first one\nplans. A board pinned to the top of the chat shows every ticket, and on top\nwhat needs you: a plan to approve, a question from its agent, a pull request\nready for human verification, or a tkt auto loop that paused for you. The chat\nscrolls below the board, so it covers nothing. An item leaves the board as\nsoon as its ticket moves on, and the chat stays free of them. Each new one\nalso shows a herdr notification. Each row shows what the branch changes,\nsuch as +293 -8, and the pull request's title, and marks a chore's run. When\na status page reports an incident, the board says so at its top. /board hide\nand /board show put the board away and back.\n\nAsk how a ticket went, merged ones too: \"how did ACM-12 go?\", \"what failed\nin ACM-12 and ACM-13?\". The chat reads tkt history: each step with its time,\nand the pull request's commits and reviews with the review bot's findings.\n\nThe same actions work without the model as slash commands: /suggest (a\nsuggest tab where suggest-tickets picks tickets to start next; add what you\nwant, such as /suggest five tickets tagged feedback, or type it when /suggest\nalone asks), /start (add \"as\nPRESET\" for a preset), /approve, /next, /auto, /hold, /sync, /send, /show,\n/peek (the agent's live screen), /run (a stage in a fresh session),\n/relaunch (tkt resume), /check (the human verification checklist, which\noffers to sync a ticket that is behind first), /done, /inbox (what needs\nyou, with fixed answers), /dismiss (set aside what a ticket needs from you),\n/board (every ticket in columns), /chores (the\nrepository's chores; /chores run NAME starts a run now), /history, /stats,\n/version, /update and /web (the same chat in your browser, mirrored both\nways, beside the board and a view of each ticket; tkt help web). A tool that changes a ticket your message did\nnot name asks first, and removing a ticket always asks. Text for a working\nagent goes in at once, and the agent reads it at its next step; text for an\nagent that asks a question waits until you answer it in its tab.\n\nThe chat checks for a newer tkt release when it opens and every six hours,\nand names it under the board. /update installs it with tkt update, then offers\nto quit: the chat runs the old tkt until you reopen it with the command it\nprints. A development build gets no notice, and /update does not replace it.\n/version says which tkt and pi the chat runs, and whether the tkt on disk is\nanother one now, as after tkt update or a new build.\n\nTickets in auto run in tkt auto loops that outlive the chat, so they keep\nmoving, and notify you, after you close it. A loop that pauses for you goes on\nby itself once you act, such as answering the agent in its tab. tkt agent also\nstarts tkt watch for the repository when none runs, which takes the upkeep\nsteps for every ticket: it syncs a moved base, fixes failing checks once per\nhead, and removes a ticket once finish-ticket merged it. The board's heading\nsays watch on or watch off.\n\nThe chat is apart from any pi you run yourself. It reads none of ~/.pi/agent:\nnot your extensions, skills, prompt templates or themes, and not the project's\nAGENTS.md or CLAUDE.md. It keeps its own settings, logins and sessions in\n${XDG_CONFIG_HOME:-~/.config}/tkt/pi. Log in to a model provider once with\n/login inside the chat.\n\nThe chat brings two themes of its own, tkt-dark and tkt-light, and picks the\none that suits the terminal's background. Overlays such as /board and /peek\ndraw on a panel of their own, so they read well on a transparent terminal. A\ntheme you pick in /settings wins from then on.\n\npi runs in the repository's root, where it keeps the sessions, so --continue\npicks up the last chat about this repository from any of its worktrees. When\nyou quit, the chat prints the command that resumes it: tkt agent --session\nID. Flags after -- go to pi as they are, such as tkt agent -- --thinking high;\npi --help lists them.\n\nIn config.toml, an [agent] table picks the model and loads more pi extensions,\nsuch as one that adds a model provider (tkt help config). --model overrides the\nmodel for one run. Without [agent] model, pi starts on its own default: in\n/model, press Ctrl+S on a model to make it the default for new chats.\n\ntkt unpacks the bundled pi the first time, under\n${XDG_DATA_HOME:-~/.local/share}/tkt/pi. Set TKT_PI to run another pi binary\ninstead; tkt doctor shows which pi tkt agent runs.\n\ntkt agent replaces itself with pi, so it needs a terminal and prints no result.\n--dry-run prints how it would start pi, and with --json the exact command line\nand environment.",
       "example": "  tkt agent\n  tkt agent --continue\n  tkt agent --session 01a15a4d\n  tkt agent --model acme/large\n  tkt agent -- --thinking high\n  tkt agent --dry-run --json",
       "group": "lifecycle",
       "args": [
@@ -88,6 +88,42 @@
         "pi": "string",
         "source": "string",
         "version": "string"
+      }
+    },
+    {
+      "path": "web",
+      "use": "web",
+      "short": "Open the tkt agent's web page, a browser view of the chat",
+      "long": "tkt web opens the tkt agent's web page in your browser: the same chat as tkt\nagent, mirrored both ways. A message you send in either place shows in both,\nwith the model's answer as it streams in, its tool calls, and the times. A\nquestion the chat asks, such as \"Remove ACM-12?\", shows in both, and the first\nanswer wins. Slash commands work in the page as in the terminal.\n\nBeside the chat, the page shows the board: what needs you, as cards with\n/inbox's answers as buttons, and every ticket. Pick a ticket for its plan or\nthe agent's last message, its pull request, its human verification steps,\nits diff, its agent's live screen and its history. Every button sends the\nslash command you could type, so the terminal shows what it did. /peek ID\nand /board typed in the page open the page's own views.\n\nThe page lives inside a running chat, which serves it on 127.0.0.1 only. The\nfirst chat in a repository serves it; a second one says it serves none. When\nno chat serves the page, tkt web opens tkt agent in a new tab of this herdr\nworkspace, waits for its page, and opens that. Outside herdr it refuses: run\ntkt agent in a herdr pane, then /web in the chat. When you quit the chat, the\npage says so and comes back by itself once a chat serves it again.\n\nThe address carries a token, which the page keeps in a cookie, so another web\npage in your browser cannot drive the chat. tkt web prints the address, so\n--no-open gives it to you without a browser.\n\nThe page follows your system's light or dark setting until you pick one with\nits sun and moon button. It keeps that choice in\n${XDG_STATE_HOME:-~/.local/state}/tkt/web.json for every repository.\n\npi's own screens, such as /model, /login, /settings, /resume and /tree, open\nin the terminal only. Text you have typed but not sent stays where you typed\nit.",
+      "example": "  tkt web\n  tkt web --no-open --json\n  tkt web --dry-run",
+      "group": "lifecycle",
+      "args": [],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print what tkt web would run instead of running it"
+        },
+        {
+          "name": "no-open",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the page's address without opening a browser"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "dry_run": "boolean",
+        "opened": "boolean",
+        "pane": "string",
+        "started": "boolean",
+        "url": "string"
       }
     },
     {
@@ -1150,7 +1186,8 @@
                 "head": "string",
                 "mergeable": "string",
                 "number": "integer",
-                "state": "string"
+                "state": "string",
+                "url": "string"
               },
               "nullable": true
             },
@@ -1225,8 +1262,8 @@
       "path": "show",
       "use": "show ID",
       "short": "Print the agent's last message, its live screen, or the verification steps",
-      "long": "tkt show prints the agent's last message: after start-ticket, the plan; after\ntkt run ID verify, its report. It reads the message from the session's own\nrecord, the Claude Code transcript or the OpenCode API, so nothing scrolls\naway. When tkt cannot read that record, it prints the agent's recent output.\n\n--screen prints the agent's live screen instead, such as a question it asks\nin a dialog.\n\n--steps prints the human verification procedure from the review that says\nREADY_FOR_HUMAN at the pull request's head, and with --json its numbered\nsteps. When the review bot cleared the head instead, it reads the Human\nverification section of the pull request's body, which work-ticket writes;\nsource says which. It reads pull requests through gh, so it supports GitHub\nforges only, and it exits 4 with no_verification_steps when neither has\nsteps. When verify-pr reported on the pull request, it prints the report's\nresult for each step after the procedure, and says when the report is about\nan older head; with --json, verification holds it.",
-      "example": "  tkt show ACM-12\n  tkt show ACM-12 --screen\n  tkt show ACM-12 --steps --json",
+      "long": "tkt show prints the agent's last message: after start-ticket, the plan; after\ntkt run ID verify, its report. It reads the message from the session's own\nrecord, the Claude Code transcript or the OpenCode API, so nothing scrolls\naway. When tkt cannot read that record, it prints the agent's recent output.\n\n--screen prints the agent's live screen instead, such as a question it asks\nin a dialog. --ansi keeps the screen's colors as ANSI escapes, as the tkt\nagent's web page draws them.\n\n--diff prints what the branch changes since it left its base, as git diff\nprints it: the committed change its pull request shows, against the base as\nthe last fetch left it. With --json, files lists each file with its status,\nthe lines it adds and removes, and its hunks.\n\n--steps prints the human verification procedure from the review that says\nREADY_FOR_HUMAN at the pull request's head, and with --json its numbered\nsteps. When the review bot cleared the head instead, it reads the Human\nverification section of the pull request's body, which work-ticket writes;\nsource says which. It reads pull requests through gh, so it supports GitHub\nforges only, and it exits 4 with no_verification_steps when neither has\nsteps. When verify-pr reported on the pull request, it prints the report's\nresult for each step after the procedure, and says when the report is about\nan older head; with --json, verification holds it.",
+      "example": "  tkt show ACM-12\n  tkt show ACM-12 --screen\n  tkt show ACM-12 --steps --json\n  tkt show ACM-12 --diff",
       "group": "inspect",
       "args": [
         {
@@ -1236,6 +1273,18 @@
         }
       ],
       "flags": [
+        {
+          "name": "ansi",
+          "type": "bool",
+          "default": "false",
+          "usage": "with --screen, keep the screen's colors as ANSI escapes"
+        },
+        {
+          "name": "diff",
+          "type": "bool",
+          "default": "false",
+          "usage": "print what the branch changes since it left its base"
+        },
         {
           "name": "pane",
           "type": "string",
@@ -1258,6 +1307,23 @@
       "result": {
         "agent_status": "string",
         "at": "string",
+        "base": "string",
+        "files": [
+          {
+            "added": "integer",
+            "binary": "boolean",
+            "hunks": [
+              {
+                "header": "string",
+                "lines": "array of string"
+              }
+            ],
+            "old_path": "string",
+            "path": "string",
+            "removed": "integer",
+            "status": "string"
+          }
+        ],
         "harness": "string",
         "last_status": "string",
         "message": "string",
@@ -2156,6 +2222,11 @@
       "summary": "the chore's last run is still open: its agent works, or its pull request waits for a merge"
     },
     {
+      "code": "web_not_running",
+      "exit": 4,
+      "summary": "no tkt agent chat serves the repository's web page, and tkt web cannot open one outside herdr"
+    },
+    {
       "code": "wt_failed",
       "exit": 1,
       "summary": "worktrunk failed or printed output tkt cannot read"
@@ -2251,6 +2322,11 @@
       "summary": "the old agent did not exit; nothing was sent"
     },
     {
+      "code": "web_start_timeout",
+      "exit": 5,
+      "summary": "tkt web opened tkt agent in a new tab, but its web page did not answer in time; look at the chat in that tab"
+    },
+    {
       "code": "interrupted",
       "exit": 5,
       "summary": "tkt was interrupted; check the ticket's pane before retrying"
@@ -2267,7 +2343,7 @@
     },
     {
       "name": "XDG_STATE_HOME",
-      "description": "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it (default ~/.local/state/tkt)"
+      "description": "tkt logs every command it runs to $XDG_STATE_HOME/tkt/tkt.log, and keeps the history tkt stats reads in history.jsonl next to it, and the light or dark choice of the tkt agent's web page in web.json (default ~/.local/state/tkt)"
     },
     {
       "name": "XDG_DATA_HOME",

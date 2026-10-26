@@ -72,6 +72,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | Command | What it does |
 |---|---|
 | `tkt agent` | Opens the tkt agent, a chat in your pane that drives your tickets. |
+| `tkt web` | Opens the tkt agent's web page in your browser: the same chat, mirrored both ways. It opens `tkt agent` in a new tab when no chat runs. |
 | `tkt suggest [N \| REQUEST]` | Has suggest-tickets pick the next tickets to start, in a suggest tab at the repository's root: the ones a request asks for, such as `tkt suggest five tickets tagged feedback`, or N tickets that can run side by side, 3 by default. The picks stay in that tab, for you to read and start. |
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
@@ -87,7 +88,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt chores` | Lists the repository's chores, the agent runs you schedule in its `.tkt/tkt.local.toml`, with their next run and the run still open. |
 | `tkt chore run NAME` | Starts a run of a chore now: a branch from the fetched base, its worktree and tab, and an agent with the chore's prompt. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
-| `tkt show ID` | Prints the agent's last message, such as the plan; `--screen` its live screen; `--steps` the human verification steps, with what verify-pr saw on each one. |
+| `tkt show ID` | Prints the agent's last message, such as the plan; `--screen` its live screen, with `--ansi` in color; `--steps` the human verification steps, with what verify-pr saw on each one; `--diff` what the branch changes since it left its base. |
 | `tkt wait ID` | Blocks until the ticket's agent needs you or has finished. |
 | `tkt stats` | Shows how long tickets took from start to merge, and how long they waited for you. |
 | `tkt history ID...` | Shows what happened to tickets, merged ones too: each event with its time, and the pull request's commits and reviews. |
@@ -160,13 +161,16 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/sync ID` | Merges the base into a ticket's branch, as `tkt sync` does. `/check` offers it first when the ticket is behind its base; your steps carry over a clean sync either way. |
 | `/hold ID [off]` | Puts a ticket on hold, so `tkt watch` and `tkt auto` leave it alone, or takes it off hold. |
 | `/send ID TEXT`, `/show ID`, `/peek ID` | Talks to the ticket's agent, prints its last message, or watches its live screen. |
+| `/run ID STAGE [as PRESET]`, `/relaunch ID` | Runs a stage, such as `review` or `verify`, in a fresh session, as `tkt run` does; relaunches the newest session when no agent runs, as `tkt resume` does. |
 | `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. When verify-pr passed every step, it offers to confirm them from its evidence instead, and its checklist starts with the steps verify-pr passed. Once every step passed, it merges with `tkt merge`: now, or with a merge order that `tkt watch` carries out once the head is synced, reviewed and green. |
 | `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
+| `/dismiss ID` | Sets aside what a ticket needs from you, until its situation changes, as `/inbox`'s Dismiss does. |
 | `/chores [run NAME]` | The repository's chores with their next run; `run NAME` starts a run now. |
 | `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |
 | `/version` | Says which tkt and pi the chat runs, and whether the tkt on disk is another one now. |
 | `/update` | Installs a newer tkt, then offers to quit. Reopen the chat with the `tkt agent --session ID` it prints to run the new tkt. The board names a newer release when the chat finds one. |
+| `/web` | Opens the chat's web page in your browser, as `tkt web` does. |
 
 Without an `[agent]` model, pi starts on its own default: in `/model`, press Ctrl+S on a model to make it the default for new chats. An `[agent]` table in `config.toml` picks the model and loads more pi extensions, such as one that adds a model provider:
 
@@ -175,6 +179,20 @@ Without an `[agent]` model, pi starts on its own default: in `/model`, press Ctr
 model = "acme/large"
 extensions = ["~/.pi/agent/extensions/acme-provider.ts"]
 ```
+
+#### The web page
+
+`tkt web`, or `/web` in the chat, opens the same chat in your browser, with the board beside it. The page has three columns:
+
+- On the left, what needs you, as cards with the answers `/inbox` offers as buttons, such as Approve or Open the checklist; then every ticket with its phase, ages, diff size and pull request title; then links to the suggest, chores, stats and version views.
+- In the middle, the ticket you picked, with buttons for what its state allows and six tabs: the agent's last message, such as the plan, drawn as a page; the pull request with its checks, review and verify-pr's report; the human verification steps, with your marks and verify-pr's; the diff, file by file; the agent's live screen in color, read again every second, with a box that tells the agent something; and the history. With no ticket picked, it shows the board in its columns, or the view you picked.
+- On the right, the chat itself, mirrored both ways: a message you send in either place shows in both, with the model's answer as it streams in, its tool calls and the times.
+
+Every button sends the slash command you could type, through the chat, so the terminal shows what it did and the two never drift; the forms for starting tickets and for suggest-tickets show the command before you send it. A question the chat asks, such as "Remove ACM-12?", `/check`'s "how do you want to verify?" or its checklist, shows in both places, and the first answer wins and closes the other. Slash commands work in the page, which offers them as you type `/`, and you can paste an image into a message. `/peek ID` and `/board` typed in the page open its own views, as they open overlays in the terminal. pi's own screens, such as `/model`, `/login` and `/resume`, open in the terminal only. The page's title counts the tickets that need you and the questions that wait, and each new item gets a notice in the page.
+
+The chat serves the page itself, on `127.0.0.1` only, so it lives as long as the chat does. The first chat in a repository serves it; a second one says it serves none. When no chat serves the page, `tkt web` opens `tkt agent` in a new tab of the herdr workspace and waits for it. When you quit the chat, the page says so and comes back by itself once a chat serves it again. The address `tkt web` prints carries a token, which the page keeps in a cookie, and the server answers only its own address and its own page, so another site in your browser cannot drive the chat.
+
+The page follows your system's light or dark setting until you pick one with its sun and moon button, and keeps that choice in `~/.local/state/tkt/web.json` for every repository. Its fonts come from Google Fonts; offline it falls back to the system's.
 
 `tkt help lifecycle` walks through each step. [`docs/lifecycle.md`](docs/lifecycle.md) follows a ticket from the tracker to a merged pull request, with diagrams of how tkt, the skills, herdr, worktrunk, the tracker and the forge fit together. [`docs/day-in-the-life.md`](docs/day-in-the-life.md) follows a whole day with several tickets at once. `tkt COMMAND --help` explains when to use a command and what it refuses.
 

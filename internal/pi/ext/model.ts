@@ -30,7 +30,8 @@ export interface Row {
 	 * watcher; it goes on by itself when they finish. */
 	agent: { pane_id: string; name: string; harness: string; status: string; background?: number } | null;
 	last_status: string;
-	pr: { number: number; state: string; mergeable?: string; head?: string } | null;
+	/** url is the open pull request's page on the forge. */
+	pr: { number: number; state: string; mergeable?: string; head?: string; url?: string } | null;
 	checks: { state: string; total: number; failing: string[]; pending: number } | null;
 	review: { verdict: string; head: string; at_head: boolean } | null;
 	/** verification is verify-pr's newest report: PASSED, FAILED or

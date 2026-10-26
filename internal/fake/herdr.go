@@ -242,7 +242,7 @@ func Herdr() {
 		s.Agents = append(s.Agents, obj{"name": nil, "agent": kind, "agent_status": "idle", "pane_id": args[0],
 			"tab_id": p["tab_id"], "cwd": p["cwd"], "foreground_cwd": p["cwd"]})
 		s.save()
-		herdrOK(obj{"type": "ok"})
+		// Like herdr, pane run prints nothing when it succeeds.
 	case "agent list":
 		herdrOK(obj{"agents": s.Agents})
 	case "agent get":
