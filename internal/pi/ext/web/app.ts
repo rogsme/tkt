@@ -68,7 +68,7 @@ function Center({ s, nav, g, now, asked }: { s: State; nav: Nav; g: Go; now: num
 			case "start":
 				return html`<${StartView} g=${g} />`;
 			case "suggest":
-				return html`<${SuggestView} g=${g} />`;
+				return html`<${SuggestView} g=${g} now=${now} />`;
 			case "chores":
 				return html`<${ChoresView} g=${g} now=${now} />`;
 			case "stats":

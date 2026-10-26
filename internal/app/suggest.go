@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gitlab.com/rogs/tkt/internal/agent"
@@ -19,31 +20,44 @@ import (
 
 // SuggestOpts are tkt suggest's arguments: what to ask suggest-tickets,
 // either Request in your own words or Count tickets, and the preset it runs
-// on.
+// on. Show reads the last run's answer instead of starting one.
 type SuggestOpts struct {
 	Count   int
 	Request string
 	As      string
+	Show    bool
 	Dry     bool
 }
 
 // SuggestResult is what tkt suggest did: the session it started in the
 // suggest tab at the repository's root, and the prompt it sent. The answer
 // stays in that tab, for you to read and talk over with the agent. Count is
-// 0 for a request.
+// 0 for a request. With --show, it is the last run's session, and Message
+// is what its agent said since the last prompt, read the way tkt show
+// reads a ticket's; Source and At are as in tkt show.
 type SuggestResult struct {
-	Count   int      `json:"count"`
-	Prompt  string   `json:"prompt"`
-	Tab     string   `json:"tab"`
-	Pane    string   `json:"pane"`
-	Preset  string   `json:"preset"`
-	Harness string   `json:"harness"`
-	Session string   `json:"session"`
-	DryRun  bool     `json:"dry_run"`
-	Actions []Action `json:"actions"`
+	Count       int      `json:"count"`
+	Prompt      string   `json:"prompt"`
+	Tab         string   `json:"tab"`
+	Pane        string   `json:"pane"`
+	Preset      string   `json:"preset"`
+	Harness     string   `json:"harness"`
+	Session     string   `json:"session"`
+	Started     string   `json:"started"`
+	AgentStatus string   `json:"agent_status"`
+	Source      string   `json:"source"`
+	Message     string   `json:"message"`
+	At          string   `json:"at"`
+	DryRun      bool     `json:"dry_run"`
+	Actions     []Action `json:"actions"`
+	shown       bool
 }
 
 func (r *SuggestResult) Text(w io.Writer) {
+	if r.shown {
+		fmt.Fprintln(w, strings.TrimRight(r.Message, "\n"))
+		return
+	}
 	if r.Count == 0 {
 		fmt.Fprintf(w, "suggest-tickets has your request in pane %s (%s, %s); read its picks there\n", r.Pane, r.Preset, r.Harness)
 		return
@@ -64,6 +78,9 @@ func suggestStatePath(common string) string { return filepath.Join(common, "tkt"
 // tickets that can run side by side. tkt reads none of the answer: it is
 // yours to weigh in the tab.
 func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error) {
+	if o.Show {
+		return a.suggestShow(ctx)
+	}
 	line := ""
 	if r := strings.TrimSpace(o.Request); r != "" {
 		line, o.Count = config.SuggestRequestLine(r), 0
@@ -111,7 +128,7 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 	}
 	res.Session = sid
 	c.save(ts, "tab", res.Tab, "pane", res.Pane, "preset", preset.Name, "harness", h, "session", sid, "status", "launching",
-		"started", c.Now().UTC().Format(history.TimeFormat))
+		"started", c.Now().UTC().Format(history.TimeFormat), "count", strconv.Itoa(o.Count), "prompt", line)
 	switch out, err := c.Agent.Launch(c.Ctx, res.Pane, name, h, harness.LaunchArgs(h, harness.New, sid, preset, c.Repo.Root)); out {
 	case agent.NotReady:
 		c.save(ts, "status", "not_ready")
@@ -132,6 +149,55 @@ func (a *App) Suggest(ctx context.Context, o SuggestOpts) (*SuggestResult, error
 	}
 	c.save(ts, "status", "submitted")
 	res.Actions = append(res.Actions, c.Plan...)
+	return res, nil
+}
+
+// suggestShow reads what the last suggest run's agent said since its last
+// prompt: from its session's record, or from its screen while it runs and
+// tkt cannot read the record. It changes nothing, so a page can poll it.
+func (a *App) suggestShow(ctx context.Context) (*SuggestResult, error) {
+	c, err := a.begin(ctx, false, false)
+	if err != nil {
+		return nil, err
+	}
+	defer c.release()
+	st := state.Read(suggestStatePath(c.Repo.Common))
+	if st["session"] == "" {
+		return nil, apperr.New(apperr.AgentMissing, "suggest-tickets has not run in this repository").WithHint("tkt suggest 3")
+	}
+	count, _ := strconv.Atoi(st["count"])
+	res := &SuggestResult{Count: count, Prompt: st["prompt"], Tab: st["tab"], Pane: st["pane"], Preset: st["preset"], Harness: st["harness"],
+		Session: st["session"], Started: st["started"], Actions: []Action{}, shown: true}
+	agents, err := c.H.Agents(c.Ctx)
+	if err != nil {
+		return nil, herdrErr(err)
+	}
+	name := prompt.AgentName(suggestLock + "-" + filepath.Base(c.Repo.Root))
+	var ag *herdr.Agent
+	for i := range agents {
+		if agents[i].NameOr("") == name {
+			ag = &agents[i]
+			res.Pane, res.AgentStatus = ag.PaneID, ag.Status
+			if ag.Kind != "" {
+				res.Harness = ag.Kind
+			}
+			if sid := ag.SessionID(); sid != "" {
+				res.Session = sid
+			}
+			break
+		}
+	}
+	turn, src := c.lastTurn(c.Ctx, ag, st, c.Repo.Root)
+	if src == "" {
+		return nil, apperr.New(apperr.AgentMissing, "no agent runs in the suggest tab and tkt cannot read its session").WithHint("tkt suggest 3")
+	}
+	res.Source, res.Message = src, turn.Final
+	if src == "screen" {
+		res.Message = turn.All
+	}
+	if !turn.At.IsZero() {
+		res.At = turn.At.UTC().Format(history.TimeFormat)
+	}
 	return res, nil
 }
 

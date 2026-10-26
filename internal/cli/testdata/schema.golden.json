@@ -130,8 +130,8 @@
       "path": "suggest",
       "use": "suggest [COUNT | REQUEST...]",
       "short": "Ask a fresh agent in the suggest tab which tickets to start next",
-      "long": "tkt suggest has the suggest-tickets skill pick the next tickets to start.\nIt opens a suggest tab at the repository's root, or reuses it, starts a\nfresh session there, and sends it what you ask, after the skill's name:\n\n  tkt suggest five tickets tagged feedback\n  -> Use the suggest-tickets skill for this request: five tickets tagged\n     feedback\n\nsuggest-tickets takes the number your request names, and narrows the\ncandidates by what else it says, such as a label, an area or a model. With\nno words, or only a count, tkt sends the suggest line for that many tickets,\n3 by default:\n\n  Use the suggest-tickets skill to suggest the next 3 tickets to start, ones\n  that can run side by side.\n\nsuggest-tickets only reads. It lists the ready tickets, keeps the ones\nwhose blockers are all done, and ranks them by how many tickets wait on\neach, then by priority. It drops one that would collide with work in\nflight, judged from the files each in-flight branch changes, or with\nanother pick, and with model routing on it takes at most one heavy ticket.\nIt reports what waits on you first, then the picks and what it left out,\nand ends with a line such as\n\n  Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)\n\nThe session runs on the [suggest] preset (tkt help config), or the default\npreset; --as picks another, such as a cheap one.\n\ntkt suggest returns once the agent has the prompt, and reads nothing it\nsays. The answer stays in the tab: read it there, ask the agent about it,\nand start the tickets you want with tkt start, adding --as PRESET for a\nticket whose model another preset serves. The tkt agent's /suggest opens\nthe same tab.",
-      "example": "  tkt suggest\n  tkt suggest 5\n  tkt suggest five tickets tagged feedback that can run side by side\n  tkt suggest 'tickets for the fast preset' --as fast --json",
+      "long": "tkt suggest has the suggest-tickets skill pick the next tickets to start.\nIt opens a suggest tab at the repository's root, or reuses it, starts a\nfresh session there, and sends it what you ask, after the skill's name:\n\n  tkt suggest five tickets tagged feedback\n  -> Use the suggest-tickets skill for this request: five tickets tagged\n     feedback\n\nsuggest-tickets takes the number your request names, and narrows the\ncandidates by what else it says, such as a label, an area or a model. With\nno words, or only a count, tkt sends the suggest line for that many tickets,\n3 by default:\n\n  Use the suggest-tickets skill to suggest the next 3 tickets to start, ones\n  that can run side by side.\n\nsuggest-tickets only reads. It lists the ready tickets, keeps the ones\nwhose blockers are all done, and ranks them by how many tickets wait on\neach, then by priority. It drops one that would collide with work in\nflight, judged from the files each in-flight branch changes, or with\nanother pick, and with model routing on it takes at most one heavy ticket.\nIt reports what waits on you first, then the picks and what it left out,\nand ends with a line such as\n\n  Suggested: ACM-14 (frontier), ACM-21 (acme-small-2)\n\nThe session runs on the [suggest] preset (tkt help config), or the default\npreset; --as picks another, such as a cheap one.\n\ntkt suggest returns once the agent has the prompt, and reads nothing it\nsays. The answer stays in the tab: read it there, ask the agent about it,\nand start the tickets you want with tkt start, adding --as PRESET for a\nticket whose model another preset serves. The tkt agent's /suggest opens\nthe same tab.\n\ntkt suggest --show prints what the last run's agent said since its last\nprompt, read from its session's record the way tkt show reads a ticket's,\nor from its screen when tkt cannot read the record. It starts nothing, so\nthe web page's Suggest view polls it to show the picks.",
+      "example": "  tkt suggest\n  tkt suggest 5\n  tkt suggest five tickets tagged feedback that can run side by side\n  tkt suggest 'tickets for the fast preset' --as fast --json\n  tkt suggest --show",
       "group": "lifecycle",
       "args": [
         {
@@ -162,9 +162,35 @@
           "type": "bool",
           "default": "false",
           "usage": "print the changes instead of making them"
+        },
+        {
+          "name": "show",
+          "type": "bool",
+          "default": "false",
+          "usage": "print what the last run's agent said, without starting one"
         }
       ],
-      "result": null
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "agent_status": "string",
+        "at": "string",
+        "count": "integer",
+        "dry_run": "boolean",
+        "harness": "string",
+        "message": "string",
+        "pane": "string",
+        "preset": "string",
+        "prompt": "string",
+        "session": "string",
+        "source": "string",
+        "started": "string",
+        "tab": "string"
+      }
     },
     {
       "path": "start",

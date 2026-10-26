@@ -1,8 +1,14 @@
 # tkt suggest has suggest-tickets pick the next tickets to start, in a
 # suggest tab at the repository's root, on the [suggest] preset. It reads
-# nothing the agent says: the picks stay in the tab for you.
+# nothing the agent says: the picks stay in the tab for you, and tkt
+# suggest --show reads them back.
 mkdir $HOME/.config/tkt
 cp $WORK/config.toml $HOME/.config/tkt/config.toml
+
+# Before the first run, there is nothing to show.
+! exec tkt suggest --show --json
+rc 4
+envelope '.error.code' agent_missing
 
 exec tkt suggest 2 --dry-run --json
 envelope '.result | [.count, .preset, .dry_run]' '[2,"cheap",true]'
@@ -32,6 +38,26 @@ envelope '.result | [.count, .prompt]' '[0,"Use the suggest-tickets skill for th
 grep '^Use the suggest-tickets skill for this request: five tickets tagged feedback$' $FAKE_DIR/prompts
 exec tkt suggest 'tickets for the fast preset'
 stdout '^suggest-tickets has your request in pane w1:p[0-9]+ \(cheap, claude\); read its picks there$'
+
+# --show reads what the agent said since the last prompt, from its session's
+# record, and changes nothing; without the record, its screen stands in.
+resetlog
+env 'FAKE_HERDR_SCREEN=Picking.'
+exec tkt suggest --show --json
+envelope '.result | [.count, .prompt, .preset, .source, .agent_status, .message]' '[0,"Use the suggest-tickets skill for this request: tickets for the fast preset","cheap","screen","idle","Picking.\n"]'
+! logged herdr tab create
+! logged herdr agent start
+jqedit $FAKE_DIR/herdr.json '(.agents[] | select(.name == "suggest-app") | .agent_session.value) = "sid-suggest"'
+claudedir CD $REPO
+mkdir $CD
+cp $WORK/suggest.jsonl $CD/sid-suggest.jsonl
+exec tkt suggest --show
+stdout '^Suggested: ACM-14 \(frontier\)$'
+! stdout Picking
+exec tkt suggest --show --json
+envelope '.result | [.source, .session, .at]' '["transcript","sid-suggest","2026-01-01T10:00:05Z"]'
+! exec tkt suggest --show 3
+rc 2
 
 # herdr numbers panes again when its server restarts, so a kept pane id
 # that now names another pane, here tkt's own, never gets the agent.
@@ -70,6 +96,9 @@ serves = ["acme-small-2"]
 
 [suggest]
 as = "cheap"
+-- suggest.jsonl --
+{"type":"user","timestamp":"2026-01-01T10:00:00.000Z","message":{"role":"user","content":"Use the suggest-tickets skill for this request: tickets for the fast preset"}}
+{"type":"assistant","timestamp":"2026-01-01T10:00:05.000Z","message":{"id":"m1","role":"assistant","content":[{"type":"text","text":"Nothing waits on you.\n\nSuggested: ACM-14 (frontier)"}]}}
 -- stale.state --
 pane=w1:p1
 tab=w1:t1

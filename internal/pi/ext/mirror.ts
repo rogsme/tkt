@@ -50,12 +50,12 @@ export interface Board {
 /** Query asks the chat for a view a page draws, such as a ticket's diff.
  * A query only reads: every change goes through a slash command. */
 export interface Query {
-	what: "message" | "screen" | "steps" | "diff" | "history" | "stats" | "chores" | "version";
+	what: "message" | "screen" | "steps" | "diff" | "history" | "stats" | "chores" | "suggest" | "version";
 	ticket: string;
 }
 
 const ticketViews = new Set<Query["what"]>(["message", "screen", "steps", "diff", "history"]);
-const views = new Set<Query["what"]>([...ticketViews, "stats", "chores", "version"]);
+const views = new Set<Query["what"]>([...ticketViews, "stats", "chores", "suggest", "version"]);
 
 /** idLike is what a ticket's id, or a chore run's branch, may look like:
  * nothing a command could read as a flag. */

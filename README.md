@@ -73,7 +73,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 |---|---|
 | `tkt agent` | Opens the tkt agent, a chat in your pane that drives your tickets. |
 | `tkt web` | Opens the tkt agent's web page in your browser: the same chat, mirrored both ways. It opens `tkt agent` in a new tab when no chat runs. |
-| `tkt suggest [N \| REQUEST]` | Has suggest-tickets pick the next tickets to start, in a suggest tab at the repository's root: the ones a request asks for, such as `tkt suggest five tickets tagged feedback`, or N tickets that can run side by side, 3 by default. The picks stay in that tab, for you to read and start. |
+| `tkt suggest [N \| REQUEST]` | Has suggest-tickets pick the next tickets to start, in a suggest tab at the repository's root: the ones a request asks for, such as `tkt suggest five tickets tagged feedback`, or N tickets that can run side by side, 3 by default. The picks stay in that tab, for you to read and start; `tkt suggest --show` prints them again. |
 | `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt, then starts `tkt auto`, which takes over once you approve the plan. `--manual` starts no loop, and `--auto-plan` and `--yolo` start the loop that approves the plan too. |
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
 | `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan; `--steer` types it in while the agent works, and `--wait` queues it until the agent stops. |
@@ -153,7 +153,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 
 | Command | What it does |
 |---|---|
-| `/suggest [N \| REQUEST] [as PRESET]` | Does what `tkt suggest` does; `/suggest` alone asks you to type the request. You read the picks in the suggest tab and `/start` the ones you want. |
+| `/suggest [N \| REQUEST] [as PRESET]` | Does what `tkt suggest` does; `/suggest` alone asks you to type the request. You read the picks in the suggest tab, or in the web page's Suggest view, and `/start` the ones you want. |
 | `/start ID... [auto \| auto-plan \| manual] [as PRESET]` | Starts tickets, on a preset you name: in auto by default, where tkt auto takes over once you approve the plan; in auto-plan, which approves the plan too; or manual. Say "start ACM-12 in yolo" for a yolo run. |
 | `/approve ID [auto]` | Approves the plan; with `auto`, `tkt auto` takes over. |
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |
@@ -184,7 +184,7 @@ extensions = ["~/.pi/agent/extensions/acme-provider.ts"]
 
 `tkt web`, or `/web` in the chat, opens the same chat in your browser, with the board beside it. The page has three columns:
 
-- On the left, what needs you, as cards with the answers `/inbox` offers as buttons, such as Approve or Open the checklist; then every ticket with its phase, ages, diff size and pull request title; then links to the suggest, chores, stats and version views.
+- On the left, what needs you, as cards with the answers `/inbox` offers as buttons, such as Approve or Open the checklist; then every ticket with its phase, ages, diff size and pull request title; then links to the suggest, chores, stats and version views. The suggest view sends `/suggest` and shows suggest-tickets' answer as it comes.
 - In the middle, the ticket you picked, with buttons for what its state allows and six tabs: the agent's last message, such as the plan, drawn as a page; the pull request with its checks, review and verify-pr's report; the human verification steps, with your marks and verify-pr's; the diff, file by file; the agent's live screen in color, read again every second, with a box that tells the agent something; and the history. With no ticket picked, it shows the board in its columns, or the view you picked.
 - On the right, the chat itself, mirrored both ways: a message you send in either place shows in both, with the model's answer as it streams in, its tool calls and the times.
 

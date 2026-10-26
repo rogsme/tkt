@@ -275,7 +275,8 @@ func suggestCmd(g *globals) *cobra.Command {
 		Example: `  tkt suggest
   tkt suggest 5
   tkt suggest five tickets tagged feedback that can run side by side
-  tkt suggest 'tickets for the fast preset' --as fast --json`,
+  tkt suggest 'tickets for the fast preset' --as fast --json
+  tkt suggest --show`,
 		SuggestFor: []string{"next", "pick", "dispatch"},
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) == 1 {
@@ -291,11 +292,15 @@ func suggestCmd(g *globals) *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if o.Show && (len(args) > 0 || o.As != "" || o.Dry) {
+				return usage("tkt suggest --show takes no request, --as or --dry-run")
+			}
 			res, err := g.app().Suggest(cmd.Context(), o)
 			return show(g, cmd, res, res == nil, err)
 		},
 	}
 	cmd.Flags().StringVar(&o.As, "as", "", "run the agent on PRESET instead of the [suggest] one")
+	cmd.Flags().BoolVar(&o.Show, "show", false, "print what the last run's agent said, without starting one")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	return cmd

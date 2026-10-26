@@ -218,13 +218,19 @@ export interface MergeResult {
 }
 
 /** SuggestResult is what tkt suggest prints: the tab and pane where the
- * agent runs, and the prompt it got; count is 0 for a request. */
+ * agent runs, and the prompt it got; count is 0 for a request. tkt suggest
+ * --show adds what the agent said since that prompt. */
 export interface SuggestResult {
 	count: number;
 	prompt: string;
 	tab: string;
 	pane: string;
 	preset: string;
+	started?: string;
+	agent_status?: string;
+	source?: string;
+	message?: string;
+	at?: string;
 }
 
 /** mergeText says what tkt merge did, for the chat. */

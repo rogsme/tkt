@@ -27,6 +27,7 @@ var resultTypes = map[string]any{
 	"hold":       app.HoldResult{},
 	"watch":      app.WatchResult{},
 	"show":       app.ShowResult{},
+	"suggest":    app.SuggestResult{},
 	"history":    app.HistoryResult{},
 	"run":        app.RunResult{},
 	"sync":       app.SyncResult{},
