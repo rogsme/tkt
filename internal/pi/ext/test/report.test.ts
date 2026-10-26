@@ -86,9 +86,12 @@ test("historyText words what tkt watch and tkt merge did", () => {
 		{ at: "2026-01-01T03:00:00Z", event: "watch", action: "run", stage: "ci" },
 		{ at: "2026-01-01T04:00:00Z", event: "merge", action: "ordered" },
 		{ at: "2026-01-01T05:00:00Z", event: "watch", action: "merge" },
+		{ at: "2026-01-01T06:00:00Z", event: "sync", action: "failed", note: "git push to origin failed: pre-push hook failed" },
+		{ at: "2026-01-01T07:00:00Z", event: "watch", action: "sync", stop: "failed", note: "git fetch origin failed" },
 	];
 	const text = historyText({ repo: "r", forge: "ok", tickets: [{ ticket: "ACM-12", timeline: null, events, pull_requests: [] }] }, false);
-	for (const want of ["put on hold", "merged the base, with no agent", "tkt watch ran ci", "merge order left, for when finish-ticket can merge", "tkt watch carried out the merge order"]) {
+	for (const want of ["put on hold", "merged the base, with no agent", "tkt watch ran ci", "merge order left, for when finish-ticket can merge", "tkt watch carried out the merge order",
+		"sync failed: git push to origin failed: pre-push hook failed", "tkt watch could not sync: git fetch origin failed"]) {
 		assert.match(text, new RegExp(`^- 2026-01-01 0\\d:00 ${want}$`, "m"), want);
 	}
 });

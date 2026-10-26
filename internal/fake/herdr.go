@@ -182,6 +182,30 @@ func Herdr() {
 		s.Panes = append(s.Panes, p)
 		s.save()
 		herdrOK(obj{"tab": obj{"tab_id": tab}, "root_pane": obj{"pane_id": pane}})
+	case "pane split":
+		beside := s.pane(args[0])
+		if beside == nil {
+			herdrFail("pane_not_found")
+		}
+		f, _ := flagValues(args[1:])
+		pane := str(beside, "workspace_id") + ":p" + fmt.Sprint(s.Next)
+		s.Next++
+		p := obj{"pane_id": pane, "tab_id": beside["tab_id"], "workspace_id": beside["workspace_id"], "cwd": f["--cwd"], "foreground_cwd": f["--cwd"], "focused": false}
+		if env := repeated(args, "--env"); len(env) > 0 {
+			p["env"] = env
+		}
+		s.Panes = append(s.Panes, p)
+		s.save()
+		herdrOK(obj{"type": "pane_info", "pane": p})
+	case "pane close":
+		id := args[0]
+		if s.pane(id) == nil {
+			herdrFail("pane_not_found")
+		}
+		other := func(o obj) bool { return str(o, "pane_id") != id }
+		s.Agents, s.Panes = filter(s.Agents, other), filter(s.Panes, other)
+		s.save()
+		herdrOK(obj{"type": "ok"})
 	case "tab close":
 		t := args[0]
 		other := func(o obj) bool { return str(o, "tab_id") != t }

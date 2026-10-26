@@ -166,12 +166,19 @@ const (
 // with a fresh session: a person may still be reading or typing there.
 const watchSettle = 5 * time.Minute
 
-// tkt watch's own actions: actDone runs tkt done, and actMerge carries out a
-// merge order with tkt merge.
+// tkt watch's own actions: actDone runs tkt done, actMerge carries out a
+// merge order with tkt merge, and actAuto starts again the tkt auto loop of
+// a ticket marked for auto whose loop is gone.
 const (
 	actDone  = "done"
 	actMerge = "merge"
+	actAuto  = "auto"
 )
+
+// autoRespawn is how long a loop tkt started has to take its lock before
+// tkt watch starts another: one that exits at once, such as on a refusal,
+// is not started again every pass.
+const autoRespawn = 10 * time.Minute
 
 // WatchPolicy is what tkt watch may do. Hold says why it starts no agent
 // for now, such as an incident a status page reports, or is "".
@@ -264,6 +271,10 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		return act(actSync, "")
 	case ReasonChecksFail:
 		return fix("ci")
+	case ReasonSyncFailed:
+		return fix(syncFixStage(f.SyncFail))
+	case ReasonFixBlocked, ReasonFixStopped:
+		return pause(StopNeedsYou)
 	case ReasonMergeDue:
 		// You left the order, so no settling: the session goes for the merge.
 		if p.Hold != "" {
@@ -272,8 +283,9 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 		return act(actMerge, "")
 	case ReasonNeedsReview:
 		// A sync moved the head of a ticket you ordered merged: finish-ticket
-		// merges only a head reviewed clean, and the steps carry over.
-		if f.MergeSteps != "" {
+		// merges only a head reviewed clean, and the steps carry over. With
+		// CI review on, the reviewer in CI reviews it, never review-pr.
+		if f.MergeSteps != "" && !f.CIReview {
 			return run("review")
 		}
 	}
@@ -661,6 +673,9 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, []WatchChore, error)
 			out = append(out, WatchTicket{Ticket: t.ID, Reason: WatchGone})
 			continue
 		}
+		if ts, err := c.readState(t.Path); err == nil {
+			c.reapFix(t.ID, t.Path, ts)
+		}
 		row, f := c.row(ctx, l, t)
 		// A stop during the reads leaves facts that may be wrong.
 		if ctx.Err() != nil {
@@ -805,6 +820,15 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		c.dropOrder(ts, t.ID, "dropped")
 		c.notify(t.ID, notice{"merge order dropped", voidText(why), "request"})
 	}
+	// A ticket marked for auto whose loop is gone, as after a reboot, gets
+	// its loop back, in the mode it had; tkt auto --stop or tkt hold stops
+	// that.
+	if row.Auto != nil && row.Auto.Wanted && !row.Auto.Running && !f.Hold && t.Chore == "" && f.PRState != "MERGED" && f.PRState != "CLOSED" {
+		if c.respawnAuto(t.ID, ts) {
+			res.Action, res.Reason = actAuto, WatchAuto
+		}
+		return res
+	}
 	mem := watchMemory{Rounds: atoi(ts.st["rounds"]), Last: ts.st["watch_last"]}
 	p := WatchPolicy{MaxRounds: c.Cfg.Auto.MaxRounds, DoneAfterMerge: c.Cfg.Watch.DoneAfterMerge, Hold: w.hold()}
 	act := watchStep(row.Next, f, p, mem)
@@ -914,6 +938,8 @@ func (w orderWaits) reason() string {
 		return ReasonBaseMoved
 	case WaitReview:
 		return ReasonNeedsReview
+	case WaitBot:
+		return ReasonAwaitingBot
 	case WaitTurn:
 		return WatchTurn
 	}
@@ -964,9 +990,10 @@ func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *t
 		return nil, err
 	case actSync:
 		_, err := a.Sync(ctx, SyncOpts{ID: id, NoAgent: true})
-		// The base moved again since the look, and now conflicts: the next
-		// pass sees the conflict and runs resolve.
-		if err != nil && apperr.As(err).Code == apperr.SyncConflict {
+		// The base moved again since the look, and now conflicts, or the
+		// sync failed another way: tkt sync kept why, and the next pass
+		// hands it to a fresh session.
+		if err != nil && (apperr.As(err).Code == apperr.SyncConflict || fixable(err)) {
 			return nil, nil
 		}
 		return nil, err
@@ -988,7 +1015,7 @@ func (w *watcher) failed(c *Ctx, ts *ticketState, id string, act watchAct, head,
 		what += " " + act.Stage
 	}
 	c.UI.Warn("%s: tkt watch could not %s: %s", id, what, msg)
-	c.record(history.Event{Ticket: id, Event: history.Watch, Action: act.Kind, Stage: act.Stage, Stop: "failed"})
+	c.record(history.Event{Ticket: id, Event: history.Watch, Action: act.Kind, Stage: act.Stage, Stop: "failed", Note: runner.Head(msg, 1000)})
 	c.notify(id, notice{"tkt watch could not " + what, msg, "request"})
 }
 

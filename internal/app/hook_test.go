@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -125,5 +126,19 @@ func TestTicketAtReadsTheWorktreesState(t *testing.T) {
 	}
 	if !ownTmp("/tmp/tkt-acme-app-ACM-12-123", "ACM-12") || ownTmp("/tmp/tkt-acme-app-ACM-13-1", "ACM-12") || ownTmp("/etc", "ACM-12") {
 		t.Error("ownTmp")
+	}
+}
+
+func TestPluginIsValidJavaScript(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not on PATH")
+	}
+	p := filepath.Join(t.TempDir(), "tkt.mjs")
+	if err := os.WriteFile(p, []byte(pluginJS("/usr/local/bin/tkt")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(node, "--check", p).CombinedOutput(); err != nil {
+		t.Fatalf("node --check: %v\n%s", err, out)
 	}
 }

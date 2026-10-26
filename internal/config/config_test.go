@@ -301,6 +301,16 @@ func TestSuggestSettings(t *testing.T) {
 	}
 }
 
+func TestFixesSettings(t *testing.T) {
+	c, err := Load(dirWith(t, map[string]string{FileName: "[presets.claude]\nharness = \"claude\"\n\n[presets.cheap]\nharness = \"opencode\"\n\n[fixes]\nas = \"cheap\"\n"}), "")
+	if err != nil || c.Fixes.As != "cheap" {
+		t.Fatalf("[fixes] as: %+v, %v", c.Fixes, err)
+	}
+	if _, err := Load(dirWith(t, map[string]string{FileName: "[fixes]\nas = \"fast\"\n"}), ""); code(err) != apperr.ConfigInvalid {
+		t.Errorf("an unknown [fixes] preset: %v", err)
+	}
+}
+
 func TestVerifySettings(t *testing.T) {
 	c, err := Load(dirWith(t, map[string]string{FileName: "[presets.claude]\nharness = \"claude\"\n\n[presets.other]\nharness = \"opencode\"\n\n[verify]\nas = \"other\"\n"}), "")
 	if err != nil || c.Verify.As != "other" {

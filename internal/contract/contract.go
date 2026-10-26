@@ -27,11 +27,13 @@ const (
 // The rows of workflow.md's feature table that tkt reads. A row reads
 // "| Name | on |"; a missing row means off. tkt runs verify-pr after a clean
 // review only with agent verification on, and tkt auto --yolo needs all
-// three on.
+// three on. With CI review on, a reviewer in CI stands in for review-pr,
+// and tkt never starts review-pr.
 const (
 	FeatureAgentVerification = "Agent verification"
 	FeatureAutonomousRuns    = "Autonomous runs"
 	FeaturePlanReview        = "Plan review"
+	FeatureCIReview          = "CI review"
 )
 
 var markerRE = regexp.MustCompile(`^<!-- rogs-skills config v(\d+): (\S+) -->$`)
@@ -52,7 +54,10 @@ func ParseMarker(line string) (version int, id string, ok bool) {
 // The status lines tkt branches on. The CLAUDE.md "Status lines" registry in
 // the skills repository lists every line a lifecycle skill emits.
 const (
-	StatusAwaitingApproval     = "AWAITING_APPROVAL"
+	StatusAwaitingApproval = "AWAITING_APPROVAL"
+	// StatusPlanApproved marks the moment an approval started the work
+	// phase in start-ticket's session; the run goes on after it.
+	StatusPlanApproved         = "PLAN_APPROVED"
 	StatusBlocked              = "BLOCKED"
 	StatusSetupRequired        = "SETUP_REQUIRED"
 	StatusReadyForReview       = "READY_FOR_REVIEW"

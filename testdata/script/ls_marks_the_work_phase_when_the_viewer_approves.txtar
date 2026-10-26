@@ -1,0 +1,49 @@
+# You can approve a plan in the plan viewer instead of with tkt approve: the
+# agent then goes on into work-ticket in the same session, and start-ticket
+# marks it with Status: PLAN_APPROVED. tkt ls reads that line from the
+# working agent's turn, moves the ticket to the work stage once, and shows it
+# building, not planning.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+statevar $FAKE_WT_ROOT/ACM-12 session SID
+claudedir CD $FAKE_WT_ROOT/ACM-12
+mkdir $CD
+
+# While the plan waits, the ticket waits for you.
+cp $WORK/waiting.jsonl $CD/$SID.jsonl
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.last_status, .phase, .stage]' '["AWAITING_APPROVAL","awaiting_approval","start"]'
+
+# The viewer's approval arrives as a task notification, in the same turn.
+cp $WORK/approved.jsonl $CD/$SID.jsonl
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .stage]' '["building","work"]'
+stderr 'ACM-12: the plan was approved in its session, so it is building now'
+state $FAKE_WT_ROOT/ACM-12 stage work
+state $FAKE_WT_ROOT/ACM-12 rounds 0
+exec tkt history ACM-12
+stdout 'plan approved, in its session'
+
+# Once only: the next look changes nothing.
+exec tkt ls --no-fetch --json
+! stderr 'approved in its session'
+exec tkt history ACM-12 --json
+envelope '[.result.tickets[0].events[] | select(.event == "approved")] | length' 1
+
+# Idle again, waiting on its own CI watcher, it has said nothing final: the
+# plan's AWAITING_APPROVAL from before the approval no longer counts.
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.last_status, .next.reason]' '["","check_agent"]'
+
+-- waiting.jsonl --
+{"type":"user","timestamp":"2026-01-01T10:00:00.000Z","message":{"role":"user","content":"Use the start-ticket skill to start ticket ACM-12."}}
+{"type":"assistant","timestamp":"2026-01-01T10:00:06.000Z","message":{"id":"m1","role":"assistant","content":[{"type":"text","text":"Revision 1 is in the viewer.\n\nStatus: AWAITING_APPROVAL"}]}}
+-- approved.jsonl --
+{"type":"user","timestamp":"2026-01-01T10:00:00.000Z","message":{"role":"user","content":"Use the start-ticket skill to start ticket ACM-12."}}
+{"type":"assistant","timestamp":"2026-01-01T10:00:06.000Z","message":{"id":"m1","role":"assistant","content":[{"type":"text","text":"Revision 1 is in the viewer.\n\nStatus: AWAITING_APPROVAL"}]}}
+{"type":"user","timestamp":"2026-01-01T10:05:00.000Z","message":{"role":"user","content":"<task-notification>\n<task-id>poll</task-id>\n<status>completed</status>\n</task-notification>"}}
+{"type":"assistant","timestamp":"2026-01-01T10:05:02.000Z","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"You approved revision 1 in the viewer.\n\nStatus: PLAN_APPROVED"}]}}
+{"type":"assistant","timestamp":"2026-01-01T10:05:04.000Z","message":{"id":"m3","role":"assistant","content":[{"type":"text","text":"Starting work-ticket."}]}}

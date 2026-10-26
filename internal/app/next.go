@@ -59,6 +59,14 @@ const (
 	ReasonNoChanges     = "no_changes"
 	ReasonChoreFindings = "chore_findings"
 	ReasonChoreReady    = "chore_ready"
+	// The reasons a small fix in a split gives: its session works, it waits
+	// on you, or it ended with a status line other than READY_FOR_REVIEW.
+	// ReasonSyncFailed is a sync that failed on the head, which a fresh
+	// session in a split fixes.
+	ReasonFixing     = "fixing"
+	ReasonFixBlocked = "fix_blocked"
+	ReasonFixStopped = "fix_stopped"
+	ReasonSyncFailed = "sync_failed_fix"
 )
 
 func command(reason string, argv ...string) Next {
@@ -102,7 +110,12 @@ func human(reason, text string) Next {
 // verify-pr's newest report, and VerifyHeld says it counts for the head:
 // it is about the head, or about one only clean merges of the base
 // separate from it. Yolo says tkt auto --yolo carries the ticket to the
-// merge with nobody watching.
+// merge with nobody watching. Fix is the status of the agent fixing the
+// ticket in a split, "" without one, and FixStatus the status line it
+// ended with. SyncFail is the kind of the sync that failed on the head:
+// conflict, failed, or "". CIReview says workflow.md turns CI review on: a
+// reviewer in CI stands in for review-pr, its CLEAR at the head counts as
+// ReviewReady, and tkt never starts review-pr.
 type Facts struct {
 	ID           string
 	Chore        string
@@ -137,6 +150,10 @@ type Facts struct {
 	Yolo         bool
 	BotWait      time.Duration
 	Waited       time.Duration
+	Fix          string
+	FixStatus    string
+	SyncFail     string
+	CIReview     bool
 }
 
 // NextStep applies the rules in order and returns the first that matches.
@@ -156,6 +173,12 @@ func NextStep(f Facts) Next {
 		return Next{Kind: "wait", Reason: ReasonAgentWaiting, Text: "wait (the agent waits on a background task)"}
 	case f.Agent == herdr.Blocked:
 		return human(ReasonAgentBlocked, "answer the agent in its tab")
+	case f.Fix == herdr.Working:
+		return Next{Kind: "wait", Reason: ReasonFixing, Text: "wait (a fresh session fixes it beside the agent)"}
+	case f.Fix == herdr.Blocked:
+		return human(ReasonFixBlocked, "answer the fix's session in its split")
+	case f.Fix != "" && f.FixStatus != "" && f.FixStatus != contract.StatusReadyForReview:
+		return human(ReasonFixStopped, "read why the fix stopped, in its split")
 	case f.PRState == "":
 		switch {
 		case f.Agent == "" && f.Chore != "" && unstarted(f.Launch):
@@ -178,6 +201,10 @@ func NextStep(f Facts) Next {
 		return human(ReasonReviewAwaitsApproval, "approve or discard the review draft in its tab")
 	case f.Checks == "pending":
 		return Next{Kind: "wait", Reason: ReasonCIPending, Text: "wait for CI"}
+	case f.SyncFail != "":
+		// The sync failed on this head; tkt sync hands it to a fresh
+		// session.
+		return command(ReasonSyncFailed, "tkt", "sync", id)
 	case f.AtHead && f.Verdict == contract.VerdictStaleBase, f.Mergeable == "CONFLICTING", f.BaseMerge == "conflict",
 		f.LastStatus == contract.StatusBlockedForSync && f.Behind > 0, f.MergeSteps != "" && f.Behind > 0:
 		return command(ReasonBaseMoved, "tkt", "sync", id)
@@ -211,15 +238,20 @@ func NextStep(f Facts) Next {
 			argv = append(argv, "--as", f.MergeAs)
 		}
 		return command(ReasonMergeDue, argv...)
-	case f.MergeSteps != "" && f.AtHead && f.Verdict == contract.VerdictClear:
+	case f.MergeSteps != "" && f.AtHead && f.Verdict == contract.VerdictClear && !f.CIReview:
 		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone.
 		return command(ReasonNeedsReview, "tkt", "run", id, "review")
 	case f.AtHead && (f.Verdict == contract.VerdictClear || f.Verdict == contract.VerdictReadyForHuman):
 		return cleared(f)
+	case f.CIReview && (f.BotWait == 0 || f.Waited < f.BotWait):
+		// The reviewer in CI reviews every head; nothing else does.
+		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
 	case f.BotWait == 0:
 		return command(ReasonNeedsReview, "tkt", "run", id, "review")
 	case f.Waited < f.BotWait:
 		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
+	case f.CIReview:
+		return human(ReasonBotSilent, "the review bot has not reviewed this head; check its CI job")
 	}
 	return human(ReasonBotSilent, "the review bot has not reviewed this head; check its CI job, or run tkt run "+id+" review")
 }
@@ -264,12 +296,16 @@ const (
 	PhaseVerifying        = "verifying"
 	PhaseWorking          = "working"
 	PhaseNeedsYou         = "needs_you"
-	PhaseReadyForHuman    = "ready_for_human"
-	PhaseMerging          = "merging"
-	PhaseMerged           = "merged"
-	PhaseClosed           = "closed"
-	PhaseNoAgent          = "no_agent"
-	PhaseUnknown          = "unknown"
+	// PhaseBlocked is a ticket that waits on something outside it: its
+	// agent stopped with Status: BLOCKED and a Reason: line, such as a
+	// person's answer, or you put it on hold.
+	PhaseBlocked       = "blocked"
+	PhaseReadyForHuman = "ready_for_human"
+	PhaseMerging       = "merging"
+	PhaseMerged        = "merged"
+	PhaseClosed        = "closed"
+	PhaseNoAgent       = "no_agent"
+	PhaseUnknown       = "unknown"
 	// PhaseFinished is a chore's run that ended with nothing to change.
 	PhaseFinished = "finished"
 )
@@ -285,6 +321,8 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseMerged
 	case f.PRState == "CLOSED":
 		return PhaseClosed
+	case f.Hold && f.Agent != herdr.Working:
+		return PhaseBlocked
 	case f.Agent != herdr.Working && (f.Launch == "tab" || f.Launch == "launching"):
 		return PhaseStarting
 	case f.Agent != herdr.Working && (f.Launch == "not_ready" || f.Launch == "prompt_uncertain"):
@@ -312,7 +350,14 @@ func PhaseOf(f Facts, n Next) string {
 			return PhaseMerging
 		}
 		return PhaseWorking
-	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval, ReasonBotSilent, ReasonChoreFindings:
+	case ReasonFixing:
+		return PhaseFixing
+	case ReasonStatusBlocked:
+		if f.LastStatus == contract.StatusBlocked {
+			return PhaseBlocked
+		}
+		return PhaseNeedsYou
+	case ReasonAgentBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval, ReasonBotSilent, ReasonChoreFindings, ReasonFixBlocked, ReasonFixStopped:
 		return PhaseNeedsYou
 	case ReasonNoChanges:
 		return PhaseFinished
@@ -326,7 +371,7 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseCI
 	case ReasonAwaitingBot, ReasonNeedsReview:
 		return PhaseWaitingReview
-	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings, ReasonChecksFail, ReasonVerifyFailed:
+	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings, ReasonChecksFail, ReasonVerifyFailed, ReasonSyncFailed:
 		return PhaseNeedsFix
 	case ReasonReviewClear, ReasonBotClear, ReasonNeedsVerify, ReasonVerified, ReasonVerifyIncomplete:
 		return PhaseReadyForHuman
@@ -366,6 +411,13 @@ func factsFor(r Row) Facts {
 	}
 	if v := r.Verification; v != nil {
 		f.Verification, f.VerifyHeld = v.Value, v.Holds()
+	}
+	if r.Fix != nil {
+		f.Fix, f.FixStatus = r.Fix.Status, r.Fix.LastStatus
+	}
+	f.CIReview = r.CIReview
+	if r.Sync != nil && r.PR != nil && r.PR.State == "OPEN" {
+		f.SyncFail = r.Sync.Kind
 	}
 	return f
 }

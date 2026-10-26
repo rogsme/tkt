@@ -1,0 +1,45 @@
+# A ticket marked for auto whose loop is gone, as after a reboot, gets its
+# loop back from tkt watch, in the mode it had. A loop tkt started a moment
+# ago is not started again, and neither is one on hold.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'ACM-12 work'
+realgit -C $WT push -q origin ACM-12
+gitvar H1 $WT HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+exec sh -c 'echo auto=on >> $REPO/.git/worktrees/ACM-12/tkt/state'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0].auto | [.wanted, .running]' '[true,false]'
+
+# On hold, it stays as it is.
+exec tkt hold ACM-12
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","hold"]'
+exec tkt hold ACM-12 --off
+
+env TKT_AUTO=
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["auto","auto"]'
+stderr 'ACM-12: its tkt auto loop was gone, so tkt watch started it again'
+# The loop polls for the review bot.
+exec sleep 2
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0].auto | [.wanted, .running]' '[true,true]'
+exec tkt history ACM-12
+stdout 'tkt watch started its tkt auto loop again'
+
+# The loop runs, and the next pass leaves it be.
+exec tkt watch --once --json
+envelope '.result.tickets[0].action' ''
+exec tkt auto ACM-12 --stop
+waitgrep 'ACM-12  stopped' $REPO/.git/tkt/auto-ACM-12.log
+
+-- config.toml --
+[auto]
+poll = "1s"
+-- prs.json --
+[{"number": 12, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+  "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}], "reviews": []}]

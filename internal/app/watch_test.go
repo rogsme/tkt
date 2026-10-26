@@ -41,6 +41,10 @@ func TestWatchStepTable(t *testing.T) {
 		{failing, p, watchMemory{Last: "run:ci@h1", Rounds: 1}, pause(StopNoProgress)},
 		{with(failing, func(f *Facts) { f.Head = "h2" }), p, watchMemory{Last: "run:ci@h1", Rounds: 1}, watchAct{Kind: actRun, Stage: "ci", Why: ReasonChecksFail}},
 		{failing, p, watchMemory{Rounds: 2}, pause(StopRoundLimit)},
+		// A failed sync goes to a fresh session in a split.
+		{with(open, func(f *Facts) { f.SyncFail = "failed" }), p, watchMemory{}, watchAct{Kind: actRun, Stage: "sync-fix", Why: ReasonSyncFailed}},
+		{with(open, func(f *Facts) { f.SyncFail = "conflict" }), p, watchMemory{}, watchAct{Kind: actRun, Stage: "resolve", Why: ReasonSyncFailed}},
+		{with(open, func(f *Facts) { f.Fix, f.FixStatus = "idle", "BLOCKED" }), p, watchMemory{}, pause(StopNeedsYou)},
 		// An agent that stopped minutes ago may still have a person in its
 		// session; a sync, which needs no agent, goes ahead.
 		{with(failing, func(f *Facts) { f.Idle = time.Minute }), p, watchMemory{}, leave(WatchSettling)},

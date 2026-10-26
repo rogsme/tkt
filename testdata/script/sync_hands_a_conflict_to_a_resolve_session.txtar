@@ -1,5 +1,6 @@
 # When the base merge conflicts, tkt sync changes nothing itself and hands
-# the merge to a fresh session that runs the resolve stage.
+# the merge to a fresh session that runs the resolve stage, in a split beside
+# the ticket's agent, which keeps its pane and its session.
 cp $WORK/app-start.txt $REPO/app.txt
 realgit -C $REPO add app.txt
 realgit -C $REPO commit -q -m 'add app.txt'
@@ -21,12 +22,20 @@ envelope '.error.code' sync_conflict
 envelope '.error.details.conflicts' '["app.txt"]'
 envelope '.error.hint' 'tkt sync ACM-12 hands it to a fresh session, or tkt run ACM-12 resolve'
 
+statevar $WT session SID
 resetlog
 exec tkt sync ACM-12
-stdout 'ACM-12  merging origin/main conflicts in app.txt; a fresh session resolves it in pane w1:p10'
-logged herdr agent start acm-12 --kind claude --pane w1:p10
+stdout 'ACM-12  merging origin/main conflicts in app.txt; a fresh session resolves it in pane w1:p[0-9]+'
+logged herdr pane split w1:p10 --direction right --cwd $WT --env
+statevar $WT fix_pane FIX
+logged herdr agent start acm-12-fix --kind claude --pane $FIX
 grep 'Fetch origin and merge origin/main into this branch. The merge conflicts: resolve each conflict from what both sides meant' $FAKE_DIR/prompts
-state $WT stage resolve
+state $WT fix_stage resolve
+state $WT stage start
+state $WT pane w1:p10
+state $WT session $SID
+jqeq $FAKE_DIR/herdr.json '[.panes[] | select(.focused == false) | .env[0] | startswith("TMPDIR=")]' '[true]'
+! logcontains 'herdr agent prompt w1:p10 /exit'
 ! logcontains 'merge --no-ff'
 ! logcontains 'push --quiet'
 gitvar SAME $WT HEAD

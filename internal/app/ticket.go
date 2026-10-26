@@ -114,17 +114,17 @@ func (c *Ctx) lastTurn(ctx context.Context, ag *herdr.Agent, st state.State, pat
 	turn, ok := c.Agent.LastTurn(ctx, h, sid, path)
 	if ok {
 		if h == config.OpenCode {
-			return turn, "api"
+			return withPluginStatuses(turn, st, sid), "api"
 		}
 		return turn, "transcript"
 	}
 	if ag == nil {
-		return harness.Turn{At: turn.At}, ""
+		return withPluginStatuses(harness.Turn{At: turn.At}, st, sid), ""
 	}
 	// Reading OpenCode's recent output scrolls its view up and back, in
 	// front of whoever watches the tab, so it gets the screen as it is.
 	if ag.Kind == config.OpenCode {
-		return harness.Turn{All: c.H.Read(ctx, ag.PaneID, 200), At: turn.At}, "screen"
+		return withPluginStatuses(harness.Turn{All: c.H.Read(ctx, ag.PaneID, 200), At: turn.At}, st, sid), "screen"
 	}
 	return harness.Turn{All: c.H.ReadRecent(ctx, ag.PaneID, 200), At: turn.At}, "screen"
 }
@@ -137,6 +137,9 @@ func (c *Ctx) ticketAgent(id, path, want string, st state.State) (herdr.Agent, e
 		return herdr.Agent{}, herdrErr(err)
 	}
 	inPath := herdr.AgentsInPath(agents, path)
+	if want == "" {
+		inPath = withoutFix(inPath, st)
+	}
 	switch {
 	case want != "":
 		i := slices.IndexFunc(inPath, func(ag herdr.Agent) bool { return ag.PaneID == want })

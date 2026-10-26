@@ -1,0 +1,32 @@
+# [fixes] as runs the small fixes, ci and resolve, on a preset of its own,
+# for that run only: the ticket keeps its preset, and address keeps it too.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+
+resetlog
+exec tkt run ACM-12 ci --json
+envelope '.result | [.stage, .preset]' '["ci","cheap"]'
+state $FAKE_WT_ROOT/ACM-12 preset claude
+logcontains haiku
+
+exec tkt run ACM-12 address --json
+envelope '.result | [.stage, .preset]' '["address","claude"]'
+
+# --as still picks the preset for that one run.
+exec tkt run ACM-12 ci --as claude --json
+envelope '.result.preset' claude
+
+-- config.toml --
+[presets.claude]
+harness = "claude"
+model = "opus"
+
+[presets.cheap]
+harness = "claude"
+model = "haiku"
+
+[fixes]
+as = "cheap"

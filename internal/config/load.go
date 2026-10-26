@@ -77,6 +77,12 @@ type fileTOML struct {
 	Verify *struct {
 		As string `toml:"as"`
 	} `toml:"verify"`
+	Fixes *struct {
+		As string `toml:"as"`
+	} `toml:"fixes"`
+	Start *struct {
+		Mode string `toml:"mode"`
+	} `toml:"start"`
 	Chores map[string]choreTOML  `toml:"chores"`
 	Status map[string]statusTOML `toml:"status"`
 }
@@ -237,7 +243,7 @@ func parseProject(c *Config, global, path, root, src string) error {
 		return err
 	}
 	if !local {
-		for _, k := range []struct{ key, as string }{{"suggest", asOf(f.Suggest)}, {"verify", asOf(f.Verify)}} {
+		for _, k := range []struct{ key, as string }{{"suggest", asOf(f.Suggest)}, {"verify", asOf(f.Verify)}, {"fixes", asOf(f.Fixes)}} {
 			if k.as != "" && !slices.ContainsFunc(ps, func(p Preset) bool { return p.Name == k.as }) {
 				return apperr.New(apperr.ConfigInvalid, "%s: [%s] as names preset '%s', which this file does not define: each person's config.toml names its own presets, so the repository's file names only its own", path, k.key, k.as).
 					WithHint("define [presets.%s] in %s, or set [%s] as in %s", k.as, path, k.key, LocalPath(root))
@@ -275,7 +281,8 @@ func asOf(t *struct {
 }
 
 // parseSettings reads the tables both files take: [stages], [auto],
-// [review], [board], [watch], [suggest], [verify] and [status]. It sets only
+// [review], [board], [watch], [suggest], [verify], [fixes], [start] and
+// [status]. It sets only
 // the keys the file names, so the file read last wins key by key.
 func parseSettings(c *Config, path string, f fileTOML) error {
 	for name, text := range f.Stages {
@@ -348,6 +355,12 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 			c.Watch.Autostart = *w.Autostart
 		}
 	}
+	if s := f.Start; s != nil && s.Mode != "" {
+		if s.Mode != ModeAuto && s.Mode != ModeManual {
+			return bad("[start] mode", fmt.Sprintf("is '%s'; it takes auto or manual", s.Mode))
+		}
+		c.Start.Mode = s.Mode
+	}
 	if s := f.Suggest; s != nil && s.As != "" {
 		if !c.Has(s.As) {
 			return bad("[suggest] as", fmt.Sprintf("names preset '%s', which the presets do not define", s.As))
@@ -359,6 +372,12 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 			return bad("[verify] as", fmt.Sprintf("names preset '%s', which the presets do not define", v.As))
 		}
 		c.Verify.As = v.As
+	}
+	if v := f.Fixes; v != nil && v.As != "" {
+		if !c.Has(v.As) {
+			return bad("[fixes] as", fmt.Sprintf("names preset '%s', which the presets do not define", v.As))
+		}
+		c.Fixes.As = v.As
 	}
 	return parseStatus(c, path, f.Status)
 }

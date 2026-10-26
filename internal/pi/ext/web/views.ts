@@ -30,6 +30,7 @@ export function BoardView({ board, g, now }: { board?: Board; g: Go; now: number
 							<span class="id">${cell.ticket}</span>
 							<span class="muted small">${since(r?.phase_since ?? "", now)}</span>
 							${r?.title && html`<span class="title">${r.title}</span>`}
+							${r?.phase === "blocked" && html`<span class="why small">${r.hold ? "on hold" : r.blocked_reason || "Status: BLOCKED"}</span>`}
 						</button>`;
 					})}
 				</div>`,
@@ -51,12 +52,12 @@ function Line({ line, g, label, onSent }: { line: string; g: Go; label: string; 
 
 export function StartView({ g }: { g: Go }) {
 	const [ids, setIds] = useState("");
-	const [mode, setMode] = useState<Mode>("manual");
+	const [mode, setMode] = useState<Mode>("auto");
 	const [as, setAs] = useState("");
 	const modes: { mode: Mode; label: string; text: string }[] = [
-		{ mode: "manual", label: "Plan, then wait for me", text: "start-ticket plans it; you approve the plan, and drive each step." },
-		{ mode: "after-plan", label: "Auto after I approve the plan", text: "You approve the plan; tkt auto drives it until it is reviewed clean." },
-		{ mode: "auto", label: "Full auto", text: "tkt auto approves the plan too, and drives it until it is reviewed clean." },
+		{ mode: "auto", label: "Auto after I approve the plan", text: "You approve the plan; tkt auto drives it to human verification." },
+		{ mode: "manual", label: "Manual", text: "start-ticket plans it; you approve the plan, and drive each step." },
+		{ mode: "auto-plan", label: "Auto-plan", text: "tkt auto approves the plan too, and drives it until it is reviewed clean." },
 	];
 	return html`<div class="view form">
 		<h2>Start tickets</h2>

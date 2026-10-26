@@ -9,7 +9,8 @@ The lifecycle skills hand off through these lines. A skill restates the lines it
 | `Status: AWAITING_CREATE_APPROVAL`, `Status: TICKETS_CREATED` | create-ticket | the user |
 | `Status: TICKETS_SUGGESTED`, after a `Suggested:` line with the picks | suggest-tickets | the user starts the picks with start-ticket |
 | `Status: AWAITING_APPROVAL` | start-ticket | the user approves (in an unattended or autonomous run, the runner that started it), then work-ticket |
-| `Status: READY_FOR_REVIEW` | work-ticket, address-pr-review | review-pr in a fresh session |
+| `Status: PLAN_APPROVED` | start-ticket, when an approval starts the work phase in the same session | work-ticket goes on in that session; a runner marks the work phase begun |
+| `Status: READY_FOR_REVIEW` | work-ticket, address-pr-review | review-pr in a fresh session, or the CI reviewer where CI review is on |
 | `Status: AWAITING_POST_APPROVAL`, `Status: REVIEW_POSTED`, `Status: READY_FOR_HUMAN` | review-pr | address-pr-review, or verify-pr and the human verification |
 | `Verdict: CHANGES_REQUESTED`, `Verdict: READY_FOR_HUMAN`, with `Reviewed head:` and `Reviewed base:` lines | review-pr, inside the posted summary | address-pr-review, finish-ticket |
 | `Status: VERIFIED`, `Status: VERIFICATION_FAILED`, `Status: VERIFICATION_INCOMPLETE` | verify-pr | the user confirms the steps from the evidence, address-pr-review fixes the failed steps, or the user runs the steps not run |

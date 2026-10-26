@@ -22,7 +22,7 @@ test("each answer /inbox offers is a button that sends the slash command you cou
 	const stalled = row({ phase: "building", auto: { wanted: true, approve_plan: true, running: false, rounds: 0, stop: "", waiting: "", paused: "", why: "" } });
 	assert.deepEqual(
 		cardActs(attentionOf(stalled, false)!, stalled).map((a) => a.cmd),
-		["/auto ACM-12 full", "/auto ACM-12 off", "/dismiss ACM-12"],
+		["/auto ACM-12 auto-plan", "/auto ACM-12 off", "/dismiss ACM-12"],
 	);
 
 	const gone = row({ phase: "no_agent", agent: null });
@@ -31,7 +31,7 @@ test("each answer /inbox offers is a button that sends the slash command you cou
 	const u = unblockedOf({ ticket: "ACM-13", by: "ACM-12", at: "2026-01-01T00:00:00Z" });
 	assert.deepEqual(
 		cardActs(u, undefined).map((a) => a.cmd),
-		["/start ACM-13", "/start ACM-13 auto", "/start ACM-13 after-plan", "/dismiss ACM-13"],
+		["/start ACM-13", "/start ACM-13 auto-plan", "/start ACM-13 manual", "/dismiss ACM-13"],
 	);
 
 	const fix = row({ phase: "needs_fix", auto: { wanted: true, approve_plan: false, running: true, rounds: 3, stop: "", waiting: "", paused: "round_limit", why: "" }, next: { kind: "command", reason: "findings", argv: ["tkt", "run", "ACM-12", "address"], text: "tkt run ACM-12 address" } });
@@ -50,8 +50,9 @@ test("a ticket's own buttons follow what its state allows", () => {
 });
 
 test("the forms build the line you could type", () => {
-	assert.equal(startLine(" ACM-12, ACM-13 ", "manual", ""), "/start ACM-12 ACM-13");
-	assert.equal(startLine("ACM-12 to ACM-15", "after-plan", " opencode "), "/start ACM-12 to ACM-15 after-plan as opencode");
+	assert.equal(startLine(" ACM-12, ACM-13 ", "auto", ""), "/start ACM-12 ACM-13");
+	assert.equal(startLine("ACM-12", "manual", ""), "/start ACM-12 manual");
+	assert.equal(startLine("ACM-12 to ACM-15", "auto-plan", " opencode "), "/start ACM-12 to ACM-15 auto-plan as opencode");
 	assert.equal(startLine("", "auto", "x"), "");
 	assert.equal(suggestLine("", "opencode"), "/suggest");
 	assert.equal(suggestLine(" five  tickets\ttagged feedback ", "sol"), "/suggest five tickets tagged feedback as sol");

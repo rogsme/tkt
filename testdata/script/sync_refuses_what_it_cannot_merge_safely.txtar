@@ -40,10 +40,11 @@ realgit -C $WORK/elsewhere commit -q --allow-empty -m 'pushed from elsewhere'
 realgit -C $WORK/elsewhere push -q origin pushed:ACM-12
 gitvar PUSHED $WORK/elsewhere HEAD
 
-# A push that fails leaves the branch where it was.
+# A push that fails leaves the branch where it was. --no-agent stops there;
+# without it, a fresh session takes the failure over.
 cp $WORK/pre-receive $WORK/origin.git/hooks/pre-receive
 chmod 755 $WORK/origin.git/hooks/pre-receive
-! exec tkt sync ACM-12
+! exec tkt sync ACM-12 --no-agent
 rc 1
 stderr 'git push to origin failed: .*; tkt undid its merge'
 gitvar AFTER $WT HEAD

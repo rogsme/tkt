@@ -184,6 +184,36 @@ func (c Client) TabCreate(ctx context.Context, workspace, cwd, label string, env
 	return v.Tab.ID, v.Root.ID, err
 }
 
+// PaneSplitArgv is the herdr command that splits a pane to its right
+// without focusing the new one, which starts in cwd. env holds KEY=VALUE
+// pairs for the new pane's shell, as for a tab's.
+func PaneSplitArgv(pane, cwd string, env ...string) []string {
+	argv := []string{"herdr", "pane", "split", pane, "--direction", "right", "--cwd", cwd}
+	for _, kv := range env {
+		argv = append(argv, "--env", kv)
+	}
+	return append(argv, "--no-focus")
+}
+
+// PaneSplit splits a pane and returns the new one.
+func (c Client) PaneSplit(ctx context.Context, pane, cwd string, env ...string) (string, error) {
+	v, err := decode[struct {
+		Pane struct {
+			ID string `json:"pane_id"`
+		} `json:"pane"`
+	}](c.call(ctx, false, PaneSplitArgv(pane, cwd, env...)[1:]...))
+	if err == nil && v.Pane.ID == "" {
+		err = &Error{Argv: PaneSplitArgv(pane, cwd, env...)[1:], Code: "bad_output", Stderr: "pane split named no pane"}
+	}
+	return v.Pane.ID, err
+}
+
+// PaneClose closes a pane, and the agent in it.
+func (c Client) PaneClose(ctx context.Context, pane string) error {
+	_, err := c.call(ctx, false, "pane", "close", pane)
+	return err
+}
+
 // WorkspaceCreateArgv is the herdr command that opens a workspace in cwd
 // without focusing it.
 func WorkspaceCreateArgv(cwd, label string) []string {

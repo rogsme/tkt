@@ -19,7 +19,7 @@ The script starts in `$REPO`. Files in a script's archive land in `$WORK`, so a 
 
 The fakes in `internal/fake` stand in for the real tools on `PATH`:
 
-- `herdr` keeps workspaces, tabs, panes and agents in `$FAKE_DIR/herdr.json` and answers the commands tkt uses. A pane that `tab create` opens keeps its `--env` values as `env`. Environment variables inject failures, such as `FAKE_HERDR_START_ERRORS=agent_pane_busy,...` or `FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled`. A `-` in such a list lets that call succeed. `agent read` prints `$FAKE_DIR/screen` when it exists, otherwise `FAKE_HERDR_SCREEN`. `FAKE_HERDR_DOWN=1` makes every call fail, as when herdr's server does not run.
+- `herdr` keeps workspaces, tabs, panes and agents in `$FAKE_DIR/herdr.json` and answers the commands tkt uses. A pane that `tab create` or `pane split` opens keeps its `--env` values as `env`; a split's pane is in its neighbor's tab, with `focused` false, and `pane close` removes a pane and its agent. Environment variables inject failures, such as `FAKE_HERDR_START_ERRORS=agent_pane_busy,...` or `FAKE_HERDR_PROMPT_ERRORS=agent_prompt_stalled`. A `-` in such a list lets that call succeed. `agent read` prints `$FAKE_DIR/screen` when it exists, otherwise `FAKE_HERDR_SCREEN`. `FAKE_HERDR_DOWN=1` makes every call fail, as when herdr's server does not run.
 - In turns mode, `FAKE_HERDR_TURNS` names a JSON list of agent turns, such as `[{"screen": "Status: AWAITING_APPROVAL"}, {"screen": "...", "prs": "/path/prs.json"}]`. A prompt sets the agent working, and each `agent wait` on a working agent ends its turn with the next entry: its `status` (idle by default), its screen, and a pull request file that `gh` lists from then on. The `auto_` scripts drive whole tickets this way.
 - `wt` creates and removes real git worktrees under `$FAKE_WT_ROOT` and prints worktrunk's JSON: schema 1, or schema 2 with `FAKE_WT_SCHEMA=2`.
 - `gh` answers `pr list` from `$FAKE_DIR/prs.json` when it exists, otherwise from the JSON file in `FAKE_GH_PRS`.
@@ -88,7 +88,8 @@ After a change to how tkt reads sessions or drives tickets (`show`, `approve`, `
 After a change to `tkt sync`, `tkt watch` or the tabs' `TMPDIR`, in a scratch GitHub repository with the lifecycle configuration and a pull request for `ACM-1`:
 
 1. Merge another branch into `main` that touches other files, then run `tkt sync ACM-1`. It pushes a merge commit within seconds, starts no agent, and CI and the review bot run on the new head.
-2. Merge a change to the same lines into `main`, then run `tkt sync ACM-1`. A fresh session in the ticket's tab gets the resolve line, resolves the conflict, and pushes one merge.
+2. Merge a change to the same lines into `main`, then run `tkt sync ACM-1`. A split opens to the right of the ticket's agent, without focus, and a fresh session there gets the resolve line, resolves the conflict, and pushes one merge. The ticket's agent stays as it was. With `tkt watch` running, the split closes within a minute of the fix's `Status: READY_FOR_REVIEW`.
+2b. Add a `.git/hooks/pre-push` that exits 1, merge another branch into `main`, and run `tkt sync ACM-1`. It undoes its merge, a split gets the sync-fix line with the hook's reason and the log's path, and `tkt ls --json` shows the reason under the row's `sync` and the split under `fix`.
 3. In the ticket's tab, run `echo $TMPDIR` and `mktemp`: both name `/tmp/tkt-...-ACM-1-...`. `tkt done ACM-1` after the merge removes the directory.
 4. Run `tkt ls` in a herdr pane: it says it started `tkt watch`, `tkt ls --json` shows `watch.running`, and the chat's board heading says `watch on`. Make the checks fail on a new head: within a minute, a fresh session runs ci, and herdr notifies. `tkt watch --stop` stops it.
 5. From a terminal outside herdr, `tkt watch --once --dry-run` finds the workspace from the panes and says what each ticket would get.
@@ -118,6 +119,7 @@ After a change to `tkt hook tmp` or its plugin, with a preset that runs OpenCode
 1. Run `tkt hook tmp --install`, then `opencode service restart` while no agent works. `tkt doctor` says the plugin is in place.
 2. Start an OpenCode ticket, and ask its agent to run `echo $TMPDIR` and to write `/tmp/acme-check.md` with its write tool, then to `cat /tmp/acme-check.md` in its shell. `$TMPDIR` names the ticket's directory, the file lands there, the `cat` finds it, and nothing named `acme-check.md` appears in `/tmp`. The agent mentions the move as expected rather than trying to undo it.
 3. Ask it to run `grep -rn "/tmp/acme-check.md" .` and to commit a message that names `/tmp/acme-check.md` in quotes: both keep the path as written.
+4. Present a plan and approve it in the viewer. Once the agent prints `Status: PLAN_APPROVED`, the ticket's state holds `oc_statuses` ending with `PLAN_APPROVED`, and `tkt ls` shows it building. Send it a new prompt: `oc_statuses` empties. This checks OpenCode's `session.inbox.delivered` and `session.text.ended` events, which the plugin relies on.
 4. Put a file in `/tmp` yourself and ask the agent to read it: it reads the real one.
 5. In an OpenCode session outside any ticket, `echo $TMPDIR` shows the service's own, and nothing moves.
 

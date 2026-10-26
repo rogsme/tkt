@@ -1,0 +1,62 @@
+# Where workflow.md turns CI review on, the review bot in CI stands in for
+# review-pr: its CLEAR at the head counts as review-pr's READY_FOR_HUMAN,
+# and tkt never starts review-pr. Your steps, passed on a head the bot
+# cleared, merge at once. On a head a clean sync made, the merge order waits
+# for the bot, and tkt watch runs no review.
+cp $WORK/workflow.md docs/agents/workflow.md
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1SHORT"; $H1[0:7]) | gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+
+exec tkt ls --json
+envelope '.result.rows[0] | [.ci_review, .next.reason]' '[true,"bot_clear"]'
+resetlog
+exec tkt merge ACM-12 --passed all --json
+envelope '.result.action' merging
+grep '^Use the finish-ticket skill to merge the PR. Human verification step 1 passed on head '$H1'.$' $FAKE_DIR/prompts
+! grep 'review-pr' $FAKE_DIR/prompts
+
+# The base moves after the steps passed: tkt watch syncs it with no agent,
+# and the order waits for the bot's review of the new head.
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+exec tkt merge ACM-12 --cancel
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+exec tkt merge ACM-12 --passed all --json
+envelope '.result | [.action, .waits]' '["ordered","sync"]'
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["sync","base_moved"]'
+gitvar H2 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H2'
+exec tkt ls --json
+envelope '.result.rows[0].next | [.reason, .text]' '["awaiting_bot","wait for the review bot"]'
+exec tkt merge ACM-12 --passed all --head $H1
+stdout 'ACM-12  merges #7 once the review bot cleared its head'
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets[0] | [.action, .reason]' '["","awaiting_bot"]'
+! logged herdr agent start
+
+# The bot clears the new head: the order is due.
+jqedit $WORK/prs.json '.[0].reviews += [{"author": {"login": "claude"}, "body": ("**Automated review: CLEAR** · head `" + $H2[0:7] + "`"), "submittedAt": "2026-01-05T00:00:00Z", "commit": {"oid": $H2}}]'
+exec tkt ls --json
+envelope '.result.rows[0].next.reason' merge_due
+houserules
+
+-- workflow.md --
+<!-- rogs-skills config v1: workflow -->
+# Workflow
+
+## Features
+
+| Feature | State |
+|---|---|
+| CI review | on |
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "body": "## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n",
+  "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** · head `H1SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

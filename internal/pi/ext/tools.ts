@@ -64,6 +64,8 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 					`pull request: ${r.pr ? `#${r.pr.number} ${r.pr.state}` : "none"}; checks: ${r.checks?.state ?? "-"}; review: ${r.review ? `${r.review.verdict}${r.review.at_head ? "" : " (old head)"}` : "-"}`,
 					`auto: ${auto}; rounds ${a?.rounds ?? 0}`,
 					`tkt watch: ${hub.watching === "off" ? "not running" : hub.watching === "failing" ? "running, but its passes fail" : r.watch?.paused ? `waits for the user (${r.watch.paused})` : r.hold ? "leaves it alone, on hold" : "keeps it moving"}`,
+					...(r.sync ? [`last sync failed at ${r.sync.at}: ${r.sync.reason}${r.sync.log ? `; git's whole output is in ${r.sync.log}` : ""}`] : []),
+					...(r.fix ? [`fix: a fresh session runs ${r.fix.stage} in pane ${r.fix.pane}, beside the agent: ${r.fix.status}${r.fix.last_status ? `, ended with ${r.fix.last_status}` : ""}`] : []),
 					`next: ${r.next.text} (${r.next.reason})`,
 					item ? `needs the user: ${item.text}` : "needs the user: nothing",
 				];
@@ -89,10 +91,10 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 		name: "tkt_start",
 		label: "tkt start",
 		description:
-			"Queue tickets to start in the background; it returns before they start. mode manual stops at the plan; auto_after_plan also stops at the plan, then tkt auto takes over once the user approves; auto approves the plan too and drives each ticket until it is reviewed clean; yolo also merges, with nobody watching, once verify-pr passed every step, where workflow.md turns on autonomous runs. Expand ranges such as ACM-12 to ACM-15 into every id. as picks the preset the agents run on.",
+			"Queue tickets to start in the background; it returns before they start. mode auto, the default, stops at the plan, then tkt auto takes over once the user approves it and drives the ticket to human verification; manual stops at the plan, and the user drives every step; auto-plan approves the plan too; yolo also merges, with nobody watching, once verify-pr passed every step, where workflow.md turns on autonomous runs. Expand ranges such as ACM-12 to ACM-15 into every id. as picks the preset the agents run on.",
 		parameters: Type.Object({
 			tickets: Type.Array(ticket, { minItems: 1 }),
-			mode: StringEnum(["manual", "auto", "auto_after_plan", "yolo"] as const),
+			mode: Type.Optional(StringEnum(["auto", "manual", "auto-plan", "yolo"] as const)),
 			as: preset,
 		}),
 		executionMode: "sequential",
@@ -102,17 +104,19 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 				return many.length > 0 ? many : [id(t)];
 			}))];
 			if (ids.length === 0) return text("Name the tickets to start, such as ACM-123.");
-			const how = p.mode === "auto" ? " in full auto" : p.mode === "auto_after_plan" ? " in auto after the plan" : p.mode === "yolo" ? " in yolo" : "";
+			const mode = p.mode ?? "auto";
+			const how = mode === "auto-plan" ? " in auto-plan" : mode === "manual" ? ", manual" : mode === "yolo" ? " in yolo" : " in auto";
 			const on = p.as ? ` on ${p.as}` : "";
-			const what = p.mode === "auto" ? "tkt auto starts each ticket, approves its plan, and drives it until it is reviewed clean."
-				: p.mode === "yolo" ? "No person checks anything before these merge: agents plan, build, review, verify and merge each ticket."
-				: "Each ticket starts in its own tab and stops at its plan.";
+			const what = mode === "auto-plan" ? "tkt auto starts each ticket, approves its plan, and drives it until it is reviewed clean."
+				: mode === "yolo" ? "No person checks anything before these merge: agents plan, build, review, verify and merge each ticket."
+				: mode === "manual" ? "Each ticket starts in its own tab and stops at its plan; you drive every step."
+				: "Each ticket starts in its own tab and stops at its plan; once you approve it, tkt auto drives it to human verification.";
 			if (!(await guard(hub, ctx, ids, `Start ${list(ids)}${how}${on}?`, what))) return text("The user did not confirm; nothing started.");
-			if (p.mode === "yolo") {
+			if (mode === "yolo") {
 				const refused = await act.yoloRefusal(hub, ids);
 				if (refused) return text(refused);
 			}
-			return text(act.start(hub, ids, p.mode, p.as ?? ""));
+			return text(act.start(hub, ids, mode, p.as ?? ""));
 		},
 	});
 
@@ -192,7 +196,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_stage",
 		label: "tkt run",
-		description: "Queue a stage in a fresh session: review, address (which merges the base first), resolve, ci, verify or start. Prefer tkt_continue, which picks the stage itself, and tkt_sync for a moved base. Never run review where the repository has a review bot in CI unless the user asks for it.",
+		description: "Queue a stage in a fresh session: review, address (which merges the base first), resolve, ci, verify or start. Prefer tkt_continue, which picks the stage itself, and tkt_sync for a moved base. Never run review where the repository has a review bot in CI unless the user asks for it; where workflow.md turns CI review on (the board row's ci_review), tkt itself never runs it.",
 		parameters: Type.Object({ ticket, stage: Type.String({ description: "review, address, resolve, ci, verify, start, or a stage from config.toml or the repository's .tkt files" }), as: preset }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
@@ -205,12 +209,12 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_sync",
 		label: "tkt sync",
-		description: "Queue tkt sync, which merges the base into a ticket's branch: tkt makes and pushes the merge itself when it is clean, and a fresh session resolves a conflict. Use it when the user asks to sync a ticket, or to bring it up to date with main.",
+		description: "Queue tkt sync, which merges the base into a ticket's branch: tkt makes and pushes the merge itself when it is clean, and any failure, a conflict or a push a hook refused, goes to a fresh session in a split beside the ticket's agent. Use it when the user asks to sync a ticket, or to bring it up to date with main.",
 		parameters: Type.Object({ ticket }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
-			if (!(await guard(hub, ctx, [t], `Sync ${t} with its base?`, "tkt merges and pushes a clean merge itself; a conflict goes to a fresh session."))) return text("The user did not confirm; nothing ran.");
+			if (!(await guard(hub, ctx, [t], `Sync ${t} with its base?`, "tkt merges and pushes a clean merge itself; a failure goes to a fresh session beside the agent."))) return text("The user did not confirm; nothing ran.");
 			return text(act.sync(hub, t));
 		},
 	});
@@ -218,7 +222,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_auto",
 		label: "tkt auto",
-		description: "Turn tkt auto on or off for a ticket. On, it drives the ticket until it is reviewed clean, pauses when the ticket needs the user and goes on by itself after; approve_plan lets it approve the plan too; yolo also merges it with nobody watching, once verify-pr passed every step, and only when the user asked for yolo.",
+		description: "Turn tkt auto on or off for a ticket. On, it drives the ticket until it is reviewed clean, pauses when the ticket needs the user and goes on by itself after; approve_plan, the auto-plan mode, lets it approve the plan too; yolo also merges it with nobody watching, once verify-pr passed every step, and only when the user asked for yolo.",
 		parameters: Type.Object({ ticket, on: Type.Boolean(), approve_plan: Type.Optional(Type.Boolean()), yolo: Type.Optional(Type.Boolean()), as: preset }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {

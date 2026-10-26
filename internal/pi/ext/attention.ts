@@ -26,6 +26,9 @@ export interface Attention {
 	/** chore marks an item of a chore's run, which tkt auto does not drive
 	 * and which has no plan to approve. */
 	chore?: boolean;
+	/** parked marks a blocked ticket's item: it notifies once, then waits in
+	 * the board's Blocked column, out of what needs you. */
+	parked?: boolean;
 }
 
 /** Choice is one answer /inbox offers for an item. do names the action, and
@@ -33,7 +36,7 @@ export interface Attention {
 export interface Choice {
 	label: string;
 	description?: string;
-	do: "approve" | "approve_auto" | "show" | "reply" | "peek" | "dismiss" | "check" | "next" | "done" | "auto_on" | "auto_off" | "run" | "resume" | "start" | "start_auto" | "start_after_plan";
+	do: "approve" | "approve_auto" | "show" | "reply" | "peek" | "dismiss" | "check" | "next" | "done" | "auto_on" | "auto_off" | "run" | "resume" | "start" | "start_auto_plan" | "start_manual";
 	stage?: string;
 }
 
@@ -70,9 +73,9 @@ const usual: Record<AttentionKind, Choice[]> = {
 	],
 	failed: [dismiss],
 	unblocked: [
-		{ label: "Start it", description: "tkt start opens its tab, and start-ticket plans it.", do: "start" },
-		{ label: "Start it in auto", description: "tkt auto approves the plan too, and drives it until it is reviewed clean.", do: "start_auto" },
-		{ label: "Start it in auto after the plan", description: "You approve the plan; tkt auto drives it from there.", do: "start_after_plan" },
+		{ label: "Start it", description: "start-ticket plans it; once you approve the plan, tkt auto drives it to human verification.", do: "start" },
+		{ label: "Start it in auto-plan", description: "tkt auto approves the plan too, and drives it until it is reviewed clean.", do: "start_auto_plan" },
+		{ label: "Start it manually", description: "start-ticket plans it, and you drive each step.", do: "start_manual" },
 		dismiss,
 	],
 };
@@ -101,7 +104,7 @@ function rerun(row: Row, label: (stage: string) => string, description: string):
 
 /** The next steps tkt watch takes by itself while it runs. It reviews too,
  * but only the head a sync made for a merge order. */
-const watchTakes = new Set(["base_moved", "checks_fail", "merge_due"]);
+const watchTakes = new Set(["base_moved", "checks_fail", "merge_due", "sync_failed_fix"]);
 const watchTakesFor = (row: Row, reason: string) => watchTakes.has(reason) || (reason === "needs_review" && !!row.merge);
 
 /** The next steps of a manual ticket that wait for your go. */
@@ -113,6 +116,7 @@ const nextSteps: Record<string, string> = {
 	qa_failed: "human verification failed",
 	verify_failed: "verify-pr found a step that fails",
 	merge_due: "the checks passed, and its merge order is due",
+	sync_failed_fix: "the sync failed; tkt sync hands it to a fresh session",
 };
 
 /** attentionOf says whether a ticket needs you now. It says nothing while a
@@ -133,6 +137,14 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: keyOf(kind), ticket: id, kind, title, text, byAuto, offers, chore: !!row.chore });
 	if (row.phase === "merged" && a?.stop === "post_merge_failed") return item("failed", "post-merge CI failed", `${id} merged in yolo, but the checks on the base failed after it. /show ${id} for finish-ticket's report; tkt leaves the ticket as it is.`);
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
+	// A ticket that waits on something outside it sits in the Blocked
+	// column: one you put on hold says nothing, and one whose agent stopped
+	// with Status: BLOCKED tells you once why.
+	if (row.phase === "blocked") {
+		if (row.hold) return undefined;
+		const why = row.blocked_reason ? `: ${row.blocked_reason}` : "";
+		return { ...item("blocked", "blocked", `${id} is blocked${why}. Reply to its agent once that clears.`, !!a?.running, [reply]), parked: true };
+	}
 	if (a?.running && !row.hold) {
 		// A pause stays in the loop's state until its next look. Once the
 		// agent works again, you acted, such as approving the plan.
@@ -142,7 +154,8 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 		if (row.phase === "ready_for_human" && reason !== "needs_verify") return item("ready", "ready to verify", readyText(row), true);
 		return undefined;
 	}
-	if (a?.wanted && !row.hold) return item("stalled", "auto stalled", `${id} is marked for auto, but no tkt auto loop drives it. /auto ${id} on resumes it.`);
+	// A running tkt watch starts such a loop again by itself.
+	if (a?.wanted && !row.hold && !watching) return item("stalled", "auto stalled", `${id} is marked for auto, but no tkt auto loop drives it. /auto ${id} on resumes it.`);
 	if (row.watch?.paused) return watchPaused(row, item);
 	if (row.chore) {
 		// No skill reviews, fixes or merges a pull request without a ticket,
@@ -191,7 +204,7 @@ function paused(row: Row, item: Make): Attention {
 		case "plan_awaits_approval":
 			return item("plan", "plan ready", `${planText(id)} tkt auto goes on after it.`, true);
 		case "bot_silent":
-			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI; tkt auto goes on when it posts.`, true, [review]);
+			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI; tkt auto goes on when it posts.`, true, row.ci_review ? [] : [review]);
 		case "round_limit": {
 			// tkt run leaves the loop's round count alone, so the loop takes
 			// the run's outcome and pauses here again if the ticket still
@@ -243,7 +256,11 @@ function byReason(row: Row, reason: string, item: Make, byAuto = false): Attenti
 		case "review_awaits_approval":
 			return item("check", "review draft waits", `${id}: review-pr waits for you to post or drop its draft, in its tab.${after}`, byAuto, [reply]);
 		case "bot_silent":
-			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI.`, byAuto, [review]);
+			return item("paused", "review bot silent", `${id}: the review bot has not reviewed the head. Check its job in CI.`, byAuto, row.ci_review ? [] : [review]);
+		case "fix_blocked":
+			return item("question", "the fix asks", `${id}: the session fixing it in a split asks a question. Answer it in pane ${row.fix?.pane ?? "its split"}.${after}`, byAuto);
+		case "fix_stopped":
+			return item("blocked", `fix: ${row.fix?.last_status || "stopped"}`, `${id}: the session fixing ${row.fix?.stage || "it"} in a split stopped with Status: ${row.fix?.last_status || "BLOCKED"}. Read why in pane ${row.fix?.pane ?? "its split"}.${after}`, byAuto);
 		case "verify_incomplete":
 			return item("paused", "verification incomplete", `${id}: verify-pr could not run every step, so the yolo run cannot merge it. /check ${id} shows the rest; run them, and merge it yourself.`, byAuto);
 	}

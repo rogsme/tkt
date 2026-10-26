@@ -127,6 +127,9 @@ func setupSandbox(env *testscript.Env, realGit string) error {
 		// Every command in a herdr pane would start a tkt watch that
 		// outlives its script; the watch_ scripts turn it back on.
 		"TKT_WATCH": "off",
+		// tkt start would start a tkt auto loop that outlives its script;
+		// the start_ scripts that test the modes pass a flag.
+		"TKT_AUTO": "off",
 		// Under -race every fake is a race-built copy of this test binary,
 		// which by default sleeps a second as it exits.
 		"GORACE": "atexit_sleep_ms=0",

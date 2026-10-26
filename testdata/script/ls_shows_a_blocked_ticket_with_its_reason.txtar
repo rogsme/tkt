@@ -1,0 +1,21 @@
+# A ticket whose agent stopped with Status: BLOCKED waits on something
+# outside it: tkt ls puts it in the blocked phase, apart from what needs
+# you, with the agent's Reason: line. A ticket you put on hold is blocked
+# too.
+exec tkt start ACM-12
+cp $WORK/blocked.txt $FAKE_DIR/screen
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .last_status, .blocked_reason]' '["blocked","BLOCKED","Albee adds the DNS records for mail.example.com."]'
+
+cp $WORK/done.txt $FAKE_DIR/screen
+exec tkt hold ACM-12
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .hold]' '["blocked",true]'
+
+-- blocked.txt --
+Steps 4 to 9 wait on the domain.
+
+Status: BLOCKED
+Reason: Albee adds the DNS records for mail.example.com.
+-- done.txt --
+Done for now.

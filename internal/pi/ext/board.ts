@@ -17,6 +17,7 @@ export const columns: { title: string; phases: string[] }[] = [
 	{ title: "Queued", phases: ["queued"] },
 	{ title: "Planning", phases: ["starting", "planning"] },
 	{ title: "Needs you", phases: ["awaiting_approval", "needs_you", "no_agent", "unknown"] },
+	{ title: "Blocked", phases: ["blocked"] },
 	{ title: "Building", phases: ["building", "ci", "working"] },
 	{ title: "Review", phases: ["waiting_review", "reviewing", "needs_fix", "fixing", "verifying"] },
 	{ title: "Ready", phases: ["ready_for_human", "merging"] },
@@ -164,6 +165,7 @@ function rowText(r: Row, s: BoardState, w: number[]): string {
 	const parts = cells.map((c, i) => pad(c, w[i]));
 	const flags: string[] = [];
 	if (r.chore) flags.push("chore");
+	if (r.phase === "blocked" && r.blocked_reason) flags.push(`blocked: ${r.blocked_reason}`);
 	if (r.hold) flags.push("hold");
 	else if (r.auto?.running) flags.push(r.auto.waiting === "slot" ? "queued" : r.auto.paused ? "paused" : r.auto.yolo ? "yolo" : "auto");
 	else if (r.auto?.wanted) flags.push("auto stalled");

@@ -58,6 +58,8 @@ export interface HistoryEvent {
 	pr?: number;
 	/** unblocked lists the tickets finish-ticket said a merge unblocked. */
 	unblocked?: string[];
+	/** note says why a step failed. */
+	note?: string;
 }
 
 export interface HistoryPR {
@@ -124,7 +126,7 @@ export function historyText(r: HistoryResult, bodies: boolean): string {
 export function eventText(e: HistoryEvent): string {
 	switch (e.event) {
 		case "approved":
-			return "plan approved";
+			return e.action === "session" ? "plan approved, in its session" : "plan approved";
 		case "stage":
 			return `ran ${e.stage}`;
 		case "phase":
@@ -136,11 +138,12 @@ export function eventText(e: HistoryEvent): string {
 		case "hold":
 			return e.action === "off" ? "taken off hold" : "put on hold";
 		case "sync":
-			return "merged the base, with no agent";
+			return e.action === "failed" ? `sync failed: ${e.note ?? ""}` : "merged the base, with no agent";
 		case "watch":
 			if (e.action === "pause") return `tkt watch waits for you: ${e.stop}`;
-			if (e.stop === "failed") return `tkt watch could not ${[e.action, e.stage].filter(Boolean).join(" ")}`;
+			if (e.stop === "failed") return `tkt watch could not ${[e.action, e.stage].filter(Boolean).join(" ")}${e.note ? `: ${e.note}` : ""}`;
 			if (e.action === "merge") return "tkt watch carried out the merge order";
+			if (e.action === "auto") return "tkt watch started its tkt auto loop again";
 			return `tkt watch ran ${e.stage}`;
 		case "merge":
 			if (e.action === "ordered") return "merge order left, for when finish-ticket can merge";

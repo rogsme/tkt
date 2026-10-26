@@ -246,10 +246,13 @@ export class Hub {
 			const a = unblockedOf(u);
 			if (!this.jobs.inFlight(u.ticket) && !this.dismissed.has(a.key)) items.push(a);
 		}
-		this.items = [...items, ...this.failed.map((f) => f.item)];
-		for (const a of this.items) {
+		const all = [...items, ...this.failed.map((f) => f.item)];
+		for (const a of all) {
 			if (!this.announced.has(a.key)) this.announce(a);
 		}
+		// A blocked ticket is announced once, then waits in the Blocked
+		// column.
+		this.items = all.filter((a) => !a.parked);
 		this.status();
 		this.redraw();
 	}
@@ -339,7 +342,7 @@ export class Hub {
 	startAuto(ticket: string, approvePlan: boolean, as?: string, yolo = false): void {
 		const args = ["auto", ticket, "--notify"];
 		if (yolo) args.push("--yolo");
-		else if (approvePlan) args.push("--approve-plan");
+		else if (approvePlan) args.push("--auto-plan");
 		if (as) args.push("--as", as);
 		const child = spawn(this.bin, args, { cwd: this.cwd, detached: true, stdio: "ignore" });
 		child.on("error", (err) => {

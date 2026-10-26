@@ -1,0 +1,37 @@
+# When a hook refuses tkt sync's push, tkt keeps why: in the ticket's state
+# for tkt ls, in the history, and everything git and the hook printed in a
+# log in the ticket's temporary directory. A sync that works forgets it.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'ACM-12 work'
+realgit -C $WT push -q origin ACM-12
+gitvar OLD $WT HEAD
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+
+cp $WORK/pre-push $REPO/.git/hooks/pre-push
+chmod 755 $REPO/.git/hooks/pre-push
+! exec tkt sync ACM-12 --no-agent --json
+envelope '.error.code' git_failed
+envelope '.error.message | test("^git push to origin failed: .*; tkt undid its merge$")' true
+state $WT sync_fail_head $OLD
+statevar $WT sync_fail_log LOG
+grep 'backend tests failed: 2 of 310' $LOG
+grep '"ticket":"ACM-12","event":"sync","action":"failed","note":"git push to origin failed: ' $HOME/.local/state/tkt/history.jsonl
+exec tkt history ACM-12
+stdout 'sync failed: git push to origin failed: '
+exec tkt ls --json
+envelope '.result.rows[0].sync.reason | test("^git push to origin failed: ")' true
+envelope '.result.rows[0].sync.log | test("/sync-[0-9]{8}T[0-9]{6}Z\\.log$")' true
+
+rm $REPO/.git/hooks/pre-push
+exec tkt sync ACM-12 --no-agent
+stdout 'ACM-12  merged origin/main'
+state $WT sync_fail ''
+exec tkt ls --json
+envelope '.result.rows[0].sync' null
+
+-- pre-push --
+#!/bin/sh
+echo "backend tests failed: 2 of 310" >&2
+exit 1

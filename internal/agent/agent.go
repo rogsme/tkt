@@ -4,10 +4,12 @@ package agent
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"gitlab.com/rogs/tkt/internal/config"
+	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/harness"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/output"
@@ -90,12 +92,36 @@ func (o Ops) LastTurn(ctx context.Context, h, sid, path string) (harness.Turn, b
 }
 
 // LastStatus returns the value of the last status line in text, or "".
+// PLAN_APPROVED marks a step inside a run, not its end: after it, the run
+// has said nothing final yet, whatever status came before.
 func LastStatus(text string) string {
 	m := statusRE.FindAllStringSubmatch(text, -1)
+	if len(m) == 0 || m[len(m)-1][1] == contract.StatusPlanApproved {
+		return ""
+	}
+	return m[len(m)-1][1]
+}
+
+// reasonRE finds the Reason: line a Status: BLOCKED comes with.
+var reasonRE = regexp.MustCompile(`(?m)^\s*Reason:\s*(.+?)\s*$`)
+
+// Reason returns the last Reason: line in text, or "".
+func Reason(text string) string {
+	m := reasonRE.FindAllStringSubmatch(text, -1)
 	if len(m) == 0 {
 		return ""
 	}
 	return m[len(m)-1][1]
+}
+
+// HasStatus says text holds the status line Status: s.
+func HasStatus(text, s string) bool {
+	for _, m := range statusRE.FindAllStringSubmatch(text, -1) {
+		if m[1] == s {
+			return true
+		}
+	}
+	return false
 }
 
 // ShellWords quotes words for the user's interactive shell. Single quotes

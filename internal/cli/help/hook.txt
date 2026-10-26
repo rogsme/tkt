@@ -33,6 +33,13 @@ its path on another machine. Outside a ticket's worktree the plugin changes
 nothing, except a TMPDIR that names a ticket's directory: a service started
 in a ticket's tab passes that one to its shells, and tkt done removes it.
 
+The plugin also tells tkt hook event what it sees in a ticket's session:
+each new prompt, which starts a turn, and the status lines of each text the
+agent finishes. tkt keeps them in the ticket's state and reads them in place
+of the session's last 50 messages, which a long turn outgrows, so a
+Status: PLAN_APPROVED early in a long work phase still counts. Without the
+plugin, or with one from an older tkt, tkt reads the messages as before.
+
 Without --install, tkt hook tmp answers one request from the plugin: JSON
 on stdin with the call's directories, its shell's TMPDIR, and its tool
 input or shell command; --json prints the answer. tkt doctor warns when a

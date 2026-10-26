@@ -12,4 +12,5 @@
 | Changelog | {{FILL: on or off; missing in older configurations means off}} |
 | Agent verification | {{FILL: on or off; missing in older configurations means off}} |
 | Autonomous runs | {{FILL: on or off; missing in older configurations means off}} |
+| CI review | {{FILL: on or off; missing in older configurations means off}} |
 

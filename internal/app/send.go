@@ -188,6 +188,19 @@ func (c *Ctx) approve(id, path string, ts *ticketState, pane string) (*SendResul
 	return res, nil
 }
 
+// planApproved moves a ticket to the work stage when its session says the
+// plan was approved there, as start-ticket does with Status: PLAN_APPROVED
+// once you approve in the plan viewer, so no tkt approve runs. The stage
+// change itself keeps it from happening twice.
+func (c *Ctx) planApproved(id string, ts *ticketState) {
+	if ts.st["stage"] != "start" {
+		return
+	}
+	c.save(ts, "stage", "work", "rounds", "0")
+	c.record(history.Event{Ticket: id, Event: history.Approved, Action: "session"})
+	c.UI.Info("%s: the plan was approved in its session, so it is building now", id)
+}
+
 // beginTicket starts a command on one ticket that has a worktree and runs in
 // herdr.
 func (a *App) beginTicket(ctx context.Context, raw string, dry, force bool) (*Ctx, string, string, *ticketState, error) {

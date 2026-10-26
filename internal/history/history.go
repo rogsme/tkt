@@ -25,7 +25,8 @@ const (
 	Done     = "done"
 	// Hold is a ticket put on hold (Action on) or taken off it (off).
 	Hold = "hold"
-	// Sync is a base merge tkt made and pushed itself (Action merged).
+	// Sync is a base merge tkt made and pushed itself (Action merged), or
+	// one that failed (Action failed, with Note saying why).
 	Sync = "sync"
 	// Watch is a step tkt watch took (Action run, with Stage, or merge), a
 	// pause for a person (Action pause, with Stop), or a step that failed
@@ -61,6 +62,8 @@ type Event struct {
 	// Chore names the chore on a chore run's start, whose Ticket is the
 	// run's branch. tkt stats leaves such runs out.
 	Chore string `json:"chore,omitempty"`
+	// Note says why a step failed, in a line.
+	Note string `json:"note,omitempty"`
 }
 
 // Path returns the history file: next to tkt's command log.

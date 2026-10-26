@@ -15,7 +15,7 @@ This page follows one ticket, `ACM-123`, from the tracker to a merged pull reque
 | herdr | The terminal multiplexer. It holds one tab per ticket and knows whether each agent is working, blocked, idle or done. |
 | worktrunk (`wt`) | Creates and removes worktrees, and runs their hooks. |
 | tkt | Runs the mechanical steps between stages: worktrees, tabs, agent sessions, prompts, clean base merges and cleanup. `tkt watch` takes the upkeep steps for every ticket and starts the chores you schedule, and `tkt auto` chains all of them for a ticket you hand over. |
-| You | Approve the plan (or let `tkt auto --approve-plan` approve it), confirm the human verification steps, by running them or from verify-pr's evidence, and merge. Or hand a ticket to `tkt auto --yolo`, which does all of it with nobody watching. |
+| You | Approve the plan (or let `tkt auto --auto-plan` approve it), confirm the human verification steps, by running them or from verify-pr's evidence, and merge. Or hand a ticket to `tkt auto --yolo`, which does all of it with nobody watching. |
 
 ```mermaid
 flowchart LR
@@ -137,8 +137,11 @@ sequenceDiagram
   tkt->>herdr: herdr agent prompt with the start line
   herdr->>agent: "Use the start-ticket skill to start ticket ACM-123."
   tkt->>tkt: record preset, session, tab and pane
+  tkt->>tkt: start tkt auto ACM-123 in its own session
   tkt-->>you: worktree, tab, agent
 ```
+
+Then tkt start starts a `tkt auto` loop for the ticket, which outlives it, and `tkt watch` starts the loop again when it is gone, as after a reboot. In auto, the default, the loop waits at the plan for you: it never approves a plan itself. Once you approve it, in the plan viewer or with `tkt approve`, the loop drives the ticket until it is ready for human verification. `--manual` starts no loop, `--auto-plan` starts one that approves the plan too, and `--yolo` one that carries the ticket to the merge. `[start] mode = "manual"` in `config.toml` makes manual the default.
 
 The new branch starts from the base on the remote: tkt fetches it first, so the plan starts from the code the base holds now, not from a local `main` that nobody pulled. When the fetch fails, it warns and starts from the local base.
 
@@ -154,7 +157,7 @@ The agent ends with `Status: AWAITING_APPROVAL`. When you drop the ticket instea
 
 ### 4. You approve, and work-ticket builds
 
-Read the plan with `tkt show ACM-123`, which prints the agent's last message from its session's record. Ask for changes with `tkt send ACM-123 "what to change"` until the plan is right, then approve it with `tkt approve ACM-123`. Both type into the planning session, as an answer in the tab would. Do not use `tkt run` here: it starts a fresh session, and the plan lives in this one. The same session goes on with `work-ticket`:
+Read the plan with `tkt show ACM-123`, which prints the agent's last message from its session's record. Ask for changes with `tkt send ACM-123 "what to change"` until the plan is right, then approve it with `tkt approve ACM-123`. Both type into the planning session, as an answer in the tab would. Do not use `tkt run` here: it starts a fresh session, and the plan lives in this one. With plan presentation on, you can approve in the browser instead: the agent goes on by itself and prints `Status: PLAN_APPROVED`, and `tkt ls` reads that line, moves the ticket to the work stage, and shows it building. The same session goes on with `work-ticket`:
 
 1. It posts the plan as an `## Approved implementation plan` comment, after moving the ticket to `in-progress` if it is not there yet.
 2. It implements the plan, test-first where the configuration says so, and commits each unit through `commit`.
@@ -180,6 +183,8 @@ tkt run ACM-123 review
 - `Verdict: READY_FOR_HUMAN`, ending with `Status: READY_FOR_HUMAN`, with the final human verification procedure in the summary.
 
 When the forge runs an automated reviewer in CI instead, it posts an `Automated review: CLEAR`, `FINDINGS` or `STALE_BASE` line, and tkt reads that the same way: the bot's `CLEAR` counts like `READY_FOR_HUMAN`, and the steps to verify are then the pull request's own Human verification section. A verdict counts only for the head it names, so after every push the ticket waits for a new review.
+
+Where `docs/agents/workflow.md` turns `CI review` on, which `/setup-rogs` does when it finds such a reviewer, the bot stands in for review-pr all the way to the merge: finish-ticket merges on its `CLEAR` for the exact head, and tkt never starts review-pr, not for a merge order on a head a sync made, and not when the bot goes silent. Without the row, finish-ticket merges only on review-pr's verdict, so tkt watch has review-pr review a head only the bot cleared before it carries out a merge order.
 
 ### 6. The review loop
 
@@ -270,9 +275,9 @@ Status: DONE
 
 | The ticket | tkt auto |
 |---|---|
-| Has no worktree yet | Runs `tkt start`. With `--approve-plan`, the start line says the run is unattended: start-ticket skips the browser plan presentation and asks every open question with the harness's question tool, so no decision hides in a plan nobody reads. |
+| Has no worktree yet | Runs `tkt start`. With `--auto-plan`, the start line says the run is unattended: start-ticket skips the browser plan presentation and asks every open question with the harness's question tool, so no decision hides in a plan nobody reads. |
 | The agent works, or waits on its own background task such as a CI watcher | Waits for it. |
-| `Status: AWAITING_APPROVAL` | Runs `tkt approve` with `--approve-plan`; without it, pauses for you. |
+| `Status: AWAITING_APPROVAL` | Runs `tkt approve` with `--auto-plan`; without it, pauses for you. |
 | Checks pending | Waits for CI. |
 | A new head with green CI and no review | Waits for the review bot in CI. |
 | Bot `STALE_BASE`, a conflict, or `BLOCKED_FOR_SYNC` behind the base | Syncs: when `git merge-tree` finds the merge clean, it merges and pushes it as `tkt sync` does, with no agent and no fix round; on a conflict it runs `tkt run ACM-123 resolve`. |
@@ -281,7 +286,7 @@ Status: DONE
 | Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head, with agent verification on | Runs `tkt run ACM-123 verify`, which spends no fix round. |
 | verify-pr's `Verification: FAILED` | Runs `tkt run ACM-123 address`, a fix round. |
 | Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head, and verify-pr passed every step or could not run some, or agent verification is off | Stops: the ticket is yours to confirm and merge. |
-| No bot review after `[review] bot_wait` (15 minutes) | Pauses for you. With no bot (`bot_wait = "0s"`) it runs `tkt run ACM-123 review` instead. |
+| No bot review after `[review] bot_wait` (15 minutes) | Pauses for you, and with `CI review` on it never offers review-pr instead. With no bot (`bot_wait = "0s"`) it runs `tkt run ACM-123 review` instead. |
 | A status page reports an incident (see [tkt watch keeps the tickets moving](#tkt-watch-keeps-the-tickets-moving)) | Waits: it starts, approves and runs nothing, and spends no round, until the incident ends. A sync goes on. |
 
 Where a person decides, it pauses rather than ends: when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. It notifies once, shows the ticket as paused, and goes on by itself when the ticket moves, such as after you answer the agent in its tab. While it drives a ticket, the tab reads `ACM-123 (claude, auto)`. After `tkt update`, a loop restarts on the new tkt at its next look, once its agent stops working, and keeps the pause it notified about. `tkt hold ACM-123` pauses the loop until `tkt hold ACM-123 --off`, without a notification, for a ticket you want to park or drive by hand. At most `[auto] max_parallel` tkt auto agents (3) work at once in a repository; a loop gives up its slot while it waits for CI, the bot or you, and the others wait, queued.
@@ -384,12 +389,16 @@ When another ticket merges, the base moves, and the branches still open fall beh
 flowchart LR
   moved["the base moved"] --> probe{"git merge-tree<br/>HEAD origin/main"}
   probe -->|clean| merge["tkt merges and pushes<br/>in seconds, no agent"]
-  probe -->|conflict| agent["fresh session merges<br/>and resolves, pushes once"]
+  probe -->|conflict| agent["fresh session in a split<br/>merges and resolves, pushes once"]
   merge --> next["CI and the review bot<br/>run on the new head"]
   agent --> next
 ```
 
-`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge. A conflict goes to the `resolve` stage, which merges the base, resolves each conflict from what both sides meant, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
+`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge and hands the failure to the `sync-fix` stage, whose line says why and names the log of git's output. A conflict goes to the `resolve` stage, which merges the base, resolves each conflict from what both sides meant, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
+
+Both fixes run in a split beside the ticket's agent, which keeps its pane and its conversation, and so does a `ci` run for failing checks. `[fixes] as` runs them on a cheaper preset. The split closes once the fix ends with `Status: READY_FOR_REVIEW` and `tkt watch` or `tkt auto` looks again; a fix that stops otherwise keeps its split, and the board says so.
+
+When a sync fails after its fetch, as when a pre-push hook refuses the push, tkt keeps why: `tkt ls --json` shows the reason under the row's `sync` while the head is the one it failed on, `tkt history` lists it, and a log in the ticket's temporary directory holds everything git and its hooks printed. The tkt agent's chat reads it from there when you ask why a sync failed.
 
 A clean merge does not make the pull request's review brief stale: the merge commit's tree equals what `git merge-tree` gives for its two parents, and review-pr checks that for itself instead of trusting tkt.
 

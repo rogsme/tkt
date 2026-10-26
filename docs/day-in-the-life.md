@@ -129,10 +129,10 @@ The chat lists the chores with their schedules and next runs: `deps` on Monday a
 Last comes ACM-124. It lets an admin unlock an account that ACM-118's lockout locked, and that merge freed it. You want to read its plan, and nothing after that:
 
 ```
-/start ACM-124 after-plan
+/start ACM-124
 ```
 
-The chat answers at once, `Queued: ACM-124 starting in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket.`, and the prompt is yours again while worktrunk makes the worktree and start-ticket reads the code. `/start ACM-124` alone stops at the plan and leaves the rest to you, and `/start ACM-124 auto` approves the plan too.
+The chat answers at once, `Queued: ACM-124 starting in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket until it is ready for human verification.`, and the prompt is yours again while worktrunk makes the worktree and start-ticket reads the code. Auto is the default; `/start ACM-124 manual` stops at the plan and leaves every step to you, and `/start ACM-124 auto-plan` approves the plan too.
 
 ## 09:15 Pick the next tickets
 
@@ -151,7 +151,7 @@ Suggested: ACM-131 (frontier), ACM-130 (small), ACM-133 (small)
 The report also says what it left out and why: ACM-129 changes the same export code as ACM-121, so the two would collide. You ask the agent there why ACM-133 beats ACM-128, agree with it, and go back to the chat:
 
 ```
-start ACM-131 in auto after the plan, and ACM-130 and ACM-133 the same on fast
+start ACM-131, and ACM-130 and ACM-133 on fast
 ```
 
 ACM-131 starts on `claude` and the other two on `fast`, each in its own tab, named after the ticket and its preset: `ACM-131 (claude, auto)`, `ACM-130 (fast, auto)`.
@@ -192,7 +192,7 @@ ACM-130 fixes the time zone in the weekly report email. Its plan is short and ri
 
 Most of the next hours happen without you. Each ticket in auto runs the same loop. work-ticket opens the pull request and waits for green CI at its head. The review bot reviews the head; on findings, address-pr-review fixes them in a fresh session, and the bot reviews again. Failing checks get a `ci` session. When the base moved at a moment a sync is due, such as when the bot reports a stale base, tkt merges a clean base itself, with no agent, and hands a conflict to a fresh session. When the bot clears the head, the loop runs verify-pr in a fresh session: it runs the human verification steps the way you would and posts what it saw on each one. A step it reports failed goes back to address-pr-review, and the loop runs again. The loop ends once verify-pr passed every step, or could not run some, and the ticket is yours to confirm.
 
-`/board` shows every ticket in columns, from Queued through Planning, Needs you, Building, Review and Ready to Merged. Arrows move between tickets and Enter shows a ticket's last message; `p` peeks, `c` checks, `a` approves, `n` takes the next step, `o` turns auto on or off, `d` removes a merged ticket and `i` opens the inbox. On the pinned board, a row turns red as stale when its agent has sat idle for two hours with no status line. A step the chat queued that failed stays on the board for fifteen minutes, and `/inbox` says why.
+`/board` shows every ticket in columns, from Queued through Planning, Needs you, Blocked, Building, Review and Ready to Merged. Blocked holds the tickets that wait on something outside them: an agent that stopped with `Status: BLOCKED`, whose reason the card shows, and the tickets you put on hold. herdr tells you once when a ticket becomes blocked, and it stays out of what needs you. Arrows move between tickets and Enter shows a ticket's last message; `p` peeks, `c` checks, `a` approves, `n` takes the next step, `o` turns auto on or off, `d` removes a merged ticket and `i` opens the inbox. On the pinned board, a row turns red as stale when its agent has sat idle for two hours with no status line. A step the chat queued that failed stays on the board for fifteen minutes, and `/inbox` says why.
 
 You remember that the app already has an audit log helper, and ACM-124 is building. Text you send a working agent goes in at once, and the agent reads it at its next step:
 
@@ -344,7 +344,7 @@ start ACM-125 in yolo with fast
 
 The chat asks once, `Start ACM-125 in yolo on fast?`, with `No person checks anything before these merge` under it, and you confirm. `/auto ACM-125 yolo as fast` asks the same without the model. `tkt auto ACM-125 --yolo` starts it on `fast`, and every line its agents get says the run is autonomous. start-ticket posts an `## Autonomous run` comment on the ticket, and a model from another vendor reviews the plan in place of you; tkt approves it. Where an agent would ask you, it takes the most conservative reading and writes it under `## Assumptions` in the plan and the pull request. review-pr reviews the head the bot cleared, verify-pr runs the steps, and once it passed every step, finish-ticket merges with every other gate in place. Had the plan touched a hard stop, the ticket would have gone to blocked, and the loop would have paused for you.
 
-For a ticket you want to watch more closely, `start ACM-125 in full auto` approves the plan and stops once the head is verified, and its agents ask any open question in a dialog, where the board shows it.
+For a ticket you want to watch more closely, `start ACM-125 in auto-plan` approves the plan and stops once the head is verified, and its agents ask any open question in a dialog, where the board shows it.
 
 ## 16:45 Verify the rest, and leave the merges to tkt watch
 
@@ -401,11 +401,12 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `verification incomplete` | A yolo loop paused: verify-pr could not run every step, and a yolo ticket merges only when it passed them all. | `/check ID`, run the rest, and merge it yourself. |
 | `post-merge CI failed` | A yolo ticket merged, and the checks on the base failed after it. | `/show ID` for finish-ticket's report, then fix the base. |
 | `merged` | The pull request merged. tkt watch removes the ticket once finish-ticket ends with `Status: DONE`. | Nothing while tkt watch runs; otherwise `/done ID`. |
-| `auto stalled` | The ticket is marked for auto, but no tkt auto loop runs, as after a reboot. | `/auto ID on`. |
+| `auto stalled` | The ticket is marked for auto, but no tkt auto loop runs, as after a reboot, and no tkt watch runs to start it again. | `/auto ID on`. |
 | `max rounds reached` | tkt auto or tkt watch made `[auto] max_rounds` fix runs since the plan's approval. | Read the review, then `Run STAGE once more` in `/inbox`, or take over. |
 | `no progress` | The last step changed nothing on the same head. | `/show ID`, then `Run STAGE again` in `/inbox`. |
-| `review bot silent` | The bot has not reviewed the head within `[review] bot_wait`. | Check its CI job, or `Run review-pr instead` in `/inbox`. |
-| `sync failed` | tkt sync cannot merge the base for now, such as with uncommitted changes in the worktree. | Fix what it names; tkt auto tries again at each look. |
+| `review bot silent` | The bot has not reviewed the head within `[review] bot_wait`. | Check its CI job, or `Run review-pr instead`, which the board leaves out where workflow.md turns `CI review` on in `/inbox`. |
+| `sync failed` | tkt sync cannot merge the base for now, such as with uncommitted changes in the worktree. A failure after the fetch, such as a push a pre-push hook refused, never shows here: a fresh session in a split beside the agent fixes it. | Fix what it names; tkt auto tries again at each look. |
+| `the fix asks`, `fix: BLOCKED` | The session fixing a failed sync or failing checks in a split asks a question, or stopped without fixing it. | Answer it, or read why, in its split. |
 | `auto paused` | tkt auto paused for another reason, such as an agent in a state tkt does not know. | `/peek ID` shows its screen. |
 | `unblocked` | A merge freed a ticket that has no worktree yet. | `/start ID`, or a start in auto from `/inbox`. |
 | `ready to merge`, `review found something` | A chore's pull request is ready, or its review found something. | Merge it on the forge, or tell its agent what to fix. |

@@ -8,3 +8,7 @@ Status: AWAITING_APPROVAL; --force sends the approval anyway. To ask for
 changes instead, use tkt send ID "what to change".
 
 tkt approve resets the round count that tkt auto caps.
+
+An approval in the plan viewer needs no tkt approve: the session goes on by
+itself and prints Status: PLAN_APPROVED, and tkt ls then moves the ticket to
+the work stage and resets the round count the same way.

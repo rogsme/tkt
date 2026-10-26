@@ -21,6 +21,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/forge"
+	"gitlab.com/rogs/tkt/internal/harness"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/output"
@@ -91,6 +92,27 @@ type RowWatch struct {
 	Paused string `json:"paused"`
 }
 
+// RowFix is the session that makes a small fix in a split beside the
+// ticket's agent: its pane, its agent's status, the stage it runs, and the
+// status line it ended with, once idle.
+type RowFix struct {
+	Pane       string `json:"pane"`
+	Status     string `json:"status"`
+	Stage      string `json:"stage"`
+	LastStatus string `json:"last_status"`
+}
+
+// RowSync is the last tkt sync that failed on the pull request's head: why,
+// when, and the log that holds everything git and its hooks printed.
+type RowSync struct {
+	Reason string `json:"reason"`
+	// Kind is conflict, which the resolve stage takes, or failed, which
+	// sync-fix takes.
+	Kind string `json:"kind"`
+	At   string `json:"at"`
+	Log  string `json:"log"`
+}
+
 // RowMerge is a merge order: the human verification steps passed on Head,
 // and tkt watch sends finish-ticket the merge line, naming Steps as passed,
 // once the checks pass and a review clears the pull request's head. The
@@ -136,15 +158,17 @@ type Row struct {
 	Chore  string `json:"chore"`
 	// Title is the open pull request's, without the ticket id it starts
 	// with, or "" before there is one.
-	Title      string         `json:"title"`
-	Path       string         `json:"path"`
-	Diff       *RowDiff       `json:"diff"`
-	Tabs       []herdr.Tab    `json:"tabs"`
-	Agent      *RowAgent      `json:"agent"`
-	LastStatus string         `json:"last_status"`
-	PR         *RowPR         `json:"pr"`
-	Checks     *forge.Checks  `json:"checks"`
-	Review     *forge.Verdict `json:"review"`
+	Title      string      `json:"title"`
+	Path       string      `json:"path"`
+	Diff       *RowDiff    `json:"diff"`
+	Tabs       []herdr.Tab `json:"tabs"`
+	Agent      *RowAgent   `json:"agent"`
+	LastStatus string      `json:"last_status"`
+	// BlockedReason is the Reason: line of the agent's Status: BLOCKED.
+	BlockedReason string         `json:"blocked_reason"`
+	PR            *RowPR         `json:"pr"`
+	Checks        *forge.Checks  `json:"checks"`
+	Review        *forge.Verdict `json:"review"`
 	// Verification is verify-pr's newest report, and whether it holds for
 	// the head.
 	Verification *forge.Verification `json:"verification"`
@@ -163,6 +187,14 @@ type Row struct {
 	// alone (tkt hold).
 	Hold  bool      `json:"hold"`
 	Watch *RowWatch `json:"watch"`
+	// CIReview says workflow.md turns CI review on: the review bot's CLEAR
+	// at the head counts as review-pr's, and tkt never starts review-pr.
+	CIReview bool `json:"ci_review"`
+	// Sync is the last failed tkt sync, while the head is the one it failed
+	// on, or null.
+	Sync *RowSync `json:"sync"`
+	// Fix is the session fixing the ticket in a split, or null.
+	Fix *RowFix `json:"fix"`
 	// Merge is the ticket's merge order when it holds at the pull request's
 	// head, or null.
 	Merge *RowMerge `json:"merge"`
@@ -172,6 +204,7 @@ type Row struct {
 	orderVoid   string
 	orderHead   string
 	reviewReady bool
+
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
 	PhaseSince string `json:"phase_since"`
@@ -321,7 +354,7 @@ func phaseStyle(phase string, you, ready, busy, faint lipgloss.Style) lipgloss.S
 		return you
 	case PhaseReadyForHuman:
 		return ready
-	case PhaseMerged, PhaseClosed, PhaseQueued:
+	case PhaseMerged, PhaseClosed, PhaseQueued, PhaseBlocked:
 		return faint
 	}
 	return busy
@@ -641,6 +674,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
 	row.Hold, row.Chore = st["hold"] != "", or(t.Chore, st["chore"])
+	row.CIReview = c.LC.On(contract.FeatureCIReview)
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan || st["auto"] == autoYolo, Yolo: st["yolo"] != "", Rounds: atoi(st["rounds"]),
 		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"], Note: st["auto_note"]}
 	if !row.Auto.Running {
@@ -651,15 +685,38 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		if row.Tabs == nil {
 			row.Tabs = []herdr.Tab{}
 		}
-		if in := herdr.AgentsInPath(l.agents, t.Path); len(in) > 0 {
+		if ag, ok := fixAgent(l.agents, st); ok {
+			row.Fix = &RowFix{Pane: ag.PaneID, Status: ag.Status, Stage: st[keyFixStage]}
+			if ag.Status == herdr.Idle || ag.Status == herdr.Done {
+				turn, _ := c.lastTurn(rctx, &ag, fixState(st), t.Path)
+				row.Fix.LastStatus = agent.LastStatus(turn.All)
+			}
+		}
+		if in := withoutFix(herdr.AgentsInPath(l.agents, t.Path), st); len(in) > 0 {
 			ag := in[0]
 			if i := slices.IndexFunc(in, func(a herdr.Agent) bool { return a.PaneID == st["pane"] }); i >= 0 {
 				ag = in[i]
 			}
 			row.Agent = &RowAgent{PaneID: ag.PaneID, Name: ag.NameOr(""), Harness: ag.Kind, Status: ag.Status}
-			if ag.Status == herdr.Idle || ag.Status == herdr.Done {
-				turn, _ := c.lastTurn(rctx, &ag, st, t.Path)
+			idle := ag.Status == herdr.Idle || ag.Status == herdr.Done
+			var turn harness.Turn
+			// A planning agent's turn is read while it works too: an
+			// approval in the plan viewer starts the work phase in the same
+			// session, with no tkt approve, and start-ticket marks it with
+			// Status: PLAN_APPROVED. That is one transcript read, or one
+			// OpenCode API call, per planning ticket and look.
+			if idle || st["stage"] == "start" {
+				turn, _ = c.lastTurn(rctx, &ag, st, t.Path)
+			}
+			if st["stage"] == "start" && agent.HasStatus(turn.All, contract.StatusPlanApproved) {
+				c.planApproved(t.ID, ts)
+				row.Stage = st["stage"]
+			}
+			if idle {
 				row.LastStatus = agent.LastStatus(turn.All)
+				if row.LastStatus == contract.StatusBlocked {
+					row.BlockedReason = agent.Reason(turn.All)
+				}
 				if !turn.At.IsZero() {
 					row.IdleSince = turn.At.UTC().Format(history.TimeFormat)
 				}
@@ -676,6 +733,11 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			row.PR = &RowPR{Number: p.Number, State: "OPEN", Mergeable: p.Mergeable, Head: p.HeadRefOid, URL: p.URL}
 			row.Checks, row.Review = &checks, verdict
 			row.reviewReady = forge.HumanVerification(p) != nil
+			if row.CIReview && verdict != nil && verdict.AtHead && verdict.Value == contract.VerdictClear {
+				// The reviewer in CI stands in for review-pr: its CLEAR at
+				// the head is what finish-ticket merges on.
+				row.reviewReady = true
+			}
 			row.Verification = forge.LatestVerification(p)
 			row.Title = prTitle(p.Title, t.ID)
 		} else if p, ok := closedPR(l.gh.Mine(l.all, t.ID)); ok {
@@ -694,6 +756,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		row.BaseMerge = c.probeBaseMerge(rctx, t.Path, row.PR.Head, l.baseRef)
 	}
 	row.Watch = &RowWatch{Last: st["watch_last"]}
+	if why := st[keySyncFail]; why != "" && (row.PR == nil || st[keySyncFailHead] == row.PR.Head) {
+		row.Sync = &RowSync{Reason: why, Kind: or(st[keySyncFailKind], syncFailure), At: st[keySyncFailAt], Log: st[keySyncFailLog]}
+	}
 	base := ""
 	if l.hasBase {
 		base = l.baseRef

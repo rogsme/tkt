@@ -15,6 +15,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/prompt"
+	"gitlab.com/rogs/tkt/internal/state"
 )
 
 // RunOpts are tkt run's arguments.
@@ -102,6 +103,11 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		return nil, err
 	}
 	st := ts.st
+	if o.Stage == "sync-fix" && o.line == "" {
+		if text, err = c.stageLineWith(o.Stage, id, st); err != nil {
+			return nil, err
+		}
+	}
 	if st["yolo"] != "" && o.line == "" && !o.Prompt.Set {
 		// Nobody answers a yolo ticket's stages, whoever starts them. A
 		// line of its own, such as yours to merge, says what it means.
@@ -125,11 +131,11 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		preset, _ = c.Cfg.Preset(st["preset"])
 	}
 	// [verify] as runs verify-pr on a preset of its own, such as another
-	// vendor's, for that run only: the ticket keeps its preset for the
-	// stages after it.
+	// vendor's, and [fixes] as the small fixes on a cheap one, for that run
+	// only: the ticket keeps its preset for the stages after it.
 	own := preset.Name
-	if o.Stage == "verify" && o.As == "" && o.line == "" && c.Cfg.Verify.As != "" {
-		preset, _ = c.Cfg.Preset(c.Cfg.Verify.As)
+	if as := c.stageAs(o.Stage); as != "" && o.As == "" && o.line == "" {
+		preset, _ = c.Cfg.Preset(as)
 		if c.Cfg.Has(st["preset"]) {
 			own = st["preset"]
 		} else {
@@ -151,6 +157,9 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 	}
 	if err := c.lockTicket(id); err != nil {
 		return nil, err
+	}
+	if isFixStage(stage) && o.Pane == "" {
+		return c.fixIn(id, path, stage, text, ts, preset, own)
 	}
 	tab, pane, err := c.pickPane(id, path, o.Pane, ts, preset)
 	if err != nil {
@@ -217,7 +226,20 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 // stageLine fills a stage's line for a ticket, with the forge's remote and
 // base branch.
 func (c *Ctx) stageLine(stage, id string) (string, error) {
-	return c.Cfg.StageLine(stage, id, "remote", c.LC.Forge.Remote, "base", c.LC.Forge.Base)
+	return c.stageLineWith(stage, id, nil)
+}
+
+// stageLineWith fills a stage's line, and {reason} from the ticket's state:
+// why its last sync failed, and the log that holds git's whole output.
+func (c *Ctx) stageLineWith(stage, id string, st state.State) (string, error) {
+	why := strings.TrimSuffix(st[keySyncFail], ".") + "."
+	if why == "." {
+		why = "it failed, and tkt kept no reason."
+	}
+	if log := st[keySyncFailLog]; log != "" {
+		why += " Everything git and its hooks printed is in " + log + "."
+	}
+	return c.Cfg.StageLine(stage, id, "remote", c.LC.Forge.Remote, "base", c.LC.Forge.Base, "reason", why)
 }
 
 // pickPane finds the pane for a ticket's agent: --pane, the recorded pane,
@@ -229,7 +251,7 @@ func (c *Ctx) pickPane(id, path, want string, ts *ticketState, preset config.Pre
 	if err != nil {
 		return "", "", herdrErr(err)
 	}
-	inPath := herdr.AgentsInPath(agents, path)
+	inPath := withoutFix(herdr.AgentsInPath(agents, path), st)
 	switch {
 	case want != "":
 		pane = want
@@ -286,4 +308,16 @@ func (c *Ctx) pickPane(id, path, want string, ts *ticketState, preset config.Pre
 	}
 	c.Agent.WaitPaneFree(c.Ctx, pane, 40)
 	return tab, pane, nil
+}
+
+// stageAs is the preset a stage runs on by the settings, whatever the
+// ticket's: [verify] as for verify, [fixes] as for the small fixes, or "".
+func (c *Ctx) stageAs(stage string) string {
+	switch {
+	case stage == "verify":
+		return c.Cfg.Verify.As
+	case slices.Contains(config.FixStages, stage):
+		return c.Cfg.Fixes.As
+	}
+	return ""
 }

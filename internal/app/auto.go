@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
@@ -293,8 +294,13 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 		return stop(StopClosed)
 	case ReasonAgentWorking:
 		return autoAct{Kind: actWait}
-	case ReasonAgentWaiting, ReasonCIPending, ReasonAwaitingBot:
+	case ReasonAgentWaiting, ReasonCIPending, ReasonAwaitingBot, ReasonFixing:
+		// A fix runs in a split, beside the pane the loop waits on.
 		return autoAct{Kind: actPoll}
+	case ReasonFixBlocked, ReasonFixStopped:
+		return pause(StopNeedsYou)
+	case ReasonSyncFailed:
+		return fix(syncFixStage(f.SyncFail))
 	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval:
 		return pause(StopNeedsYou)
 	case ReasonNoAgent:
@@ -320,6 +326,10 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 	case ReasonChecksFail:
 		return fix("ci")
 	case ReasonNeedsReview:
+		if f.CIReview {
+			// The reviewer in CI reviews every head; nothing else does.
+			return autoAct{Kind: actPoll}
+		}
 		return act(actRun, "review")
 	case ReasonVerifyIncomplete:
 		if p.Yolo {
@@ -812,6 +822,9 @@ func (w *ctxWorld) look(ctx context.Context, fetch bool) (autoView, error) {
 		}
 		w.path = e.Path
 	}
+	if ts, err := c.readState(w.path); err == nil && !c.Dry {
+		c.reapFix(w.id, w.path, ts)
+	}
 	l, err := c.look(lookOpts{ids: []string{w.id}, fetch: fetch, probe: true})
 	if err != nil {
 		return autoView{}, err
@@ -862,7 +875,8 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 	var actions []Action
 	switch a.Kind {
 	case actStart:
-		res, err := c.App.Start(ctx, StartOpts{ID: w.id, As: w.as, Dry: c.Dry, Unattended: w.mode == autoPlan, Autonomous: w.mode == autoYolo})
+		// The loop drives the ticket itself, so the start starts no other.
+		res, err := c.App.Start(ctx, StartOpts{ID: w.id, As: w.as, Dry: c.Dry, Mode: config.ModeManual, Unattended: w.mode == autoPlan, Autonomous: w.mode == autoYolo})
 		if err != nil {
 			return err
 		}
@@ -893,9 +907,10 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 		actions = res.Actions
 	case actRun:
 		as := w.as
-		if a.Stage == "verify" && c.Cfg.Verify.As != "" {
-			// [verify] as wins over --as: the verifier should not be the
-			// model that built the change.
+		if c.stageAs(a.Stage) != "" {
+			// [verify] as wins over --as, since the verifier should not be
+			// the model that built the change, and [fixes] as does too,
+			// since a small fix needs no model as strong.
 			as = ""
 		}
 		res, err := c.App.Run(ctx, RunOpts{ID: w.id, Stage: a.Stage, As: as, Dry: c.Dry})
@@ -935,10 +950,17 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 				// Another tkt command, or an agent, works on it right now.
 				return errStep{error: err}
 			default:
+				if fixable(err) {
+					// tkt sync kept why, and the next look hands it to
+					// a fresh session.
+					return errStep{error: err}
+				}
 				return errStep{error: err, stop: StopSyncFailed}
 			}
 		}
-		actions = res.Actions
+		if res != nil {
+			actions = res.Actions
+		}
 	}
 	w.actions = append(w.actions, actions...)
 	c.record(history.Event{Ticket: w.id, Event: history.Auto, Action: a.Kind, Stage: a.Stage})

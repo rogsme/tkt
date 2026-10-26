@@ -10,10 +10,15 @@ stdout '^ACM-12 +awaiting_approval +[0-9]+[smh] +idle .*read the plan'
 exec tkt ls --no-fetch
 grep -count=1 '"event":"phase","phase":"awaiting_approval"' $HOME/.local/state/tkt/history.jsonl
 
-env 'FAKE_HERDR_SCREEN=Status: BLOCKED'
+env 'FAKE_HERDR_SCREEN=Status: SETUP_REQUIRED'
 exec tkt ls --no-fetch --json
 envelope '.result.rows[0] | [.phase, .stage, .launch, .auto.wanted, .auto.running]' '["needs_you","start","submitted",false,false]'
 grep -count=1 '"event":"phase","phase":"needs_you","from":"awaiting_approval"' $HOME/.local/state/tkt/history.jsonl
+
+env 'FAKE_HERDR_SCREEN=Status: BLOCKED'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0].phase' blocked
+grep -count=1 '"event":"phase","phase":"blocked","from":"needs_you"' $HOME/.local/state/tkt/history.jsonl
 
 # Outside herdr, tkt ls cannot see the agent and records nothing.
 env HERDR_ENV=

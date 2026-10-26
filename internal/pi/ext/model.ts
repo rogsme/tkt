@@ -30,6 +30,8 @@ export interface Row {
 	 * watcher; it goes on by itself when they finish. */
 	agent: { pane_id: string; name: string; harness: string; status: string; background?: number } | null;
 	last_status: string;
+	/** blocked_reason is the Reason: line of the agent's Status: BLOCKED. */
+	blocked_reason?: string;
 	/** url is the open pull request's page on the forge. */
 	pr: { number: number; state: string; mergeable?: string; head?: string; url?: string } | null;
 	checks: { state: string; total: number; failing: string[]; pending: number } | null;
@@ -53,6 +55,16 @@ export interface Row {
 	 * run:ci@HEAD; paused says why it waits for you, round_limit or
 	 * no_progress. */
 	watch?: { last: string; paused: string } | null;
+	/** sync is the last tkt sync that failed on the head: why, when, and the
+	 * log with everything git and its hooks printed. */
+	sync?: { reason: string; kind: string; at: string; log: string } | null;
+	/** ci_review says workflow.md turns CI review on: the review bot's
+	 * CLEAR counts as review-pr's, and tkt never starts review-pr. */
+	ci_review?: boolean;
+	/** fix is the session fixing the ticket in a split beside its agent:
+	 * its pane, its agent's status, the stage it runs, and the status line
+	 * it ended with. */
+	fix?: { pane: string; status: string; stage: string; last_status: string } | null;
 	/** merge is the merge order tkt merge left once the steps passed on
 	 * head: tkt watch hands them to finish-ticket once the head is synced,
 	 * reviewed and green. It holds across clean merges of the base, and sent
@@ -200,7 +212,7 @@ export interface MergeResult {
 	verified?: string;
 	steps: number[];
 	action: "merging" | "ordered" | "cancelled" | "none";
-	waits?: "sync" | "review" | "checks" | "turn" | "";
+	waits?: "sync" | "review" | "bot" | "checks" | "turn" | "";
 	after?: string;
 	sent?: string;
 }
@@ -223,6 +235,7 @@ export function mergeText(r: MergeResult): string {
 		const once = {
 			sync: "tkt watch merged its base and a review cleared the new head; your steps carry over the clean merge",
 			review: r.verified && r.verified !== r.head ? "a review clears the head a sync made; your steps carry over the clean merge" : "review-pr, which tkt watch starts, clears its head, since finish-ticket merges on review-pr's verdict",
+			bot: "the review bot clears the head a sync made; your steps carry over the clean merge",
 			turn: `${r.after || "the other ticket"} merged first, since one merge goes at a time`,
 			checks: "its checks pass",
 			"": "its checks pass",

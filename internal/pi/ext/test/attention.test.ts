@@ -17,6 +17,15 @@ test("a plan, a question and a ready ticket need you", () => {
 	assert.match(ready?.text ?? "", /Pull request #4/);
 });
 
+test("a blocked ticket says why once, and waits out of what needs you", () => {
+	const a = attentionOf(row({ phase: "blocked", last_status: "BLOCKED", blocked_reason: "Clerk account upgrade pending with James." }), false);
+	assert.equal(a?.kind, "blocked");
+	assert.equal(a?.parked, true);
+	assert.match(a?.text ?? "", /^ACM-12 is blocked: Clerk account upgrade pending with James\./);
+	// One you put on hold says nothing.
+	assert.equal(attentionOf(row({ phase: "blocked", hold: true }), false), undefined);
+});
+
 test("quiet phases only move the board", () => {
 	for (const phase of ["planning", "building", "ci", "reviewing", "fixing", "starting", "queued"]) {
 		assert.equal(attentionOf(row({ phase, agent: working, next: { kind: "wait", reason: "agent_working", argv: null, text: "wait" } }), false), undefined, phase);
@@ -60,6 +69,8 @@ test("a ticket marked for auto with no loop has stalled", () => {
 	const a = attentionOf(row({ phase: "building", auto: auto({ running: false }) }), false);
 	assert.equal(a?.kind, "stalled");
 	assert.match(a?.text ?? "", /\/auto ACM-12 on/);
+	// A running tkt watch starts the loop again by itself.
+	assert.equal(attentionOf(row({ phase: "building", auto: auto({ running: false }) }), false, true), undefined);
 });
 
 test("the key stays while the situation does, and changes with it", () => {
@@ -171,7 +182,7 @@ test("a ticket a merge unblocked offers its starts", () => {
 	assert.match(a.text, /^ACM-15 is unblocked: ACM-12 merged/);
 	assert.deepEqual(
 		choicesOf(a).map((c) => c.do),
-		["start", "start_auto", "start_after_plan", "dismiss"],
+		["start", "start_auto_plan", "start_manual", "dismiss"],
 	);
 	assert.equal(sound(a), "done");
 });

@@ -35,17 +35,18 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 	};
 
 	pi.registerCommand("start", {
-		description: "Start tickets: /start ACM-12 [ACM-13 ...] [auto | after-plan] [as PRESET]",
+		description: "Start tickets: /start ACM-12 [ACM-13 ...] [auto | auto-plan | manual] [as PRESET]",
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
 			const words = args.trim().split(/\s+/).filter(Boolean);
 			const as = preset(words);
-			const modeWord = words.find((w) => ["auto", "full", "after-plan", "manual"].includes(w.toLowerCase()))?.toLowerCase();
+			const modeWord = words.find((w) => ["auto", "auto-plan", "full", "after-plan", "manual"].includes(w.toLowerCase()))?.toLowerCase();
 			const list = expandIds(words.filter((w) => w.toLowerCase() !== modeWord).join(" "), hub.key);
 			const rest = words.filter((w) => w.toLowerCase() !== modeWord && /^\d+$/.test(w)).map((w) => hub.idOf(w));
 			const all = [...new Set([...list, ...rest])];
-			if (all.length === 0) return notify(ctx, "usage: /start ACM-12 [ACM-13 ...] [auto | after-plan] [as PRESET]", "warning");
-			const mode: act.Mode = modeWord === "auto" || modeWord === "full" ? "auto" : modeWord === "after-plan" ? "auto_after_plan" : "manual";
+			if (all.length === 0) return notify(ctx, "usage: /start ACM-12 [ACM-13 ...] [auto | auto-plan | manual] [as PRESET]", "warning");
+			// after-plan and full are auto and auto-plan under their old names.
+			const mode: act.Mode = modeWord === "auto-plan" || modeWord === "full" ? "auto-plan" : modeWord === "manual" ? "manual" : "auto";
 			if (all.length > 1 && !(await confirm(ctx, `Start ${all.join(", ")}?`, "Each ticket starts in its own tab."))) return;
 			say(act.start(hub, all, mode, as));
 		},
@@ -99,10 +100,10 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 	});
 
 	pi.registerCommand("auto", {
-		description: "tkt auto for a ticket: /auto ACM-12 on | off | full | yolo [as PRESET]",
+		description: "tkt auto for a ticket: /auto ACM-12 on | off | auto-plan | yolo [as PRESET]",
 		getArgumentCompletions: ids,
 		handler: async (args, ctx) => {
-			const id = one(args, ctx, "/auto ACM-12 on | off | full | yolo [as PRESET]");
+			const id = one(args, ctx, "/auto ACM-12 on | off | auto-plan | yolo [as PRESET]");
 			if (!id) return;
 			const words = args.trim().split(/\s+/);
 			const as = preset(words);
@@ -114,7 +115,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 				], false);
 				if (!a?.answer.startsWith("Start")) return say("Nothing started.");
 			}
-			say(await act.auto(hub, id, how !== "off", how === "full", as, how === "yolo"));
+			say(await act.auto(hub, id, how !== "off", how === "full" || how === "auto-plan", as, how === "yolo"));
 		},
 	});
 
