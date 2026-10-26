@@ -52,6 +52,8 @@ type RowPR struct {
 	State     string `json:"state"`
 	Mergeable string `json:"mergeable,omitempty"`
 	Head      string `json:"head,omitempty"`
+	// URL is the open pull request's page on the forge.
+	URL string `json:"url,omitempty"`
 }
 
 // RowAuto is what tkt auto does with a ticket.
@@ -671,7 +673,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		if mine := l.gh.Mine(l.open, t.ID); len(mine) > 0 {
 			p := mine[0]
 			checks, verdict := forge.Summarize(p), forge.LatestVerdict(p)
-			row.PR = &RowPR{Number: p.Number, State: "OPEN", Mergeable: p.Mergeable, Head: p.HeadRefOid}
+			row.PR = &RowPR{Number: p.Number, State: "OPEN", Mergeable: p.Mergeable, Head: p.HeadRefOid, URL: p.URL}
 			row.Checks, row.Review = &checks, verdict
 			row.reviewReady = forge.HumanVerification(p) != nil
 			row.Verification = forge.LatestVerification(p)

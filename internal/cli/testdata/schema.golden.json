@@ -1186,7 +1186,8 @@
                 "head": "string",
                 "mergeable": "string",
                 "number": "integer",
-                "state": "string"
+                "state": "string",
+                "url": "string"
               },
               "nullable": true
             },

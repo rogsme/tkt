@@ -10,7 +10,7 @@ env FAKE_GH_PRS=$WORK/prs.json
 resetlog
 exec tkt ls 2 --no-fetch --json
 envelope '[.result.rows[].ticket]' '["ACM-2"]'
-envelope '.result.rows[0].pr' '{"head":"abc","mergeable":"MERGEABLE","number":2,"state":"OPEN"}'
+envelope '.result.rows[0].pr' '{"head":"abc","mergeable":"MERGEABLE","number":2,"state":"OPEN","url":"https://github.com/acme/app/pull/2"}'
 logged gh pr list --repo github.com/acme/app --head ACM-2 --state all
 ! logcontains '--state open'
 
@@ -22,4 +22,4 @@ envelope '.error.details.missing' '["ACM-9"]'
 envelope '[.error.details.rows[].ticket]' '["ACM-1"]'
 
 -- prs.json --
-[{"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "abc", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [], "reviews": []}]
+[{"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "abc", "url": "https://github.com/acme/app/pull/2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE", "statusCheckRollup": [], "reviews": []}]

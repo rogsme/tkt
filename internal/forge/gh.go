@@ -37,8 +37,8 @@ type PR struct {
 	MergedAt          string   `json:"mergedAt"`
 	// Body is read only by ListBodies.
 	Body string `json:"body"`
-	// Title is read by ListOpen, ListHead with full, and ListHistory; URL,
-	// the size and the commits only by ListHistory.
+	// Title and URL are read by ListOpen, ListHead with full, and
+	// ListHistory; the size and the commits only by ListHistory.
 	Title        string   `json:"title"`
 	URL          string   `json:"url"`
 	Additions    int      `json:"additions"`
@@ -100,7 +100,7 @@ func (g GH) ListBodies(ctx context.Context, branch string) ([]PR, error) {
 // ListOpen returns the open pull requests with their checks and reviews.
 func (g GH) ListOpen(ctx context.Context) ([]PR, error) {
 	return g.list(ctx, "--state", "open", "--limit", "100",
-		"--json", "number,title,headRefName,headRefOid,headRepository,mergeable,statusCheckRollup,reviews")
+		"--json", "number,title,url,headRefName,headRefOid,headRepository,mergeable,statusCheckRollup,reviews")
 }
 
 // ListAll returns the latest pull requests in any state.
@@ -112,7 +112,7 @@ func (g GH) ListAll(ctx context.Context) ([]PR, error) {
 func (g GH) ListHead(ctx context.Context, branch string, full bool) ([]PR, error) {
 	fields := "number,state,headRefName,headRefOid,headRepository,createdAt,mergedAt"
 	if full {
-		fields += ",title,mergeable,statusCheckRollup,reviews"
+		fields += ",title,url,mergeable,statusCheckRollup,reviews"
 	}
 	return g.list(ctx, "--head", branch, "--state", "all", "--limit", "100", "--json", fields)
 }
