@@ -9,23 +9,28 @@ import (
 	"gitlab.com/rogs/tkt/internal/agent"
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/forge"
+	"gitlab.com/rogs/tkt/internal/gitx"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
 )
 
-// ShowOpts are tkt show's arguments. Screen and Steps pick another view.
+// ShowOpts are tkt show's arguments. Screen, Steps and Diff pick another
+// view; ANSI keeps the screen's colors.
 type ShowOpts struct {
 	ID     string
 	Pane   string
 	Screen bool
+	ANSI   bool
 	Steps  bool
+	Diff   bool
 }
 
 // ShowResult is one view of a ticket: the agent's last message, its live
-// screen, or the pull request's human verification steps.
+// screen, the pull request's human verification steps, or the branch's
+// diff.
 type ShowResult struct {
 	Ticket string `json:"ticket"`
-	// View is message, screen or steps.
+	// View is message, screen, steps or diff.
 	View        string `json:"view"`
 	Pane        string `json:"pane"`
 	AgentStatus string `json:"agent_status"`
@@ -50,12 +55,20 @@ type ShowResult struct {
 	// each step's result, or null. AtHead says whether it is about the head
 	// the steps are for.
 	Verification *forge.Verification `json:"verification"`
+	// Base is the branch the diff is against, such as origin/main, and Files
+	// what the branch changes since it left it, file by file. The text
+	// output prints the diff as git does.
+	Base  string      `json:"base"`
+	Files []gitx.File `json:"files"`
+	diff  string
 }
 
 func (r *ShowResult) Text(w io.Writer) {
 	switch r.View {
 	case "screen":
 		fmt.Fprintln(w, strings.TrimRight(r.Screen, "\n"))
+	case "diff":
+		fmt.Fprint(w, r.diff)
 	case "steps":
 		fmt.Fprintln(w, r.Procedure)
 		if v := r.Verification; v != nil {
@@ -82,10 +95,14 @@ func (a *App) Show(ctx context.Context, o ShowOpts) (*ShowResult, error) {
 		return nil, err
 	}
 	defer c.release()
-	res := &ShowResult{Ticket: id, View: "message", Steps: []forge.Step{}}
+	res := &ShowResult{Ticket: id, View: "message", Steps: []forge.Step{}, Files: []gitx.File{}}
 	if o.Steps {
 		res.View = "steps"
 		return res, c.showSteps(id, res)
+	}
+	if o.Diff {
+		res.View = "diff"
+		return res, c.showDiff(path, res)
 	}
 	target, err := c.ticketAgent(id, path, o.Pane, ts.st)
 	var ag *herdr.Agent
@@ -98,7 +115,11 @@ func (a *App) Show(ctx context.Context, o ShowOpts) (*ShowResult, error) {
 	}
 	if o.Screen {
 		res.View = "screen"
-		res.Screen = c.H.Read(c.Ctx, target.PaneID, 120)
+		if o.ANSI {
+			res.Screen = c.H.ReadANSI(c.Ctx, target.PaneID, 120)
+		} else {
+			res.Screen = c.H.Read(c.Ctx, target.PaneID, 120)
+		}
 		return res, nil
 	}
 	turn, src := c.lastTurn(c.Ctx, ag, ts.st, path)
@@ -120,6 +141,25 @@ func (a *App) Show(ctx context.Context, o ShowOpts) (*ShowResult, error) {
 		res.At = turn.At.UTC().Format(history.TimeFormat)
 	}
 	return res, nil
+}
+
+// showDiff reads what the branch changes since it left its base: the
+// committed change its pull request shows, against the base as the last
+// fetch left it.
+func (c *Ctx) showDiff(path string, res *ShowResult) error {
+	f := c.LC.Forge
+	ref := "refs/remotes/" + f.Remote + "/" + f.Base
+	res.Base = f.Remote + "/" + f.Base
+	if !c.Git.HasRef(c.Ctx, path, ref) {
+		return apperr.New(apperr.GitFailed, "%s has no %s to compare the branch with", path, res.Base).
+			WithHint("git -C %s fetch %s", path, f.Remote)
+	}
+	text, ok := c.Git.Diff(c.Ctx, path, ref+"...HEAD")
+	if !ok {
+		return apperr.New(apperr.GitFailed, "git diff %s...HEAD failed in %s", res.Base, path)
+	}
+	res.diff, res.Files = text, gitx.ParseDiff(text)
+	return nil
 }
 
 // showSteps reads the human verification steps from the review at the open

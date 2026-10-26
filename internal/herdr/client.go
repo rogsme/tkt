@@ -268,14 +268,20 @@ func (c Client) Read(ctx context.Context, pane string, lines int) string {
 	return c.read(ctx, pane, "visible", lines)
 }
 
+// ReadANSI returns the agent's visible screen with its colors, as ANSI
+// escapes.
+func (c Client) ReadANSI(ctx context.Context, pane string, lines int) string {
+	return c.read(ctx, pane, "visible", lines, "--ansi")
+}
+
 // ReadRecent returns the agent's recent output, which reaches further back
 // than its screen.
 func (c Client) ReadRecent(ctx context.Context, pane string, lines int) string {
 	return c.read(ctx, pane, "recent", lines)
 }
 
-func (c Client) read(ctx context.Context, pane, source string, lines int) string {
-	r := c.R.Run(ctx, runner.Cmd{Argv: []string{"herdr", "agent", "read", pane, "--source", source, "--lines", strconv.Itoa(lines)}})
+func (c Client) read(ctx context.Context, pane, source string, lines int, flags ...string) string {
+	r := c.R.Run(ctx, runner.Cmd{Argv: append([]string{"herdr", "agent", "read", pane, "--source", source, "--lines", strconv.Itoa(lines)}, flags...)})
 	if !r.OK() {
 		return ""
 	}

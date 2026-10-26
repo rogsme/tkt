@@ -1262,8 +1262,8 @@
       "path": "show",
       "use": "show ID",
       "short": "Print the agent's last message, its live screen, or the verification steps",
-      "long": "tkt show prints the agent's last message: after start-ticket, the plan; after\ntkt run ID verify, its report. It reads the message from the session's own\nrecord, the Claude Code transcript or the OpenCode API, so nothing scrolls\naway. When tkt cannot read that record, it prints the agent's recent output.\n\n--screen prints the agent's live screen instead, such as a question it asks\nin a dialog.\n\n--steps prints the human verification procedure from the review that says\nREADY_FOR_HUMAN at the pull request's head, and with --json its numbered\nsteps. When the review bot cleared the head instead, it reads the Human\nverification section of the pull request's body, which work-ticket writes;\nsource says which. It reads pull requests through gh, so it supports GitHub\nforges only, and it exits 4 with no_verification_steps when neither has\nsteps. When verify-pr reported on the pull request, it prints the report's\nresult for each step after the procedure, and says when the report is about\nan older head; with --json, verification holds it.",
-      "example": "  tkt show ACM-12\n  tkt show ACM-12 --screen\n  tkt show ACM-12 --steps --json",
+      "long": "tkt show prints the agent's last message: after start-ticket, the plan; after\ntkt run ID verify, its report. It reads the message from the session's own\nrecord, the Claude Code transcript or the OpenCode API, so nothing scrolls\naway. When tkt cannot read that record, it prints the agent's recent output.\n\n--screen prints the agent's live screen instead, such as a question it asks\nin a dialog. --ansi keeps the screen's colors as ANSI escapes, as the tkt\nagent's web page draws them.\n\n--diff prints what the branch changes since it left its base, as git diff\nprints it: the committed change its pull request shows, against the base as\nthe last fetch left it. With --json, files lists each file with its status,\nthe lines it adds and removes, and its hunks.\n\n--steps prints the human verification procedure from the review that says\nREADY_FOR_HUMAN at the pull request's head, and with --json its numbered\nsteps. When the review bot cleared the head instead, it reads the Human\nverification section of the pull request's body, which work-ticket writes;\nsource says which. It reads pull requests through gh, so it supports GitHub\nforges only, and it exits 4 with no_verification_steps when neither has\nsteps. When verify-pr reported on the pull request, it prints the report's\nresult for each step after the procedure, and says when the report is about\nan older head; with --json, verification holds it.",
+      "example": "  tkt show ACM-12\n  tkt show ACM-12 --screen\n  tkt show ACM-12 --steps --json\n  tkt show ACM-12 --diff",
       "group": "inspect",
       "args": [
         {
@@ -1273,6 +1273,18 @@
         }
       ],
       "flags": [
+        {
+          "name": "ansi",
+          "type": "bool",
+          "default": "false",
+          "usage": "with --screen, keep the screen's colors as ANSI escapes"
+        },
+        {
+          "name": "diff",
+          "type": "bool",
+          "default": "false",
+          "usage": "print what the branch changes since it left its base"
+        },
         {
           "name": "pane",
           "type": "string",
@@ -1295,6 +1307,23 @@
       "result": {
         "agent_status": "string",
         "at": "string",
+        "base": "string",
+        "files": [
+          {
+            "added": "integer",
+            "binary": "boolean",
+            "hunks": [
+              {
+                "header": "string",
+                "lines": "array of string"
+              }
+            ],
+            "old_path": "string",
+            "path": "string",
+            "removed": "integer",
+            "status": "string"
+          }
+        ],
         "harness": "string",
         "last_status": "string",
         "message": "string",

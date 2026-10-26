@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -181,4 +182,88 @@ func TestDiffStat(t *testing.T) {
 	if _, ok := g.DiffStat(ctx, dir, "main...no-such-branch"); ok {
 		t.Error("a bad range read as no change")
 	}
+}
+
+func TestDiffReadsFilesAndHunks(t *testing.T) {
+	dir := repo(t)
+	g := Git{R: runner.Exec{}}
+	ctx := context.Background()
+	text, ok := g.Diff(ctx, dir, "main...side")
+	if !ok {
+		t.Fatal("git diff failed")
+	}
+	got := ParseDiff(text)
+	want := []File{{Path: "f", Status: "modified", Added: 1, Removed: 1, Hunks: []Hunk{{Header: "@@ -1 +1 @@", Lines: []string{"-one", "+side"}}}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("side: %+v", got)
+	}
+	if text, ok := g.Diff(ctx, dir, "side...side"); !ok || len(ParseDiff(text)) != 0 {
+		t.Errorf("no change: %q, %v", text, ok)
+	}
+}
+
+func TestParseDiff(t *testing.T) {
+	text := `diff --git a/app.go b/app.go
+index 1111111..2222222 100644
+--- a/app.go
++++ b/app.go
+@@ -1,3 +1,3 @@ package app
+ package app
+-var x = 1
++var x = 2
+ 
+@@ -10 +10,2 @@ func f() {
+ 	return
++	// done
+diff --git a/old name.txt b/new name.txt
+similarity index 90%
+rename from old name.txt
+rename to new name.txt
+diff --git a/logo.png b/logo.png
+new file mode 100644
+index 0000000..3333333
+Binary files /dev/null and b/logo.png differ
+diff --git a/gone.txt b/gone.txt
+deleted file mode 100644
+index 4444444..0000000
+--- a/gone.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-bye
+\ No newline at end of file
+diff --git "a/caf\303\251.txt" "b/caf\303\251.txt"
+new file mode 100644
+--- /dev/null
++++ "b/caf\303\251.txt"
+@@ -0,0 +1 @@
++hi
+`
+	got := ParseDiff(text)
+	want := []File{
+		{Path: "app.go", Status: "modified", Added: 2, Removed: 1, Hunks: []Hunk{
+			{Header: "@@ -1,3 +1,3 @@ package app", Lines: []string{" package app", "-var x = 1", "+var x = 2", " "}},
+			{Header: "@@ -10 +10,2 @@ func f() {", Lines: []string{" \treturn", "+\t// done"}},
+		}},
+		{Path: "new name.txt", OldPath: "old name.txt", Status: "renamed", Hunks: []Hunk{}},
+		{Path: "logo.png", Status: "added", Binary: true, Hunks: []Hunk{}},
+		{Path: "gone.txt", Status: "deleted", Removed: 1, Hunks: []Hunk{{Header: "@@ -1 +0,0 @@", Lines: []string{"-bye", `\ No newline at end of file`}}}},
+		{Path: "café.txt", Status: "added", Added: 1, Hunks: []Hunk{{Header: "@@ -0,0 +1 @@", Lines: []string{"+hi"}}}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		for i := range max(len(got), len(want)) {
+			if i >= len(got) || i >= len(want) || !reflect.DeepEqual(got[i], want[i]) {
+				t.Errorf("file %d:\n got %+v\nwant %+v", i, at(got, i), at(want, i))
+			}
+		}
+	}
+	if got := ParseDiff(""); got == nil || len(got) != 0 {
+		t.Errorf("empty diff: %#v", got)
+	}
+}
+
+func at(fs []File, i int) any {
+	if i < len(fs) {
+		return fs[i]
+	}
+	return nil
 }
