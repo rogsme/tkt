@@ -129,10 +129,10 @@ The chat lists the chores with their schedules and next runs: `deps` on Monday a
 Last comes ACM-124. It lets an admin unlock an account that ACM-118's lockout locked, and that merge freed it. You want to read its plan, and nothing after that:
 
 ```
-/start ACM-124 after-plan
+/start ACM-124
 ```
 
-The chat answers at once, `Queued: ACM-124 starting in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket.`, and the prompt is yours again while worktrunk makes the worktree and start-ticket reads the code. `/start ACM-124` alone stops at the plan and leaves the rest to you, and `/start ACM-124 auto` approves the plan too.
+The chat answers at once, `Queued: ACM-124 starting in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket until it is ready for human verification.`, and the prompt is yours again while worktrunk makes the worktree and start-ticket reads the code. Auto is the default; `/start ACM-124 manual` stops at the plan and leaves every step to you, and `/start ACM-124 auto-plan` approves the plan too.
 
 ## 09:15 Pick the next tickets
 
@@ -151,7 +151,7 @@ Suggested: ACM-131 (frontier), ACM-130 (small), ACM-133 (small)
 The report also says what it left out and why: ACM-129 changes the same export code as ACM-121, so the two would collide. You ask the agent there why ACM-133 beats ACM-128, agree with it, and go back to the chat:
 
 ```
-start ACM-131 in auto after the plan, and ACM-130 and ACM-133 the same on fast
+start ACM-131, and ACM-130 and ACM-133 on fast
 ```
 
 ACM-131 starts on `claude` and the other two on `fast`, each in its own tab, named after the ticket and its preset: `ACM-131 (claude, auto)`, `ACM-130 (fast, auto)`.
@@ -344,7 +344,7 @@ start ACM-125 in yolo with fast
 
 The chat asks once, `Start ACM-125 in yolo on fast?`, with `No person checks anything before these merge` under it, and you confirm. `/auto ACM-125 yolo as fast` asks the same without the model. `tkt auto ACM-125 --yolo` starts it on `fast`, and every line its agents get says the run is autonomous. start-ticket posts an `## Autonomous run` comment on the ticket, and a model from another vendor reviews the plan in place of you; tkt approves it. Where an agent would ask you, it takes the most conservative reading and writes it under `## Assumptions` in the plan and the pull request. review-pr reviews the head the bot cleared, verify-pr runs the steps, and once it passed every step, finish-ticket merges with every other gate in place. Had the plan touched a hard stop, the ticket would have gone to blocked, and the loop would have paused for you.
 
-For a ticket you want to watch more closely, `start ACM-125 in full auto` approves the plan and stops once the head is verified, and its agents ask any open question in a dialog, where the board shows it.
+For a ticket you want to watch more closely, `start ACM-125 in auto-plan` approves the plan and stops once the head is verified, and its agents ask any open question in a dialog, where the board shows it.
 
 ## 16:45 Verify the rest, and leave the merges to tkt watch
 

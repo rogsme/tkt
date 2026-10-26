@@ -339,7 +339,7 @@ export class Hub {
 	startAuto(ticket: string, approvePlan: boolean, as?: string, yolo = false): void {
 		const args = ["auto", ticket, "--notify"];
 		if (yolo) args.push("--yolo");
-		else if (approvePlan) args.push("--approve-plan");
+		else if (approvePlan) args.push("--auto-plan");
 		if (as) args.push("--as", as);
 		const child = spawn(this.bin, args, { cwd: this.cwd, detached: true, stdio: "ignore" });
 		child.on("error", (err) => {

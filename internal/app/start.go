@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"gitlab.com/rogs/tkt/internal/agent"
@@ -13,6 +15,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/prompt"
+	"gitlab.com/rogs/tkt/internal/runner"
 )
 
 // StartOpts are tkt start's arguments.
@@ -25,6 +28,10 @@ type StartOpts struct {
 	Focus   bool
 	Force   bool
 	Dry     bool
+	// Mode is how a ticket's start goes on: manual, auto (tkt auto takes
+	// over once you approve the plan), auto-plan or yolo; "" takes [start]
+	// mode. Every mode but manual starts a tkt auto loop after the start.
+	Mode string
 	// Unattended adds config.UnattendedLine to the prompt, for a tkt auto
 	// that approves the plan itself. Autonomous adds config.AutonomousLine
 	// instead, for tkt auto --yolo, where nobody answers a question either.
@@ -39,21 +46,25 @@ type StartOpts struct {
 
 // StartResult is what tkt start did.
 type StartResult struct {
-	Ticket          string   `json:"ticket"`
-	Scratch         string   `json:"scratch,omitempty"`
-	Worktree        string   `json:"worktree"`
-	WorktreeCreated bool     `json:"worktree_created"`
-	Tab             string   `json:"tab"`
-	Pane            string   `json:"pane"`
-	Agent           string   `json:"agent"`
-	Preset          string   `json:"preset"`
-	Harness         string   `json:"harness"`
-	Session         string   `json:"session"`
-	Stage           string   `json:"stage"`
-	Continued       bool     `json:"continued"`
-	Resent          bool     `json:"resent"`
-	DryRun          bool     `json:"dry_run"`
-	Actions         []Action `json:"actions"`
+	Ticket          string `json:"ticket"`
+	Scratch         string `json:"scratch,omitempty"`
+	Worktree        string `json:"worktree"`
+	WorktreeCreated bool   `json:"worktree_created"`
+	Tab             string `json:"tab"`
+	Pane            string `json:"pane"`
+	Agent           string `json:"agent"`
+	Preset          string `json:"preset"`
+	Harness         string `json:"harness"`
+	Session         string `json:"session"`
+	Stage           string `json:"stage"`
+	Continued       bool   `json:"continued"`
+	Resent          bool   `json:"resent"`
+	// Mode is how the ticket goes on: manual, or the tkt auto mode whose
+	// loop the start started (auto, auto-plan or yolo); "" for a worktree
+	// with no ticket.
+	Mode    string   `json:"mode"`
+	DryRun  bool     `json:"dry_run"`
+	Actions []Action `json:"actions"`
 }
 
 func (r *StartResult) Text(w io.Writer) {
@@ -62,6 +73,14 @@ func (r *StartResult) Text(w io.Writer) {
 		name = r.Scratch
 	}
 	fmt.Fprintf(w, "%s  %s  tab %s  agent %s (%s, %s)\n", name, r.Worktree, r.Tab, r.Agent, r.Preset, r.Harness)
+	switch r.Mode {
+	case config.ModeAuto:
+		fmt.Fprintf(w, "%s  tkt auto takes over once you approve the plan\n", name)
+	case config.ModeAutoPlan:
+		fmt.Fprintf(w, "%s  tkt auto approves the plan and drives it until it is reviewed clean\n", name)
+	case config.ModeYolo:
+		fmt.Fprintf(w, "%s  tkt auto carries it to the merge, with nobody watching\n", name)
+	}
 }
 
 // Start creates or reuses a ticket's worktree, opens its tab, starts an agent
@@ -116,6 +135,21 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 		a.UI.Info("ticket %s (the first id in the prompt)", id)
 	}
 	c.ticket(id)
+	mode := ""
+	if !named {
+		if mode, err = c.startMode(o.Mode); err != nil {
+			return nil, err
+		}
+		switch mode {
+		case config.ModeAutoPlan:
+			o.Unattended = true
+		case config.ModeYolo:
+			if err := c.yoloAllowed(id); err != nil {
+				return nil, err
+			}
+			o.Autonomous = true
+		}
+	}
 	preset, err := c.Cfg.Pick(o.As, text, o.Force)
 	if err != nil {
 		return nil, err
@@ -252,8 +286,98 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 			return nil, herdrErr(err)
 		}
 	}
+	if mode != "" {
+		res.Mode = c.startAuto(id, mode, ts)
+	}
 	res.Actions = c.Plan
 	return res, nil
+}
+
+// startMode is the mode a ticket's start takes: the flag's, else [start]
+// mode. TKT_AUTO=off keeps every start manual, as the tests need.
+func (c *Ctx) startMode(flag string) (string, error) {
+	switch {
+	case flag == config.ModeManual, flag == config.ModeAuto, flag == config.ModeAutoPlan, flag == config.ModeYolo:
+		return flag, nil
+	case flag != "":
+		return "", apperr.New(apperr.Usage, "unknown start mode '%s'; it is manual, auto, auto-plan or yolo", flag)
+	case c.Getenv("TKT_AUTO") == "off":
+		return config.ModeManual, nil
+	}
+	return c.Cfg.Start.Mode, nil
+}
+
+// startAuto starts the tkt auto loop that drives a ticket tkt start just
+// started, in a session of its own, so it outlives the start. In auto mode
+// the loop waits for you to approve the plan, in the viewer or with tkt
+// approve, and drives the ticket from there; it never approves a plan
+// itself. It returns the mode the ticket goes on in: manual where tkt auto
+// cannot run, as on a forge other than GitHub.
+func (c *Ctx) startAuto(id, mode string, ts *ticketState) string {
+	if mode == config.ModeManual {
+		return mode
+	}
+	if c.LC.RequireGitHub("auto") != nil || !found("gh") {
+		c.UI.Info("%s stays manual: tkt auto needs GitHub and gh", id)
+		return config.ModeManual
+	}
+	self, err := os.Executable()
+	if err != nil {
+		c.UI.Warn("%s stays manual: %v", id, err)
+		return config.ModeManual
+	}
+	argv := autoArgv(self, c.Repo.Root, id, mode)
+	if c.Dry {
+		c.Would(argv)
+		return mode
+	}
+	if mode == config.ModeYolo {
+		// A yolo loop that attaches to a started ticket needs its mark.
+		c.save(ts, "yolo", "1")
+	}
+	sp, ok := c.R.(runner.Spawner)
+	if !ok {
+		return config.ModeManual
+	}
+	dir := filepath.Join(c.Repo.Common, "tkt")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		c.UI.Warn("%s stays manual: %v", id, err)
+		return config.ModeManual
+	}
+	if err := sp.Spawn(c.Ctx, runner.Cmd{Argv: argv}, autoEnv(os.Environ()), c.Repo.Root, filepath.Join(dir, "auto-"+id+".log")); err != nil {
+		c.UI.Warn("%s stays manual: cannot start tkt auto: %v", id, err)
+		return config.ModeManual
+	}
+	return mode
+}
+
+// autoEnv is the environment a tkt auto loop starts with: this one, in the
+// same herdr workspace, where it opens the ticket's tabs, but out of the
+// pane and tab tkt start ran in, and out of a ticket's own TMPDIR.
+func autoEnv(env []string) []string {
+	var out []string
+	for _, kv := range env {
+		switch {
+		case strings.HasPrefix(kv, "HERDR_PANE_ID="), strings.HasPrefix(kv, "HERDR_TAB_ID="):
+		case strings.HasPrefix(kv, "TMPDIR="):
+			out = append(out, "TMPDIR="+tmpRoot(strings.TrimPrefix(kv, "TMPDIR=")))
+		default:
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
+// autoArgv is the tkt auto command for a mode.
+func autoArgv(self, root, id, mode string) []string {
+	argv := []string{self, "-C", root, "auto", id, "--notify"}
+	switch mode {
+	case config.ModeAutoPlan:
+		argv = append(argv, "--auto-plan")
+	case config.ModeYolo:
+		argv = append(argv, "--yolo")
+	}
+	return argv
 }
 
 // startTab reuses the ticket's idle tab in this workspace, or opens one. busy

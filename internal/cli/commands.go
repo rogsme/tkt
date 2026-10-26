@@ -13,6 +13,7 @@ import (
 
 	"gitlab.com/rogs/tkt/internal/app"
 	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/output"
 	"gitlab.com/rogs/tkt/internal/prompt"
 )
@@ -87,6 +88,7 @@ func (p *promptFlags) source(cmd *cobra.Command) prompt.Source {
 func startCmd(g *globals) *cobra.Command {
 	var o app.StartOpts
 	var pf promptFlags
+	var modeOf func() string
 	cmd := &cobra.Command{
 		Use:   "start [ID | --scratch NAME]",
 		Short: "Create the worktree and tab, start an agent and send it the prompt",
@@ -95,6 +97,8 @@ func startCmd(g *globals) *cobra.Command {
   tkt start ACM-12
   tkt start ACM-12 --prompt-file plan-request.md --as fast
   tkt start ACM-12 --dry-run
+  tkt start ACM-12 --manual
+  tkt start ACM-12 --auto-plan
   tkt start --scratch spike-login --as fast`,
 		ValidArgsFunction: g.completeTickets(false),
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -111,6 +115,7 @@ func startCmd(g *globals) *cobra.Command {
 				o.ID = args[0]
 			}
 			o.Prompt = pf.source(cmd)
+			o.Mode = modeOf()
 			res, err := g.app().Start(cmd.Context(), o)
 			return show(g, cmd, res, res == nil, err)
 		},
@@ -121,6 +126,25 @@ func startCmd(g *globals) *cobra.Command {
 	cmd.MarkFlagsMutuallyExclusive("scratch", "prompt-file")
 	cmd.Flags().StringVar(&o.As, "as", "", "run on PRESET instead of the one the prompt's Model: line picks")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
+	var manual, auto, autoPlan, yolo bool
+	cmd.Flags().BoolVar(&manual, "manual", false, "drive the ticket yourself: start no tkt auto loop")
+	cmd.Flags().BoolVar(&auto, "auto", false, "tkt auto takes over once you approve the plan (the default, [start] mode)")
+	cmd.Flags().BoolVar(&autoPlan, "auto-plan", false, "tkt auto approves the plan too, and drives the ticket until it is reviewed clean")
+	cmd.Flags().BoolVar(&yolo, "yolo", false, "tkt auto carries the ticket to the merge with nobody watching")
+	cmd.MarkFlagsMutuallyExclusive("manual", "auto", "auto-plan", "yolo")
+	modeOf = func() string {
+		switch {
+		case manual:
+			return config.ModeManual
+		case auto:
+			return config.ModeAuto
+		case autoPlan:
+			return config.ModeAutoPlan
+		case yolo:
+			return config.ModeYolo
+		}
+		return ""
+	}
 	cmd.Flags().BoolVar(&o.Focus, "focus", false, "switch to the ticket's tab afterwards")
 	cmd.Flags().BoolVar(&o.Force, "force", false, "override the safety refusals")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
@@ -393,7 +417,7 @@ func autoCmd(g *globals) *cobra.Command {
 		Use:   "auto ID",
 		Short: "Drive the ticket until it needs you: approve, review, fix, until READY_FOR_HUMAN",
 		Long:  helpText("auto"),
-		Example: `  tkt auto ACM-12 --approve-plan --notify
+		Example: `  tkt auto ACM-12 --auto-plan --notify
   tkt auto ACM-12 --yolo --notify
   tkt approve ACM-12 && tkt auto ACM-12
   tkt auto ACM-12 --once
@@ -412,7 +436,11 @@ func autoCmd(g *globals) *cobra.Command {
 			return show(g, cmd, res, res == nil, err)
 		},
 	}
-	cmd.Flags().BoolVar(&o.ApprovePlan, "approve-plan", false, "approve the plan in your place when start-ticket ends with AWAITING_APPROVAL")
+	cmd.Flags().BoolVar(&o.ApprovePlan, "auto-plan", false, "approve the plan in your place when start-ticket ends with AWAITING_APPROVAL")
+	// --approve-plan is --auto-plan under its old name. It stays, since a
+	// loop restarts on a new tkt with the arguments it started with.
+	cmd.Flags().BoolVar(&o.ApprovePlan, "approve-plan", false, "the same as --auto-plan")
+	cmd.Flags().MarkHidden("approve-plan")
 	cmd.Flags().BoolVar(&o.Yolo, "yolo", false, "carry the ticket to the merge with nobody watching: approve the plan, and merge once verify-pr passed every step")
 	cmd.Flags().StringVar(&o.As, "as", "", "start the ticket's agents on PRESET")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
@@ -424,6 +452,7 @@ func autoCmd(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "with --once, print the step instead of taking it")
 	cmd.MarkFlagsMutuallyExclusive("stop", "once")
 	cmd.MarkFlagsMutuallyExclusive("stop", "approve-plan")
+	cmd.MarkFlagsMutuallyExclusive("stop", "auto-plan")
 	cmd.MarkFlagsMutuallyExclusive("stop", "yolo")
 	return cmd
 }

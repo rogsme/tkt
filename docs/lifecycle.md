@@ -15,7 +15,7 @@ This page follows one ticket, `ACM-123`, from the tracker to a merged pull reque
 | herdr | The terminal multiplexer. It holds one tab per ticket and knows whether each agent is working, blocked, idle or done. |
 | worktrunk (`wt`) | Creates and removes worktrees, and runs their hooks. |
 | tkt | Runs the mechanical steps between stages: worktrees, tabs, agent sessions, prompts, clean base merges and cleanup. `tkt watch` takes the upkeep steps for every ticket and starts the chores you schedule, and `tkt auto` chains all of them for a ticket you hand over. |
-| You | Approve the plan (or let `tkt auto --approve-plan` approve it), confirm the human verification steps, by running them or from verify-pr's evidence, and merge. Or hand a ticket to `tkt auto --yolo`, which does all of it with nobody watching. |
+| You | Approve the plan (or let `tkt auto --auto-plan` approve it), confirm the human verification steps, by running them or from verify-pr's evidence, and merge. Or hand a ticket to `tkt auto --yolo`, which does all of it with nobody watching. |
 
 ```mermaid
 flowchart LR
@@ -137,8 +137,11 @@ sequenceDiagram
   tkt->>herdr: herdr agent prompt with the start line
   herdr->>agent: "Use the start-ticket skill to start ticket ACM-123."
   tkt->>tkt: record preset, session, tab and pane
+  tkt->>tkt: start tkt auto ACM-123 in its own session
   tkt-->>you: worktree, tab, agent
 ```
+
+Then tkt start starts a `tkt auto` loop for the ticket, which outlives it. In auto, the default, the loop waits at the plan for you: it never approves a plan itself. Once you approve it, in the plan viewer or with `tkt approve`, the loop drives the ticket until it is ready for human verification. `--manual` starts no loop, `--auto-plan` starts one that approves the plan too, and `--yolo` one that carries the ticket to the merge. `[start] mode = "manual"` in `config.toml` makes manual the default.
 
 The new branch starts from the base on the remote: tkt fetches it first, so the plan starts from the code the base holds now, not from a local `main` that nobody pulled. When the fetch fails, it warns and starts from the local base.
 
@@ -272,9 +275,9 @@ Status: DONE
 
 | The ticket | tkt auto |
 |---|---|
-| Has no worktree yet | Runs `tkt start`. With `--approve-plan`, the start line says the run is unattended: start-ticket skips the browser plan presentation and asks every open question with the harness's question tool, so no decision hides in a plan nobody reads. |
+| Has no worktree yet | Runs `tkt start`. With `--auto-plan`, the start line says the run is unattended: start-ticket skips the browser plan presentation and asks every open question with the harness's question tool, so no decision hides in a plan nobody reads. |
 | The agent works, or waits on its own background task such as a CI watcher | Waits for it. |
-| `Status: AWAITING_APPROVAL` | Runs `tkt approve` with `--approve-plan`; without it, pauses for you. |
+| `Status: AWAITING_APPROVAL` | Runs `tkt approve` with `--auto-plan`; without it, pauses for you. |
 | Checks pending | Waits for CI. |
 | A new head with green CI and no review | Waits for the review bot in CI. |
 | Bot `STALE_BASE`, a conflict, or `BLOCKED_FOR_SYNC` behind the base | Syncs: when `git merge-tree` finds the merge clean, it merges and pushes it as `tkt sync` does, with no agent and no fix round; on a conflict it runs `tkt run ACM-123 resolve`. |

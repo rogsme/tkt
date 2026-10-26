@@ -51,12 +51,12 @@ function Line({ line, g, label, onSent }: { line: string; g: Go; label: string; 
 
 export function StartView({ g }: { g: Go }) {
 	const [ids, setIds] = useState("");
-	const [mode, setMode] = useState<Mode>("manual");
+	const [mode, setMode] = useState<Mode>("auto");
 	const [as, setAs] = useState("");
 	const modes: { mode: Mode; label: string; text: string }[] = [
-		{ mode: "manual", label: "Plan, then wait for me", text: "start-ticket plans it; you approve the plan, and drive each step." },
-		{ mode: "after-plan", label: "Auto after I approve the plan", text: "You approve the plan; tkt auto drives it until it is reviewed clean." },
-		{ mode: "auto", label: "Full auto", text: "tkt auto approves the plan too, and drives it until it is reviewed clean." },
+		{ mode: "auto", label: "Auto after I approve the plan", text: "You approve the plan; tkt auto drives it to human verification." },
+		{ mode: "manual", label: "Manual", text: "start-ticket plans it; you approve the plan, and drive each step." },
+		{ mode: "auto-plan", label: "Auto-plan", text: "tkt auto approves the plan too, and drives it until it is reviewed clean." },
 	];
 	return html`<div class="view form">
 		<h2>Start tickets</h2>

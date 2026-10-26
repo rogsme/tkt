@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
@@ -874,7 +875,8 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 	var actions []Action
 	switch a.Kind {
 	case actStart:
-		res, err := c.App.Start(ctx, StartOpts{ID: w.id, As: w.as, Dry: c.Dry, Unattended: w.mode == autoPlan, Autonomous: w.mode == autoYolo})
+		// The loop drives the ticket itself, so the start starts no other.
+		res, err := c.App.Start(ctx, StartOpts{ID: w.id, As: w.as, Dry: c.Dry, Mode: config.ModeManual, Unattended: w.mode == autoPlan, Autonomous: w.mode == autoYolo})
 		if err != nil {
 			return err
 		}

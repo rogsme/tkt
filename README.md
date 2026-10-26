@@ -74,10 +74,10 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt agent` | Opens the tkt agent, a chat in your pane that drives your tickets. |
 | `tkt web` | Opens the tkt agent's web page in your browser: the same chat, mirrored both ways. It opens `tkt agent` in a new tab when no chat runs. |
 | `tkt suggest [N \| REQUEST]` | Has suggest-tickets pick the next tickets to start, in a suggest tab at the repository's root: the ones a request asks for, such as `tkt suggest five tickets tagged feedback`, or N tickets that can run side by side, 3 by default. The picks stay in that tab, for you to read and start. |
-| `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt. |
+| `tkt start [ID]` | Creates the worktree and tab, starts an agent and sends it the prompt, then starts `tkt auto`, which takes over once you approve the plan. `--manual` starts no loop, and `--auto-plan` and `--yolo` start the loop that approves the plan too. |
 | `tkt approve ID` | Approves the plan in the ticket's own session, so work-ticket begins there. |
 | `tkt send ID TEXT` | Types text into the ticket's running session, such as changes to the plan; `--steer` types it in while the agent works, and `--wait` queues it until the agent stops. |
-| `tkt auto ID` | Drives the ticket: approves the plan with `--approve-plan`, waits for CI and the review bot, runs the fixes, runs verify-pr where agent verification is on, pauses when the ticket needs you, and stops when the head is reviewed clean and verified. `--yolo` carries it to the merge with nobody watching (see [Yolo](#yolo)). |
+| `tkt auto ID` | Drives the ticket: approves the plan with `--auto-plan`, waits for CI and the review bot, runs the fixes, runs verify-pr where agent verification is on, pauses when the ticket needs you, and stops when the head is reviewed clean and verified. `--yolo` carries it to the merge with nobody watching (see [Yolo](#yolo)). |
 | `tkt hold ID` | Puts the ticket on hold, so `tkt watch` and `tkt auto` leave it alone; `--off` takes it off hold. |
 | `tkt watch` | Keeps every ticket moving: syncs a moved base, runs ci once per head when the checks fail, and removes a ticket after finish-ticket's `Status: DONE`. tkt commands start it by themselves; `--install` runs it, and herdr's server, as services that start at boot. |
 | `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first), `resolve`, `ci`, `verify` (verify-pr runs the human verification steps and posts what it saw) or `start`. `sync`, the old name of `address`, still works and warns. |
@@ -154,7 +154,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | Command | What it does |
 |---|---|
 | `/suggest [N \| REQUEST] [as PRESET]` | Does what `tkt suggest` does; `/suggest` alone asks you to type the request. You read the picks in the suggest tab and `/start` the ones you want. |
-| `/start ID... [auto \| after-plan] [as PRESET]` | Starts tickets: by hand, in full auto, or in auto once you approve the plan, on a preset you name. Say "start ACM-12 in yolo" for a yolo run. |
+| `/start ID... [auto \| auto-plan \| manual] [as PRESET]` | Starts tickets, on a preset you name: in auto by default, where tkt auto takes over once you approve the plan; in auto-plan, which approves the plan too; or manual. Say "start ACM-12 in yolo" for a yolo run. |
 | `/approve ID [auto]` | Approves the plan; with `auto`, `tkt auto` takes over. |
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |
 | `/auto ID on \| off \| full \| yolo` | Turns `tkt auto` on or off for a ticket; `yolo` asks once, then carries it to the merge with nobody watching. |

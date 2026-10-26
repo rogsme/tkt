@@ -6,7 +6,7 @@ cp $WORK/config.toml $HOME/.config/tkt/config.toml
 cp $WORK/workflow.md docs/agents/workflow.md
 jqedit $WORK/turns.json 'map(if .prs then .prs = $WORK + "/" + .prs else . end)'
 env FAKE_HERDR_TURNS=$WORK/turns.json
-exec tkt auto ACM-12 --approve-plan --poll 1s --json
+exec tkt auto ACM-12 --auto-plan --poll 1s --json
 envelope '.result | [.stop, .rounds]' '["ready_for_human",1]'
 envelope '[.result.steps[] | .action + ":" + (.stage // "") + ":" + .reason]' '["start::","approve::plan_awaits_approval","run:review:needs_review","run:verify:needs_verify","run:address:verify_failed","run:review:needs_review","run:verify:needs_verify"]'
 exec cat $FAKE_DIR/prompts

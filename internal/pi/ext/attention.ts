@@ -33,7 +33,7 @@ export interface Attention {
 export interface Choice {
 	label: string;
 	description?: string;
-	do: "approve" | "approve_auto" | "show" | "reply" | "peek" | "dismiss" | "check" | "next" | "done" | "auto_on" | "auto_off" | "run" | "resume" | "start" | "start_auto" | "start_after_plan";
+	do: "approve" | "approve_auto" | "show" | "reply" | "peek" | "dismiss" | "check" | "next" | "done" | "auto_on" | "auto_off" | "run" | "resume" | "start" | "start_auto_plan" | "start_manual";
 	stage?: string;
 }
 
@@ -70,9 +70,9 @@ const usual: Record<AttentionKind, Choice[]> = {
 	],
 	failed: [dismiss],
 	unblocked: [
-		{ label: "Start it", description: "tkt start opens its tab, and start-ticket plans it.", do: "start" },
-		{ label: "Start it in auto", description: "tkt auto approves the plan too, and drives it until it is reviewed clean.", do: "start_auto" },
-		{ label: "Start it in auto after the plan", description: "You approve the plan; tkt auto drives it from there.", do: "start_after_plan" },
+		{ label: "Start it", description: "start-ticket plans it; once you approve the plan, tkt auto drives it to human verification.", do: "start" },
+		{ label: "Start it in auto-plan", description: "tkt auto approves the plan too, and drives it until it is reviewed clean.", do: "start_auto_plan" },
+		{ label: "Start it manually", description: "start-ticket plans it, and you drive each step.", do: "start_manual" },
 		dismiss,
 	],
 };

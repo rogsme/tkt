@@ -80,6 +80,9 @@ type fileTOML struct {
 	Fixes *struct {
 		As string `toml:"as"`
 	} `toml:"fixes"`
+	Start *struct {
+		Mode string `toml:"mode"`
+	} `toml:"start"`
 	Chores map[string]choreTOML  `toml:"chores"`
 	Status map[string]statusTOML `toml:"status"`
 }
@@ -278,7 +281,8 @@ func asOf(t *struct {
 }
 
 // parseSettings reads the tables both files take: [stages], [auto],
-// [review], [board], [watch], [suggest], [verify], [fixes] and [status]. It sets only
+// [review], [board], [watch], [suggest], [verify], [fixes], [start] and
+// [status]. It sets only
 // the keys the file names, so the file read last wins key by key.
 func parseSettings(c *Config, path string, f fileTOML) error {
 	for name, text := range f.Stages {
@@ -350,6 +354,12 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 		if w.Autostart != nil {
 			c.Watch.Autostart = *w.Autostart
 		}
+	}
+	if s := f.Start; s != nil && s.Mode != "" {
+		if s.Mode != ModeAuto && s.Mode != ModeManual {
+			return bad("[start] mode", fmt.Sprintf("is '%s'; it takes auto or manual", s.Mode))
+		}
+		c.Start.Mode = s.Mode
 	}
 	if s := f.Suggest; s != nil && s.As != "" {
 		if !c.Has(s.As) {

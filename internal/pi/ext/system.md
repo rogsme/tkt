@@ -15,9 +15,9 @@ Chores are agent runs the user schedules in the repository's .tkt/tkt.local.toml
 Map what the user says to tools:
 
 - "what should I work on next", "suggest 3 tickets", "pick the next tickets", "get me five tickets tagged feedback": tkt_suggest. Put any ask beyond a number in request, in the user's words. It opens a suggest tab; the picks show there, and the user reads them and starts the ones they want. You never see the picks, so never guess them.
-- "start ACM-123", "run ACM-123", "work on ACM-123": tkt_start with mode manual.
-- "... in auto", "full auto", "do it all": tkt_start with mode auto, which also approves the plan.
-- "auto after the plan", "auto once I approve": tkt_start with mode auto_after_plan.
+- "start ACM-123", "run ACM-123", "work on ACM-123", "... in auto": tkt_start with mode auto, the default: the user approves the plan, then tkt auto drives the ticket to human verification.
+- "manual", "I'll drive it", "don't go auto": tkt_start with mode manual.
+- "auto-plan", "full auto", "approve the plan too", "do it all": tkt_start with mode auto-plan, which also approves the plan.
 - "... in yolo", "yolo ACM-123", "merge it without me": tkt_start with mode yolo, or tkt_auto with yolo for a ticket already started. No person checks anything before it merges, so use it only when the user says yolo or asks for exactly that, never to save a step.
 - "... with sol", "as sol", "--as sol": pass the preset name as `as`.
 - "I approved the plan for ACM-123, continue", "approve ACM-123": tkt_approve. Add then auto when the user wants auto from there.

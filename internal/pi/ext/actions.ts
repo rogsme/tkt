@@ -10,27 +10,30 @@ import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark
 import { ask, checklist, confirm, editor, input } from "./dialog.ts";
 import { peek, type Step } from "./ui.ts";
 
-export type Mode = "manual" | "auto" | "auto_after_plan" | "yolo";
+/** Mode is how a ticket starts: manual drives nothing; auto, the default,
+ * has tkt auto take over once you approve the plan; auto-plan also
+ * approves the plan; yolo also merges, with nobody watching. */
+export type Mode = "manual" | "auto" | "auto-plan" | "yolo";
 
 /** start starts tickets in the background: manual ones with tkt start,
  * the others with a tkt auto loop that starts the ticket itself. as picks
  * a preset from config.toml or the .tkt files, such as one that runs another model. */
 export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 	for (const id of ids) {
-		if (mode === "manual") hub.add({ ticket: id, label: "start", args: ["start", id, ...(as ? ["--as", as] : [])] });
-		else hub.startAuto(id, mode === "auto", as, mode === "yolo");
+		if (mode === "manual") hub.add({ ticket: id, label: "start", args: ["start", id, "--manual", ...(as ? ["--as", as] : [])] });
+		else hub.startAuto(id, mode === "auto-plan", as, mode === "yolo");
 	}
 	const list = ids.join(", ");
 	const on = as ? ` on ${as}` : "";
 	switch (mode) {
+		case "auto-plan":
+			return `Queued: ${list} starting${on} in auto-plan. tkt approves the plan and drives each ticket until it is reviewed clean; the board shows when one needs you.`;
 		case "auto":
-			return `Queued: ${list} starting${on} in full auto. tkt approves the plan and drives each ticket until it is reviewed clean; the board shows when one needs you.`;
-		case "auto_after_plan":
-			return `Queued: ${list} starting${on} in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket.`;
+			return `Queued: ${list} starting${on} in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket until it is ready for human verification.`;
 		case "yolo":
 			return `Queued: ${list} starting${on} in yolo. tkt carries each ticket to the merge with nobody watching; the board shows when one needs you, and the plan and pull request list the assumptions its agents made.`;
 	}
-	return `Queued: ${list} starting${on}. The board shows each plan when it is ready.`;
+	return `Queued: ${list} starting${on}, manual. The board shows each plan when it is ready, and you drive each step.`;
 }
 
 /** suggest opens a suggest tab where suggest-tickets picks the tickets to
@@ -464,11 +467,11 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 		case "resume":
 			return resume(hub, id);
 		case "start":
-			return start(hub, [id], "manual");
-		case "start_auto":
 			return start(hub, [id], "auto");
-		case "start_after_plan":
-			return start(hub, [id], "auto_after_plan");
+		case "start_auto_plan":
+			return start(hub, [id], "auto-plan");
+		case "start_manual":
+			return start(hub, [id], "manual");
 	}
 	return undefined;
 }

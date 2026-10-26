@@ -61,6 +61,7 @@ type Config struct {
 	Suggest       Suggest
 	Verify        Verify
 	Fixes         Fixes
+	Start         Start
 	// Chores are the repository's scheduled runs, by name.
 	Chores []Chore
 	// Status lists the status pages tkt watch reads, by name.
@@ -88,6 +89,23 @@ type Fixes struct {
 	// means the ticket's own.
 	As string
 }
+
+// Start holds the [start] settings for tkt start.
+type Start struct {
+	// Mode is how tkt start drives a ticket when no flag says: auto, where
+	// tkt auto takes over once you approve the plan, or manual.
+	Mode string
+}
+
+// The modes tkt start takes: manual drives nothing; auto drives the ticket
+// once you approve its plan; auto-plan also approves the plan; yolo also
+// merges, with nobody watching.
+const (
+	ModeManual   = "manual"
+	ModeAuto     = "auto"
+	ModeAutoPlan = "auto-plan"
+	ModeYolo     = "yolo"
+)
 
 // FixStages are the stages [fixes] as runs on.
 var FixStages = []string{"ci", "resolve", "sync-fix"}
@@ -270,7 +288,8 @@ func builtin() Config {
 		Auto:   Auto{MaxRounds: DefaultMaxRounds, Poll: DefaultPoll, MaxParallel: DefaultMaxParallel},
 		Review: Review{BotWait: DefaultBotWait},
 		Board:  Board{StaleAfter: DefaultStaleAfter},
-		Watch:  Watch{Interval: DefaultWatchEvery, DoneAfterMerge: true, Autostart: true}}
+		Watch:  Watch{Interval: DefaultWatchEvery, DoneAfterMerge: true, Autostart: true},
+		Start:  Start{Mode: ModeAuto}}
 	for k, v := range BuiltinStages {
 		c.Stages[k] = v
 	}

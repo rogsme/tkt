@@ -171,7 +171,7 @@ test("a ticket a merge unblocked offers its starts", () => {
 	assert.match(a.text, /^ACM-15 is unblocked: ACM-12 merged/);
 	assert.deepEqual(
 		choicesOf(a).map((c) => c.do),
-		["start", "start_auto", "start_after_plan", "dismiss"],
+		["start", "start_auto_plan", "start_manual", "dismiss"],
 	);
 	assert.equal(sound(a), "done");
 });

@@ -1,0 +1,44 @@
+# tkt start starts a tkt auto loop after the start, in a session of its own,
+# unless --manual or [start] mode says otherwise. In auto, the default, the
+# loop waits for you to approve the plan: it never sends the approval line.
+# --auto-plan and --yolo start the loop that approves it.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+env TKT_AUTO=
+env 'FAKE_HERDR_SCREEN=1. Do it.\nStatus: AWAITING_APPROVAL'
+
+# A dry run says what it would start.
+exec tkt start ACM-14 --auto-plan --dry-run
+stderr 'dry run: .* -C '$REPO' auto ACM-14 --notify --auto-plan'
+exec tkt start ACM-15 --dry-run
+stderr 'dry run: .* -C '$REPO' auto ACM-15 --notify$'
+
+exec tkt start ACM-12 --json
+envelope '.result.mode' auto
+env WT=$FAKE_WT_ROOT/ACM-12
+waitstate $WT auto on
+waitstate $WT auto_pause plan_awaits_approval
+! grep 'The plan is approved' $FAKE_DIR/prompts
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.auto.running, .auto.approve_plan, .phase]' '[true,false,"awaiting_approval"]'
+exec tkt auto ACM-12 --stop
+waitgrep 'ACM-12  stopped' $REPO/.git/tkt/auto-ACM-12.log
+
+# --manual starts no loop, and neither does [start] mode = "manual".
+exec tkt start ACM-13 --manual --json
+envelope '.result.mode' manual
+! exists $REPO/.git/tkt/auto-ACM-13.log
+cp $WORK/manual.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-16 --json
+envelope '.result.mode' manual
+
+# The modes exclude each other.
+! exec tkt start ACM-17 --manual --yolo
+stderr 'none of the others can be'
+
+-- config.toml --
+[auto]
+poll = "1s"
+-- manual.toml --
+[start]
+mode = "manual"

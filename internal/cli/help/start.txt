@@ -22,6 +22,23 @@ history; --prompt-file reads it from a file.
 The prompt's Model: line, when it has one, picks the preset (tkt help config);
 --as picks one yourself.
 
+After the start, tkt start starts a tkt auto loop for the ticket, in a
+session of its own, so the ticket drives itself once you approve the plan:
+
+  --auto       the default: the loop waits for you to approve the plan, in
+               the plan viewer or with tkt approve, and never approves it
+               itself; from there it drives the ticket to human
+               verification.
+  --manual     no loop: you drive each step.
+  --auto-plan  the loop approves the plan too, as tkt auto --auto-plan does.
+  --yolo       the loop carries the ticket to the merge with nobody
+               watching, as tkt auto --yolo does.
+
+[start] mode = "manual" in config.toml makes manual the default. tkt auto
+needs GitHub and gh; elsewhere a start stays manual and says so. The loop
+writes to auto-ID.log in the repository's tkt directory, and tkt auto ID
+--stop stops it.
+
 tkt start refuses when an agent already runs in the worktree: use tkt run for
 a fresh session, or tkt resume to bring back the last one. When the agent stops
 at a startup dialog, answer it in the tab and rerun the same tkt start: it

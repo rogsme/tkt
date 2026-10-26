@@ -56,7 +56,7 @@ export function cardActs(a: Attention, row: Row | undefined): Act[] {
 			case "done":
 				return { ...act, cmd: `/done ${id}` };
 			case "auto_on":
-				return { ...act, cmd: `/auto ${id} ${row?.auto?.approve_plan ? "full" : "on"}` };
+				return { ...act, cmd: `/auto ${id} ${row?.auto?.approve_plan ? "auto-plan" : "on"}` };
 			case "auto_off":
 				return { ...act, cmd: `/auto ${id} off` };
 			case "run":
@@ -65,10 +65,10 @@ export function cardActs(a: Attention, row: Row | undefined): Act[] {
 				return { ...act, cmd: `/relaunch ${id}` };
 			case "start":
 				return { ...act, cmd: `/start ${id}` };
-			case "start_auto":
-				return { ...act, cmd: `/start ${id} auto` };
-			case "start_after_plan":
-				return { ...act, cmd: `/start ${id} after-plan` };
+			case "start_auto_plan":
+				return { ...act, cmd: `/start ${id} auto-plan` };
+			case "start_manual":
+				return { ...act, cmd: `/start ${id} manual` };
 		}
 		return act;
 	});
@@ -94,13 +94,13 @@ export function ticketActs(r: Row): Act[] {
 	return out;
 }
 
-export type Mode = "manual" | "after-plan" | "auto";
+export type Mode = "auto" | "manual" | "auto-plan";
 
 /** startLine is the /start line for the tickets you typed. */
 export function startLine(ids: string, mode: Mode, as: string): string {
 	const list = ids.split(/[\s,]+/).filter(Boolean).join(" ");
 	if (!list) return "";
-	return ["/start", list, mode === "manual" ? "" : mode, as.trim() ? `as ${as.trim()}` : ""].filter(Boolean).join(" ");
+	return ["/start", list, mode === "auto" ? "" : mode, as.trim() ? `as ${as.trim()}` : ""].filter(Boolean).join(" ");
 }
 
 /** suggestLine is the /suggest line for what you asked for. Without a
