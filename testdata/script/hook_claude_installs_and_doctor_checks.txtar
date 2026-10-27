@@ -1,0 +1,31 @@
+# tkt hook claude --install adds tkt's hooks to the project's
+# .claude/settings.local.json, or settings.json with --shared, keeping what
+# the file held. tkt doctor finds them in either file, or in your own.
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "claude_hooks") | .status' warn
+
+mkdir $REPO/.claude
+cp $WORK/local.json $REPO/.claude/settings.local.json
+exec tkt hook claude --install --dry-run
+stderr 'dry run: tee '$REPO/.claude/settings.local.json
+cmp $REPO/.claude/settings.local.json $WORK/local.json
+
+exec tkt hook claude --install --json
+envelope '.result | [.settings, .installed]' '["'$REPO'/.claude/settings.local.json",true]'
+jqeq $REPO/.claude/settings.local.json '.permissions.allow' '["Bash(just test)"]'
+jqeq $REPO/.claude/settings.local.json '[.hooks.PreToolUse[].matcher]' '["Bash","Skill"]'
+jqeq $REPO/.claude/settings.local.json '[.hooks.Stop[].hooks[].command]' '["tkt hook event --claude"]'
+exec tkt hook claude --install --json
+envelope '.result.installed' false
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "claude_hooks") | [.status, (.message | test("settings.local.json"))]' '["ok",true]'
+
+# The shared file, the one you commit, counts too.
+rm $REPO/.claude/settings.local.json
+exec tkt hook claude --install --shared --json
+envelope '.result.settings' $REPO/.claude/settings.json
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "claude_hooks") | .status' ok
+
+-- local.json --
+{"permissions": {"allow": ["Bash(just test)"]}, "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "rtk hook"}]}]}}

@@ -703,12 +703,13 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			// A planning agent's turn is read while it works too: an
 			// approval in the plan viewer starts the work phase in the same
 			// session, with no tkt approve, and start-ticket marks it with
-			// Status: PLAN_APPROVED. That is one transcript read, or one
-			// OpenCode API call, per planning ticket and look.
+			// Status: PLAN_APPROVED, or at least starts work-ticket. That is
+			// one transcript read, or one OpenCode API call, per planning
+			// ticket and look.
 			if idle || st["stage"] == "start" {
 				turn, _ = c.lastTurn(rctx, &ag, st, t.Path)
 			}
-			if st["stage"] == "start" && agent.HasStatus(turn.All, contract.StatusPlanApproved) {
+			if st["stage"] == "start" && (agent.HasStatus(turn.All, contract.StatusPlanApproved) || slices.ContainsFunc(turn.Skills, contract.StartsWork)) {
 				c.planApproved(t.ID, ts)
 				row.Stage = st["stage"]
 			}

@@ -64,7 +64,7 @@ var doctorGroups = []struct {
 	ids   []string
 }{
 	{"Tools", []string{"git", "wt", "herdr", "gh", "pi"}},
-	{"Harnesses", []string{"opencode_plugin"}},
+	{"Harnesses", []string{"claude_hooks", "opencode_plugin"}},
 	{"Project", []string{"repository", "lifecycle", "worktrunk_hooks", "chores"}},
 	{"Environment", []string{"config", "herdr_env", "services", "log"}},
 }
@@ -75,6 +75,7 @@ var doctorLabels = map[string]string{
 	"herdr_env":       "herdr pane",
 	"worktrunk_hooks": "worktrunk hooks",
 	"opencode_plugin": "opencode plugin",
+	"claude_hooks":    "claude hooks",
 }
 
 func doctorGroup(id string) int {
@@ -346,7 +347,8 @@ func (a *App) Doctor(ctx context.Context) (*DoctorResult, error) {
 			})
 		}
 	}
-	add(func() Check { return a.pluginCheck(cfg, cfgErr) })
+	add(func() Check { return a.claudeHooksCheck(cfg, cfgErr, repo.Root) })
+	add(func() Check { return a.pluginCheck(cfg, cfgErr, repo.Root) })
 	add(func() Check { return a.choresCheck(cfg, cfgErr, repo) })
 	add(func() Check {
 		if repo.Root == "" {

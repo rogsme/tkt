@@ -553,25 +553,37 @@ func (a *App) installPlugin(ctx context.Context, dry bool) (*HookResult, error) 
 }
 
 // pluginCheck is tkt doctor's view of the OpenCode plugin, for a
-// configuration that runs OpenCode.
-func (a *App) pluginCheck(cfg config.Config, cfgErr error) Check {
+// configuration that runs OpenCode. OpenCode loads it from the project's
+// .opencode/plugins as well as from the global directory.
+func (a *App) pluginCheck(cfg config.Config, cfgErr error, root string) Check {
 	const id = "opencode_plugin"
 	if cfgErr != nil || !slices.ContainsFunc(cfg.Presets, func(p config.Preset) bool { return p.Harness == config.OpenCode }) {
 		return Check{ID: id, Status: CheckSkip, Message: "no preset runs OpenCode"}
 	}
-	path := OpenCodePluginPath(a.Getenv)
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return Check{ID: id, Status: CheckWarn, Message: "OpenCode agents share the service's TMPDIR and /tmp, since tkt's plugin is not installed",
-			Hint: "tkt hook tmp --install"}
+	paths := []string{OpenCodePluginPath(a.Getenv)}
+	if root != "" {
+		paths = append(paths, filepath.Join(root, ".opencode", "plugins", "tkt.js"))
 	}
-	if tkt, err := exec.LookPath("tkt"); err == nil {
-		tkt, _ = filepath.Abs(tkt)
-		if string(b) != pluginJS(tkt) {
-			return Check{ID: id, Status: CheckWarn, Message: path + " is from another tkt", Hint: "tkt hook tmp --install"}
+	var stale string
+	for _, path := range paths {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
 		}
+		if tkt, err := exec.LookPath("tkt"); err == nil {
+			tkt, _ = filepath.Abs(tkt)
+			if string(b) != pluginJS(tkt) {
+				stale = path
+				continue
+			}
+		}
+		return Check{ID: id, Status: CheckOK, Message: "OpenCode agents get their ticket's TMPDIR and report their status lines through " + path}
 	}
-	return Check{ID: id, Status: CheckOK, Message: "OpenCode agents get their ticket's TMPDIR from " + path}
+	if stale != "" {
+		return Check{ID: id, Status: CheckWarn, Message: stale + " is from another tkt", Hint: "tkt hook tmp --install"}
+	}
+	return Check{ID: id, Status: CheckWarn, Message: "OpenCode agents share the service's TMPDIR and /tmp, and tkt reads their status lines only from the last 50 messages, since tkt's plugin is not installed",
+		Hint: "tkt hook tmp --install"}
 }
 
 // pluginJS is tkt's OpenCode plugin. OpenCode runs plugins in its one
@@ -589,8 +601,8 @@ const pluginSource = `// tkt's OpenCode plugin. tkt hook tmp --install wrote it,
 // worktree it gives each shell the ticket's own TMPDIR, moves the new /tmp
 // paths an agent types into that directory, and tells the agent so. tkt
 // hook tmp decides each call; elsewhere it does nothing. It also tells tkt
-// hook event about each new prompt and each status line in a session, in
-// order, so tkt need not read a long session back.
+// hook event about each new prompt, each status line and each skill started
+// in a session, in order, so tkt need not read a long session back.
 import { spawn, spawnSync } from "node:child_process"
 
 const tkt = TKT_PATH
@@ -641,6 +653,11 @@ export default {
 				if (!event.input || typeof event.input !== "object") return
 				const dir = await dirOf(event.sessionID)
 				if (!dir) return
+				// A skill's start, such as work-ticket's after the plan viewer's
+				// approval, tells tkt the stage moved on.
+				if (event.tool === "skill" && typeof event.input.name === "string") {
+					tell({ directories: [dir], session: event.sessionID, skill: event.input.name })
+				}
 				const r = ask({ directories: [dir], tool: event.tool, input: event.input })
 				// In place, as OpenCode may hold on to the object it passed.
 				if (r?.input) Object.assign(event.input, r.input)
@@ -697,35 +714,100 @@ func (r *HookEventResult) Text(w io.Writer) {
 	}
 }
 
-// hookEvent is what the plugin tells: the session's directories, the
-// session, and either that a new prompt reached it (turn "new") or the
-// status lines of a text it finished.
+// hookEvent is what a hook tells: the session's directories, the session,
+// and either that a new prompt reached it (turn "new"), the status lines of
+// a text it finished, or a skill it started.
 type hookEvent struct {
 	Directories []string `json:"directories"`
 	Session     string   `json:"session"`
 	Turn        string   `json:"turn"`
 	Statuses    []string `json:"statuses"`
+	Skill       string   `json:"skill"`
 }
 
-// The ticket state's keys for what tkt's OpenCode plugin saw in a session:
-// which session, the status lines of its current turn in order, and when it
-// last told. The fix's session keeps its own under fixOC.
+// claudeHook is the part of a Claude Code hook's input tkt reads. AgentID
+// is set inside a subagent, whose session id is its parent's.
+type claudeHook struct {
+	Event   string `json:"hook_event_name"`
+	Session string `json:"session_id"`
+	Cwd     string `json:"cwd"`
+	AgentID string `json:"agent_id"`
+	Tool    string `json:"tool_name"`
+	Input   struct {
+		Skill string `json:"skill"`
+	} `json:"tool_input"`
+	Last string `json:"last_assistant_message"`
+}
+
+// event turns a Claude Code hook's input into what tkt records: a prompt
+// starts a turn, a stop gives the status lines of the turn's last text,
+// and a Skill call the skill it starts. ok is false for anything else.
+func (h claudeHook) event() (hookEvent, bool) {
+	ev := hookEvent{Directories: []string{h.Cwd}, Session: h.Session}
+	if h.AgentID != "" {
+		return ev, false
+	}
+	switch {
+	case h.Event == "UserPromptSubmit":
+		ev.Turn = "new"
+	case h.Event == "Stop":
+		// The turn's last text, where a run's status line goes. One in the
+		// middle of the turn, such as start-ticket's PLAN_APPROVED, is in
+		// the transcript, and work-ticket's start stands in for it.
+		for _, m := range contract.StatusLineRE.FindAllStringSubmatch(h.Last, -1) {
+			ev.Statuses = append(ev.Statuses, m[1])
+		}
+	case h.Event == "PreToolUse" && h.Tool == "Skill" && h.Input.Skill != "":
+		ev.Skill = h.Input.Skill
+	default:
+		return ev, false
+	}
+	return ev, true
+}
+
+// HookEventOpts are tkt hook event's arguments. Claude reads a Claude Code
+// hook's input in place of the OpenCode plugin's event.
+type HookEventOpts struct {
+	Claude bool
+}
+
+// The ticket state's keys for what tkt's hooks saw in a session: which
+// session, the status lines and skills of its current turn in order, and
+// when they last told. The fix's session keeps its own under fixHook.
+// Worktrees started before the Claude Code hooks keep the OpenCode
+// plugin's older keys, which tkt still reads.
 const (
+	keyHookSession  = "hook_session"
+	keyHookStatuses = "hook_statuses"
+	keyHookSkills   = "hook_skills"
+	keyHookAt       = "hook_at"
+	fixHook         = "fix_"
+
 	keyOCSession  = "oc_session"
 	keyOCStatuses = "oc_statuses"
 	keyOCAt       = "oc_at"
-	fixOC         = "fix_"
 )
 
-// HookEvent records what tkt's OpenCode plugin saw in a ticket's session,
-// read as JSON from stdin: a new prompt starts a turn, and each text the
-// agent finishes adds its status lines. tkt reads them back in place of
-// the session's last 50 messages, which a long turn outgrows, as start-
-// ticket's Status: PLAN_APPROVED does once the work phase runs for an hour.
-// It reads and writes only the state file, so it stays fast.
-func (a *App) HookEvent(ctx context.Context) (*HookEventResult, error) {
+// HookEvent records what tkt's hooks saw in a ticket's session, read as
+// JSON from stdin: a new prompt starts a turn, each text the agent finishes
+// adds its status lines, and each skill it starts is noted. tkt reads them
+// back over the session's own record, which a long turn outgrows and a
+// compaction cuts, so start-ticket's Status: PLAN_APPROVED, or work-ticket
+// starting after the plan viewer's approval, still counts. It reads and
+// writes only the state file, so it stays fast.
+func (a *App) HookEvent(ctx context.Context, o HookEventOpts) (*HookEventResult, error) {
 	var ev hookEvent
-	if err := json.NewDecoder(io.LimitReader(a.Stdin, 1<<20)).Decode(&ev); err != nil {
+	in := io.LimitReader(a.Stdin, 1<<20)
+	if o.Claude {
+		var h claudeHook
+		if err := json.NewDecoder(in).Decode(&h); err != nil {
+			return nil, apperr.New(apperr.Usage, "tkt hook event --claude reads a Claude Code hook's JSON on stdin: %v", err)
+		}
+		var ok bool
+		if ev, ok = h.event(); !ok {
+			return &HookEventResult{Session: h.Session, Statuses: []string{}}, nil
+		}
+	} else if err := json.NewDecoder(in).Decode(&ev); err != nil {
 		return nil, apperr.New(apperr.Usage, "tkt hook event reads a JSON event on stdin: %v", err).
 			WithHint(`echo '{"directories": ["DIR"], "session": "ses_...", "statuses": ["READY_FOR_REVIEW"]}' | tkt hook event`)
 	}
@@ -742,23 +824,27 @@ func (a *App) HookEvent(ctx context.Context) (*HookEventResult, error) {
 		switch ev.Session {
 		case st["session"]:
 		case st[keyFixSession]:
-			prefix = fixOC
+			prefix = fixHook
 		default:
 			// Another session in the worktree, such as a subagent's.
 			return res, nil
 		}
-		var statuses []string
-		if ev.Turn != "new" && st[prefix+keyOCSession] == ev.Session {
-			statuses = strings.Fields(st[prefix+keyOCStatuses])
+		var statuses, skills []string
+		if ev.Turn != "new" && st[prefix+keyHookSession] == ev.Session {
+			statuses = strings.Fields(st[prefix+keyHookStatuses])
+			skills = strings.Fields(st[prefix+keyHookSkills])
 		}
 		for _, s := range ev.Statuses {
 			if contract.StatusLineRE.MatchString("Status: " + s) {
 				statuses = append(statuses, s)
 			}
 		}
+		if ev.Skill != "" && !strings.ContainsAny(ev.Skill, " \t\n") {
+			skills = append(skills, ev.Skill)
+		}
 		now := a.Now()
-		if _, err := state.Update(path, now, prefix+keyOCSession, ev.Session, prefix+keyOCStatuses, strings.Join(statuses, " "),
-			prefix+keyOCAt, now.UTC().Format(history.TimeFormat)); err != nil {
+		if _, err := state.Update(path, now, prefix+keyHookSession, ev.Session, prefix+keyHookStatuses, strings.Join(statuses, " "),
+			prefix+keyHookSkills, strings.Join(skills, " "), prefix+keyHookAt, now.UTC().Format(history.TimeFormat)); err != nil {
 			return nil, apperr.New(apperr.Internal, "cannot write %s: %v", path, err)
 		}
 		res.Ticket, res.Statuses = st["ticket"], append(res.Statuses, statuses...)
@@ -767,15 +853,25 @@ func (a *App) HookEvent(ctx context.Context) (*HookEventResult, error) {
 	return res, nil
 }
 
-// withPluginStatuses adds the status lines tkt's OpenCode plugin saw in the
-// session's current turn after the turn's text, so the last of them counts:
-// the plugin saw every text, and the API only the last 50 messages.
-func withPluginStatuses(turn harness.Turn, st state.State, sid string) harness.Turn {
-	if sid == "" || st[keyOCSession] != sid || st[keyOCAt] == "" {
+// withHookEvents adds the status lines tkt's hooks saw in the session's
+// current turn after the turn's text, so the last of them counts, and the
+// skills it started: the hooks saw every text, and the session's own record
+// may hold only the turn's end.
+func withHookEvents(turn harness.Turn, st state.State, sid string) harness.Turn {
+	session, statuses, at := st[keyHookSession], st[keyHookStatuses], st[keyHookAt]
+	if session == "" {
+		session, statuses, at = st[keyOCSession], st[keyOCStatuses], st[keyOCAt]
+	}
+	if sid == "" || session != sid || at == "" {
 		return turn
 	}
-	for _, s := range strings.Fields(st[keyOCStatuses]) {
+	for _, s := range strings.Fields(statuses) {
 		turn.All += "\nStatus: " + s
+	}
+	for _, s := range strings.Fields(st[keyHookSkills]) {
+		if !slices.Contains(turn.Skills, s) {
+			turn.Skills = append(turn.Skills, s)
+		}
 	}
 	return turn
 }

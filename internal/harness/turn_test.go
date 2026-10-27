@@ -73,6 +73,28 @@ func TestClaudeLastTurn(t *testing.T) {
 	}
 }
 
+func TestClaudeLastTurnListsSkillsAndSurvivesCompaction(t *testing.T) {
+	lines := []string{
+		rec("user", "2026-01-01T10:00:00.000Z", "", "Use the start-ticket skill to start ticket ACM-12."),
+		rec("assistant", "2026-01-01T10:00:01.000Z", "m1", text("Status: AWAITING_APPROVAL")),
+		rec("user", "2026-01-01T10:00:02.000Z", "", "This session is being continued from a previous conversation.", "isCompactSummary"),
+		rec("user", "2026-01-01T10:00:03.000Z", "", "<task-notification>\n<task-id>poll</task-id>\n{\"type\": \"approval\"}"),
+		rec("assistant", "2026-01-01T10:00:04.000Z", "m2", []map[string]any{{"type": "tool_use", "name": "Skill", "input": map[string]any{"skill": "work-ticket"}}}),
+	}
+	file := filepath.Join(t.TempDir(), "s.jsonl")
+	os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	turn, ok := ClaudeLastTurn(file)
+	if !ok {
+		t.Fatal("the turn is unknown")
+	}
+	if !strings.Contains(turn.All, "AWAITING_APPROVAL") {
+		t.Errorf("the compaction reset the turn: %q", turn.All)
+	}
+	if len(turn.Skills) != 1 || turn.Skills[0] != "work-ticket" {
+		t.Errorf("skills: %v", turn.Skills)
+	}
+}
+
 func TestClaudeLastTurnCountsPendingBackgroundTasks(t *testing.T) {
 	launch := func(ts, id string) string {
 		return `{"type":"user","timestamp":"` + ts + `","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","content":"Command running in background with ID: ` + id + `."}]},"toolUseResult":{"stdout":"","backgroundTaskId":"` + id + `"}}`

@@ -1,8 +1,9 @@
-tkt hook tmp keeps the temporary files of OpenCode agents apart, one ticket
-from another. OpenCode runs every agent's tools in its one background
-service, so the TMPDIR tkt gives a ticket's tab never reaches them, and two
-agents that write /tmp/pr-body.md overwrite each other. Claude Code needs
-none of this: it runs its tools in the ticket's tab, under its TMPDIR.
+tkt hook puts tkt's hooks into the agents' harnesses. tkt hook tmp keeps
+the temporary files of OpenCode agents apart, one ticket from another.
+OpenCode runs every agent's tools in its one background service, so the
+TMPDIR tkt gives a ticket's tab never reaches them, and two agents that
+write /tmp/pr-body.md overwrite each other. Claude Code needs none of this:
+it runs its tools in the ticket's tab, under its TMPDIR.
 
 tkt hook tmp --install writes tkt's plugin into OpenCode's global plugins
 directory, ~/.config/opencode/plugins/tkt.js, next to the plugins herdr and
@@ -34,13 +35,36 @@ nothing, except a TMPDIR that names a ticket's directory: a service started
 in a ticket's tab passes that one to its shells, and tkt done removes it.
 
 The plugin also tells tkt hook event what it sees in a ticket's session:
-each new prompt, which starts a turn, and the status lines of each text the
-agent finishes. tkt keeps them in the ticket's state and reads them in place
-of the session's last 50 messages, which a long turn outgrows, so a
-Status: PLAN_APPROVED early in a long work phase still counts. Without the
-plugin, or with one from an older tkt, tkt reads the messages as before.
+each new prompt, which starts a turn, the status lines of each text the
+agent finishes, and each skill it starts. tkt keeps them in the ticket's
+state and reads them over the session's last 50 messages, which a long
+turn outgrows, so a Status: PLAN_APPROVED early in a long work phase still
+counts. Without the plugin, or with one from an older tkt, tkt reads the
+messages as before.
 
 Without --install, tkt hook tmp answers one request from the plugin: JSON
 on stdin with the call's directories, its shell's TMPDIR, and its tool
 input or shell command; --json prints the answer. tkt doctor warns when a
-preset runs OpenCode and the plugin is missing or comes from another tkt.
+preset runs OpenCode and the plugin is in neither OpenCode's global plugins
+directory nor the project's .opencode/plugins, or comes from another tkt.
+
+tkt hook claude does the same for Claude Code. tkt hook claude --install
+adds three hooks to the repository's .claude/settings.local.json, or to
+.claude/settings.json, the file you commit, with --shared, and keeps the
+rest of the file:
+
+  - UserPromptSubmit: a new prompt starts a turn;
+  - Stop: the status lines of the turn's last text;
+  - PreToolUse on the Skill tool: the skill a session starts.
+
+Each runs tkt hook event --claude, which reads Claude Code's hook input,
+prints nothing, since Claude Code adds a prompt hook's output to the
+prompt, and never fails, so the agent always goes on. None rewrites a tool
+call, so they leave your own hooks, such as RTK's Bash rewrite, alone. A
+session that starts work-ticket on the start stage had its plan approved,
+since start-ticket starts it only then, so tkt shows the ticket building
+even when the agent printed no Status: PLAN_APPROVED. A ticket's worktree
+gets settings.local.json only when worktrunk copies ignored files into it,
+as wt step copy-ignored does. Without --install, tkt hook claude prints the
+hooks as JSON. tkt doctor warns when a preset runs Claude Code and the
+hooks are in none of the project's settings files nor ~/.claude/settings.json.

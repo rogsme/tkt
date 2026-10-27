@@ -60,7 +60,7 @@ The scripts use these commands beyond testscript's own:
 | `mkrelease TAG` | Publishes a fake release TAG under `$WORK/rel`: a binary for each system that logs `new-tkt ARGS` and prints `tkt version TAG`, and `SHA256SUMS`. |
 | `envelope [EXPR WANT]` | stdout holds exactly one JSON envelope, and EXPR applied to it gives WANT. |
 | `unitvar VAR PATH` | Sets VAR to PATH as `systemd-escape --path` names it. |
-| `expand FILE` | Replaces `$WORK`, `$REPO`, `$HOME` and `$FAKE_DIR` in FILE with their values, for an archive file that names a path, such as a `config.toml`. |
+| `expand FILE [VAR...]` | Replaces `$WORK`, `$REPO`, `$HOME`, `$FAKE_DIR` and each VAR named in FILE with their values, for an archive file that names a path, such as a `config.toml`, or a value the script learned, such as a session id. |
 | `webserve FILE` | Stands in for a tkt agent chat that serves the web page: a server on 127.0.0.1 that answers `/health` as the extension does, named in FILE with its port and token. |
 
 ## Manual check in herdr
@@ -119,9 +119,17 @@ After a change to `tkt hook tmp` or its plugin, with a preset that runs OpenCode
 1. Run `tkt hook tmp --install`, then `opencode service restart` while no agent works. `tkt doctor` says the plugin is in place.
 2. Start an OpenCode ticket, and ask its agent to run `echo $TMPDIR` and to write `/tmp/acme-check.md` with its write tool, then to `cat /tmp/acme-check.md` in its shell. `$TMPDIR` names the ticket's directory, the file lands there, the `cat` finds it, and nothing named `acme-check.md` appears in `/tmp`. The agent mentions the move as expected rather than trying to undo it.
 3. Ask it to run `grep -rn "/tmp/acme-check.md" .` and to commit a message that names `/tmp/acme-check.md` in quotes: both keep the path as written.
-4. Present a plan and approve it in the viewer. Once the agent prints `Status: PLAN_APPROVED`, the ticket's state holds `oc_statuses` ending with `PLAN_APPROVED`, and `tkt ls` shows it building. Send it a new prompt: `oc_statuses` empties. This checks OpenCode's `session.inbox.delivered` and `session.text.ended` events, which the plugin relies on.
+4. Present a plan and approve it in the viewer. Once the agent prints `Status: PLAN_APPROVED`, the ticket's state holds `hook_statuses` ending with `PLAN_APPROVED` and `hook_skills` naming `work-ticket`, and `tkt ls` shows it building. Send it a new prompt: both empty. This checks OpenCode's `session.inbox.delivered` and `session.text.ended` events and the `skill` tool's `name` argument, which the plugin relies on.
 4. Put a file in `/tmp` yourself and ask the agent to read it: it reads the real one.
 5. In an OpenCode session outside any ticket, `echo $TMPDIR` shows the service's own, and nothing moves.
+
+After a change to `tkt hook claude` or `tkt hook event --claude`, with a preset that runs Claude Code:
+
+1. Run `tkt hook claude --install` in the repository. `tkt doctor` says the hooks are in `.claude/settings.local.json`. A ticket's worktree gets that file only when worktrunk copies ignored files into it; check that the new worktree has it, or use `--shared`.
+2. Start a Claude Code ticket. Its first prompt empties `hook_statuses` in the ticket's state, and the plan's end leaves `AWAITING_APPROVAL` there. This checks the `UserPromptSubmit` and `Stop` hooks and Stop's `last_assistant_message`.
+3. Approve the plan in the viewer. Once the agent starts work-ticket, `hook_skills` names it and `tkt ls` shows the ticket building, whether or not the agent printed `Status: PLAN_APPROVED`. This checks the `PreToolUse` hook on `Skill` and its `tool_input.skill`.
+4. In the ticket's tab, have the agent run `git status`: your own Bash rewrite hook, such as RTK's, still rewrites it.
+5. In a Claude Code session outside any ticket, the hooks change nothing and print nothing.
 
 After a change to `tkt watch --install` or the units, on a Linux machine with systemd, from a herdr pane in a scratch repository with the lifecycle configuration and a pull request for `ACM-1`:
 

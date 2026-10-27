@@ -189,9 +189,20 @@ func TestStartTicketMarksTheWorkPhaseBegun(t *testing.T) {
 		"with the viewer's Approve button",
 		"print `Status: " + contract.StatusPlanApproved + "` on a line of its own before the work phase begins",
 		"the run goes on after it",
+		// An approval starts work-ticket, so its start marks the approval.
+		"Approve revision N and start work-ticket?",
+		"treat that event as the user's message approving the revision and starting the work phase",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("start-ticket no longer says %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestStartsWork(t *testing.T) {
+	for skill, want := range map[string]bool{"work-ticket": true, "rogs:work-ticket": true, "start-ticket": false, "work-ticket-x": false} {
+		if got := contract.StartsWork(skill); got != want {
+			t.Errorf("StartsWork(%q) = %v", skill, got)
 		}
 	}
 }

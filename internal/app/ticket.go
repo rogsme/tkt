@@ -114,19 +114,19 @@ func (c *Ctx) lastTurn(ctx context.Context, ag *herdr.Agent, st state.State, pat
 	turn, ok := c.Agent.LastTurn(ctx, h, sid, path)
 	if ok {
 		if h == config.OpenCode {
-			return withPluginStatuses(turn, st, sid), "api"
+			return withHookEvents(turn, st, sid), "api"
 		}
-		return turn, "transcript"
+		return withHookEvents(turn, st, sid), "transcript"
 	}
 	if ag == nil {
-		return withPluginStatuses(harness.Turn{At: turn.At}, st, sid), ""
+		return withHookEvents(harness.Turn{At: turn.At}, st, sid), ""
 	}
 	// Reading OpenCode's recent output scrolls its view up and back, in
 	// front of whoever watches the tab, so it gets the screen as it is.
 	if ag.Kind == config.OpenCode {
-		return withPluginStatuses(harness.Turn{All: c.H.Read(ctx, ag.PaneID, 200), At: turn.At}, st, sid), "screen"
+		return withHookEvents(harness.Turn{All: c.H.Read(ctx, ag.PaneID, 200), At: turn.At}, st, sid), "screen"
 	}
-	return harness.Turn{All: c.H.ReadRecent(ctx, ag.PaneID, 200), At: turn.At}, "screen"
+	return withHookEvents(harness.Turn{All: c.H.ReadRecent(ctx, ag.PaneID, 200), At: turn.At}, st, sid), "screen"
 }
 
 // ticketAgent picks the ticket's agent: the one in pane want, the only one

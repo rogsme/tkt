@@ -235,15 +235,16 @@ func cmdWebServe(ts *testscript.TestScript, neg bool, args []string) {
 // webToken is the token webserve's page takes.
 const webToken = "0123456789abcdef0123456789abcdef0123456789abcdef"
 
-// expand FILE: replace $WORK, $REPO, $HOME and $FAKE_DIR in FILE with their
-// values, for an archive file that names a path, such as a config.toml.
+// expand FILE [VAR...]: replace $WORK, $REPO, $HOME and $FAKE_DIR in FILE,
+// and each VAR named, with their values, for an archive file that names a
+// path or a value a script learned, such as a session id.
 func cmdExpand(ts *testscript.TestScript, neg bool, args []string) {
-	if neg || len(args) != 1 {
-		ts.Fatalf("usage: expand FILE")
+	if neg || len(args) < 1 {
+		ts.Fatalf("usage: expand FILE [VAR...]")
 	}
 	f := ts.MkAbs(args[0])
 	var pairs []string
-	for _, v := range []string{"WORK", "REPO", "HOME", "FAKE_DIR"} {
+	for _, v := range append(args[1:], "WORK", "REPO", "HOME", "FAKE_DIR") {
 		pairs = append(pairs, "$"+v, ts.Getenv(v))
 	}
 	ts.Check(os.WriteFile(f, []byte(strings.NewReplacer(pairs...).Replace(ts.ReadFile(f))), 0o644))

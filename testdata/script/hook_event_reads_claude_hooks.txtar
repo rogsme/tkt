@@ -1,0 +1,60 @@
+# tkt's Claude Code hooks tell tkt hook event --claude about each new prompt,
+# the status lines of each turn's last text, and each skill a session
+# starts. tkt keeps them in the ticket's state, so a work-ticket start moves
+# the ticket to the work stage even when the transcript is out of reach.
+mkprompt $WORK/p.txt ACM-5
+stdin $WORK/p.txt
+exec tkt start ACM-5 --prompt -
+env WT=$FAKE_WT_ROOT/ACM-5
+statevar $WT session SID
+expand $WORK/prompt.json SID WT
+expand $WORK/stop.json SID WT
+expand $WORK/skill.json SID WT
+expand $WORK/subagent.json SID WT
+
+# The hooks print nothing, which Claude Code would add to the prompt.
+stdin $WORK/prompt.json
+exec tkt hook event --claude
+! stdout .
+stdin $WORK/stop.json
+exec tkt hook event --claude
+! stdout .
+state $WT hook_statuses AWAITING_APPROVAL
+state $WT hook_session $SID
+
+# A subagent's Skill call shares the session id, and changes nothing.
+stdin $WORK/subagent.json
+exec tkt hook event --claude
+state $WT hook_skills ''
+stdin $WORK/skill.json
+exec tkt hook event --claude --json
+envelope '.result.ticket' ACM-5
+state $WT hook_skills work-ticket
+
+# No transcript to read: the hooks' record says work-ticket started.
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .stage]' '["building","work"]'
+
+# A new prompt starts a new turn.
+stdin $WORK/prompt.json
+exec tkt hook event --claude
+state $WT hook_statuses ''
+state $WT hook_skills ''
+
+# Input it cannot read never fails the hook, so the agent goes on.
+stdin $WORK/broken.json
+exec tkt hook event --claude
+! stdout .
+stderr 'reads a Claude Code hook''s JSON'
+
+-- prompt.json --
+{"hook_event_name": "UserPromptSubmit", "session_id": "$SID", "cwd": "$WT", "prompt": "Use the start-ticket skill to start ticket ACM-5."}
+-- stop.json --
+{"hook_event_name": "Stop", "session_id": "$SID", "cwd": "$WT", "last_assistant_message": "Revision 1 is in the viewer.\n\nStatus: AWAITING_APPROVAL"}
+-- skill.json --
+{"hook_event_name": "PreToolUse", "session_id": "$SID", "cwd": "$WT/src", "tool_name": "Skill", "tool_input": {"skill": "work-ticket"}}
+-- subagent.json --
+{"hook_event_name": "PreToolUse", "session_id": "$SID", "agent_id": "a1", "cwd": "$WT", "tool_name": "Skill", "tool_input": {"skill": "work-ticket"}}
+-- broken.json --
+{"hook_event_name":

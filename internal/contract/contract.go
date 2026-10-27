@@ -8,6 +8,7 @@ package contract
 import (
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Version is the configuration contract version tkt reads, as defined in
@@ -127,6 +128,18 @@ var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`
 // Skills names the lifecycle skills tkt's built-in stage lines, and the
 // lines tkt approve, tkt merge and tkt suggest send, ask for.
 var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr", "verify-pr", "finish-ticket", "suggest-tickets"}
+
+// StartsWork reports whether skill, as a harness's Skill tool names it, is
+// work-ticket: start-ticket's session starts it only once the plan is
+// approved, so tkt takes it for the approval when no Status: PLAN_APPROVED
+// came first. A plugin's skill carries the plugin's name before a colon.
+func StartsWork(skill string) bool {
+	_, name, _ := strings.Cut(skill, ":")
+	if name == "" {
+		name = skill
+	}
+	return name == "work-ticket"
+}
 
 // CleanMergeRule is how review-pr's rule about a review brief across clean
 // base merges begins. tkt sync relies on it: it pushes such merges with no

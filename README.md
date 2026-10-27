@@ -93,7 +93,8 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt stats` | Shows how long tickets took from start to merge, and how long they waited for you. |
 | `tkt history ID...` | Shows what happened to tickets, merged ones too: each event with its time, and the pull request's commits and reviews. |
 | `tkt doctor` | Checks the tools, versions and configuration tkt needs. |
-| `tkt hook tmp --install` | Installs tkt's OpenCode plugin, which gives OpenCode agents their ticket's `TMPDIR` and moves the new `/tmp` paths they type into it. |
+| `tkt hook tmp --install` | Installs tkt's OpenCode plugin, which gives OpenCode agents their ticket's `TMPDIR`, moves the new `/tmp` paths they type into it, and tells tkt each prompt, status line and skill start. |
+| `tkt hook claude --install` | Adds tkt's Claude Code hooks to the project's `.claude/settings.local.json`, or `settings.json` with `--shared`: they tell tkt each prompt, each turn's status lines and each skill start, so a plan approved in the viewer shows at once. `tkt doctor` checks for them. |
 | `tkt schema` | Describes every command, flag, result and error code as JSON. |
 
 A ticket from start to merge, in short:

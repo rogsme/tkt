@@ -328,18 +328,44 @@ func hookCmd(g *globals) *cobra.Command {
 	}
 	tmp.Flags().BoolVar(&o.Install, "install", false, "write tkt's plugin into OpenCode's global plugins directory")
 	tmp.Flags().BoolVar(&o.Dry, "dry-run", false, "with --install, print the change instead of making it")
+	var eo app.HookEventOpts
 	event := &cobra.Command{
 		Use:     "event",
-		Short:   "Record a status line or a new prompt that tkt's OpenCode plugin saw in a ticket's session",
+		Short:   "Record a prompt, status line or skill that tkt's hooks saw in a ticket's session",
 		Long:    helpText("hook"),
 		Example: `  echo '{"directories": ["'$PWD'"], "session": "ses_1", "statuses": ["PLAN_APPROVED"]}' | tkt hook event`,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			res, err := g.app().HookEvent(cmd.Context())
+			res, err := g.app().HookEvent(cmd.Context(), eo)
+			if eo.Claude && !g.json {
+				// Claude Code adds a prompt hook's output to the prompt, and
+				// a failed hook must never hold the agent up.
+				if err != nil {
+					g.ui.Warn("tkt hook event: %v", err)
+				}
+				return nil
+			}
 			return show(g, cmd, res, res == nil, err)
 		},
 	}
-	cmd.AddCommand(tmp, event)
+	event.Flags().BoolVar(&eo.Claude, "claude", false, "read a Claude Code hook's input, print nothing, and never fail")
+	var co app.ClaudeHookOpts
+	claude := &cobra.Command{
+		Use:   "claude",
+		Short: "Add tkt's Claude Code hooks to the project's settings, so tkt hears each prompt, status line and skill",
+		Long:  helpText("hook"),
+		Example: `  tkt hook claude --install
+  tkt hook claude --install --shared`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().ClaudeHook(cmd.Context(), co)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	claude.Flags().BoolVar(&co.Install, "install", false, "add the hooks to the repository's .claude/settings.local.json")
+	claude.Flags().BoolVar(&co.Shared, "shared", false, "with --install, write .claude/settings.json, the file you commit")
+	claude.Flags().BoolVar(&co.Dry, "dry-run", false, "with --install, print the change instead of making it")
+	cmd.AddCommand(tmp, event, claude)
 	return cmd
 }
 

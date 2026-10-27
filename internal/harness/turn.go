@@ -22,6 +22,9 @@ type Turn struct {
 	// heard back from. Claude Code ends a turn while a CI watcher or a
 	// subagent runs, and goes on when the task's notification arrives.
 	Pending int
+	// Skills names the skills the agent started in the turn, in order, as
+	// the Skill tool names them.
+	Skills []string
 }
 
 var (
@@ -57,7 +60,7 @@ func ClaudeLastTurn(file string) (t Turn, known bool) {
 		}
 	}
 	var (
-		all             []string
+		all, skills     []string
 		lastID, lastTxt string
 		prompt          bool
 		started         = map[string]bool{}
@@ -79,6 +82,7 @@ func ClaudeLastTurn(file string) (t Turn, known bool) {
 				Type      string `json:"type"`
 				Sidechain bool   `json:"isSidechain"`
 				Meta      bool   `json:"isMeta"`
+				Compact   bool   `json:"isCompactSummary"`
 				Timestamp string `json:"timestamp"`
 				Message   struct {
 					ID      string          `json:"id"`
@@ -90,9 +94,11 @@ func ClaudeLastTurn(file string) (t Turn, known bool) {
 					t.At = at
 				}
 				switch {
-				case rec.Type == "user" && isPrompt(rec.Message.Content) && !isNotice(rec.Message.Content):
-					all, lastID, lastTxt, prompt = nil, "", "", true
+				// A compaction's summary carries the turn on; it is no prompt.
+				case rec.Type == "user" && !rec.Compact && isPrompt(rec.Message.Content) && !isNotice(rec.Message.Content):
+					all, skills, lastID, lastTxt, prompt = nil, nil, "", "", true
 				case rec.Type == "assistant":
+					skills = append(skills, skillUses(rec.Message.Content)...)
 					if text := texts(rec.Message.Content); text != "" {
 						all = append(all, text)
 						if rec.Message.ID == lastID && lastID != "" {
@@ -116,8 +122,29 @@ func ClaudeLastTurn(file string) (t Turn, known bool) {
 	if !prompt && !(cut && len(all) > 0) {
 		return Turn{At: t.At, Pending: t.Pending}, false
 	}
-	t.Final, t.All = lastTxt, strings.Join(all, "\n")
+	t.Final, t.All, t.Skills = lastTxt, strings.Join(all, "\n"), skills
 	return t, true
+}
+
+// skillUses lists the skills a message's Skill tool calls start.
+func skillUses(content json.RawMessage) []string {
+	var parts []struct {
+		Type  string `json:"type"`
+		Name  string `json:"name"`
+		Input struct {
+			Skill string `json:"skill"`
+		} `json:"input"`
+	}
+	if json.Unmarshal(content, &parts) != nil {
+		return nil
+	}
+	var out []string
+	for _, p := range parts {
+		if p.Type == "tool_use" && p.Name == "Skill" && p.Input.Skill != "" {
+			out = append(out, p.Input.Skill)
+		}
+	}
+	return out
 }
 
 // isNotice reports whether a user record is something Claude Code wrote
