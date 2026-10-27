@@ -224,6 +224,37 @@ func syncCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func verifiedCmd(g *globals) *cobra.Command {
+	var o app.VerifiedOpts
+	cmd := &cobra.Command{
+		Use:   "verified ID",
+		Short: "Comment on the ticket's pull request that every human verification step passed",
+		Long:  helpText("verified"),
+		Example: `  tkt verified ACM-12 --passed all --head a1b2c3d
+  tkt verified ACM-12 --passed all --evidence`,
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case len(args) != 1:
+				return usage("usage: tkt verified ID --passed STEPS")
+			case !cmd.Flags().Changed("passed"):
+				return usage("tkt verified needs --passed: the human verification steps that passed, such as 1-3, or all")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Verified(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.Passed, "passed", "", "the human verification steps that passed: numbers and ranges such as 1-3 or 1,2,4, or all")
+	cmd.Flags().StringVar(&o.Head, "head", "", "the head the steps ran on; tkt verified refuses once the pull request moved past it")
+	cmd.Flags().BoolVar(&o.Evidence, "evidence", false, "say you confirmed the steps from verify-pr's evidence, on the head it ran on")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the comment command instead of running it")
+	return cmd
+}
+
 func mergeCmd(g *globals) *cobra.Command {
 	var o app.MergeOpts
 	cmd := &cobra.Command{

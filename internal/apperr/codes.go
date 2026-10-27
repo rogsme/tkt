@@ -107,22 +107,23 @@ const (
 	ChoreRunning        Code = "chore_running"
 	WebNotRunning       Code = "web_not_running"
 
-	WtFailed          Code = "wt_failed"
-	WtSwitchFailed    Code = "wt_switch_failed"
-	WtHookFailed      Code = "wt_hook_failed"
-	WtRemoveFailed    Code = "wt_remove_failed"
-	GitFailed         Code = "git_failed"
-	HerdrFailed       Code = "herdr_failed"
-	AgentLaunchFailed Code = "agent_launch_failed"
-	PromptSendFailed  Code = "prompt_send_failed"
-	OpenCodeFailed    Code = "opencode_failed"
-	ForgeQueryFailed  Code = "forge_query_failed"
-	ReleaseFailed     Code = "release_query_failed"
-	UpdateChecksum    Code = "update_checksum"
-	UpdateVerify      Code = "update_verify_failed"
-	Internal          Code = "internal"
-	PiUnpackFailed    Code = "pi_unpack_failed"
-	ServiceFailed     Code = "service_failed"
+	WtFailed           Code = "wt_failed"
+	WtSwitchFailed     Code = "wt_switch_failed"
+	WtHookFailed       Code = "wt_hook_failed"
+	WtRemoveFailed     Code = "wt_remove_failed"
+	GitFailed          Code = "git_failed"
+	HerdrFailed        Code = "herdr_failed"
+	AgentLaunchFailed  Code = "agent_launch_failed"
+	PromptSendFailed   Code = "prompt_send_failed"
+	OpenCodeFailed     Code = "opencode_failed"
+	ForgeQueryFailed   Code = "forge_query_failed"
+	ForgeCommentFailed Code = "forge_comment_failed"
+	ReleaseFailed      Code = "release_query_failed"
+	UpdateChecksum     Code = "update_checksum"
+	UpdateVerify       Code = "update_verify_failed"
+	Internal           Code = "internal"
+	PiUnpackFailed     Code = "pi_unpack_failed"
+	ServiceFailed      Code = "service_failed"
 
 	AgentNotReady   Code = "agent_not_ready"
 	PromptUncertain Code = "prompt_uncertain"
@@ -228,6 +229,7 @@ var Registry = []Info{
 	{PromptSendFailed, ExitTool, "sending the prompt failed"},
 	{OpenCodeFailed, ExitTool, "the OpenCode API failed"},
 	{ForgeQueryFailed, ExitTool, "reading pull requests from the forge failed"},
+	{ForgeCommentFailed, ExitTool, "commenting on the pull request failed"},
 	{ReleaseFailed, ExitTool, "reading or downloading a tkt release failed"},
 	{UpdateChecksum, ExitTool, "the downloaded binary does not match SHA256SUMS; nothing was replaced"},
 	{UpdateVerify, ExitTool, "the downloaded binary did not run or did not print its version; nothing was replaced"},

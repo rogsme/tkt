@@ -171,6 +171,11 @@ func (e HistoryEvent) line() string {
 		return "merged " + forge.Ref(e.PR)
 	case history.Closed:
 		return forge.Ref(e.PR) + " closed without merging"
+	case history.Verified:
+		if e.Action == "evidence" {
+			return "human verification passed, from verify-pr's evidence; commented on " + forge.Ref(e.PR)
+		}
+		return "human verification passed; commented on " + forge.Ref(e.PR)
 	case history.Hold:
 		if e.Action == "off" {
 			return "taken off hold"

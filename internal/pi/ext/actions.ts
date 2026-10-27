@@ -364,6 +364,7 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	// tkt merge refuses a head that moved since the steps ran, which it can
 	// check only against the head they ran on.
 	if (!head) return `${id}: every step passed, but the board has no head for its pull request yet. /check ${id} again in a moment to merge it.`;
+	const said = await verified(hub, id, steps.map((s) => s.n), head);
 	const pending = hub.row(id)?.checks?.state === "pending";
 	const go = await ask(ctx, `${id}: every step passed. Merge it?`, [
 		behind > 0
@@ -373,8 +374,18 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 				: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab, or leaves an order while another ticket merges." },
 		{ label: "Not yet" },
 	], false);
-	if (!go?.answer.startsWith("Merge")) return `${id}: every step passed. /check ${id} merges it when you are ready.`;
-	return merge(hub, id, steps.map((s) => s.n), head);
+	if (!go?.answer.startsWith("Merge")) return `${id}: every step passed. ${said} /check ${id} merges it when you are ready.`;
+	return `${said} ${merge(hub, id, steps.map((s) => s.n), head)}`;
+}
+
+/** verified comments on the pull request that every step passed, with tkt
+ * verified, before the merge question: the pull request says so even when
+ * you merge later. It returns a sentence that says how that went. */
+async function verified(hub: Hub, id: string, steps: number[], head: string, evidence = false): Promise<string> {
+	const env = await hub.tkt<{ action: string; pr: number; url: string }>(["verified", id, "--passed", steps.join(","), "--head", head, ...(evidence ? ["--evidence"] : [])]);
+	if (!env.ok || !env.result) return `tkt verified could not comment on the pull request: ${env.error?.message ?? "no answer"}.`;
+	if (env.result.action === "none") return `Pull request #${env.result.pr} says so already.`;
+	return `Commented on pull request #${env.result.pr} that human verification passed.`;
 }
 
 /** howOptions are /check's first answers: confirm from verify-pr's
@@ -403,7 +414,8 @@ async function confirmEvidence(hub: Hub, ctx: ExtensionContext, id: string, step
 		{ label: "Not yet" },
 	], false);
 	if (!go?.answer.startsWith("Confirm")) return `${id}: nothing confirmed. /check ${id} goes on when you are ready.`;
-	return merge(hub, id, steps.map((s) => s.n), v.head, true);
+	const said = await verified(hub, id, steps.map((s) => s.n), v.head, true);
+	return `${said} ${merge(hub, id, steps.map((s) => s.n), v.head, true)}`;
 }
 
 /** inbox walks what needs you, each with fixed answers. It asks about each

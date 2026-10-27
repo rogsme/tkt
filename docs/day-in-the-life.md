@@ -230,7 +230,7 @@ ACM-130: verify-pr on 7c41e09:
 Confirm the steps from this and merge?
 ```
 
-You open the third capture to see the dates yourself, then pick `Confirm and merge now`. verify-pr's report is evidence, never your word: `tkt merge ACM-130 --passed all --evidence` tells finish-ticket you confirmed the steps from it, and finish-ticket records that in its completion comment.
+You open the third capture to see the dates yourself, then pick `Confirm and merge now`. verify-pr's report is evidence, never your word: `tkt verified ACM-130 --passed all --evidence` comments on the pull request that human verification passed, confirmed from verify-pr's evidence, and `tkt merge ACM-130 --passed all --evidence` tells finish-ticket you confirmed the steps from it, which finish-ticket records in its completion comment.
 
 finish-ticket merges only a head that review-pr cleared, and only the bot reviewed this one, so `tkt merge` leaves a merge order instead of sending the line now. The row's notes say `merges when green`. tkt watch has review-pr review the head in a fresh session, then sends finish-ticket the word to merge, naming your steps and the head they passed on. finish-ticket checks CI, the review and the open feedback at that exact head, merges, moves ACM-130 to done in the tracker, and waits for CI on main. At 12:20 it ends with `Status: DONE`, and tkt watch closes the tab and removes the worktree. Without a watch, `/done ACM-130`, or "ACM-130 is merged, remove it", does that after asking.
 
@@ -328,7 +328,7 @@ run the flaky chore now
 
 ## 15:30 Merge once synced
 
-The bot cleared ACM-124's fix at 15:05. The checklist keeps its marks per head, so on the new head `/check ACM-124` starts blank. You pick `Verify this head` again, and this time every step passes. Main is still ahead of the branch, so the choice reads:
+The bot cleared ACM-124's fix at 15:05. The checklist keeps its marks per head, so on the new head `/check ACM-124` starts blank. You pick `Verify this head` again, and this time every step passes. /check runs `tkt verified ACM-124 --passed all`, which comments `Human verification passed` with a green check mark on pull request #485, naming the steps and the head, so anyone reading it knows. Main is still ahead of the branch, so the choice reads:
 
 ```
 ACM-124: every step passed. Merge it?

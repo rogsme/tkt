@@ -1,0 +1,49 @@
+# tkt verified comments on the pull request that every human verification
+# step passed, once per head. It checks the steps as tkt merge does, and
+# with --evidence, that verify-pr's report passes each one.
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+
+# Every step must pass, on the pull request's head.
+! exec tkt verified ACM-12 --passed 1
+stderr 'names step 1, but the pull request''s procedure has steps 1 and 2'
+! exec tkt verified ACM-12 --passed all --head 0000000
+rc 4
+! exists $FAKE_DIR/comments.txt
+
+exec tkt verified ACM-12 --passed all --head $H1 --dry-run
+stderr 'dry run: gh pr comment 7 --repo github.com/acme/app --body'
+! exists $FAKE_DIR/comments.txt
+
+# A comment gh refuses fails the command, and leaves the head to try again.
+env FAKE_GH_COMMENT_FAIL=1
+! exec tkt verified ACM-12 --passed all --head $H1 --json
+envelope '.error.code' forge_comment_failed
+state $FAKE_WT_ROOT/ACM-12 verified_head ''
+env FAKE_GH_COMMENT_FAIL=
+
+exec tkt verified ACM-12 --passed all --head $H1 --json
+envelope '.result | [.action, .pr, .steps, .url]' '["commented",7,[1,2],"https://github.com/acme/app/pull/7#issuecomment-1"]'
+grep '^Human verification passed ' $FAKE_DIR/comments.txt
+grep '^Steps 1 and 2 passed on head '$H1'\.$' $FAKE_DIR/comments.txt
+state $FAKE_WT_ROOT/ACM-12 verified_head $H1
+exec tkt history ACM-12
+stdout 'human verification passed; commented on #7'
+
+# Once per head.
+exec tkt verified ACM-12 --passed all --json
+envelope '.result.action' none
+
+# --evidence needs a verify-pr report that passes each step.
+! exec tkt verified ACM-12 --passed all --evidence --json
+envelope '.error.code' not_verified
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n2. Sign in with the code sent by text.\n   Expected: the dashboard.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

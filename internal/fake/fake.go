@@ -90,7 +90,8 @@ func Claude() {
 	os.Exit(99)
 }
 
-// GH answers `gh pr list` from the JSON file in $FAKE_GH_PRS.
+// GH answers `gh pr list` from the JSON file in $FAKE_GH_PRS, and keeps
+// what `gh pr comment` posts.
 func GH() {
 	logCall("gh")
 	args := os.Args[1:]
@@ -100,6 +101,26 @@ func GH() {
 	}
 	if os.Getenv("FAKE_GH_FAIL") == "1" {
 		die(1, "HTTP 502")
+	}
+	if len(args) >= 3 && args[0] == "pr" && args[1] == "comment" {
+		// Comments go to $FAKE_DIR/comments.txt, one per block.
+		if os.Getenv("FAKE_GH_COMMENT_FAIL") == "1" {
+			die(1, "HTTP 403")
+		}
+		body := ""
+		for i := 3; i+1 < len(args); i++ {
+			if args[i] == "--body" {
+				body = args[i+1]
+			}
+		}
+		f, err := os.OpenFile(filepath.Join(os.Getenv("FAKE_DIR"), "comments.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			die(1, "%v", err)
+		}
+		fmt.Fprintf(f, "#%s\n%s\n--\n", args[2], body)
+		f.Close()
+		fmt.Printf("https://github.com/acme/app/pull/%s#issuecomment-1\n", args[2])
+		os.Exit(0)
 	}
 	if len(args) < 2 || args[0] != "pr" || args[1] != "list" {
 		die(2, "fake gh: unsupported: %s", strings.Join(args, " "))

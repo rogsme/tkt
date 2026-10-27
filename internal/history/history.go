@@ -25,7 +25,11 @@ const (
 	// Closed is a pull request closed without merging, which tkt done
 	// records when it removes the ticket.
 	Closed = "closed"
-	Done   = "done"
+	// Verified is every human verification step passing on a head, which
+	// tkt verified comments on the pull request (Action evidence when you
+	// confirmed them from verify-pr's report).
+	Verified = "verified"
+	Done     = "done"
 	// Hold is a ticket put on hold (Action on) or taken off it (off).
 	Hold = "hold"
 	// Sync is a base merge tkt made and pushed itself (Action merged), or

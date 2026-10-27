@@ -142,6 +142,8 @@ export function eventText(e: HistoryEvent): string {
 			return `merged #${e.pr}`;
 		case "closed":
 			return `#${e.pr} closed without merging`;
+		case "verified":
+			return e.action === "evidence" ? `human verification passed, from verify-pr's evidence; commented on #${e.pr}` : `human verification passed; commented on #${e.pr}`;
 		case "hold":
 			return e.action === "off" ? "taken off hold" : "put on hold";
 		case "sync":

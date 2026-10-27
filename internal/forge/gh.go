@@ -1,5 +1,5 @@
-// Package forge reads pull requests, their checks and their review verdicts.
-// Only GitHub, through gh, is supported.
+// Package forge reads pull requests, their checks and their review verdicts,
+// and comments on them. Only GitHub, through gh, is supported.
 package forge
 
 import (
@@ -13,7 +13,8 @@ import (
 	"gitlab.com/rogs/tkt/internal/runner"
 )
 
-// GH reads pull requests of one repository, named host/owner/name.
+// GH reads, and comments on, pull requests of one repository, named
+// host/owner/name.
 type GH struct {
 	R    runner.Runner
 	Repo string
@@ -90,6 +91,20 @@ func (g GH) list(ctx context.Context, args ...string) ([]PR, error) {
 		return nil, apperr.New(apperr.ForgeQueryFailed, "gh pr list printed output tkt cannot read").Wrap(err)
 	}
 	return prs, nil
+}
+
+// CommentArgv is the gh command that comments body on pull request n.
+func (g GH) CommentArgv(n int, body string) []string {
+	return []string{"gh", "pr", "comment", strconv.Itoa(n), "--repo", g.Repo, "--body", body}
+}
+
+// Comment comments body on pull request n, and returns the comment's URL.
+func (g GH) Comment(ctx context.Context, n int, body string) (string, error) {
+	r := g.R.Run(ctx, runner.Cmd{Argv: g.CommentArgv(n, body), Timeout: 60 * time.Second})
+	if !r.OK() {
+		return "", apperr.New(apperr.ForgeCommentFailed, "gh pr comment failed: %s", runner.Head(strings.TrimSpace(r.ErrText()), 200))
+	}
+	return strings.TrimSpace(r.Out()), nil
 }
 
 // ListBodies returns the branch's open pull requests with their bodies.
