@@ -145,11 +145,13 @@ test("a page's question to the chat is checked, and only that page hears the ans
 	m.receive({ t: "query", id: 6, what: "rm", ticket: "ACM-12" }, a.p);
 	m.receive({ t: "query", id: "7", what: "diff", ticket: "ACM-12" }, a.p);
 	m.receive({ t: "query", id: 8, what: "screen", ticket: "chore/nightly-1" }, a.p);
+	m.receive({ t: "query", id: 9, what: "suggest", ticket: "" }, a.p);
 	await new Promise((r) => setTimeout(r, 0));
 	assert.deepEqual(queries, [
 		{ what: "diff", ticket: "ACM-12" },
 		{ what: "stats", ticket: "" },
 		{ what: "screen", ticket: "chore/nightly-1" },
+		{ what: "suggest", ticket: "" },
 	]);
 	assert.deepEqual(
 		a.got.filter((g) => g.t === "result"),
@@ -157,6 +159,7 @@ test("a page's question to the chat is checked, and only that page hears the ans
 			{ t: "result", id: 1, value: { ok: true, result: { view: "diff" } } },
 			{ t: "result", id: 2, value: { ok: true, result: { view: "stats" } } },
 			{ t: "result", id: 8, value: { ok: true, result: { view: "screen" } } },
+			{ t: "result", id: 9, value: { ok: true, result: { view: "suggest" } } },
 		],
 	);
 	assert.equal(b.got.filter((g) => g.t === "result").length, 0);

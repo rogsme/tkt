@@ -32,3 +32,8 @@ says. The answer stays in the tab: read it there, ask the agent about it,
 and start the tickets you want with tkt start, adding --as PRESET for a
 ticket whose model another preset serves. The tkt agent's /suggest opens
 the same tab.
+
+tkt suggest --show prints what the last run's agent said since its last
+prompt, read from its session's record the way tkt show reads a ticket's,
+or from its screen when tkt cannot read the record. It starts nothing, so
+the web page's Suggest view polls it to show the picks.

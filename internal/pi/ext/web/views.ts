@@ -5,10 +5,10 @@
 
 import { boardColumns } from "../board.ts";
 import type { Board } from "../mirror.ts";
-import { ago, type ChoresResult, since } from "../model.ts";
+import { ago, type ChoresResult, since, type SuggestResult } from "../model.ts";
 import { local, type StatsResult } from "../report.ts";
 import { type Mode, startLine, suggestLine } from "./acts.ts";
-import { Failure, type Go, Loading } from "./bits.ts";
+import { Failure, type Go, Loading, Md } from "./bits.ts";
 import { useQuery } from "./query.ts";
 import { html, useState } from "./vendor/preact.js";
 
@@ -73,15 +73,33 @@ export function StartView({ g }: { g: Go }) {
 	</div>`;
 }
 
-export function SuggestView({ g }: { g: Go }) {
+export function SuggestView({ g, now }: { g: Go; now: number }) {
 	const [request, setRequest] = useState("");
 	const [as, setAs] = useState("");
+	const q = useQuery<SuggestResult>(g.send, "suggest", "", [], suggestPollMs);
 	return html`<div class="view form">
 		<h2>Suggest tickets</h2>
-		<p class="muted">suggest-tickets reads the tracker in a suggest tab, and picks tickets that can run side by side. It changes nothing: read its picks in that tab, then start the ones you want.</p>
-		<label>What to look for <input value=${request} placeholder="a number such as 3, or what you want, such as five tickets tagged feedback" onInput=${(e: InputEvent) => setRequest((e.target as HTMLInputElement).value)} /></label>
-		<label>Preset <input value=${as} placeholder="the default" onInput=${(e: InputEvent) => setAs((e.target as HTMLInputElement).value)} /></label>
-		<${Line} line=${suggestLine(request, as)} g=${g} label="Suggest" />
+		<p class="muted">suggest-tickets reads the tracker in a suggest tab, and picks tickets that can run side by side. It changes nothing: read its picks below, then start the ones you want.</p>
+		<label>What to look for <input value=${request} placeholder="empty for 3 tickets of any kind; or a number, or what you want, such as five tickets tagged feedback" onInput=${(e: InputEvent) => setRequest((e.target as HTMLInputElement).value)} /></label>
+		<label>Run it on <input value=${as} placeholder="the [suggest] preset, or the default one" onInput=${(e: InputEvent) => setAs((e.target as HTMLInputElement).value)} /><span class="muted small">The preset, from config.toml, whose agent and model run suggest-tickets. It does not filter the tickets: say that in what to look for.</span></label>
+		<${Line} line=${suggestLine(request, as)} g=${g} label="Suggest" onSent=${() => setRequest("")} />
+		<h3>Last run</h3>
+		${!q.env ? html`<${Loading} />` : !q.env.ok || !q.env.result ? q.env.error?.code === "agent_missing" ? html`<p class="muted">${q.env.error.message}.</p>` : html`<${Failure} env=${q.env} />` : html`<${SuggestAnswer} r=${q.env.result} now=${now} loading=${q.loading} reload=${q.reload} />`}
+	</div>`;
+}
+
+/** suggestPollMs is how often the Suggest view reads the run again, so
+ * the picks show soon after the agent writes them. */
+const suggestPollMs = 4000;
+
+function SuggestAnswer({ r, now, loading, reload }: { r: SuggestResult; now: number; loading: boolean; reload: () => void }) {
+	const status = r.agent_status === "working" ? "picking" : r.agent_status === "blocked" ? `asks a question in its tab (pane ${r.pane})` : r.agent_status ? "done" : "no longer runs";
+	return html`<div>
+		<p class="meta">
+			${r.prompt ? html`Asked <q>${r.prompt}</q>` : "Asked"}${r.started ? ` ${since(r.started, now)} ago` : ""} on ${r.preset}; suggest-tickets ${status}${r.at ? `, last wrote ${since(r.at, now)} ago` : ""}.
+			<button class="link" onClick=${reload}>${loading ? "reading..." : "read again"}</button>
+		</p>
+		${r.message?.trim() ? html`<${Md} text=${r.message} />` : html`<p class="muted">suggest-tickets has said nothing since it got the request.</p>`}
 	</div>`;
 }
 

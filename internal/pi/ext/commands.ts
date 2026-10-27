@@ -67,7 +67,7 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 				if (!request) return notify(ctx, "Nothing sent to suggest-tickets.", "info");
 			}
 			if (/^\d+$/.test(request) && (Number(request) < 1 || Number(request) > 10)) return notify(ctx, "usage: /suggest [1 to 10 | what you want] [as PRESET]", "warning");
-			say(act.suggest(hub, request, as));
+			say(await act.suggest(hub, request, as));
 		},
 	});
 

@@ -103,11 +103,12 @@ export function startLine(ids: string, mode: Mode, as: string): string {
 	return ["/start", list, mode === "auto" ? "" : mode, as.trim() ? `as ${as.trim()}` : ""].filter(Boolean).join(" ");
 }
 
-/** suggestLine is the /suggest line for what you asked for. Without a
- * request, the chat asks you for one. */
+/** suggestLine is the /suggest line for what you asked for. An empty
+ * request asks for 3 tickets of any kind, since /suggest alone would have
+ * the chat ask what to look for. */
 export function suggestLine(request: string, as: string): string {
-	const r = request.replace(/\s+/g, " ").trim();
-	return ["/suggest", r, r && as.trim() ? `as ${as.trim()}` : ""].filter(Boolean).join(" ");
+	const r = request.replace(/\s+/g, " ").trim() || "3";
+	return ["/suggest", r, as.trim() ? `as ${as.trim()}` : ""].filter(Boolean).join(" ");
 }
 
 /** sendLine is the /send line that tells a ticket's agent text. */

@@ -54,7 +54,8 @@ test("the forms build the line you could type", () => {
 	assert.equal(startLine("ACM-12", "manual", ""), "/start ACM-12 manual");
 	assert.equal(startLine("ACM-12 to ACM-15", "auto-plan", " opencode "), "/start ACM-12 to ACM-15 auto-plan as opencode");
 	assert.equal(startLine("", "auto", "x"), "");
-	assert.equal(suggestLine("", "opencode"), "/suggest");
+	assert.equal(suggestLine("", ""), "/suggest 3");
+	assert.equal(suggestLine("  ", "opencode"), "/suggest 3 as opencode");
 	assert.equal(suggestLine(" five  tickets\ttagged feedback ", "sol"), "/suggest five tickets tagged feedback as sol");
 	assert.equal(sendLine("ACM-12", "  keep the old endpoint\nfor now "), "/send ACM-12 keep the old endpoint\nfor now");
 	assert.equal(sendLine("ACM-12", "  "), "");

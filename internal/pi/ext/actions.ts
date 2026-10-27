@@ -37,26 +37,32 @@ export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 }
 
 /** suggest opens a suggest tab where suggest-tickets picks the tickets to
- * start: the ones request asks for, or a count, 3 by default. tkt reads
- * none of the answer: you read it in the tab, talk it over with the agent,
- * and start the tickets you want. */
-export function suggest(hub: Hub, request: string, as = ""): string {
+ * start: the ones request asks for, or a count, 3 by default. The chat
+ * reads none of the answer: you read it in the tab or the web page's
+ * Suggest view, talk it over with the agent, and start the tickets you
+ * want. */
+export async function suggest(hub: Hub, request: string, as = ""): Promise<string> {
 	const ask = request.trim();
 	const count = /^\d+$/.test(ask) ? Number(ask) : ask ? 0 : 3;
+	const args = ["suggest", ...(ask ? [ask] : []), ...(as ? ["--as", as] : [])];
+	// A dry run fails at once on what the real run would fail on, such as an
+	// unknown preset or a run still at work, before the chat says queued.
+	const dry = await hub.tkt([...args, "--dry-run"]);
+	if (!dry.ok) return `Nothing queued: ${failure("suggest", dry)}`;
 	hub.add({
 		ticket: "suggest",
 		label: "suggest",
-		args: ["suggest", ...(ask ? [ask] : []), ...(as ? ["--as", as] : [])],
+		args,
 		then: (env) => {
 			if (!env.ok || !env.result) return;
 			const r = env.result as SuggestResult;
-			if (count === 0) return hub.post(`suggest-tickets has your request in the suggest tab (pane ${r.pane}). Read its picks there, and /start the ones you want.`);
-			hub.post(`suggest-tickets is picking in the suggest tab (pane ${r.pane}). Read its picks there, and /start the ones you want.`);
+			if (count === 0) return hub.post(`suggest-tickets has your request in the suggest tab (pane ${r.pane}). Read its picks there or in the web page's Suggest view, and /start the ones you want.`);
+			hub.post(`suggest-tickets is picking in the suggest tab (pane ${r.pane}). Read its picks there or in the web page's Suggest view, and /start the ones you want.`);
 		},
 	});
-	if (count === 0) return "Queued: suggest-tickets gets your request in a suggest tab, reading only. Its picks show in that tab, not here.";
+	if (count === 0) return "Queued: suggest-tickets gets your request in a suggest tab, reading only. Its picks show in that tab and in the web page's Suggest view, not in this chat.";
 	const n = `${count} ticket${count === 1 ? "" : "s"}`;
-	return `Queued: suggest-tickets picks ${n} in a suggest tab, reading only. Its picks show in that tab, not here.`;
+	return `Queued: suggest-tickets picks ${n} in a suggest tab, reading only. Its picks show in that tab and in the web page's Suggest view, not in this chat.`;
 }
 
 /** chores lists the repository's chores with their next run. */
