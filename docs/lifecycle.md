@@ -216,7 +216,7 @@ Where workflow.md's feature table turns on `Agent verification`, this is the nex
 | `Verification: PASSED` | You confirm the steps from its evidence, or run them yourself. |
 | `Verification: INCOMPLETE` | You run the steps it could not. |
 
-A report counts for the head it ran on, and across clean merges of the base after it, as your confirmations do; a fix voids it. You still decide whether each step passed: verify-pr's report is evidence, not your word. `/check` in the tkt agent shows what it saw on each step, and starts the checklist with the steps it passed already marked.
+A report counts for the head it ran on, and across clean merges of the base after it, as your confirmations do; a fix voids it. You still decide whether each step passed: verify-pr's report is evidence, not your word. `/check` in the tkt agent shows what it saw beside each step. The checklist starts with nothing marked, or with the marks you left on this head, since only you mark a step.
 
 ### 8. finish-ticket merges
 

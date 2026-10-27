@@ -729,8 +729,16 @@ dd {
 }
 
 .step-text {
-	white-space: pre-wrap;
 	overflow-wrap: anywhere;
+}
+
+.step-text p {
+	margin: 0 0 4px;
+}
+
+.step-text code {
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
 }
 
 .step-state {
@@ -750,7 +758,7 @@ dd {
 }
 
 .mark.skip {
-	color: var(--dim);
+	color: var(--warning);
 }
 
 /* Diff */
@@ -1177,43 +1185,98 @@ table.grid th {
 	padding-left: 1.5rem;
 }
 
+/* Each row's left edge says how you marked it; an unmarked row has none. */
+.checklist li {
+	border-left: 3px solid transparent;
+	padding: 4px 0 6px 10px;
+	margin-left: -13px;
+}
+
 .checklist li.pass {
-	color: var(--muted);
+	border-left-color: var(--success);
+}
+
+.checklist li.fail {
+	border-left-color: var(--error);
+}
+
+.checklist li.skip {
+	border-left-color: var(--warning);
 }
 
 .marks {
 	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
 	gap: 6px;
-	margin-top: 4px;
+	margin-top: 6px;
 }
 
+.marks .state {
+	font-size: 0.8rem;
+	margin-left: 6px;
+}
+
+/* Each button wears its own color, so pass, fail and skip read apart
+ * before you press one. The pressed one fills, rings and checks itself;
+ * the row's other two fade. */
 .mark-btn {
+	--c: var(--fg);
 	font: inherit;
 	font-size: 0.8rem;
+	text-transform: capitalize;
 	background: transparent;
-	border: 1px solid var(--border);
+	border: 1px solid var(--c);
 	border-radius: 6px;
-	padding: 2px 10px;
-	color: var(--fg);
+	padding: 2px 12px;
+	color: var(--c);
 	cursor: pointer;
+	transition:
+		background 0.1s,
+		opacity 0.1s,
+		box-shadow 0.1s;
 }
 
-.mark-btn.pass.on {
-	background: var(--success);
-	border-color: var(--success);
-	color: var(--on-accent);
+.mark-btn.pass {
+	--c: var(--success);
 }
 
-.mark-btn.fail.on {
-	background: var(--error);
-	border-color: var(--error);
-	color: #ffffff;
+.mark-btn.fail {
+	--c: var(--error);
 }
 
-.mark-btn.skip.on {
-	background: var(--dim);
-	border-color: var(--dim);
+.mark-btn.skip {
+	--c: var(--warning);
+}
+
+.mark-btn:hover {
+	background: color-mix(in srgb, var(--c) 14%, transparent);
+}
+
+.mark-btn.on {
+	background: var(--c);
 	color: var(--bg);
+	font-weight: 600;
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent);
+}
+
+.mark-btn.on::before {
+	content: "\2713\00a0";
+}
+
+.mark-btn.off {
+	opacity: 0.45;
+}
+
+.mark-btn.off:hover {
+	opacity: 1;
+}
+
+.actions .tally {
+	margin-right: auto;
+	color: var(--muted);
+	font-size: 0.85rem;
+	align-self: center;
 }
 
 /* Transcript */

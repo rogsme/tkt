@@ -7,7 +7,11 @@ import { Marked } from "./vendor/marked.js";
 
 const marked = new Marked({ gfm: true, breaks: false, async: false });
 
-marked.use({
+// A human verification step keeps its lines as written: "Expected:" goes on
+// a line of its own.
+const stepMarked = new Marked({ gfm: true, breaks: true, async: false });
+
+const safety = {
 	renderer: {
 		html({ text }: { text: string }): string {
 			return escape(text);
@@ -23,11 +27,18 @@ marked.use({
 			return safe(href) ? `<a href="${escape(href)}" target="_blank" rel="noopener noreferrer">${label}</a>` : label;
 		},
 	},
-});
+};
+marked.use(safety);
+stepMarked.use(safety);
 
 /** md renders markdown as HTML that is safe to put in the page. */
 export function md(text: string): string {
 	return marked.parse(text) as string;
+}
+
+/** mdStep renders a human verification step's text, keeping its lines. */
+export function mdStep(text: string): string {
+	return stepMarked.parse(text) as string;
 }
 
 function safe(href: string): boolean {

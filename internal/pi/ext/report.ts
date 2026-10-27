@@ -177,6 +177,16 @@ export function cycle(m: Mark): Mark {
 	return m === "" ? "pass" : m === "pass" ? "fail" : m === "fail" ? "skip" : "";
 }
 
+/** withEvidence adds verify-pr's result to each step it reported on, to
+ * show beside the step: only you mark a step. */
+export function withEvidence<S extends { n: number }>(steps: S[], v: { steps: { n: number; result: "PASSED" | "FAILED" | "NOT RUN" }[] } | undefined): (S & { verified?: "PASSED" | "FAILED" | "NOT RUN" })[] {
+	if (!v) return steps;
+	return steps.map((s) => {
+		const r = v.steps.find((x) => x.n === s.n);
+		return r ? { ...s, verified: r.result } : s;
+	});
+}
+
 /** tally counts the marks over n steps. */
 export function tally(marks: Mark[], n: number): { pass: number; fail: number; skip: number; open: number } {
 	const t = { pass: 0, fail: 0, skip: 0, open: 0 };

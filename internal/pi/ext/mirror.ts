@@ -30,7 +30,7 @@ export interface Dialog {
 	prefill?: string;
 	/** steps and marks are a checklist's: the human verification steps,
 	 * and how each is marked so far. */
-	steps?: { n: number; text: string }[];
+	steps?: { n: number; text: string; verified?: "PASSED" | "FAILED" | "NOT RUN" }[];
 	marks?: Mark[];
 }
 

@@ -6,7 +6,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
 import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
-import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult } from "./report.ts";
+import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult, withEvidence } from "./report.ts";
 import { ask, checklist, confirm, editor, input } from "./dialog.ts";
 import { peek, type Step } from "./ui.ts";
 
@@ -328,8 +328,8 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 		if (a.answer.startsWith("Sync")) return `${sync(hub, id)} /check ${id} again once the new head is reviewed.`;
 	}
 	// verify-pr's report, when it holds for the head, is evidence: you may
-	// confirm the steps from it, and the checklist starts with the steps
-	// it passed marked.
+	// confirm the steps from it, and the checklist shows what it saw on
+	// each step. Only you mark them: it starts blank, or as you left it.
 	const v = verifiedAt(hub.row(id));
 	const first = await ask(ctx, `${id}: how do you want to verify?`, howOptions(v), false);
 	if (!first) return "Closed.";
@@ -341,7 +341,7 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	const from = env.result.source === "pull_request" ? `The review bot cleared the head; these steps come from pull request #${env.result.pr}.` : "";
 	const head = hub.row(id)?.pr?.head ?? "";
 	const key = `${id}@${head}`;
-	const got = await checklist(ctx, id, steps, marks.get(key) ?? evidenceMarks(steps, v), from);
+	const got = await checklist(ctx, id, withEvidence(steps, v), marks.get(key) ?? [], from);
 	marks.set(key, got);
 	hub.pi.appendEntry("tkt-check", { key, marks: got });
 	const t = tally(got, steps.length);
@@ -381,17 +381,10 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
  * evidence when its report passed every step, the checklist, and a run of
  * verify-pr. */
 function howOptions(v: Verification | undefined): { label: string; description?: string }[] {
-	const list = { label: "Open the checklist", description: v ? "The steps verify-pr passed start marked; mark the rest as you run them." : "Mark each human verification step as you run it." };
+	const list = { label: "Open the checklist", description: v ? "verify-pr's result shows beside each step; mark each one as you run it." : "Mark each human verification step as you run it." };
 	const run = { label: "Run verify-pr first", description: "verify-pr runs the steps in a fresh session and posts what it saw; it changes no code. /check again when it is done." };
 	if (v?.verification === "PASSED") return [{ label: "Confirm from verify-pr's evidence", description: "Read what it saw on each step, then merge on it." }, list, { ...run, label: "Run verify-pr again" }];
 	return v ? [list, { ...run, label: "Run verify-pr again" }] : [list, run];
-}
-
-/** evidenceMarks marks the steps verify-pr passed. */
-function evidenceMarks(steps: Step[], v: Verification | undefined): Mark[] {
-	if (!v) return [];
-	const passed = new Set(v.steps.filter((s) => s.result === "PASSED").map((s) => s.n));
-	return steps.map((s) => (passed.has(s.n) ? "pass" : ""));
 }
 
 /** confirmEvidence shows what verify-pr saw on each step, and merges with

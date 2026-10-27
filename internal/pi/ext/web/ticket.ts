@@ -12,6 +12,7 @@ import { cardActs, type Tab, tabs, ticketActs } from "./acts.ts";
 import { look, parseAnsi } from "./ansi.ts";
 import { ActButtons, Failure, type Go, Loading, Md, Phase, Reply } from "./bits.ts";
 import { type File, lines, section, total } from "./diff.ts";
+import { mdStep } from "./md.ts";
 import { useQuery } from "./query.ts";
 import { html, useState } from "./vendor/preact.js";
 
@@ -168,7 +169,7 @@ function StepsTab({ r, g, asked }: { r: Row; g: Go; asked: number }) {
 				const res = v?.steps.find((x) => x.n === st.n);
 				const mark = marks[i] ?? "";
 				return html`<li value=${st.n}>
-					<div class="step-text">${st.text}</div>
+					<div class="step-text md" dangerouslySetInnerHTML=${{ __html: mdStep(st.text) }}></div>
 					<div class="step-state">
 						${mark && html`<span class=${`mark ${mark}`}>you: ${mark}</span>`}
 						${res && html`<span class=${`state ${res.result.toLowerCase().replace(" ", "-")}`}>verify-pr: ${res.result}</span> <span class="muted">${res.text}</span>`}

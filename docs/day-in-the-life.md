@@ -288,17 +288,21 @@ ACM-124 is 1 commit behind its base. Sync it first?
 
 You verify this head, since your steps carry over the clean merge the merge order gets later. ACM-124 is not in auto, so nothing ran verify-pr yet: /check asks how to verify, and you pick `Run verify-pr first`. It runs the steps in a fresh session, as you would, and changes no code. Ten minutes later its report is on the pull request, and the board says `verify-pr found a step that fails`: steps 1, 2 and 4 went as written, and in step 3 an admin of another workspace saw the Unlock button.
 
-You want to see it yourself before anything changes. You run `/check ACM-124` again, pick `Verify this head` and then `Open the checklist`. The checklist starts with the steps verify-pr passed already marked, and you try step 3:
+You want to see it yourself before anything changes. You run `/check ACM-124` again, pick `Verify this head` and then `Open the checklist`. The checklist starts with nothing marked, since only you mark a step, and shows what verify-pr saw beside each one. You run the four steps and mark them as you go:
 
 ```
 ACM-124: human verification
 The review bot cleared the head; these steps come from pull request #485.
 
-  [pass] 1. Sign in as an admin of the Acme workspace and open a locked user's page.
-  [pass] 2. Click Unlock. The user can sign in again, and the audit log shows the unlock.
-> [FAIL] 3. Sign in as an admin of another workspace. The Unlock button is not shown.
-  [pass] 4. Call POST /api/users/:id/unlock as a user who is not an admin. It returns 403.
+  [pass] 1. Sign in as an admin of the Acme workspace and open a locked user's page. (verify-pr: passed)
+  [pass] 2. Click Unlock. The user can sign in again, and the audit log shows the unlock. (verify-pr: passed)
+> [FAIL] 3. Sign in as an admin of another workspace. The Unlock button is not shown. (verify-pr: failed)
+  [pass] 4. Call POST /api/users/:id/unlock as a user who is not an admin. It returns 403. (verify-pr: passed)
+
+4 of 4 marked
 ```
+
+On the web page, each step reads as Markdown, so its commands show as code, and its pass, fail and skip buttons wear green, red and yellow. The one you press fills in with a check mark, and the row's other two fade.
 
 Space cycles a step's mark, `p`, `f` and `s` set pass, fail and skip, and Enter closes the list. You close it with step 3 failed, as verify-pr said. Its report is feedback on the pull request, so `/next ACM-124` runs address: a fresh session answers the failed step as a finding, fixes it test-first, and pushes. For a failure only you found, `Start a fix session with what I saw` in /check sends a fresh session the step and what you type instead. CI and the bot run on the new head, and at 15:05 the bot clears it.
 
