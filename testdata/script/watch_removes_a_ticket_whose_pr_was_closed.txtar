@@ -1,0 +1,38 @@
+# A pull request closed without merging rejected the work: tkt ls names tkt
+# done, and tkt watch removes the ticket's tabs and worktree, records the
+# close in the history, and says the tracker is yours to move. Commits that
+# never reached the pull request keep the worktree.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $WT push -q origin ACM-12
+gitvar H1 $WT HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+env FAKE_GH_PRS=$WORK/prs.json
+
+exec tkt ls --json
+envelope '.result.rows[0].next | [.reason, .kind, (.argv | join(" "))]' '["closed","command","tkt done ACM-12"]'
+
+# A commit newer than the pull request's head keeps the worktree.
+realgit -C $WT commit -q --allow-empty -m 'more work'
+! exec tkt done ACM-12
+stderr 'neither the pull request''s head nor in origin/main'
+exists $WT
+realgit -C $WT reset -q --hard $H1
+
+resetlog
+exec tkt watch --once --json
+envelope '.result.tickets' '[{"action":"done","reason":"closed","ticket":"ACM-12"}]'
+logged wt -C $REPO remove ACM-12 --foreground --reap --format json
+logged herdr notification show 'ACM-12: removed' --body 'its pull request was closed without merging, so tkt watch removed its tabs and worktree; move the ticket in the tracker yourself'
+! exists $WT
+grep '"ticket":"ACM-12","event":"closed","pr":7' $HOME/.local/state/tkt/history.jsonl
+
+exec tkt stats --json
+envelope '.result | [.tickets[0].in_progress, .summary.closed, .summary.merged]' '[false,1,0]'
+exec tkt stats
+stdout '1 closed without merging, left out of the times'
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "CLOSED", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

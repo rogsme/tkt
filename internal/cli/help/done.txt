@@ -1,12 +1,16 @@
 tkt done closes the ticket's tabs and removes its worktree, and the private
-temporary directory its tabs had as TMPDIR, once its pull request is merged.
-worktrunk deletes the branch when it is merged into the base; after a squash
-merge the branch stays.
+temporary directory its tabs had as TMPDIR, once its pull request is merged,
+or closed without merging: closing it rejects the work. worktrunk deletes the
+branch when it is merged into the base; after a squash merge, or a close, the
+branch stays. tkt never writes the tracker, so after a close you move the
+ticket there yourself.
 
 It keeps the worktree, and says why, when:
-  - the pull request is still open, or no merged pull request has the branch;
+  - the pull request is still open, or no merged or closed pull request has
+    the branch;
   - the worktree has uncommitted changes;
-  - the branch tip is neither the merged head nor in the base;
+  - the branch tip is neither the pull request's head nor in the base, so
+    commits that never reached the pull request stay;
   - an agent in the worktree works or waits for an answer;
   - tkt runs inside the worktree or in the ticket's own tab;
   - a pane outside the ticket's tabs, or the OpenCode service, works in it.
@@ -20,7 +24,8 @@ when stdin is not a terminal. It reads pull requests through gh, so it
 supports GitHub forges only.
 
 It records the merge in the history, so tkt stats can say how long the ticket
-took from tkt start to the merge.
+took from tkt start to the merge. A close goes in the history too, and tkt
+stats leaves closed tickets out of its times.
 
 finish-ticket ends its report with an Unblocked: line, right before Status:
 DONE: the tickets whose blockers are all done now that this one merged.

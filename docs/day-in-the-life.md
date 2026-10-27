@@ -230,7 +230,7 @@ ACM-130: verify-pr on 7c41e09:
 Confirm the steps from this and merge?
 ```
 
-You open the third capture to see the dates yourself, then pick `Confirm and merge now`. verify-pr's report is evidence, never your word: `tkt merge ACM-130 --passed all --evidence` tells finish-ticket you confirmed the steps from it, and finish-ticket records that in its completion comment.
+You open the third capture to see the dates yourself, then pick `Confirm and merge now`. verify-pr's report is evidence, never your word: `tkt verified ACM-130 --passed all --evidence` comments on the pull request that human verification passed, confirmed from verify-pr's evidence, and `tkt merge ACM-130 --passed all --evidence` tells finish-ticket you confirmed the steps from it, which finish-ticket records in its completion comment.
 
 finish-ticket merges only a head that review-pr cleared, and only the bot reviewed this one, so `tkt merge` leaves a merge order instead of sending the line now. The row's notes say `merges when green`. tkt watch has review-pr review the head in a fresh session, then sends finish-ticket the word to merge, naming your steps and the head they passed on. finish-ticket checks CI, the review and the open feedback at that exact head, merges, moves ACM-130 to done in the tracker, and waits for CI on main. At 12:20 it ends with `Status: DONE`, and tkt watch closes the tab and removes the worktree. Without a watch, `/done ACM-130`, or "ACM-130 is merged, remove it", does that after asking.
 
@@ -243,6 +243,8 @@ where are we?
 ```
 
 The chat reads the board and answers in a sentence or two: ACM-124 is ready to verify, ACM-131 is building, ACM-133 is on hold, and ACM-127 has findings again. ACM-127's item has been on the board since 10:55, when the bot's second review came back; on GitHub it asks for a test of the retry limit. `/next ACM-127` runs `address` again.
+
+Not every finding needs a fix. Last week the bot asked ACM-118 to reword its pull request's description, which nobody reads after the merge. Instead of another address round, `/accept ACM-118 the finding is about the description` ran `tkt accept`, which commented `## Review accepted` on the pull request with the head and that reason. The head went on to verify-pr as a clean one does, with the steps from the pull request's body, and finish-ticket recorded the reason in its completion comment. `Accept review` on the web page and `Accept the review as it is` in `/inbox` do the same, and ask for the reason first. A clean sync keeps the acceptance; a fix voids it, and the next review runs as usual.
 
 Then you close a tab by mistake: ACM-131's, with its agent in it. Its tkt auto loop pauses, since no agent runs, and the board shows `no agent`. In `/inbox`, `Bring the agent back` runs `tkt resume ACM-131`, which relaunches the newest session in a new tab with its whole conversation, and sends nothing. `/send ACM-131 go on where you stopped` sets it working again, and the loop goes on by itself.
 
@@ -288,17 +290,21 @@ ACM-124 is 1 commit behind its base. Sync it first?
 
 You verify this head, since your steps carry over the clean merge the merge order gets later. ACM-124 is not in auto, so nothing ran verify-pr yet: /check asks how to verify, and you pick `Run verify-pr first`. It runs the steps in a fresh session, as you would, and changes no code. Ten minutes later its report is on the pull request, and the board says `verify-pr found a step that fails`: steps 1, 2 and 4 went as written, and in step 3 an admin of another workspace saw the Unlock button.
 
-You want to see it yourself before anything changes. You run `/check ACM-124` again, pick `Verify this head` and then `Open the checklist`. The checklist starts with the steps verify-pr passed already marked, and you try step 3:
+You want to see it yourself before anything changes. You run `/check ACM-124` again, pick `Verify this head` and then `Open the checklist`. The checklist starts with nothing marked, since only you mark a step, and shows what verify-pr saw beside each one. You run the four steps and mark them as you go:
 
 ```
 ACM-124: human verification
 The review bot cleared the head; these steps come from pull request #485.
 
-  [pass] 1. Sign in as an admin of the Acme workspace and open a locked user's page.
-  [pass] 2. Click Unlock. The user can sign in again, and the audit log shows the unlock.
-> [FAIL] 3. Sign in as an admin of another workspace. The Unlock button is not shown.
-  [pass] 4. Call POST /api/users/:id/unlock as a user who is not an admin. It returns 403.
+  [pass] 1. Sign in as an admin of the Acme workspace and open a locked user's page. (verify-pr: passed)
+  [pass] 2. Click Unlock. The user can sign in again, and the audit log shows the unlock. (verify-pr: passed)
+> [FAIL] 3. Sign in as an admin of another workspace. The Unlock button is not shown. (verify-pr: failed)
+  [pass] 4. Call POST /api/users/:id/unlock as a user who is not an admin. It returns 403. (verify-pr: passed)
+
+4 of 4 marked
 ```
+
+On the web page, each step reads as Markdown, so its commands show as code, and its pass, fail and skip buttons wear green, red and yellow. The one you press fills in with a check mark, and the row's other two fade.
 
 Space cycles a step's mark, `p`, `f` and `s` set pass, fail and skip, and Enter closes the list. You close it with step 3 failed, as verify-pr said. Its report is feedback on the pull request, so `/next ACM-124` runs address: a fresh session answers the failed step as a finding, fixes it test-first, and pushes. For a failure only you found, `Start a fix session with what I saw` in /check sends a fresh session the step and what you type instead. CI and the bot run on the new head, and at 15:05 the bot clears it.
 
@@ -324,7 +330,7 @@ run the flaky chore now
 
 ## 15:30 Merge once synced
 
-The bot cleared ACM-124's fix at 15:05. The checklist keeps its marks per head, so on the new head `/check ACM-124` starts blank. You pick `Verify this head` again, and this time every step passes. Main is still ahead of the branch, so the choice reads:
+The bot cleared ACM-124's fix at 15:05. The checklist keeps its marks per head, so on the new head `/check ACM-124` starts blank. You pick `Verify this head` again, and this time every step passes. /check runs `tkt verified ACM-124 --passed all`, which comments `Human verification passed` with a green check mark on pull request #485, naming the steps and the head, so anyone reading it knows. Main is still ahead of the branch, so the choice reads:
 
 ```
 ACM-124: every step passed. Merge it?
@@ -395,14 +401,14 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `stopped, no status` | The agent stopped without a status line. | `/show ID`, then reply to it. |
 | `did not start` | The agent did not start cleanly; for a chore's run, its start stopped before the prompt. | `/peek ID` and fix it in its tab; for a run, `/chores run NAME` goes on with it, or `/done ID` drops it. |
 | `no agent` | No agent runs in the worktree. | `Bring the agent back` in `/inbox`, which runs `tkt resume ID`. |
-| `the review has findings to address`, `the pull request waits for review-pr`, `human verification failed`, `verify-pr found a step that fails` | A ticket you drive by hand has a next step. With a merge order, tkt watch has review-pr review the head itself. | `/next ID`, or say "continue ID". |
+| `the review has findings to address`, `the pull request waits for review-pr`, `human verification failed`, `verify-pr found a step that fails` | A ticket you drive by hand has a next step. With a merge order, tkt watch has review-pr review the head itself. | `/next ID`, or say "continue ID". For findings that do not matter, `Accept the review as it is`, or `/accept ID`. |
 | `the checks fail`, `the base moved; tkt sync merges it`, `the checks passed, and its merge order is due` | The same, for steps tkt watch takes itself, so they show only while tkt watch is off or its passes fail. | `/next ID`. |
 | `ready to verify` | The bot or review-pr cleared the head. The text says what verify-pr's report found, or that the head waits for verify-pr. | `/check ID`. |
 | `verification incomplete` | A yolo loop paused: verify-pr could not run every step, and a yolo ticket merges only when it passed them all. | `/check ID`, run the rest, and merge it yourself. |
 | `post-merge CI failed` | A yolo ticket merged, and the checks on the base failed after it. | `/show ID` for finish-ticket's report, then fix the base. |
 | `merged` | The pull request merged. tkt watch removes the ticket once finish-ticket ends with `Status: DONE`. | Nothing while tkt watch runs; otherwise `/done ID`. |
 | `auto stalled` | The ticket is marked for auto, but no tkt auto loop runs, as after a reboot, and no tkt watch runs to start it again. | `/auto ID on`. |
-| `max rounds reached` | tkt auto or tkt watch made `[auto] max_rounds` fix runs since the plan's approval. | Read the review, then `Run STAGE once more` in `/inbox`, or take over. |
+| `max rounds reached` | tkt auto or tkt watch made `[auto] max_rounds` fix runs since the plan's approval. | Read the review, then `Run STAGE once more` in `/inbox`, `Accept the review as it is` when its findings do not matter, or take over. |
 | `no progress` | The last step changed nothing on the same head. | `/show ID`, then `Run STAGE again` in `/inbox`. |
 | `review bot silent` | The bot has not reviewed the head within `[review] bot_wait`. | Check its CI job, or `Run review-pr instead`, which the board leaves out where workflow.md turns `CI review` on in `/inbox`. |
 | `sync failed` | tkt sync cannot merge the base for now, such as with uncommitted changes in the worktree. A failure after the fetch, such as a push a pre-push hook refused, never shows here: a fresh session in a split beside the agent fixes it. | Fix what it names; tkt auto tries again at each look. |
@@ -410,14 +416,14 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `auto paused` | tkt auto paused for another reason, such as an agent in a state tkt does not know. | `/peek ID` shows its screen. |
 | `unblocked` | A merge freed a ticket that has no worktree yet. | `/start ID`, or a start in auto from `/inbox`. |
 | `ready to merge`, `review found something` | A chore's pull request is ready, or its review found something. | Merge it on the forge, or tell its agent what to fix. |
-| `nothing to change`, `closed` | A chore's run found nothing, or you closed its pull request, and no tkt watch removed it. | `/done ID`. |
+| `nothing to change`, `closed` | A chore's run found nothing, or a pull request was closed without merging, and no tkt watch removed the ticket or run. A closed ticket stays where it was in the tracker. | `/done ID`, and move the ticket in the tracker. |
 | `start failed`, `sync failed` and the like | A step the chat queued failed. | `/inbox` says why. |
 
 ## Chat or terminal
 
 The chat fits most of the day. Use it when several tickets are in flight and you want to hear from a ticket only when it needs you, when you want a ticket's state or history told in words, and when you want a step taken without looking up its flags. Slash commands take the same actions with no model call in between. Plain words cover the rest, such as ranges ("start ACM-140 to ACM-142 in auto with fast") and questions about how a ticket went.
 
-Every action in the chat is a tkt command underneath, so a terminal can always take the same step. `/approve ID` is `tkt approve ID`, and `/approve ID auto` also starts `tkt auto ID`. `/send` is `tkt send --steer`, and text queued until the agent stops is `tkt send --wait`. `/hold` is `tkt hold`, `/sync` is `tkt sync`, `/chores` is `tkt chores` and `tkt chore run`, `/suggest` is `tkt suggest` with the same words, and `/update` is `tkt update`. `/version` has no terminal twin: `tkt --version` names the tkt on disk, which a chat opened before an update no longer runs. `/web` is `tkt web`, and the page it opens is the chat again, not a third place: use it for reading long answers, pasting a screenshot, or clicking through a question, and keep the terminal for pi's own screens such as `/model`. `/auto ID on` runs `tkt auto ID`, `/auto ID full` adds `--approve-plan`, `/auto ID yolo` adds `--yolo`, `/auto ID off` is `tkt auto ID --stop`, and `/start ID as fast` is `tkt start ID --as fast`. Reach for a terminal:
+Every action in the chat is a tkt command underneath, so a terminal can always take the same step. `/approve ID` is `tkt approve ID`, and `/approve ID auto` also starts `tkt auto ID`. `/send` is `tkt send --steer`, and text queued until the agent stops is `tkt send --wait`. `/hold` is `tkt hold`, `/sync` is `tkt sync`, `/accept` is `tkt accept --reason`, `/chores` is `tkt chores` and `tkt chore run`, `/suggest` is `tkt suggest` with the same words, and `/update` is `tkt update`. `/version` has no terminal twin: `tkt --version` names the tkt on disk, which a chat opened before an update no longer runs. `/web` is `tkt web`, and the page it opens is the chat again, not a third place: use it for reading long answers, pasting a screenshot, or clicking through a question, and keep the terminal for pi's own screens such as `/model`. `/auto ID on` runs `tkt auto ID`, `/auto ID full` adds `--approve-plan`, `/auto ID yolo` adds `--yolo`, `/auto ID off` is `tkt auto ID --stop`, and `/start ID as fast` is `tkt start ID --as fast`. Reach for a terminal:
 
 - to set up, stop and check the tools, with `tkt doctor`, `tkt watch --install`, `--stop` and `--uninstall`, `tkt hook tmp --install` and `tkt completion`;
 - for the steps the chat does not take, such as `tkt merge ID --cancel`, a start-ticket block with its `Model:` line piped in from the clipboard (`xclip -selection clipboard -o | tkt start --prompt -`, or `--prompt-file` for a file), work with no ticket (`tkt start --scratch spike-pdf`, removed later with `wt remove spike-pdf`), and `tkt done --all` after a time without tkt watch;

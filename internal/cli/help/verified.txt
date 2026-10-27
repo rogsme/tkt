@@ -1,0 +1,23 @@
+tkt verified comments on a ticket's pull request that every human
+verification step passed:
+
+  Human verification passed (a green check mark)
+
+  Steps 1 to 3 passed on head HEAD.
+
+/check in tkt agent runs it once you mark every step passed, before it asks
+whether to merge, so the pull request says so even when you merge later.
+With --evidence, the comment says you confirmed the steps from verify-pr's
+evidence, and tkt verified checks that verify-pr's report for the head marks
+each one passed.
+
+--passed names the steps that passed, as tkt merge reads it: every step of
+the procedure, since a partial pass is no pass. --head names the head the
+steps ran on; the steps hold across clean merges of the base, so tkt
+verified refuses only a head that changed beyond them. It comments once per
+head: a second run on the same head changes nothing.
+
+The comment holds no status, verdict or report line, so review-pr, verify-pr
+and finish-ticket read past it. tkt merge still sends finish-ticket the
+merge line; the comment is a record for the people reading the pull
+request.

@@ -1,0 +1,24 @@
+# An agent can go from the viewer's approval straight into work-ticket
+# without printing start-ticket's Status: PLAN_APPROVED. start-ticket starts
+# work-ticket only once the plan is approved, so tkt ls takes its start for
+# the approval and shows the ticket building, not planning.
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --prompt -
+statevar $FAKE_WT_ROOT/ACM-12 session SID
+claudedir CD $FAKE_WT_ROOT/ACM-12
+mkdir $CD
+
+cp $WORK/approved.jsonl $CD/$SID.jsonl
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .stage]' '["building","work"]'
+stderr 'ACM-12: the plan was approved in its session, so it is building now'
+exec tkt history ACM-12
+stdout 'plan approved, in its session'
+
+-- approved.jsonl --
+{"type":"user","timestamp":"2026-01-01T10:00:00.000Z","message":{"role":"user","content":"Use the start-ticket skill to start ticket ACM-12."}}
+{"type":"assistant","timestamp":"2026-01-01T10:00:06.000Z","message":{"id":"m1","role":"assistant","content":[{"type":"text","text":"Revision 1 is in the viewer.\n\nStatus: AWAITING_APPROVAL"}]}}
+{"type":"user","timestamp":"2026-01-01T10:05:00.000Z","message":{"role":"user","content":"<task-notification>\n<task-id>poll</task-id>\n<status>completed</status>\n</task-notification>"}}
+{"type":"assistant","timestamp":"2026-01-01T10:05:02.000Z","message":{"id":"m2","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Skill","input":{"skill":"work-ticket"}}]}}

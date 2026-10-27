@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cycle, fixPrompt, type HistoryResult, historyText, statsText, tally } from "../report.ts";
+import { cycle, fixPrompt, type HistoryResult, historyText, statsText, tally, withEvidence } from "../report.ts";
 
 test("statsText", () => {
 	const text = statsText({
@@ -24,6 +24,26 @@ test("checklist marks", () => {
 	assert.equal(cycle("fail"), "skip");
 	assert.equal(cycle("skip"), "");
 	assert.deepEqual(tally(["pass", "fail", "", "skip"], 5), { pass: 1, fail: 1, skip: 1, open: 2 });
+});
+
+test("the checklist shows verify-pr's results without marking a step", () => {
+	const steps = [
+		{ n: 1, text: "Open the page." },
+		{ n: 2, text: "Sign in." },
+	];
+	assert.deepEqual(withEvidence(steps, undefined), steps);
+	const got = withEvidence(steps, { steps: [{ n: 1, result: "PASSED" }] });
+	assert.deepEqual(got, [{ n: 1, text: "Open the page.", verified: "PASSED" }, { n: 2, text: "Sign in." }]);
+});
+
+test("statsText counts closed tickets apart", () => {
+	const text = statsText({
+		repo: "git.example.com/acme/app",
+		tickets: [{ ticket: "ACM-2", repo: "", started: "2026-01-03T00:00:00Z", merged: "", total_s: 86400, in_progress: false, waiting_on_you_s: 0, rounds: 0, auto: false, pr: 9 }],
+		summary: { merged: 0, closed: 1, in_progress: 0, median_total_s: 0, p90_total_s: 0, median_waiting_on_you_s: 0, p90_waiting_on_you_s: 0, without_start: 0 },
+	});
+	assert.match(text, /\| ACM-2 \| 2026-01-03 \| 24h \(closed\) \|/);
+	assert.match(text, /1 closed without merging, left out of the times\./);
 });
 
 test("fixPrompt", () => {

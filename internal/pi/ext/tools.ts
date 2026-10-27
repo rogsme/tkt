@@ -220,6 +220,20 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerTool({
+		name: "tkt_accept",
+		label: "tkt accept",
+		description: "Accept the review at a ticket's head as it is, with tkt accept: it comments on the pull request, which finish-ticket and verify-pr take in place of a clean review, so the head goes on to human verification instead of another fix. Only a review with findings at the head can be accepted. reason is the user's reason, in their words; the comment and finish-ticket's completion record it.",
+		parameters: Type.Object({ ticket, reason: Type.String({ description: "why the review's findings can stay as they are, in the user's words" }) }),
+		executionMode: "sequential",
+		async execute(_id, p, _signal, _update, ctx) {
+			const t = id(p.ticket);
+			if (!p.reason.trim()) return text("Nothing accepted: tkt accept needs the user's reason. Ask the user for it.");
+			if (!(await guard(hub, ctx, [t], `Accept ${t}'s review as it is?`, `Reason: ${p.reason.trim()}. The head goes on to human verification.`))) return text("The user did not confirm; nothing changed.");
+			return text(await act.accept(hub, t, p.reason.trim()));
+		},
+	});
+
+	pi.registerTool({
 		name: "tkt_auto",
 		label: "tkt auto",
 		description: "Turn tkt auto on or off for a ticket. On, it drives the ticket until it is reviewed clean, pauses when the ticket needs the user and goes on by itself after; approve_plan, the auto-plan mode, lets it approve the plan too; yolo also merges it with nobody watching, once verify-pr passed every step, and only when the user asked for yolo.",

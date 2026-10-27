@@ -200,6 +200,18 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 		},
 	});
 
+	pi.registerCommand("accept", {
+		description: "Accept the review at a ticket's head as it is, and go on to human verification: /accept ACM-12 [reason]",
+		getArgumentCompletions: ids,
+		handler: async (args, ctx) => {
+			const id = one(args, ctx, "/accept ACM-12 [reason]");
+			if (!id) return;
+			const why = args.trim().replace(/^\S+\s*/, "") || (await act.acceptReason(ctx, id));
+			if (!why) return notify(ctx, `Nothing accepted: tkt accept needs your reason, such as /accept ${id} the finding is about the description.`, "warning");
+			say(await act.accept(hub, id, why));
+		},
+	});
+
 	pi.registerCommand("check", {
 		description: "Walk a ticket's human verification steps, and merge once they pass: /check ACM-12",
 		getArgumentCompletions: ids,

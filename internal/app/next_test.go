@@ -13,7 +13,7 @@ func TestNextStepTable(t *testing.T) {
 		reason string
 	}{
 		{Facts{PRState: "MERGED", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE"}, "tkt done ACM-1", "command", ReasonMerged},
-		{Facts{PRState: "CLOSED"}, "closed without merging", "human", ReasonClosed},
+		{Facts{PRState: "CLOSED"}, "tkt done ACM-1", "command", ReasonClosed},
 		{Facts{PRState: "OPEN", Agent: "working", Checks: "ok", Mergeable: "MERGEABLE"}, "wait (agent working)", "wait", ReasonAgentWorking},
 		{Facts{PRState: "OPEN", Agent: "blocked", Checks: "ok", Mergeable: "MERGEABLE"}, "answer the agent in its tab", "human", ReasonAgentBlocked},
 		{Facts{}, "tkt resume ACM-1", "command", ReasonNoAgent},
@@ -84,6 +84,19 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Yolo: true, Verification: "PASSED", VerifyHeld: true}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Yolo: true, Verification: "INCOMPLETE", VerifyHeld: true}, "run the steps verify-pr could not (tkt show ACM-1 --steps), then tkt merge ACM-1 --passed all", "human", ReasonVerifyIncomplete},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h2", MergeSteps: "1", MergeHead: "h1", MergeBy: "autonomous", Yolo: true}, "tkt merge ACM-1 --passed 1 --head h1 --autonomous", "command", ReasonMergeDue},
+		// A review you accepted stands in for a clean one: its findings
+		// get no fix, the head goes on to the steps, and nothing waits
+		// for a review. CI must still pass.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CHANGES_REQUESTED", AtHead: true, Accepted: true}, "tkt run ACM-1 verify", "command", ReasonReviewAccepted},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true, Accepted: true, AgentVerify: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Verdict: "FINDINGS", AtHead: true, Accepted: true}, "tkt run ACM-1 ci", "command", ReasonChecksFail},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: false, Accepted: true, CIReview: true, BotWait: 15 * time.Minute}, "tkt run ACM-1 verify", "command", ReasonReviewAccepted},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CHANGES_REQUESTED", AtHead: true, Accepted: true, Yolo: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CHANGES_REQUESTED", AtHead: true, Accepted: true, Verification: "PASSED", VerifyHeld: true},
+			"verify-pr passed every step: confirm them from its evidence (tkt show ACM-1 --steps), then tkt merge ACM-1 --passed all --evidence", "human", ReasonVerified},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CHANGES_REQUESTED", AtHead: true, Accepted: true, Head: "h1", MergeSteps: "1", MergeHead: "h1"}, "tkt merge ACM-1 --passed 1 --head h1", "command", ReasonMergeDue},
+		// An acceptance a fix voided leaves the findings to address.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CHANGES_REQUESTED", AtHead: true}, "tkt run ACM-1 address", "command", ReasonFindings},
 		// An order you confirmed from the evidence keeps saying so.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h1", MergeSteps: "1,2", MergeHead: "h1", MergeBy: "evidence"}, "tkt merge ACM-1 --passed 1,2 --head h1 --evidence", "command", ReasonMergeDue},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 5 * time.Minute}, "wait for the review bot", "wait", ReasonAwaitingBot},
@@ -181,6 +194,7 @@ func TestPhaseOf(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: time.Hour, Waited: time.Hour}, PhaseNeedsYou},
 		{Facts{PRState: "OPEN", Agent: "idle", Background: true, Stage: "work"}, PhaseBuilding},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true}, PhaseNeedsFix},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true, Accepted: true}, PhaseReadyForHuman},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true}, PhaseReadyForHuman},
 		{Facts{Chore: "deps", Agent: "idle", LastStatus: "DONE"}, PhaseFinished},
 		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true}, PhaseNeedsYou},

@@ -135,7 +135,7 @@ func stopHint(stop, id string) string {
 	case StopMerged:
 		return "tkt done " + id
 	case StopClosed:
-		return "the pull request was closed without merging"
+		return "the pull request was closed without merging; tkt watch removes the ticket, or tkt done " + id + " does"
 	case StopStopped:
 		return "tkt auto " + id + " starts it again"
 	case StopNeedsYou:
@@ -336,7 +336,7 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 			return pause(StopNeedsYou)
 		}
 		return stop(StopReadyForHuman)
-	case ReasonReviewClear, ReasonBotClear, ReasonVerified:
+	case ReasonReviewClear, ReasonBotClear, ReasonReviewAccepted, ReasonVerified:
 		return stop(StopReadyForHuman)
 	case ReasonAutonomousMerge:
 		return act(actMerge, "")
@@ -770,7 +770,7 @@ func (a *App) auto(ctx context.Context, o AutoOpts, carry autoCarry, self string
 	}
 	res.Actions = append(append([]Action{}, c.Plan...), w.actions...)
 	switch res.Stop {
-	case "", StopReadyForHuman, StopMergeOrdered, StopMerged, StopStopped:
+	case "", StopReadyForHuman, StopMergeOrdered, StopMerged, StopClosed, StopStopped:
 		return res, nil
 	}
 	if o.Once {
@@ -1071,7 +1071,7 @@ func autoNotice(stop, id, reason string) notice {
 		return notice{"merge order due", "the checks passed, so tkt watch sends finish-ticket your merge line", "none"}
 	case StopPostMergeFailed:
 		return notice{"post-merge CI failed", stopHint(stop, id), "request"}
-	case StopMerged, StopStopped:
+	case StopMerged, StopClosed, StopStopped:
 		return notice{stop, stopHint(stop, id), "done"}
 	}
 	return notice{"needs you", stop + ": " + stopHint(stop, id), "request"}

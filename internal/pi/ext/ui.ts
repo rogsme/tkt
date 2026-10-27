@@ -9,7 +9,7 @@ import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { type BoardState, boardColumns, boardLines, footer, grid, order, title } from "./board.ts";
 import { type Row, type Stamp, stampText } from "./model.ts";
-import { cycle, type Mark } from "./report.ts";
+import { cycle, type Mark, tally } from "./report.ts";
 
 export interface Option {
 	label: string;
@@ -276,6 +276,9 @@ export function peek(ctx: ExtensionContext, ticket: string, read: () => Promise<
 export interface Step {
 	n: number;
 	text: string;
+	/** verified is verify-pr's result on the step, when its report holds
+	 * for the head: shown beside the step, never taken for your mark. */
+	verified?: "PASSED" | "FAILED" | "NOT RUN";
 }
 
 /** checklist lets you mark each human verification step passed, failed or
@@ -288,7 +291,7 @@ export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], 
 			closeOn(signal, () => done(undefined));
 			const marks = steps.map((_, i) => start[i] ?? "");
 			let index = 0;
-			const sign = (m: Mark) => (m === "pass" ? theme.fg("success", "[pass]") : m === "fail" ? theme.fg("error", "[FAIL]") : m === "skip" ? theme.fg("muted", "[skip]") : "[    ]");
+			const sign = (m: Mark) => (m === "pass" ? theme.fg("success", "[pass]") : m === "fail" ? theme.fg("error", "[FAIL]") : m === "skip" ? theme.fg("warning", "[skip]") : "[    ]");
 			return {
 				handleInput(data: string) {
 					if (matchesKey(data, Key.escape) || matchesKey(data, Key.enter) || data === "q") return done(marks);
@@ -306,9 +309,12 @@ export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], 
 					if (from) lines.push(theme.fg("muted", from), "");
 					steps.forEach((s, i) => {
 						const head = `${i === index ? ">" : " "} ${sign(marks[i])} ${s.n}. `;
-						const wrapped = wrapTextWithAnsi(s.text, Math.max(10, w - 17));
+						const text = s.verified ? `${s.text} ${theme.fg("muted", `(verify-pr: ${s.verified.toLowerCase()})`)}` : s.text;
+						const wrapped = wrapTextWithAnsi(text, Math.max(10, w - 17));
 						wrapped.forEach((l, j) => lines.push((j === 0 ? head : " ".repeat(12)) + (i === index ? theme.fg("accent", l) : l)));
 					});
+					const t = tally(marks, steps.length);
+					lines.push("", theme.fg("muted", `${steps.length - t.open} of ${steps.length} marked`));
 					return panel(theme, frame(theme, w, `${ticket}: human verification`, lines, "space cycles  p pass  f fail  s skip  enter or esc closes"));
 				},
 				invalidate() {},

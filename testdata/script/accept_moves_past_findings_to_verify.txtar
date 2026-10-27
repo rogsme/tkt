@@ -1,0 +1,63 @@
+# tkt accept takes the review at a ticket's head as it is. It comments on
+# the pull request, which finish-ticket and verify-pr take in place of a
+# clean review, and the head goes on to its human verification steps, from
+# the pull request's body. A fix voids the acceptance.
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+
+exec tkt ls --json
+envelope '.result.rows[0].next.reason' findings
+
+# A reason is required.
+! exec tkt accept ACM-12
+rc 2
+stderr 'needs --reason'
+
+exec tkt accept ACM-12 --reason 'the finding is about the description' --dry-run
+stderr 'dry run: gh pr comment 7 --repo github.com/acme/app --body'
+! exists $FAKE_DIR/comments.txt
+
+exec tkt accept ACM-12 --reason 'the finding is about the description' --json
+envelope '.result | [.action, .pr, .review, .head]' '["commented",7,"CHANGES_REQUESTED","'$H1'"]'
+grep '^## Review accepted$' $FAKE_DIR/comments.txt
+grep '^Accepted head: `'$H1'`$' $FAKE_DIR/comments.txt
+grep '^Reason: the finding is about the description$' $FAKE_DIR/comments.txt
+! grep 'Verdict:|^## Human verification' $FAKE_DIR/comments.txt
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .next.text, .phase, .accepted.at_head]' '["review_accepted","tkt run ACM-12 verify","ready_for_human",true]'
+exec tkt history ACM-12
+stdout 'review accepted \(the finding is about the description\); commented on #7'
+
+# Once per head.
+exec tkt accept ACM-12 --reason 'again' --json
+envelope '.result.action' none
+
+# The steps come from the pull request's body, and tkt merge sends
+# finish-ticket the usual merge line.
+exec tkt show ACM-12 --steps --json
+envelope '.result | [.source, (.steps | length)]' '["pull_request",2]'
+exec tkt merge ACM-12 --passed all --json
+envelope '.result.action' merging
+grep '^Use the finish-ticket skill to merge the PR. Human verification steps 1 and 2 passed on head '$H1'.$' $FAKE_DIR/prompts
+
+# A fix voids the acceptance, and the findings wait for an answer again.
+jqedit $FAKE_DIR/herdr.json '.agents |= map(.agent_status = "idle")'
+exec tkt merge ACM-12 --cancel
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'fix ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H2 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H2 | .[0].reviews[0].body |= gsub($H1; $H2) | .[0].reviews[0].commit.oid = $H2'
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .accepted.at_head, .accepted.carried]' '["findings",false,false]'
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "body": "## Summary\n\nA login page.\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n2. Sign in with a wrong password.\n   Expected: an error.\n",
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: CHANGES_REQUESTED\n\nThe description names the wrong ticket.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

@@ -8,6 +8,7 @@ package contract
 import (
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Version is the configuration contract version tkt reads, as defined in
@@ -115,6 +116,20 @@ const (
 	StepNotRun             = "NOT RUN"
 )
 
+// A review the user accepted as it is: a conversation comment under the
+// heading, naming the head it accepts and why. It stands in for a clean
+// review at that head, and at a head only clean merges of the base follow,
+// and finish-ticket and verify-pr take the procedure from the pull
+// request's body. One without a Reason: line counts for nothing.
+var (
+	AcceptedHeadingRE = regexp.MustCompile(`(?m)^## Review accepted[ \t]*$`)
+	AcceptedHeadRE    = regexp.MustCompile("(?m)^Accepted head: `?([0-9a-f]{7,40})")
+	AcceptedReasonRE  = regexp.MustCompile(`(?m)^Reason: (.*\S)`)
+)
+
+// AcceptedHeading is the heading the comment opens with.
+const AcceptedHeading = "## Review accepted"
+
 // UnblockedRE finds the line finish-ticket's report gives right before
 // Status: DONE: the tickets the merge unblocked, whose blockers are all
 // done now, or none.
@@ -127,6 +142,18 @@ var HumanVerificationRE = regexp.MustCompile(`(?m)^## Human verification[ \t]*$`
 // Skills names the lifecycle skills tkt's built-in stage lines, and the
 // lines tkt approve, tkt merge and tkt suggest send, ask for.
 var Skills = []string{"start-ticket", "work-ticket", "address-pr-review", "review-pr", "verify-pr", "finish-ticket", "suggest-tickets"}
+
+// StartsWork reports whether skill, as a harness's Skill tool names it, is
+// work-ticket: start-ticket's session starts it only once the plan is
+// approved, so tkt takes it for the approval when no Status: PLAN_APPROVED
+// came first. A plugin's skill carries the plugin's name before a colon.
+func StartsWork(skill string) bool {
+	_, name, _ := strings.Cut(skill, ":")
+	if name == "" {
+		name = skill
+	}
+	return name == "work-ticket"
+}
 
 // CleanMergeRule is how review-pr's rule about a review brief across clean
 // base merges begins. tkt sync relies on it: it pushes such merges with no

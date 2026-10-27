@@ -17,7 +17,7 @@ cp $WORK/draft.txt $WT/scratch.txt
 ! exec tkt done ACM-12
 rc 4
 stderr 'uncommitted changes'
-stderr 'neither the merged head nor in origin/main'
+stderr 'neither the pull request''s head nor in origin/main'
 ! logcontains 'herdr tab close'
 
 # The reasons are in the error itself, for a program that reads --json and

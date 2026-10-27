@@ -309,3 +309,40 @@ func ReviewVerification(r Review) (Verification, bool) {
 	}
 	return v, true
 }
+
+// Acceptance is a review the user accepted as it is: the head it names,
+// the reason, and the comment that says so.
+type Acceptance struct {
+	Head      string `json:"head"`
+	Reason    string `json:"reason"`
+	URL       string `json:"url"`
+	CreatedAt string `json:"created_at"`
+	// AtHead and Carried say what they say of a Verification: the
+	// acceptance is about the head, or about an older one that only clean
+	// merges of the base separate from it, which the caller checks.
+	AtHead  bool `json:"at_head"`
+	Carried bool `json:"carried"`
+}
+
+// Holds reports whether the acceptance counts for the pull request's head.
+func (a *Acceptance) Holds() bool { return a != nil && (a.AtHead || a.Carried) }
+
+// LatestAcceptance returns the newest acceptance on a pull request, or nil.
+// A comment without a reason accepts nothing, as the skills read it.
+func LatestAcceptance(p PR) *Acceptance {
+	var best *Acceptance
+	for _, c := range p.Comments {
+		if !contract.AcceptedHeadingRE.MatchString(c.Body) {
+			continue
+		}
+		head, reason := firstGroup(contract.AcceptedHeadRE, c.Body, ""), firstGroup(contract.AcceptedReasonRE, c.Body, "")
+		if head == "" || reason == "" || best != nil && best.CreatedAt > c.CreatedAt {
+			continue
+		}
+		best = &Acceptance{Head: head, Reason: reason, URL: c.URL, CreatedAt: c.CreatedAt}
+	}
+	if best != nil {
+		best.AtHead = strings.HasPrefix(p.HeadRefOid, best.Head)
+	}
+	return best
+}

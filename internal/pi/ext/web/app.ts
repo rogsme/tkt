@@ -7,10 +7,11 @@
 
 import type { Dialog, Theme, ToPage } from "../mirror.ts";
 import type { Incident } from "../model.ts";
-import type { Mark } from "../report.ts";
+import { type Mark, tally } from "../report.ts";
 import { hashOf, type Nav, navOf, type Tab } from "./acts.ts";
 import type { Go } from "./bits.ts";
 import { Left } from "./left.ts";
+import { mdStep } from "./md.ts";
 import { dropAll, type Send, settle } from "./query.ts";
 import { apply, type Event, initial, type State, title } from "./state.ts";
 import { Composer, Transcript } from "./talk.ts";
@@ -286,23 +287,28 @@ function Ask({ d, send }: { d: Dialog; send: Send }) {
 			break;
 		case "checklist": {
 			const set = (i: number, m: Mark) => setMarks((ms) => (d.steps ?? []).map((_, j) => (j === i ? m : (ms[j] ?? ""))));
+			const steps = d.steps ?? [];
+			const t = tally(marks, steps.length);
 			body = html`${d.message && html`<p>${d.message}</p>`}
 				<ol class="checklist">
-					${(d.steps ?? []).map((st, i) => {
+					${steps.map((st, i) => {
 						const m = marks[i] ?? "";
-						return html`<li value=${st.n} class=${m}>
-							<div class="step-text">${st.text}</div>
+						return html`<li value=${st.n} class=${m || "open"}>
+							<div class="step-text md" dangerouslySetInnerHTML=${{ __html: mdStep(st.text) }}></div>
 							<div class="marks" role="group" aria-label=${`step ${st.n}`}>
 								${(["pass", "fail", "skip"] as Mark[]).map(
-									(k) => html`<button class=${`mark-btn ${k}${m === k ? " on" : ""}`} aria-pressed=${m === k} onClick=${() => set(i, m === k ? "" : k)}>${k}</button>`,
+									(k) =>
+										html`<button class=${`mark-btn ${k}${m === k ? " on" : m ? " off" : ""}`} aria-pressed=${m === k} title=${m === k ? "Press again to clear" : ""} onClick=${() => set(i, m === k ? "" : k)}>${k}</button>`,
 								)}
+								${st.verified && html`<span class=${`state ${st.verified.toLowerCase().replace(" ", "-")}`}>verify-pr: ${st.verified.toLowerCase()}</span>`}
 							</div>
 						</li>`;
 					})}
 				</ol>
 				<div class="actions">
+					<span class="tally">${steps.length - t.open} of ${steps.length} marked${t.fail ? `, ${t.fail} failed` : ""}${t.skip ? `, ${t.skip} skipped` : ""}</span>
 					<button class="btn quiet" onClick=${() => answer(null)} title="Close without keeping these marks">Cancel</button>
-					<button class="btn" onClick=${() => answer((d.steps ?? []).map((_, i) => marks[i] ?? ""))}>Done</button>
+					<button class="btn" onClick=${() => answer(steps.map((_, i) => marks[i] ?? ""))}>Done</button>
 				</div>`;
 			break;
 		}

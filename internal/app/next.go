@@ -37,11 +37,14 @@ const (
 	ReasonChecksFail           = "checks_fail"
 	ReasonBotClear             = "bot_clear"
 	ReasonReviewClear          = "review_clear"
-	ReasonMergeDue             = "merge_due"
-	ReasonAwaitingBot          = "awaiting_bot"
-	ReasonBotSilent            = "bot_silent"
-	ReasonNeedsReview          = "needs_review"
-	ReasonUnknown              = "unknown"
+	// ReasonReviewAccepted is a head whose review you accepted as it is
+	// (tkt accept): it goes on to the steps as a clean one does.
+	ReasonReviewAccepted = "review_accepted"
+	ReasonMergeDue       = "merge_due"
+	ReasonAwaitingBot    = "awaiting_bot"
+	ReasonBotSilent      = "bot_silent"
+	ReasonNeedsReview    = "needs_review"
+	ReasonUnknown        = "unknown"
 	// The reasons verify-pr gives: a clean head waits for it, where
 	// workflow.md turns agent verification on; its report found a step
 	// that fails; or the report holds, every step passed or some it could
@@ -104,7 +107,10 @@ func human(reason, text string) Next {
 // behind, MergeAs the preset the order names, and MergeBy who confirmed
 // the steps: "" for you, evidence for you from verify-pr's evidence.
 // ReviewReady says review-pr's READY_FOR_HUMAN summary is at the head, which
-// finish-ticket merges on; the review bot's CLEAR is not one. Chore names
+// finish-ticket merges on; the review bot's CLEAR is not one. Accepted says
+// you accepted a review as it is at the head, or at one only clean merges
+// of the base separate from it: its findings count as answered, and it
+// stands in for that summary. Chore names
 // the chore whose run this is, or is "" for a ticket. AgentVerify says
 // workflow.md turns agent verification on. Verification is the outcome of
 // verify-pr's newest report, and VerifyHeld says it counts for the head:
@@ -154,6 +160,7 @@ type Facts struct {
 	FixStatus    string
 	SyncFail     string
 	CIReview     bool
+	Accepted     bool
 }
 
 // NextStep applies the rules in order and returns the first that matches.
@@ -162,11 +169,10 @@ func NextStep(f Facts) Next {
 	switch {
 	case f.PRState == "MERGED":
 		return command(ReasonMerged, "tkt", "done", id)
-	case f.PRState == "CLOSED" && f.Chore != "":
-		// Closing a chore's pull request drops the run.
-		return command(ReasonClosed, "tkt", "done", id)
 	case f.PRState == "CLOSED":
-		return human(ReasonClosed, "closed without merging")
+		// Closing a pull request without merging rejects the work, and
+		// drops a chore's run.
+		return command(ReasonClosed, "tkt", "done", id)
 	case f.Agent == herdr.Working:
 		return Next{Kind: "wait", Reason: ReasonAgentWorking, Argv: []string{"tkt", "wait", id}, Text: "wait (agent working)"}
 	case f.Background:
@@ -213,7 +219,7 @@ func NextStep(f Facts) Next {
 	case f.VerifyHeld && f.Verification == contract.VerificationFailed && f.Chore == "":
 		// The report is feedback, which address-pr-review answers.
 		return command(ReasonVerifyFailed, "tkt", "run", id, "address")
-	case f.AtHead && (f.Verdict == contract.VerdictFindings || f.Verdict == contract.VerdictChangesRequested):
+	case f.AtHead && (f.Verdict == contract.VerdictFindings || f.Verdict == contract.VerdictChangesRequested) && !f.Accepted:
 		if f.Chore != "" {
 			return human(ReasonChoreFindings, "read the review's findings, then have its agent fix them in its tab, or merge the pull request as it is")
 		}
@@ -226,7 +232,7 @@ func NextStep(f Facts) Next {
 		return human(ReasonChoreReady, "review the pull request, and merge it yourself")
 	case f.Chore != "":
 		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
-	case f.MergeSteps != "" && f.ReviewReady:
+	case f.MergeSteps != "" && (f.ReviewReady || f.Accepted):
 		argv := []string{"tkt", "merge", id, "--passed", f.MergeSteps, "--head", f.MergeHead}
 		switch f.MergeBy {
 		case mergeByEvidence:
@@ -238,6 +244,9 @@ func NextStep(f Facts) Next {
 			argv = append(argv, "--as", f.MergeAs)
 		}
 		return command(ReasonMergeDue, argv...)
+	case f.Accepted:
+		// Your acceptance stands in for the review, so no review waits.
+		return cleared(f)
 	case f.MergeSteps != "" && f.AtHead && f.Verdict == contract.VerdictClear && !f.CIReview:
 		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone.
 		return command(ReasonNeedsReview, "tkt", "run", id, "review")
@@ -263,7 +272,7 @@ func NextStep(f Facts) Next {
 func cleared(f Facts) Next {
 	id := f.ID
 	switch {
-	case f.Yolo && !f.ReviewReady:
+	case f.Yolo && !f.ReviewReady && !f.Accepted:
 		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone, so a
 		// head only the bot cleared gets that review first.
 		return command(ReasonNeedsReview, "tkt", "run", id, "review")
@@ -275,6 +284,8 @@ func cleared(f Facts) Next {
 		return human(ReasonVerifyIncomplete, "run the steps verify-pr could not (tkt show "+id+" --steps), then tkt merge "+id+" --passed all")
 	case f.AgentVerify || f.Yolo:
 		return command(ReasonNeedsVerify, "tkt", "run", id, "verify")
+	case f.Accepted:
+		return command(ReasonReviewAccepted, "tkt", "run", id, "verify")
 	case f.Verdict == contract.VerdictClear:
 		return command(ReasonBotClear, "tkt", "run", id, "verify")
 	}
@@ -373,7 +384,7 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseWaitingReview
 	case ReasonBaseMoved, ReasonQAFailed, ReasonFindings, ReasonChecksFail, ReasonVerifyFailed, ReasonSyncFailed:
 		return PhaseNeedsFix
-	case ReasonReviewClear, ReasonBotClear, ReasonNeedsVerify, ReasonVerified, ReasonVerifyIncomplete:
+	case ReasonReviewClear, ReasonBotClear, ReasonReviewAccepted, ReasonNeedsVerify, ReasonVerified, ReasonVerifyIncomplete:
 		return PhaseReadyForHuman
 	case ReasonMergeDue, ReasonAutonomousMerge:
 		return PhaseMerging
@@ -415,7 +426,7 @@ func factsFor(r Row) Facts {
 	if r.Fix != nil {
 		f.Fix, f.FixStatus = r.Fix.Status, r.Fix.LastStatus
 	}
-	f.CIReview = r.CIReview
+	f.CIReview, f.Accepted = r.CIReview, r.Accepted.Holds()
 	if r.Sync != nil && r.PR != nil && r.PR.State == "OPEN" {
 		f.SyncFail = r.Sync.Kind
 	}

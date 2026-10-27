@@ -40,6 +40,10 @@ export interface Row {
 	 * INCOMPLETE, with each step's result. It counts for the head when
 	 * at_head, or carried over clean merges of the base. */
 	verification?: Verification | null;
+	/** accepted is the newest review you accepted as it is (tkt accept),
+	 * with your reason. It counts for the head when at_head, or carried
+	 * over clean merges of the base, and stands in for a clean review. */
+	accepted?: { head: string; reason: string; url: string; at_head: boolean; carried: boolean } | null;
 	/** behind counts the base's commits the branch lacks, or null. */
 	behind?: number | null;
 	next: Next;
@@ -85,6 +89,13 @@ export interface Verification {
 	at_head: boolean;
 	carried: boolean;
 	steps: { n: number; result: "PASSED" | "FAILED" | "NOT RUN"; text: string }[];
+}
+
+/** accepted says you accepted the review as it is, for the row's head or
+ * one only clean merges of the base separate from it. */
+export function accepted(row: Row | undefined): boolean {
+	const a = row?.accepted;
+	return !!a && (a.at_head || a.carried);
 }
 
 /** verifiedAt returns the report when it counts for the row's head. */

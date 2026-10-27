@@ -29,6 +29,10 @@ func TestWatchStepTable(t *testing.T) {
 		// merge without it, such as one in the forge's page, waits for you.
 		{with(open, func(f *Facts) { f.PRState, f.LastStatus = "MERGED", "DONE" }), p, watchMemory{}, watchAct{Kind: actDone, Why: ReasonMerged}},
 		{with(open, func(f *Facts) { f.PRState = "MERGED" }), p, watchMemory{}, leave(ReasonMerged)},
+		// A pull request closed without merging rejected the work.
+		{with(open, func(f *Facts) { f.PRState = "CLOSED" }), p, watchMemory{}, watchAct{Kind: actDone, Why: ReasonClosed}},
+		{with(open, func(f *Facts) { f.PRState, f.Agent = "CLOSED", "working" }), p, watchMemory{}, leave(ReasonClosed)},
+		{with(open, func(f *Facts) { f.PRState = "CLOSED" }), WatchPolicy{MaxRounds: 2}, watchMemory{}, leave(ReasonClosed)},
 		{with(open, func(f *Facts) { f.PRState, f.LastStatus = "MERGED", "DONE" }), WatchPolicy{MaxRounds: 2}, watchMemory{}, leave(ReasonMerged)},
 		// A moved base: clean merges with no agent, even past the round
 		// limit; a conflict runs resolve, which counts a round.
@@ -125,6 +129,9 @@ func TestWatchPausesNeedYou(t *testing.T) {
 	}
 	if got := watchPauseText("deps-1", StopRoundLimit, "run:ci@h1", true); strings.Contains(got, "plan") {
 		t.Errorf("a chore's run has no plan: %q", got)
+	}
+	if got := doneText("", ReasonClosed); !strings.Contains(got, "closed without merging") || strings.Contains(got, "finish-ticket") {
+		t.Errorf("doneText for a closed ticket: %q", got)
 	}
 	for _, why := range []string{ReasonMerged, ReasonNoChanges, ReasonClosed} {
 		if got := doneText("deps", why); strings.Contains(got, "finish-ticket") {

@@ -224,6 +224,65 @@ func syncCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func verifiedCmd(g *globals) *cobra.Command {
+	var o app.VerifiedOpts
+	cmd := &cobra.Command{
+		Use:   "verified ID",
+		Short: "Comment on the ticket's pull request that every human verification step passed",
+		Long:  helpText("verified"),
+		Example: `  tkt verified ACM-12 --passed all --head a1b2c3d
+  tkt verified ACM-12 --passed all --evidence`,
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case len(args) != 1:
+				return usage("usage: tkt verified ID --passed STEPS")
+			case !cmd.Flags().Changed("passed"):
+				return usage("tkt verified needs --passed: the human verification steps that passed, such as 1-3, or all")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Verified(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.Passed, "passed", "", "the human verification steps that passed: numbers and ranges such as 1-3 or 1,2,4, or all")
+	cmd.Flags().StringVar(&o.Head, "head", "", "the head the steps ran on; tkt verified refuses once the pull request moved past it")
+	cmd.Flags().BoolVar(&o.Evidence, "evidence", false, "say you confirmed the steps from verify-pr's evidence, on the head it ran on")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the comment command instead of running it")
+	return cmd
+}
+
+func acceptCmd(g *globals) *cobra.Command {
+	var o app.AcceptOpts
+	cmd := &cobra.Command{
+		Use:               "accept ID",
+		Short:             "Accept the review at the ticket's head as it is, and go on to human verification",
+		Long:              helpText("accept"),
+		Example:           `  tkt accept ACM-12 --reason "the finding is about the pull request's wording"`,
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case len(args) != 1:
+				return usage("usage: tkt accept ID --reason TEXT")
+			case strings.TrimSpace(o.Reason) == "":
+				return usage("tkt accept needs --reason: why the review's findings can stay as they are")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Accept(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.Reason, "reason", "", "why the review's findings can stay as they are; the comment and finish-ticket's completion record it")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the comment command instead of running it")
+	return cmd
+}
+
 func mergeCmd(g *globals) *cobra.Command {
 	var o app.MergeOpts
 	cmd := &cobra.Command{
@@ -328,18 +387,44 @@ func hookCmd(g *globals) *cobra.Command {
 	}
 	tmp.Flags().BoolVar(&o.Install, "install", false, "write tkt's plugin into OpenCode's global plugins directory")
 	tmp.Flags().BoolVar(&o.Dry, "dry-run", false, "with --install, print the change instead of making it")
+	var eo app.HookEventOpts
 	event := &cobra.Command{
 		Use:     "event",
-		Short:   "Record a status line or a new prompt that tkt's OpenCode plugin saw in a ticket's session",
+		Short:   "Record a prompt, status line or skill that tkt's hooks saw in a ticket's session",
 		Long:    helpText("hook"),
 		Example: `  echo '{"directories": ["'$PWD'"], "session": "ses_1", "statuses": ["PLAN_APPROVED"]}' | tkt hook event`,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			res, err := g.app().HookEvent(cmd.Context())
+			res, err := g.app().HookEvent(cmd.Context(), eo)
+			if eo.Claude && !g.json {
+				// Claude Code adds a prompt hook's output to the prompt, and
+				// a failed hook must never hold the agent up.
+				if err != nil {
+					g.ui.Warn("tkt hook event: %v", err)
+				}
+				return nil
+			}
 			return show(g, cmd, res, res == nil, err)
 		},
 	}
-	cmd.AddCommand(tmp, event)
+	event.Flags().BoolVar(&eo.Claude, "claude", false, "read a Claude Code hook's input, print nothing, and never fail")
+	var co app.ClaudeHookOpts
+	claude := &cobra.Command{
+		Use:   "claude",
+		Short: "Add tkt's Claude Code hooks to the project's settings, so tkt hears each prompt, status line and skill",
+		Long:  helpText("hook"),
+		Example: `  tkt hook claude --install
+  tkt hook claude --install --shared`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().ClaudeHook(cmd.Context(), co)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	claude.Flags().BoolVar(&co.Install, "install", false, "add the hooks to the repository's .claude/settings.local.json")
+	claude.Flags().BoolVar(&co.Shared, "shared", false, "with --install, write .claude/settings.json, the file you commit")
+	claude.Flags().BoolVar(&co.Dry, "dry-run", false, "with --install, print the change instead of making it")
+	cmd.AddCommand(tmp, event, claude)
 	return cmd
 }
 

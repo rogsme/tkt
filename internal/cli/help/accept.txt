@@ -1,0 +1,24 @@
+tkt accept takes the review at a ticket's head as it is, when its findings
+do not matter, such as a remark on the pull request's wording. It comments
+on the pull request:
+
+  ## Review accepted
+
+  Accepted head: `HEAD`
+  Accepted review: CHANGES_REQUESTED on `HEAD`, submitted TIME
+  Reason: REASON
+
+finish-ticket and verify-pr take that comment in place of a clean review for
+the head, and for a later head that only clean merges of the base follow, so
+tkt sync keeps it. The human verification steps come from the pull request's
+body, as after the review bot's CLEAR. tkt ls then shows the next step as
+review_accepted, or verify-pr where agent verification is on, and tkt auto
+and tkt merge go on as after a clean review. Any other commit, such as a
+fix, voids the acceptance, and the next review runs as usual.
+
+Only the newest review at the head can be accepted, and only one with
+findings: FINDINGS from the review bot, or CHANGES_REQUESTED from
+review-pr. tkt accept refuses while the ticket's agent works, since its push
+would void the acceptance. --reason is required; the comment and
+finish-ticket's completion comment record it. A second run on the same head
+changes nothing.

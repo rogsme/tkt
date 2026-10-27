@@ -40,6 +40,9 @@ type DoneTicket struct {
 	Started string `json:"started"`
 	Merged  string `json:"merged"`
 	Elapsed int64  `json:"elapsed_s"`
+	// Closed is the pull request closed without merging whose ticket
+	// tkt done removed, or 0.
+	Closed int `json:"closed_pr"`
 	// Unblocked lists the tickets finish-ticket said the merge unblocked:
 	// their blockers are all done now.
 	Unblocked []string `json:"unblocked"`
@@ -58,6 +61,9 @@ func (r *DoneResult) Text(w io.Writer) {
 		if t.Outcome != "removed" {
 			continue
 		}
+		if t.Closed > 0 {
+			fmt.Fprintf(w, "%s  pull request %s was closed without merging; move the ticket in the tracker yourself\n", t.Ticket, forge.Ref(t.Closed))
+		}
 		if t.BranchDeleted {
 			fmt.Fprintf(w, "%s  removed %s and branch %s\n", t.Ticket, t.Path, t.Ticket)
 		} else {
@@ -72,7 +78,8 @@ func (r *DoneResult) Text(w io.Writer) {
 	}
 }
 
-// Done closes the tabs and removes the worktree of each merged ticket.
+// Done closes the tabs and removes the worktree of each ticket whose pull
+// request merged, or closed without merging.
 func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 	c, err := a.begin(ctx, o.Dry, false)
 	if err != nil {
@@ -170,7 +177,7 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		if err := c.lockTicket(t.ID); err != nil {
 			return nil, err
 		}
-		reasons, closeTabs, merged := c.doneCheck(gh, t, herdr.AgentsInPath(agents, t.Path), panes, tabs)
+		reasons, closeTabs, pr := c.doneCheck(gh, t, herdr.AgentsInPath(agents, t.Path), panes, tabs)
 		if len(reasons) > 0 {
 			a.UI.Info("%s kept:", t.ID)
 			for _, r := range reasons {
@@ -187,8 +194,8 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		}
 		// finish-ticket's report names the tickets the merge unblocked, and
 		// its session holds the report until the tabs close. A chore's run
-		// has no ticket, and no finish-ticket.
-		if t.Chore == "" {
+		// has no ticket, and no finish-ticket; nor does a closed pull request.
+		if t.Chore == "" && pr.State != "CLOSED" {
 			dt.Unblocked = c.sessionUnblocked(t.ID, t.Path, herdr.AgentsInPath(agents, t.Path), st)
 		}
 		for _, tab := range closeTabs {
@@ -200,9 +207,12 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 			dt.ClosedTabs = append(dt.ClosedTabs, tab)
 		}
 		started, tmp := st["started"], st["tmpdir"]
-		dt.Started, dt.Merged = started, merged.MergedAt
+		dt.Started, dt.Merged = started, pr.MergedAt
+		if pr.State == "CLOSED" {
+			dt.Closed = pr.Number
+		}
 		if s, err := time.Parse(time.RFC3339, started); err == nil {
-			if m, err := time.Parse(time.RFC3339, merged.MergedAt); err == nil {
+			if m, err := time.Parse(time.RFC3339, pr.MergedAt); err == nil {
 				dt.Elapsed = int64(m.Sub(s).Seconds())
 			}
 		}
@@ -219,8 +229,11 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 		}
 		c.removeTmp(t.ID, tmp)
 		// A chore's run that changed nothing merged nothing.
-		if merged.Number > 0 {
-			c.record(history.Event{Ticket: t.ID, Event: history.Merged, PR: merged.Number, MergedAt: merged.MergedAt, OpenedAt: merged.CreatedAt})
+		switch {
+		case pr.State == "CLOSED":
+			c.record(history.Event{Ticket: t.ID, Event: history.Closed, PR: pr.Number, OpenedAt: pr.CreatedAt})
+		case pr.Number > 0:
+			c.record(history.Event{Ticket: t.ID, Event: history.Merged, PR: pr.Number, MergedAt: pr.MergedAt, OpenedAt: pr.CreatedAt})
 		}
 		c.record(history.Event{Ticket: t.ID, Event: history.Done, Unblocked: dt.Unblocked})
 		c.noteUnblocked(t.ID, dt.Unblocked)
@@ -253,9 +266,9 @@ func (a *App) Done(ctx context.Context, o DoneOpts) (*DoneResult, error) {
 }
 
 // doneCheck lists why a ticket's worktree must stay, the tabs to close, and
-// the merged pull request. A chore's run goes too when you closed its pull
-// request, and when it never opened one and its branch holds nothing the
-// base lacks: it ended with nothing to change.
+// the merged pull request, or the one closed without merging: closing it
+// rejected the work. A chore's run goes too when it never opened one and its
+// branch holds nothing the base lacks: it ended with nothing to change.
 func (c *Ctx) doneCheck(gh forge.GH, t ticketWorktree, agents []herdr.Agent, panes []herdr.Pane, tabs []herdr.Tab) (reasons, closeTabs []string, pr forge.PR) {
 	id, path := t.ID, t.Path
 	f := c.LC.Forge
@@ -281,12 +294,13 @@ func (c *Ctx) doneCheck(gh forge.GH, t ticketWorktree, agents []herdr.Agent, pan
 		switch len(merged) {
 		case 0:
 			switch {
-			case t.Chore != "" && len(closed) > 0:
-				// You closed the run's pull request to drop it, and it keeps
-				// the run's commits: its head must be all the branch holds.
-				oid = closed[0].HeadRefOid
+			case len(closed) > 0 && len(open) == 0:
+				// A pull request closed without merging drops the work, and
+				// it keeps the work's commits: its head must be all the
+				// branch holds, so nothing newer is lost.
+				oid, pr = closed[0].HeadRefOid, closed[0]
 			case t.Chore == "":
-				reasons = append(reasons, fmt.Sprintf("no merged pull request has %s as its head branch", id))
+				reasons = append(reasons, fmt.Sprintf("no merged or closed pull request has %s as its head branch", id))
 			}
 		case 1:
 		default:
@@ -301,7 +315,7 @@ func (c *Ctx) doneCheck(gh forge.GH, t ticketWorktree, agents []herdr.Agent, pan
 	}
 	tip := c.Git.Head(c.Ctx, path)
 	if tip != oid && !c.Git.IsAncestor(c.Ctx, c.Repo.Root, tip, "refs/remotes/"+f.Remote+"/"+f.Base) {
-		reasons = append(reasons, fmt.Sprintf("the branch tip %s is neither the merged head nor in %s/%s", short(tip), f.Remote, f.Base))
+		reasons = append(reasons, fmt.Sprintf("the branch tip %s is neither the pull request's head nor in %s/%s", short(tip), f.Remote, f.Base))
 	}
 	for _, a := range agents {
 		if a.Status == herdr.Working || a.Status == herdr.Blocked {

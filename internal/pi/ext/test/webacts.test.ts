@@ -36,6 +36,8 @@ test("each answer /inbox offers is a button that sends the slash command you cou
 
 	const fix = row({ phase: "needs_fix", auto: { wanted: true, approve_plan: false, running: true, rounds: 3, stop: "", waiting: "", paused: "round_limit", why: "" }, next: { kind: "command", reason: "findings", argv: ["tkt", "run", "ACM-12", "address"], text: "tkt run ACM-12 address" } });
 	assert.equal(cardActs(attentionOf(fix, false)!, fix)[0].cmd, "/run ACM-12 address");
+	// Accepting the review is a button too; /accept asks for the reason.
+	assert.equal(cardActs(attentionOf(fix, false)!, fix)[1].cmd, "/accept ACM-12");
 });
 
 test("a ticket's own buttons follow what its state allows", () => {
@@ -43,7 +45,7 @@ test("a ticket's own buttons follow what its state allows", () => {
 	assert.deepEqual(labels(row({ phase: "awaiting_approval" })), ["/approve ACM-12", "/approve ACM-12 auto", "/auto ACM-12 on", "/hold ACM-12"]);
 	assert.deepEqual(labels(row({ phase: "ready_for_human", behind: 2, hold: true })), ["/check ACM-12", "/sync ACM-12", "/auto ACM-12 on", "/hold ACM-12 off"]);
 	assert.deepEqual(labels(row({ phase: "merged" })), ["/done ACM-12"]);
-	assert.deepEqual(labels(row({ phase: "needs_fix", agent: null, next: { kind: "command", reason: "findings", argv: [], text: "tkt run ACM-12 address" } })), ["/next ACM-12", "/relaunch ACM-12", "/auto ACM-12 on", "/hold ACM-12"]);
+	assert.deepEqual(labels(row({ phase: "needs_fix", agent: null, next: { kind: "command", reason: "findings", argv: [], text: "tkt run ACM-12 address" } })), ["/next ACM-12", "/accept ACM-12", "/relaunch ACM-12", "/auto ACM-12 on", "/hold ACM-12"]);
 	// A chore's run has no plan and no tkt auto.
 	assert.deepEqual(labels(row({ ticket: "chore-deps-1", chore: "deps", phase: "ready_for_human" })), ["/hold chore-deps-1"]);
 	assert.deepEqual(labels(row({ auto: { wanted: true, approve_plan: false, running: true, rounds: 0, stop: "", waiting: "", paused: "", why: "" } })), ["/auto ACM-12 off", "/hold ACM-12"]);

@@ -1,0 +1,48 @@
+# An acceptance holds across clean merges of the base, as your steps do:
+# after tkt sync, the head still goes on to verification, even when the
+# review bot finds the same thing again.
+cp $WORK/workflow.md docs/agents/workflow.md
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1SHORT"; $H1[0:7]) | gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+
+exec tkt ls --json
+envelope '.result.rows[0].next.reason' findings
+exec tkt accept ACM-12 --reason 'the finding is about the description'
+stdout 'ACM-12  accepted the review on #7'
+exec tkt ls --json
+envelope '.result.rows[0].next.reason' review_accepted
+
+# The base moves; tkt sync merges it with no agent.
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+exec tkt sync ACM-12
+gitvar H2 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H2'
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .accepted.at_head, .accepted.carried]' '["review_accepted",false,true]'
+
+# The bot finds the same thing on the new head; the acceptance still holds.
+jqedit $WORK/prs.json '.[0].reviews += [{"body": ("**Automated review: FINDINGS** · head `" + $H2[0:7] + "`"), "submittedAt": "2026-01-03T00:00:00Z", "commit": {"oid": $H2}}]'
+exec tkt ls --json
+envelope '.result.rows[0] | [.review.verdict, .review.at_head, .next.reason]' '["FINDINGS",true,"review_accepted"]'
+houserules
+
+-- workflow.md --
+<!-- rogs-skills config v1: workflow -->
+# Workflow
+
+## Features
+
+| Feature | State |
+|---|---|
+| CI review | on |
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "body": "## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n",
+  "reviews": [{"body": "**Automated review: FINDINGS** · head `H1SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

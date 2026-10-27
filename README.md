@@ -82,9 +82,11 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt watch` | Keeps every ticket moving: syncs a moved base, runs ci once per head when the checks fail, and removes a ticket after finish-ticket's `Status: DONE`. tkt commands start it by themselves; `--install` runs it, and herdr's server, as services that start at boot. |
 | `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first), `resolve`, `ci`, `verify` (verify-pr runs the human verification steps and posts what it saw) or `start`. `sync`, the old name of `address`, still works and warns. |
 | `tkt sync ID` | Merges the base into the ticket's branch: itself, with no agent, when the merge is clean; through a fresh session in a split beside the ticket's agent on a conflict, or when the sync fails another way, such as on a push a pre-push hook refuses. |
+| `tkt accept ID --reason TEXT` | Takes the review at the head as it is, when its findings do not matter: it comments `## Review accepted` on the pull request, which finish-ticket and verify-pr take in place of a clean review, and the head goes on to human verification with the steps from the pull request's body. The acceptance holds across clean merges of the base; a fix voids it. |
+| `tkt verified ID --passed STEPS` | Comments on the pull request that every human verification step passed on a head, once per head. `/check` in the tkt agent runs it before it asks whether to merge. |
 | `tkt merge ID --passed STEPS` | Once the human verification steps passed, sends finish-ticket the word to merge in a fresh session, naming the head they passed on. When finish-ticket could not merge yet, leaves a merge order that `tkt watch` carries out: it syncs a clean base, has the new head reviewed, waits for green checks, and merges one ticket at a time. The steps carry over clean merges of the base, so a verified batch merges while you are away. `--evidence` says you confirmed the steps from verify-pr's evidence. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
-| `tkt done ID...` | Closes merged tickets' tabs and removes their worktrees, and names the tickets each merge unblocked, which `tkt ls` lists and the tkt agent offers to start. `--all` checks every ticket worktree. |
+| `tkt done ID...` | Closes the tabs of tickets whose pull request merged, or closed without merging, and removes their worktrees. It names the tickets each merge unblocked, which `tkt ls` lists and the tkt agent offers to start. `--all` checks every ticket worktree. |
 | `tkt chores` | Lists the repository's chores, the agent runs you schedule in its `.tkt/tkt.local.toml`, with their next run and the run still open. |
 | `tkt chore run NAME` | Starts a run of a chore now: a branch from the fetched base, its worktree and tab, and an agent with the chore's prompt. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
@@ -93,7 +95,8 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt stats` | Shows how long tickets took from start to merge, and how long they waited for you. |
 | `tkt history ID...` | Shows what happened to tickets, merged ones too: each event with its time, and the pull request's commits and reviews. |
 | `tkt doctor` | Checks the tools, versions and configuration tkt needs. |
-| `tkt hook tmp --install` | Installs tkt's OpenCode plugin, which gives OpenCode agents their ticket's `TMPDIR` and moves the new `/tmp` paths they type into it. |
+| `tkt hook tmp --install` | Installs tkt's OpenCode plugin, which gives OpenCode agents their ticket's `TMPDIR`, moves the new `/tmp` paths they type into it, and tells tkt each prompt, status line and skill start. |
+| `tkt hook claude --install` | Adds tkt's Claude Code hooks to the project's `.claude/settings.local.json`, or `settings.json` with `--shared`: they tell tkt each prompt, each turn's status lines and each skill start, so a plan approved in the viewer shows at once. `tkt doctor` checks for them. |
 | `tkt schema` | Describes every command, flag, result and error code as JSON. |
 
 A ticket from start to merge, in short:
@@ -162,6 +165,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/hold ID [off]` | Puts a ticket on hold, so `tkt watch` and `tkt auto` leave it alone, or takes it off hold. |
 | `/send ID TEXT`, `/show ID`, `/peek ID` | Talks to the ticket's agent, prints its last message, or watches its live screen. |
 | `/run ID STAGE [as PRESET]`, `/relaunch ID` | Runs a stage, such as `review` or `verify`, in a fresh session, as `tkt run` does; relaunches the newest session when no agent runs, as `tkt resume` does. |
+| `/accept ID [REASON]` | Accepts the review at the head as it is, as `tkt accept` does, and asks for the reason when you give none. The board and the web page offer it on a ticket whose review has findings. |
 | `/check ID` | Walks the human verification steps as a checklist, and starts a fix session for a step that failed. When verify-pr passed every step, it offers to confirm them from its evidence instead, and its checklist starts with the steps verify-pr passed. Once every step passed, it merges with `tkt merge`: now, or with a merge order that `tkt watch` carries out once the head is synced, reviewed and green. |
 | `/inbox`, `/board`, `/stats` | What needs you, with fixed answers; every ticket in columns (`/board hide` and `/board show` put the pinned board away and back); how long tickets take. |
 | `/dismiss ID` | Sets aside what a ticket needs from you, until its situation changes, as `/inbox`'s Dismiss does. |

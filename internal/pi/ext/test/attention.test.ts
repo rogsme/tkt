@@ -94,10 +94,18 @@ const offered = (r: Parameters<typeof attentionOf>[0]) => {
 const fix = (reason: string, stage: string) => ({ kind: "command" as const, reason, argv: ["tkt", "run", "ACM-12", stage], text: `tkt run ACM-12 ${stage}` });
 
 test("a loop at its round limit offers one more fix run first", () => {
-	assert.deepEqual(offered(row({ phase: "needs_you", next: fix("findings", "address"), auto: auto({ paused: "round_limit", why: "findings" }) })), ["run:address", "peek", "show", "dismiss"]);
+	assert.deepEqual(offered(row({ phase: "needs_you", next: fix("findings", "address"), auto: auto({ paused: "round_limit", why: "findings" }) })), ["run:address", "accept", "peek", "show", "dismiss"]);
 	assert.equal(offered(row({ phase: "needs_you", next: fix("checks_fail", "ci"), auto: auto({ paused: "round_limit", why: "checks_fail" }) }))[0], "run:ci");
 	const a = attentionOf(row({ phase: "needs_you", next: fix("findings", "address"), auto: auto({ paused: "round_limit", why: "findings" }) }), false);
 	assert.equal(choicesOf(a!)[0].label, "Run address once more");
+});
+
+test("findings can be accepted as they are, after the fix that moves them on", () => {
+	assert.equal(offered(row({ phase: "needs_you", next: fix("findings", "address"), auto: auto({ paused: "no_progress" }) }))[1], "accept");
+	assert.deepEqual(offered(row({ phase: "needs_you", next: fix("findings", "address"), watch: { last: "run:address@h1", paused: "round_limit" } })), ["run:address", "accept", "peek", "show", "dismiss"]);
+	// Other fixes, and a chore's findings, have no review to accept.
+	assert.ok(!offered(row({ phase: "needs_fix", next: fix("checks_fail", "ci") })).includes("accept"));
+	assert.ok(!offered(row({ phase: "needs_you", next: fix("findings", "address"), auto: auto({ paused: "round_limit", why: "findings" }), chore: "deps" })).includes("accept"));
 });
 
 test("a loop with no progress offers the same step again, when it runs one", () => {
@@ -120,7 +128,7 @@ test("each stop offers the answer that moves it on", () => {
 });
 
 test("a manual step can go to tkt auto, and a stalled ticket can leave it", () => {
-	assert.deepEqual(offered(row({ phase: "needs_fix", next: fix("findings", "address") })), ["next", "show", "auto_on"]);
+	assert.deepEqual(offered(row({ phase: "needs_fix", next: fix("findings", "address") })), ["next", "show", "auto_on", "accept"]);
 	assert.deepEqual(offered(row({ phase: "building", auto: auto({ running: false }) })), ["auto_on", "auto_off", "dismiss"]);
 	assert.deepEqual(offered(row({ phase: "awaiting_approval", last_status: "AWAITING_APPROVAL" })), ["approve", "approve_auto", "show", "reply"]);
 });
@@ -224,6 +232,12 @@ test("a chore's run gets no tkt auto and no plan answers", () => {
 	const closed = row({ ticket: "deps-1", chore: "deps", phase: "closed", pr: { number: 44, state: "CLOSED" }, next: { kind: "command", reason: "closed", argv: ["tkt", "done", "deps-1"], text: "tkt done deps-1" } });
 	assert.equal(attentionOf(closed, false, true), undefined);
 	assert.match(attentionOf(closed, false, false)?.text ?? "", /you closed chore deps's pull request #44\. \/done deps-1 removes the run/);
+});
+
+test("a ticket whose pull request closed without merging goes with tkt watch", () => {
+	const closed = row({ phase: "closed", pr: { number: 9, state: "CLOSED" }, next: { kind: "command", reason: "closed", argv: ["tkt", "done", "ACM-12"], text: "tkt done ACM-12" } });
+	assert.equal(attentionOf(closed, false, true), undefined);
+	assert.match(attentionOf(closed, false, false)?.text ?? "", /ACM-12: pull request #9 was closed without merging\. \/done ACM-12 removes the ticket; move it in the tracker yourself\./);
 });
 
 test("verify-pr's report shapes the ready item", () => {

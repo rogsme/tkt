@@ -46,6 +46,10 @@ func TestAutoStepTable(t *testing.T) {
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 1}, autoAct{Kind: actRun, Stage: "address"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, pause(StopRoundLimit)},
+		// Findings you accepted get no fix: the head is ready for you, or
+		// for verify-pr where agent verification is on.
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.Accepted = "FINDINGS", true, true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.Accepted, f.AgentVerify = "FINDINGS", true, true, true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actRun, Stage: "verify"}},
 		// A failed sync goes to a fresh session in a split, which spends a
 		// round: sync-fix, or resolve for a conflict. The loop polls while
 		// it works, since it waits on the ticket's own pane.

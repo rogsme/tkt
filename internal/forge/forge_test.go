@@ -2,6 +2,7 @@ package forge
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -83,5 +84,34 @@ func TestParseProcedureNestsSubSteps(t *testing.T) {
 	}
 	if steps[1].Text != "Sign in:\n1. Type the name.\n2. Press Enter." {
 		t.Errorf("step 2: %q", steps[1].Text)
+	}
+}
+
+func TestLatestAcceptance(t *testing.T) {
+	head := strings.Repeat("b2", 20)
+	accept := func(at, h, reason string) Comment {
+		body := "## Review accepted\n\nAccepted head: `" + h + "`\n"
+		if reason != "" {
+			body += "Reason: " + reason + "\n"
+		}
+		return Comment{Body: body, CreatedAt: at, URL: "https://github.com/acme/app/pull/7#issuecomment-" + at}
+	}
+	p := PR{HeadRefOid: head, Comments: []Comment{
+		{Body: "Looks fine to me.", CreatedAt: "2026-01-04"},
+		accept("2026-01-02", "a1a1a1a", "the wording"),
+		accept("2026-01-03", head[:7], "the description"),
+		// A comment without a reason accepts nothing.
+		accept("2026-01-05", head, ""),
+	}}
+	a := LatestAcceptance(p)
+	if a == nil || a.Head != head[:7] || a.Reason != "the description" || !a.AtHead || !a.Holds() {
+		t.Fatalf("LatestAcceptance = %+v", a)
+	}
+	p.HeadRefOid = strings.Repeat("c3", 20)
+	if a := LatestAcceptance(p); a == nil || a.AtHead || a.Holds() {
+		t.Errorf("an acceptance of an older head holds: %+v", a)
+	}
+	if LatestAcceptance(PR{HeadRefOid: head}) != nil {
+		t.Errorf("a pull request without comments has an acceptance")
 	}
 }

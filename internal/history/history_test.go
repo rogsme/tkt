@@ -102,6 +102,27 @@ func TestTimelinesCountTheLastCycle(t *testing.T) {
 	}
 }
 
+func TestTimelinesCountClosedTicketsApart(t *testing.T) {
+	now := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	events := []Event{
+		ev("2026-01-01T00:00:00Z", "ACM-1", Started),
+		ev("2026-01-01T02:00:00Z", "ACM-1", Merged),
+		ev("2026-01-03T00:00:00Z", "ACM-2", Started),
+		ev("2026-01-04T00:00:00Z", "ACM-2", Closed, func(e *Event) { e.PR = 9 }),
+		ev("2026-01-04T00:00:00Z", "ACM-2", Done),
+	}
+	tickets, sum := Timelines(events, Filter{}, waiting, now)
+	if len(tickets) != 2 || tickets[0].Ticket != "ACM-2" {
+		t.Fatalf("tickets: %+v", tickets)
+	}
+	if c := tickets[0]; c.InProgress || c.Closed == "" || c.PR != 9 || c.Total != 24*3600 {
+		t.Errorf("ACM-2: %+v", c)
+	}
+	if sum.Merged != 1 || sum.Closed != 1 || sum.InProgress != 0 || sum.MedianTotal != 2*3600 {
+		t.Errorf("summary: %+v", sum)
+	}
+}
+
 func TestPercentile(t *testing.T) {
 	vs := []int64{5, 1, 4, 2, 3, 6, 7, 8, 9, 10}
 	if percentile(vs, 50) != 5 || percentile(vs, 90) != 9 || percentile(nil, 50) != 0 || percentile([]int64{4}, 90) != 4 {

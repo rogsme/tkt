@@ -157,7 +157,7 @@ The agent ends with `Status: AWAITING_APPROVAL`. When you drop the ticket instea
 
 ### 4. You approve, and work-ticket builds
 
-Read the plan with `tkt show ACM-123`, which prints the agent's last message from its session's record. Ask for changes with `tkt send ACM-123 "what to change"` until the plan is right, then approve it with `tkt approve ACM-123`. Both type into the planning session, as an answer in the tab would. Do not use `tkt run` here: it starts a fresh session, and the plan lives in this one. With plan presentation on, you can approve in the browser instead: the agent goes on by itself and prints `Status: PLAN_APPROVED`, and `tkt ls` reads that line, moves the ticket to the work stage, and shows it building. The same session goes on with `work-ticket`:
+Read the plan with `tkt show ACM-123`, which prints the agent's last message from its session's record. Ask for changes with `tkt send ACM-123 "what to change"` until the plan is right, then approve it with `tkt approve ACM-123`. Both type into the planning session, as an answer in the tab would. Do not use `tkt run` here: it starts a fresh session, and the plan lives in this one. With plan presentation on, you can approve in the browser instead: the agent goes on by itself and prints `Status: PLAN_APPROVED`, and `tkt ls` reads that line, moves the ticket to the work stage, and shows it building. An agent that skips the line and goes straight into `work-ticket` counts the same: start-ticket starts it only after the approval. tkt's hooks, `tkt hook claude --install` for Claude Code and `tkt hook tmp --install` for OpenCode, tell tkt the moment the skill starts. The same session goes on with `work-ticket`:
 
 1. It posts the plan as an `## Approved implementation plan` comment, after moving the ticket to `in-progress` if it is not there yet.
 2. It implements the plan, test-first where the configuration says so, and commits each unit through `commit`.
@@ -195,8 +195,27 @@ Act on the verdict, then review again:
 | `Verdict: CHANGES_REQUESTED`, or comments you left | `tkt run ACM-123 address` | `address-pr-review` first merges the base when it moved, resolving conflicts. Then it checks each finding, fixes the valid ones at their root cause, answers the rest with evidence, pushes, waits for CI and replies to every comment. It runs at most two rounds and never resolves a thread. |
 | `Status: BLOCKED_FOR_SYNC` with the branch behind, the bot's `STALE_BASE`, or a conflict | `tkt sync ACM-123` | tkt merges the base itself when the merge is clean, and pushes it in seconds. On a conflict, a fresh session runs the `resolve` stage, which only merges and resolves. See [Syncing with the base](#syncing-with-the-base). |
 | The checks fail at the head, with no review to address | `tkt run ACM-123 ci` | A fresh agent finds the cause, fixes it, and pushes once. An infrastructure failure gets a rerun instead of a code change. |
+| Findings at the head that do not matter, such as a remark on the pull request's description | `tkt accept ACM-123 --reason "the finding is about the description"` | tkt comments `## Review accepted` on the pull request, with the head and your reason. See [Accepting a review](#accepting-a-review). |
 
 `address` ends with `Status: READY_FOR_REVIEW`, which leads back to step 5, and so does a sync, since its new head needs a review too. On a re-review, `review-pr` checks each earlier thread against the new head and resolves the ones that are fixed.
+
+#### Accepting a review
+
+Some findings are not worth a fix round, such as a remark on the pull request's description. `tkt accept ACM-123 --reason "..."` takes the newest review at the head as it is: review-pr's `CHANGES_REQUESTED` or the bot's `FINDINGS`. It comments on the pull request:
+
+```
+## Review accepted
+
+The user accepts this review's findings as they are. Verification goes on from the pull request's Human verification section.
+
+Accepted head: `3f2a...`
+Accepted review: CHANGES_REQUESTED on `3f2a1b0`, submitted 2026-10-27T14:02:11Z
+Reason: the finding is about the description
+```
+
+finish-ticket and verify-pr take the comment in place of a clean review for that head, and for a later head that only clean merges of the base follow, so `tkt sync` keeps it. The steps come from the pull request's body, as after the bot's `CLEAR`. address-pr-review leaves the accepted findings alone, and review-pr raises them again only when a later commit changes the code they name. `tkt ls` gives the head the next step a clean one gets: `review_accepted` (`tkt run ACM-123 verify`), or verify-pr where agent verification is on, and `tkt auto` goes on to it. Any other commit, such as a fix after verify-pr found a failing step, voids the acceptance, and the next review runs as usual.
+
+tkt accept needs `--reason`, which the comment and finish-ticket's completion comment record. It refuses with `nothing_to_accept` when the newest review at the head has no findings, and with `agent_busy` while the ticket's agent works, since its push would void the acceptance. In the tkt agent, `/accept ACM-123` asks for the reason, and the board and the web page offer `Accept the review as it is` beside the fix.
 
 ### 7. verify-pr runs the steps, and you confirm them
 
@@ -216,7 +235,7 @@ Where workflow.md's feature table turns on `Agent verification`, this is the nex
 | `Verification: PASSED` | You confirm the steps from its evidence, or run them yourself. |
 | `Verification: INCOMPLETE` | You run the steps it could not. |
 
-A report counts for the head it ran on, and across clean merges of the base after it, as your confirmations do; a fix voids it. You still decide whether each step passed: verify-pr's report is evidence, not your word. `/check` in the tkt agent shows what it saw on each step, and starts the checklist with the steps it passed already marked.
+A report counts for the head it ran on, and across clean merges of the base after it, as your confirmations do; a fix voids it. You still decide whether each step passed: verify-pr's report is evidence, not your word. `/check` in the tkt agent shows what it saw beside each step. The checklist starts with nothing marked, or with the marks you left on this head, since only you mark a step.
 
 ### 8. finish-ticket merges
 
@@ -226,7 +245,7 @@ A report counts for the head it ran on, and across clean merges of the base afte
 Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 passed on head 3f2a....
 ```
 
-`--passed all` names every step, and `/check` in the tkt agent runs it when you mark the last one passed. When you confirmed the steps from verify-pr's evidence instead of running them, add `--evidence`: the line then says `... passed on head 3f2a...: the user confirmed them from verify-pr's evidence.`, and finish-ticket checks that the report for that head marks each step `PASSED` and ran the final review's procedure. tkt merge checks the report first, and refuses with `not_verified` when it is missing or marks a step otherwise. Before any session starts, tkt merge refuses a list that leaves a step out, a head the steps cannot carry to (`--head`), a head no review cleared that no sync made, a base whose merge conflicts, and failing checks at a head it would merge as it is; `finish-ticket` checks the rest itself. When finish-ticket could not merge yet, tkt merge leaves a merge order instead, and `tkt watch` carries it out:
+`--passed all` names every step, and `/check` in the tkt agent runs it when you mark the last one passed. First, `/check` runs `tkt verified ACM-123 --passed all --head 3f2a...`, which comments `Human verification passed` with a green check mark on the pull request, naming the steps and the head, once per head. The comment holds no status or verdict line, so the skills read past it. When you confirmed the steps from verify-pr's evidence instead of running them, add `--evidence`: the line then says `... passed on head 3f2a...: the user confirmed them from verify-pr's evidence.`, and finish-ticket checks that the report for that head marks each step `PASSED` and ran the final review's procedure. tkt merge checks the report first, and refuses with `not_verified` when it is missing or marks a step otherwise. Before any session starts, tkt merge refuses a list that leaves a step out, a head the steps cannot carry to (`--head`), a head no review cleared that no sync made, a base whose merge conflicts, and failing checks at a head it would merge as it is; `finish-ticket` checks the rest itself. When finish-ticket could not merge yet, tkt merge leaves a merge order instead, and `tkt watch` carries it out:
 
 ```mermaid
 flowchart LR
@@ -334,7 +353,7 @@ A yolo run starts with the ticket: `--yolo` refuses a ticket you started another
 flowchart TD
   pass(["every 60s: one fetch, one read of every ticket"]) --> skip{"on hold, driven by tkt auto,<br/>locked, or agent working?"}
   skip -->|yes| leave["leave it for now"]
-  skip -->|no| merged{"PR merged and finish-ticket<br/>said Status: DONE?"}
+  skip -->|no| merged{"PR merged and finish-ticket<br/>said Status: DONE, or PR<br/>closed without merging?"}
   merged -->|yes| done["tkt done"]
   merged -->|no| behind{"the base moved at a moment<br/>a sync is due?"}
   behind -->|clean| sync["merge it, no agent"]
@@ -455,6 +474,6 @@ A ticket that waits on a blocker sits in `blocked`, with a `## Blocked` comment 
 | `Status: BLOCKED` with a `Reason:` line | Read the reason in the tab. It names what a person has to decide or fix. When a blocker holds the ticket, the tracker shows it in `blocked`, with the reason in a comment. |
 | The agent waits for an answer | Answer it in the tab. `tkt ls` shows it as blocked. |
 | No agent runs for the ticket | `tkt resume ACM-123` brings back the last session and sends nothing. Use it, not `tkt run`, when the conversation matters, such as a plan waiting for approval. |
-| The pull request closed without merging | Decide by hand. tkt does not guess. |
+| The pull request closed without merging | Closing it rejected the work. `tkt watch` removes the ticket's tabs and worktree once no agent works there, as `tkt done ACM-123` does, and keeps a worktree with commits that never reached the pull request. tkt never writes the tracker, so move the ticket there yourself. |
 
 `tkt ls` applies these rules in order and prints the next step. `tkt help ls` lists the rules.

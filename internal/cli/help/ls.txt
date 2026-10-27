@@ -12,7 +12,7 @@ transcript or the OpenCode API; when tkt cannot read that, from the agent's
 recent output.
 
 The next step is the first of these rules that matches:
-  1. The pull request is merged: tkt done ID.
+  1. The pull request is merged, or closed without merging: tkt done ID.
   2. The agent works, or waits on its background task: wait; or it waits for
      an answer: answer it.
   3. No pull request yet: tkt resume ID when no agent runs; otherwise read the
@@ -48,8 +48,7 @@ waits for a new review.
 A chore's run is a row too, named by its branch (tkt help chores). No skill
 reviews, fixes or merges a pull request without a ticket, so some rules
 differ for it: an agent that ended with Status: DONE and no pull request
-found nothing to change, and a pull request you closed drops the run (tkt
-done ID, for both); a start that stopped before the agent got its prompt
+found nothing to change (tkt done ID); a start that stopped before the agent got its prompt
 goes on with tkt chore run NAME; findings in the review at the head are
 yours to read; and a green pull request that the bot cleared, or did not
 review within bot_wait, is yours to merge.

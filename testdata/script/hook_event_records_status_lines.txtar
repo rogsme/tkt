@@ -19,13 +19,13 @@ exec tkt hook event --json
 stdin $WORK/approved.json
 exec tkt hook event --json
 envelope '.result.statuses' '["AWAITING_APPROVAL","PLAN_APPROVED"]'
-state $WT oc_statuses 'AWAITING_APPROVAL PLAN_APPROVED'
+state $WT hook_statuses 'AWAITING_APPROVAL PLAN_APPROVED'
 
 # Another session in the worktree, such as a subagent's, changes nothing.
 stdin $WORK/other.json
 exec tkt hook event --json
 envelope '.result.ticket' ''
-state $WT oc_session ses_fake1
+state $WT hook_session ses_fake1
 
 # The API's 50 messages hold only the work phase's end; the plugin's record
 # says the plan was approved.
@@ -39,7 +39,7 @@ stdout 'plan approved, in its session'
 # A new prompt starts a new turn.
 stdin $WORK/new.json
 exec tkt hook event --json
-state $WT oc_statuses ''
+state $WT hook_statuses ''
 
 -- new.json --
 {"directories": ["$WORK/wt/ACM-5"], "session": "ses_fake1", "turn": "new"}
