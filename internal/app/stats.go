@@ -38,8 +38,11 @@ func (r *StatsResult) Text(w io.Writer) {
 		var rows [][]string
 		for _, t := range r.Tickets {
 			total := dur(t.Total)
-			if t.InProgress {
+			switch {
+			case t.InProgress:
 				total += " so far"
+			case t.Merged == "":
+				total += " (closed)"
 			}
 			auto := "-"
 			if t.Auto {
@@ -57,6 +60,9 @@ func (r *StatsResult) Text(w io.Writer) {
 	if s.Merged > 0 {
 		fmt.Fprintf(w, "\n%d merged: start to merge median %s, p90 %s; waiting on you median %s, p90 %s\n",
 			s.Merged, dur(s.MedianTotal), dur(s.P90Total), dur(s.MedianWait), dur(s.P90Wait))
+	}
+	if s.Closed > 0 {
+		fmt.Fprintf(w, "%d closed without merging, left out of the times\n", s.Closed)
 	}
 	if s.WithoutStart > 0 {
 		fmt.Fprintf(w, "%d tickets have no recorded start and are left out\n", s.WithoutStart)

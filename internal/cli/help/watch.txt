@@ -3,8 +3,10 @@ ones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads
 every ticket with a fixed number of gh calls, and takes at most one step per
 ticket, from the same rules as tkt ls:
 
-  - finish-ticket ended with Status: DONE after the merge: it runs tkt done,
-    unless [watch] done_after_merge = false;
+  - finish-ticket ended with Status: DONE after the merge, or the pull
+    request was closed without merging and no agent works on it: it runs
+    tkt done, unless [watch] done_after_merge = false; after a close, the
+    tracker is yours to move;
   - the base moved at a moment a sync is due (a conflict, the bot's
     STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base
     itself, as tkt sync does, with no agent, and runs resolve on a conflict;

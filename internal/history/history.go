@@ -22,7 +22,10 @@ const (
 	Phase    = "phase"
 	Auto     = "auto"
 	Merged   = "merged"
-	Done     = "done"
+	// Closed is a pull request closed without merging, which tkt done
+	// records when it removes the ticket.
+	Closed = "closed"
+	Done   = "done"
 	// Hold is a ticket put on hold (Action on) or taken off it (off).
 	Hold = "hold"
 	// Sync is a base merge tkt made and pushed itself (Action merged), or

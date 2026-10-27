@@ -16,8 +16,10 @@ type Ticket struct {
 	Opened   string `json:"pr_opened"`
 	Ready    string `json:"ready_for_human"`
 	Merged   string `json:"merged"`
-	Done     string `json:"done"`
-	PR       int    `json:"pr"`
+	// Closed is when the pull request was closed without merging.
+	Closed string `json:"closed"`
+	Done   string `json:"done"`
+	PR     int    `json:"pr"`
 	// Total runs from the start to the merge, or to now while the ticket
 	// is in progress.
 	Total      int64 `json:"total_s"`
@@ -30,9 +32,12 @@ type Ticket struct {
 	Auto   bool `json:"auto"`
 }
 
-// Summary describes the merged tickets of a Timelines call.
+// Summary describes the merged tickets of a Timelines call. Closed tickets
+// count apart and stay out of the times: rejected work says nothing about
+// how long work takes to land.
 type Summary struct {
 	Merged       int   `json:"merged"`
+	Closed       int   `json:"closed"`
 	InProgress   int   `json:"in_progress"`
 	MedianTotal  int64 `json:"median_total_s"`
 	P90Total     int64 `json:"p90_total_s"`
@@ -96,6 +101,10 @@ func Timelines(events []Event, f Filter, waiting []string, now time.Time) ([]Tic
 	for _, t := range out {
 		if t.InProgress {
 			sum.InProgress++
+			continue
+		}
+		if t.Merged == "" {
+			sum.Closed++
 			continue
 		}
 		sum.Merged++
@@ -166,6 +175,9 @@ func timeline(evs []Event, waiting []string, now time.Time) (Ticket, bool) {
 			}
 			t.Opened = e.OpenedAt
 			t.PR = e.PR
+		case Closed:
+			t.Closed = e.At
+			t.PR = e.PR
 		case Done:
 			t.Done = e.At
 		}
@@ -177,6 +189,8 @@ func timeline(evs []Event, waiting []string, now time.Time) (Ticket, bool) {
 	end := now
 	if m, ok := parse(t.Merged); ok {
 		end = m
+	} else if c, ok := parse(t.Closed); ok {
+		end = c
 	} else {
 		t.InProgress = true
 	}

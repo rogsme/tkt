@@ -208,7 +208,7 @@ func (a watchAct) key(head string) string { return a.Kind + ":" + a.Stage + "@" 
 // watchStep decides what tkt watch does for one ticket, from the rule tkt
 // ls applies, as autoStep does for tkt auto. watch takes only the upkeep
 // nobody needs to decide on: it removes a ticket once finish-ticket ends
-// with Status: DONE, syncs a moved base, fixes failing checks, once per head
+// with Status: DONE or its pull request closed without merging, syncs a moved base, fixes failing checks, once per head
 // and up to [auto] max_rounds, and carries out the merge order you left with
 // tkt merge, reviewing the head a sync made for one first. The plan,
 // reviews and findings stay with you and with tkt auto, and a ticket on
@@ -260,8 +260,9 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 	case ReasonNoChanges:
 		return act(actDone, "")
 	case ReasonClosed:
-		// Closing a chore's pull request drops the run, as merging it does.
-		if p.DoneAfterMerge && f.Chore != "" && f.Agent != herdr.Working && f.Agent != herdr.Blocked {
+		// Closing a pull request without merging rejects the work, so the
+		// ticket or run goes once no agent works there.
+		if p.DoneAfterMerge && f.Agent != herdr.Working && f.Agent != herdr.Blocked {
 			return act(actDone, "")
 		}
 	case ReasonBaseMoved:
@@ -310,6 +311,8 @@ func watchArgv(a watchAct, id string, n Next) []string {
 // next step it answered.
 func doneText(chore, why string) string {
 	switch {
+	case chore == "" && why == ReasonClosed:
+		return "its pull request was closed without merging, so tkt watch removed its tabs and worktree; move the ticket in the tracker yourself"
 	case chore == "":
 		return "finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree"
 	case why == ReasonNoChanges:

@@ -13,7 +13,7 @@ func TestNextStepTable(t *testing.T) {
 		reason string
 	}{
 		{Facts{PRState: "MERGED", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE"}, "tkt done ACM-1", "command", ReasonMerged},
-		{Facts{PRState: "CLOSED"}, "closed without merging", "human", ReasonClosed},
+		{Facts{PRState: "CLOSED"}, "tkt done ACM-1", "command", ReasonClosed},
 		{Facts{PRState: "OPEN", Agent: "working", Checks: "ok", Mergeable: "MERGEABLE"}, "wait (agent working)", "wait", ReasonAgentWorking},
 		{Facts{PRState: "OPEN", Agent: "blocked", Checks: "ok", Mergeable: "MERGEABLE"}, "answer the agent in its tab", "human", ReasonAgentBlocked},
 		{Facts{}, "tkt resume ACM-1", "command", ReasonNoAgent},

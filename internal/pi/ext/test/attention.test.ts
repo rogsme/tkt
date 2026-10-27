@@ -226,6 +226,12 @@ test("a chore's run gets no tkt auto and no plan answers", () => {
 	assert.match(attentionOf(closed, false, false)?.text ?? "", /you closed chore deps's pull request #44\. \/done deps-1 removes the run/);
 });
 
+test("a ticket whose pull request closed without merging goes with tkt watch", () => {
+	const closed = row({ phase: "closed", pr: { number: 9, state: "CLOSED" }, next: { kind: "command", reason: "closed", argv: ["tkt", "done", "ACM-12"], text: "tkt done ACM-12" } });
+	assert.equal(attentionOf(closed, false, true), undefined);
+	assert.match(attentionOf(closed, false, false)?.text ?? "", /ACM-12: pull request #9 was closed without merging\. \/done ACM-12 removes the ticket; move it in the tracker yourself\./);
+});
+
 test("verify-pr's report shapes the ready item", () => {
 	const pr = { number: 4, state: "OPEN", head: "abc" };
 	const steps = [{ n: 1, result: "PASSED" as const, text: "opened" }];

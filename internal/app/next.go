@@ -162,11 +162,10 @@ func NextStep(f Facts) Next {
 	switch {
 	case f.PRState == "MERGED":
 		return command(ReasonMerged, "tkt", "done", id)
-	case f.PRState == "CLOSED" && f.Chore != "":
-		// Closing a chore's pull request drops the run.
-		return command(ReasonClosed, "tkt", "done", id)
 	case f.PRState == "CLOSED":
-		return human(ReasonClosed, "closed without merging")
+		// Closing a pull request without merging rejects the work, and
+		// drops a chore's run.
+		return command(ReasonClosed, "tkt", "done", id)
 	case f.Agent == herdr.Working:
 		return Next{Kind: "wait", Reason: ReasonAgentWorking, Argv: []string{"tkt", "wait", id}, Text: "wait (agent working)"}
 	case f.Background:

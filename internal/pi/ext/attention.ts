@@ -137,6 +137,12 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: keyOf(kind), ticket: id, kind, title, text, byAuto, offers, chore: !!row.chore });
 	if (row.phase === "merged" && a?.stop === "post_merge_failed") return item("failed", "post-merge CI failed", `${id} merged in yolo, but the checks on the base failed after it. /show ${id} for finish-ticket's report; tkt leaves the ticket as it is.`);
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
+	// A pull request closed without merging rejected the work; tkt watch
+	// removes the ticket, and the tracker is yours to move.
+	if (row.phase === "closed" && !row.chore) {
+		const pr = row.pr ? `pull request #${row.pr.number}` : "its pull request";
+		return watching ? undefined : item("merged", "closed", `${id}: ${pr} was closed without merging. /done ${id} removes the ticket; move it in the tracker yourself.`);
+	}
 	// A ticket that waits on something outside it sits in the Blocked
 	// column: one you put on hold says nothing, and one whose agent stopped
 	// with Status: BLOCKED tells you once why.

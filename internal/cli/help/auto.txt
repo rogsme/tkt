@@ -66,11 +66,12 @@ auto.paused, notifies once with --notify, and goes on by itself when the
 ticket moves, such as after you answer the agent in its tab or approve the
 plan.
 
-A loop ends only when the ticket is ready for you, merged or closed (with
---yolo, also when the checks on the base fail after the merge), or with
-tkt auto --stop, which it notices at its next look. Ctrl-C ends it with exit 5
-and leaves the ticket marked for auto, so tkt ls shows auto.wanted. While a
-loop drives the ticket, its tab reads ACM-12 (claude, auto).
+A loop ends only when the ticket is ready for you, merged, or closed
+without merging, which tkt watch then removes (with --yolo, also when the
+checks on the base fail after the merge), or with tkt auto --stop, which it
+notices at its next look. Ctrl-C ends it with exit 5 and leaves the ticket
+marked for auto, so tkt ls shows auto.wanted. While a loop drives the
+ticket, its tab reads ACM-12 (claude, auto).
 
 When tkt update replaces tkt, a loop restarts on the new tkt at its next
 look, once its agent stops working: the same process runs the same command

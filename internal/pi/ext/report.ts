@@ -6,6 +6,9 @@ export interface StatsTicket {
 	ticket: string;
 	repo: string;
 	started: string;
+	/** merged is when the pull request merged; "" for one closed without
+	 * merging, or still open. */
+	merged?: string;
 	total_s: number;
 	in_progress: boolean;
 	waiting_on_you_s: number;
@@ -19,6 +22,7 @@ export interface StatsResult {
 	tickets: StatsTicket[];
 	summary: {
 		merged: number;
+		closed?: number;
 		in_progress: number;
 		median_total_s: number;
 		p90_total_s: number;
@@ -35,13 +39,14 @@ export function statsText(r: StatsResult, limit = 15): string {
 	if (r.tickets.length === 0) return "No tickets in the history yet. tkt records a ticket from its first tkt start.";
 	const out = ["| Ticket | Started | Start to merge | Waiting on you | Rounds | Auto |", "|---|---|---|---|---|---|"];
 	for (const t of r.tickets.slice(0, limit)) {
-		const total = secs(t.total_s) + (t.in_progress ? " so far" : "");
+		const total = secs(t.total_s) + (t.in_progress ? " so far" : t.merged === "" ? " (closed)" : "");
 		out.push(`| ${t.ticket} | ${t.started.split("T")[0]} | ${total} | ${secs(t.waiting_on_you_s)} | ${t.rounds} | ${t.auto ? "yes" : "-"} |`);
 	}
 	const s = r.summary;
 	if (s.merged > 0) {
 		out.push("", `${s.merged} merged: start to merge median ${secs(s.median_total_s)}, p90 ${secs(s.p90_total_s)}; waiting on you median ${secs(s.median_waiting_on_you_s)}, p90 ${secs(s.p90_waiting_on_you_s)}.`);
 	}
+	if (s.closed) out.push(`${s.closed} closed without merging, left out of the times.`);
 	if (s.in_progress > 0) out.push(`${s.in_progress} in progress.`);
 	if (s.without_start > 0) out.push(`${s.without_start} tickets have no recorded start and are left out.`);
 	return out.join("\n");
@@ -135,6 +140,8 @@ export function eventText(e: HistoryEvent): string {
 			return ["auto", e.action, e.stage, e.stop].filter(Boolean).join(" ");
 		case "merged":
 			return `merged #${e.pr}`;
+		case "closed":
+			return `#${e.pr} closed without merging`;
 		case "hold":
 			return e.action === "off" ? "taken off hold" : "put on hold";
 		case "sync":
