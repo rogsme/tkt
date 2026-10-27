@@ -316,7 +316,7 @@ func doneText(chore, why string) string {
 	case chore == "":
 		return "finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree"
 	case why == ReasonNoChanges:
-		return "the run found nothing to change, so tkt watch removed its tabs and worktree"
+		return "the run ended with Status: DONE and nothing to merge, so tkt watch removed its tabs and worktree"
 	case why == ReasonClosed:
 		return "you closed the run's pull request, so tkt watch removed its tabs and worktree"
 	}

@@ -416,7 +416,7 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `auto paused` | tkt auto paused for another reason, such as an agent in a state tkt does not know. | `/peek ID` shows its screen. |
 | `unblocked` | A merge freed a ticket that has no worktree yet. | `/start ID`, or a start in auto from `/inbox`. |
 | `ready to merge`, `review found something` | A chore's pull request is ready, or its review found something. | Merge it on the forge, or tell its agent what to fix. |
-| `nothing to change`, `closed` | A chore's run found nothing, or a pull request was closed without merging, and no tkt watch removed the ticket or run. A closed ticket stays where it was in the tracker. | `/done ID`, and move the ticket in the tracker. |
+| `nothing to merge`, `closed` | A chore's run ended with no pull request, or a pull request was closed without merging, and no tkt watch removed the ticket or run. A closed ticket stays where it was in the tracker. | `/done ID`, and move the ticket in the tracker. |
 | `start failed`, `sync failed` and the like | A step the chat queued failed. | `/inbox` says why. |
 
 ## Chat or terminal

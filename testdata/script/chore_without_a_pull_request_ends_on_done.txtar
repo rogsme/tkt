@@ -1,0 +1,31 @@
+# A chore with pr = false, such as a release, opens no pull request: its
+# agent gets a rule that says so, and a run that ended with Status: DONE is
+# finished, so tkt done removes it.
+mkdir $REPO/.tkt
+cp $WORK/tkt.local.toml $REPO/.tkt/tkt.local.toml
+
+exec tkt chores --json
+envelope '.result.chores[0] | [.name, .pr]' '["release",false]'
+
+exec tkt chore run release
+grep 'Tag main with the next version and publish its release.' $FAKE_DIR/prompts
+grep 'This is a scheduled chore with no ticket, on branch release-run in this worktree. It opens no pull request, and commits nothing on this branch: tkt removes the run once it ends.' $FAKE_DIR/prompts
+grep 'End with Status: DONE once the work is done, or with Status: BLOCKED and a Reason: line when it cannot be done.' $FAKE_DIR/prompts
+! grep 'READY_FOR_REVIEW' $FAKE_DIR/prompts
+
+cp $WORK/done.txt $FAKE_DIR/screen
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.next.reason, .phase]' '["no_changes","finished"]'
+exec tkt done release-run
+stdout 'release-run  removed'
+! exists $FAKE_WT_ROOT/release-run
+
+-- tkt.local.toml --
+[chores.release]
+schedule = "0 10 * * 5"
+branch = "{name}-run"
+pr = false
+prompt = "Tag main with the next version and publish its release."
+-- done.txt --
+Tagged v1.4.0 and published its release.
+Status: DONE

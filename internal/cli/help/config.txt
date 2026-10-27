@@ -128,6 +128,8 @@ repository, such as a dependency upgrade (tkt help chores). tkt ships none:
   branch = "deps-{date}"        # {name}, {date} and {time}; the default
                                 # is {name}-{date}
   as = "fast"                   # the preset; leave out for the default
+  pr = true                     # false for a chore that opens no pull
+                                # request, such as a release
   prompt = "Upgrade the dependencies, and note the breaking changes in the pull request."
 
 A [status.NAME] table names a status page that tkt watch reads, one that

@@ -181,7 +181,7 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 			case "chore_findings":
 				return item("chore", "review found something", `${id}: the review found something on chore ${row.chore}'s ${pr}. Read it, then tell its agent what to fix, or merge it as it is.`, false, [reply]);
 			case "no_changes":
-				return watching ? undefined : item("merged", "nothing to change", `${id}: chore ${row.chore} found nothing to change. /done ${id} removes the run.`);
+				return watching ? undefined : item("merged", "nothing to merge", `${id}: chore ${row.chore} ended with nothing to merge. /done ${id} removes the run.`);
 			case "closed":
 				return watching ? undefined : item("merged", "closed", `${id}: you closed chore ${row.chore}'s ${pr}. /done ${id} removes the run.`);
 			case "no_agent":
