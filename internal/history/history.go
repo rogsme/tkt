@@ -29,6 +29,9 @@ const (
 	// tkt verified comments on the pull request (Action evidence when you
 	// confirmed them from verify-pr's report).
 	Verified = "verified"
+	// Accepted is a review you accepted as it is, which tkt accept
+	// comments on the pull request, with Note giving your reason.
+	Accepted = "accepted"
 	Done     = "done"
 	// Hold is a ticket put on hold (Action on) or taken off it (off).
 	Hold = "hold"

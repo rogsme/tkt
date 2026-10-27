@@ -176,6 +176,8 @@ func (e HistoryEvent) line() string {
 			return "human verification passed, from verify-pr's evidence; commented on " + forge.Ref(e.PR)
 		}
 		return "human verification passed; commented on " + forge.Ref(e.PR)
+	case history.Accepted:
+		return "review accepted (" + e.Note + "); commented on " + forge.Ref(e.PR)
 	case history.Hold:
 		if e.Action == "off" {
 			return "taken off hold"

@@ -1,0 +1,40 @@
+# tkt accept accepts only the newest review at the head, and only one with
+# findings, and never while the agent works: its push would void the
+# acceptance. A chore's run has no ticket, so no skill takes it.
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+
+# No pull request.
+! exec tkt accept ACM-12 --reason 'the wording' --json
+envelope '.error.code' nothing_to_accept
+
+# A clean review.
+env FAKE_GH_PRS=$WORK/prs.json
+! exec tkt accept ACM-12 --reason 'the wording' --json
+envelope '.error.code' nothing_to_accept
+
+# Findings on an older head.
+jqedit $WORK/prs.json '.[0].reviews[0].body |= gsub("READY_FOR_HUMAN"; "CHANGES_REQUESTED") | .[0].headRefOid = "ffffffffffffffffffffffffffffffffffffffff"'
+! exec tkt accept ACM-12 --reason 'the wording' --json
+envelope '.error.code' nothing_to_accept
+
+# The agent works.
+jqedit $WORK/prs.json '.[0].headRefOid = $H1'
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+! exec tkt accept ACM-12 --reason 'the wording' --json
+envelope '.error | [.code, .hint]' '["agent_busy","tkt wait ACM-12"]'
+
+# A chore's run.
+! exec tkt accept chore/deps --reason 'the wording' --json
+envelope '.error.code' invalid_ticket_id
+! exists $FAKE_DIR/comments.txt
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

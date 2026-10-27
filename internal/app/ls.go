@@ -172,7 +172,10 @@ type Row struct {
 	// Verification is verify-pr's newest report, and whether it holds for
 	// the head.
 	Verification *forge.Verification `json:"verification"`
-	Behind       *int                `json:"behind"`
+	// Accepted is the newest review you accepted as it is (tkt accept),
+	// and whether that holds for the head.
+	Accepted *forge.Acceptance `json:"accepted"`
+	Behind   *int              `json:"behind"`
 	// BaseMerge says how merging the base into a pull request that is
 	// behind would go, clean or conflict, when tkt auto or tkt watch tried
 	// it with git merge-tree; tkt ls leaves it "".
@@ -393,6 +396,9 @@ func (r *LsResult) cells(row Row, now time.Time) []string {
 		review = row.Review.Value
 		if !row.Review.AtHead {
 			review += " (old)"
+		}
+		if row.Accepted.Holds() {
+			review += " accepted"
 		}
 		if v := row.Verification; v.Holds() {
 			review += " " + verifiedText[v.Value]
@@ -740,6 +746,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 				row.reviewReady = true
 			}
 			row.Verification = forge.LatestVerification(p)
+			row.Accepted = forge.LatestAcceptance(p)
 			row.Title = prTitle(p.Title, t.ID)
 		} else if p, ok := closedPR(l.gh.Mine(l.all, t.ID)); ok {
 			row.PR = &RowPR{Number: p.Number, State: p.State}
@@ -770,6 +777,16 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		if h := c.Git.Rev(rctx, t.Path, v.Head+"^{commit}"); h != "" {
 			v.Carried, _ = c.Git.CleanMerges(rctx, t.Path, h, row.PR.Head, base)
 		}
+	}
+	if a := row.Accepted; a != nil && !a.AtHead && base != "" && row.PR != nil {
+		// So does your acceptance of a review.
+		if h := c.Git.Rev(rctx, t.Path, a.Head+"^{commit}"); h != "" {
+			a.Carried, _ = c.Git.CleanMerges(rctx, t.Path, h, row.PR.Head, base)
+		}
+	}
+	if row.Accepted.Holds() {
+		// It stands in for the clean review finish-ticket merges on.
+		row.reviewReady = true
 	}
 	row.Merge, row.orderVoid = c.mergeOrder(rctx, t.Path, st, row.PR, base, row.LastStatus)
 	row.orderHead = st["merge_head"]

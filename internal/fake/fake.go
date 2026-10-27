@@ -91,7 +91,8 @@ func Claude() {
 }
 
 // GH answers `gh pr list` from the JSON file in $FAKE_GH_PRS, and keeps
-// what `gh pr comment` posts.
+// what `gh pr comment` posts, which later lists show among the pull
+// request's comments.
 func GH() {
 	logCall("gh")
 	args := os.Args[1:]
@@ -119,6 +120,23 @@ func GH() {
 		}
 		fmt.Fprintf(f, "#%s\n%s\n--\n", args[2], body)
 		f.Close()
+		posted := map[string][]map[string]any{}
+		path := filepath.Join(os.Getenv("FAKE_DIR"), "comments.json")
+		if b, err := os.ReadFile(path); err == nil {
+			json.Unmarshal(b, &posted)
+		}
+		n := 0
+		for _, cs := range posted {
+			n += len(cs)
+		}
+		posted[args[2]] = append(posted[args[2]], map[string]any{
+			"body": body, "createdAt": fmt.Sprintf("2026-06-01T00:00:%02dZ", n),
+			"url": "https://github.com/acme/app/pull/" + args[2] + "#issuecomment-1",
+		})
+		b, _ := json.Marshal(posted)
+		if err := os.WriteFile(path, b, 0o644); err != nil {
+			die(1, "%v", err)
+		}
 		fmt.Printf("https://github.com/acme/app/pull/%s#issuecomment-1\n", args[2])
 		os.Exit(0)
 	}
@@ -147,10 +165,18 @@ func GH() {
 	if json.Unmarshal(b, &prs) != nil {
 		os.Exit(0)
 	}
+	posted := map[string][]any{}
+	if b, err := os.ReadFile(filepath.Join(os.Getenv("FAKE_DIR"), "comments.json")); err == nil {
+		json.Unmarshal(b, &posted)
+	}
 	out := []map[string]any{}
 	for _, p := range prs {
 		s, _ := p["state"].(string)
 		if (head == "" || p["headRefName"] == head) && (state == "all" || strings.EqualFold(s, state)) {
+			if cs := posted[fmt.Sprint(p["number"])]; len(cs) > 0 {
+				have, _ := p["comments"].([]any)
+				p["comments"] = append(have, cs...)
+			}
 			out = append(out, p)
 		}
 	}

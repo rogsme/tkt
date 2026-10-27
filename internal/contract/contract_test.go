@@ -447,3 +447,41 @@ func TestUnblockedLineNamesTheTicketsAMergeFreed(t *testing.T) {
 		}
 	}
 }
+
+func TestAcceptedReviewStandsInForACleanOne(t *testing.T) {
+	finish, verify := read(t, "finish-ticket-accepted.md"), read(t, "verify-pr-accepted.md")
+	for _, want := range []string{
+		"A pull request conversation comment headed `" + contract.AcceptedHeading + "` records it",
+		"an `Accepted head:` line naming the head",
+		"and a `Reason:` line",
+		"for a later head when every commit after the accepted head is a clean merge of the base",
+		"stands in for the final review summary",
+		"its numbered procedure is the pull request body's `## Human verification` section at that head",
+		"count as answered rather than open feedback",
+		"treat one without a `Reason:` line as absent",
+	} {
+		if !strings.Contains(finish, want) {
+			t.Errorf("finish-ticket no longer says %q", want)
+		}
+	}
+	for _, want := range []string{"a conversation comment headed `" + contract.AcceptedHeading + "`, with a `Reason:` line, whose `Accepted head:` is this head, or a head that only clean merges of the base separate from this one", "use the pull request body's `## Human verification` section"} {
+		if !strings.Contains(verify, want) {
+			t.Errorf("verify-pr no longer says %q", want)
+		}
+	}
+	if !strings.Contains(read(t, "finish-ticket-ci-review.md"), "after the CI reviewer's CLEAR or the user's acceptance, require it to be an ancestor of the reviewed head") {
+		t.Errorf("finish-ticket no longer takes an acceptance's base as the CI reviewer's")
+	}
+	if !strings.Contains(read(t, "finish-ticket-autonomous.md"), "the user's acceptance that holds for it") {
+		t.Errorf("finish-ticket's autonomous runs no longer take an acceptance")
+	}
+	// The lines tkt accept writes are the ones the skills read, and nothing
+	// reads them as a review summary.
+	body := contract.AcceptedHeading + "\n\nAccepted head: `" + strings.Repeat("a1", 20) + "`\nAccepted review: FINDINGS\nReason: the wording\n"
+	if !contract.AcceptedHeadingRE.MatchString(body) || contract.AcceptedHeadRE.FindStringSubmatch(body)[1] != strings.Repeat("a1", 20) || contract.AcceptedReasonRE.FindStringSubmatch(body)[1] != "the wording" {
+		t.Errorf("the acceptance lines do not read back")
+	}
+	if contract.VerdictRE.MatchString(body) || contract.HumanVerificationRE.MatchString(body) {
+		t.Errorf("an acceptance reads as a review summary")
+	}
+}

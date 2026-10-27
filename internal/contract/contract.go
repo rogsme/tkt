@@ -116,6 +116,20 @@ const (
 	StepNotRun             = "NOT RUN"
 )
 
+// A review the user accepted as it is: a conversation comment under the
+// heading, naming the head it accepts and why. It stands in for a clean
+// review at that head, and at a head only clean merges of the base follow,
+// and finish-ticket and verify-pr take the procedure from the pull
+// request's body. One without a Reason: line counts for nothing.
+var (
+	AcceptedHeadingRE = regexp.MustCompile(`(?m)^## Review accepted[ \t]*$`)
+	AcceptedHeadRE    = regexp.MustCompile("(?m)^Accepted head: `?([0-9a-f]{7,40})")
+	AcceptedReasonRE  = regexp.MustCompile(`(?m)^Reason: (.*\S)`)
+)
+
+// AcceptedHeading is the heading the comment opens with.
+const AcceptedHeading = "## Review accepted"
+
 // UnblockedRE finds the line finish-ticket's report gives right before
 // Status: DONE: the tickets the merge unblocked, whose blockers are all
 // done now, or none.

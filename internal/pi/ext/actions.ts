@@ -138,6 +138,19 @@ export function merge(hub: Hub, id: string, steps: number[], head: string, evide
 	return `Queued: tkt merge for ${id}. finish-ticket merges it now when the checks passed at its head; otherwise tkt watch hands it over once they do.`;
 }
 
+/** accept takes the review at a ticket's head as it is, with tkt accept.
+ * Its comment on the pull request stands in for a clean review, so the
+ * head goes on to its human verification steps; the reason is yours, and
+ * the comment and finish-ticket's completion record it. */
+export async function accept(hub: Hub, id: string, reason: string): Promise<string> {
+	if (hub.row(id)?.chore) return `${id} is a run of a chore: no skill merges it, so there is no review to accept. Merge its pull request yourself.`;
+	const env = await hub.tkt<{ action: string; pr: number; review: string }>(["accept", id, "--reason", reason]);
+	if (!env.ok || !env.result) return `tkt accept did not accept ${id}'s review: ${env.error?.message ?? "no answer"}.${env.error?.hint ? ` ${env.error.hint}` : ""}`;
+	void hub.refresh();
+	if (env.result.action === "none") return `${id}: pull request #${env.result.pr} has an acceptance for its head already.`;
+	return `${id}: accepted the ${env.result.review} review on pull request #${env.result.pr} as it is. The head goes on to human verification; /check ${id} walks the steps once it is ready.`;
+}
+
 /** resume relaunches the ticket's newest session when no agent runs for it. */
 export function resume(hub: Hub, id: string): string {
 	hub.add({ ticket: id, label: "resume", args: ["resume", id] });
@@ -436,6 +449,13 @@ export async function inbox(hub: Hub, ctx: ExtensionContext): Promise<string> {
 	return n === 0 ? "Nothing needs you." : `${n} item${n === 1 ? "" : "s"} still ${n === 1 ? "needs" : "need"} you; the board lists ${n === 1 ? "it" : "them"}.`;
 }
 
+/** acceptReason asks why a ticket's review findings can stay as they are,
+ * or returns undefined when you give no reason. */
+export async function acceptReason(ctx: ExtensionContext, id: string): Promise<string | undefined> {
+	if (!ctx.hasUI) return undefined;
+	return (await input(ctx, `Why can ${id}'s review findings stay as they are?`, "the finding is about the pull request's description"))?.trim() || undefined;
+}
+
 /** answer asks about one item. It returns the line to post, "" when the
  * item is done with nothing to say, or undefined to stop the walk. */
 async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<string | undefined> {
@@ -465,6 +485,10 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 			return "";
 		case "check":
 			return check(hub, ctx, id);
+		case "accept": {
+			const why = await acceptReason(ctx, id);
+			return why ? accept(hub, id, why) : undefined;
+		}
 		case "next":
 			return next(hub, id);
 		case "done":

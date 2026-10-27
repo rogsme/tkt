@@ -884,6 +884,51 @@
       "result": null
     },
     {
+      "path": "accept",
+      "use": "accept ID",
+      "short": "Accept the review at the ticket's head as it is, and go on to human verification",
+      "long": "tkt accept takes the review at a ticket's head as it is, when its findings\ndo not matter, such as a remark on the pull request's wording. It comments\non the pull request:\n\n  ## Review accepted\n\n  Accepted head: `HEAD`\n  Accepted review: CHANGES_REQUESTED on `HEAD`, submitted TIME\n  Reason: REASON\n\nfinish-ticket and verify-pr take that comment in place of a clean review for\nthe head, and for a later head that only clean merges of the base follow, so\ntkt sync keeps it. The human verification steps come from the pull request's\nbody, as after the review bot's CLEAR. tkt ls then shows the next step as\nreview_accepted, or verify-pr where agent verification is on, and tkt auto\nand tkt merge go on as after a clean review. Any other commit, such as a\nfix, voids the acceptance, and the next review runs as usual.\n\nOnly the newest review at the head can be accepted, and only one with\nfindings: FINDINGS from the review bot, or CHANGES_REQUESTED from\nreview-pr. tkt accept refuses while the ticket's agent works, since its push\nwould void the acceptance. --reason is required; the comment and\nfinish-ticket's completion comment record it. A second run on the same head\nchanges nothing.",
+      "example": "  tkt accept ACM-12 --reason \"the finding is about the pull request's wording\"",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "print the comment command instead of running it"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "default": "",
+          "usage": "why the review's findings can stay as they are; the comment and finish-ticket's completion record it"
+        }
+      ],
+      "result": {
+        "action": "string",
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "dry_run": "boolean",
+        "head": "string",
+        "pr": "integer",
+        "reason": "string",
+        "review": "string",
+        "ticket": "string",
+        "url": "string"
+      }
+    },
+    {
       "path": "merge",
       "use": "merge ID",
       "short": "Have finish-ticket merge a verified ticket, now or once its checks pass",
@@ -1207,6 +1252,17 @@
         ],
         "rows": [
           {
+            "accepted": {
+              "fields": {
+                "at_head": "boolean",
+                "carried": "boolean",
+                "created_at": "string",
+                "head": "string",
+                "reason": "string",
+                "url": "string"
+              },
+              "nullable": true
+            },
             "agent": {
               "fields": {
                 "background": "integer",
@@ -2369,6 +2425,11 @@
       "code": "not_verified",
       "exit": 4,
       "summary": "verify-pr has no report that passes the steps on the head they ran on, so there is no evidence to confirm them from"
+    },
+    {
+      "code": "nothing_to_accept",
+      "exit": 4,
+      "summary": "the ticket has no open pull request whose newest review has findings at its head, so tkt accept has no review to accept"
     },
     {
       "code": "autonomous_off",

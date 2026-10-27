@@ -336,7 +336,7 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 			return pause(StopNeedsYou)
 		}
 		return stop(StopReadyForHuman)
-	case ReasonReviewClear, ReasonBotClear, ReasonVerified:
+	case ReasonReviewClear, ReasonBotClear, ReasonReviewAccepted, ReasonVerified:
 		return stop(StopReadyForHuman)
 	case ReasonAutonomousMerge:
 		return act(actMerge, "")

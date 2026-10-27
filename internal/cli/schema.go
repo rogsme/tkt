@@ -31,6 +31,7 @@ var resultTypes = map[string]any{
 	"history":    app.HistoryResult{},
 	"run":        app.RunResult{},
 	"sync":       app.SyncResult{},
+	"accept":     app.AcceptResult{},
 	"merge":      app.MergeResult{},
 	"resume":     app.ResumeResult{},
 	"done":       app.DoneResult{},

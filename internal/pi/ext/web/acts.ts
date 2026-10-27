@@ -51,6 +51,8 @@ export function cardActs(a: Attention, row: Row | undefined): Act[] {
 				return { ...act, cmd: `/dismiss ${id}` };
 			case "check":
 				return { ...act, cmd: `/check ${id}` };
+			case "accept":
+				return { ...act, cmd: `/accept ${id}` };
 			case "next":
 				return { ...act, cmd: `/next ${id}` };
 			case "done":
@@ -84,6 +86,7 @@ export function ticketActs(r: Row): Act[] {
 	if (r.phase === "ready_for_human" && !r.chore) out.push({ label: "Verify", description: "Walk the human verification steps, and merge once they pass.", cmd: `/check ${id}`, main: true });
 	if (merged) out.push({ label: "Remove it", description: "Close its tabs and remove its worktree, once tkt done confirms the merge.", cmd: `/done ${id}`, main: true });
 	if (!merged && r.next?.kind === "command") out.push({ label: "Next step", description: r.next.text, cmd: `/next ${id}` });
+	if (!merged && !r.chore && r.next?.reason === "findings") out.push({ label: "Accept review", description: "Take the review's findings as they are, for the reason you give, and go on to human verification.", cmd: `/accept ${id}` });
 	if (!merged && (r.behind ?? 0) > 0) out.push({ label: "Sync the base", description: `${r.behind} commit${r.behind === 1 ? "" : "s"} behind.`, cmd: `/sync ${id}` });
 	if (!merged && !r.agent) out.push({ label: "Relaunch", description: "tkt resume relaunches its newest session.", cmd: `/relaunch ${id}` });
 	if (!merged && !r.chore) {

@@ -29,6 +29,9 @@ export interface Attention {
 	/** parked marks a blocked ticket's item: it notifies once, then waits in
 	 * the board's Blocked column, out of what needs you. */
 	parked?: boolean;
+	/** later are answers that come after the usual ones, such as accepting
+	 * a review's findings instead of fixing them. */
+	later?: Choice[];
 }
 
 /** Choice is one answer /inbox offers for an item. do names the action, and
@@ -36,7 +39,7 @@ export interface Attention {
 export interface Choice {
 	label: string;
 	description?: string;
-	do: "approve" | "approve_auto" | "show" | "reply" | "peek" | "dismiss" | "check" | "next" | "done" | "auto_on" | "auto_off" | "run" | "resume" | "start" | "start_auto_plan" | "start_manual";
+	do: "approve" | "approve_auto" | "show" | "reply" | "peek" | "dismiss" | "check" | "next" | "done" | "auto_on" | "auto_off" | "run" | "resume" | "start" | "start_auto_plan" | "start_manual" | "accept";
 	stage?: string;
 }
 
@@ -87,12 +90,17 @@ const ticketOnly = new Set<Choice["do"]>(["approve", "approve_auto", "auto_on", 
 /** choicesOf lists the answers /inbox offers for an item: its situation's
  * first, so Enter takes the step that moves the ticket on, then its kind's. */
 export function choicesOf(a: Attention): Choice[] {
-	return [...(a.offers ?? []), ...usual[a.kind]].filter((c) => !(a.chore && ticketOnly.has(c.do)));
+	return [...(a.offers ?? []), ...usual[a.kind], ...(a.later ?? [])].filter((c) => !(a.chore && ticketOnly.has(c.do)));
 }
 
 const reply: Choice = { label: "Reply to the agent", description: "Type what to tell it; it reads the text as a new prompt.", do: "reply" };
 const resume: Choice = { label: "Bring the agent back", description: "tkt resume relaunches its newest session.", do: "resume" };
 const review: Choice = { label: "Run review-pr instead", description: "review-pr reviews the head in a fresh session.", do: "run", stage: "review" };
+const accept: Choice = { label: "Accept the review as it is", description: "Its findings stay as they are, for the reason you give; the head goes on to human verification.", do: "accept" };
+
+/** acceptable offers accepting the review when the next step addresses
+ * its findings. */
+const acceptable = (row: Row): Choice[] => (row.next?.reason === "findings" && !row.chore ? [accept] : []);
 
 /** rerun offers the stage tkt ls's next step runs, or nothing when the step
  * runs none. */
@@ -192,7 +200,7 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 	}
 	const step = nextSteps[reason];
 	if (step && row.agent?.status !== "working" && !row.hold && !(watching && watchTakesFor(row, reason))) {
-		return item("next", step, `${id}: ${step}. /next ${id}, or say "continue ${id}".`);
+		return { ...item("next", step, `${id}: ${step}. /next ${id}, or say "continue ${id}".`), later: acceptable(row) };
 	}
 	return undefined;
 }
@@ -216,11 +224,11 @@ function paused(row: Row, item: Make): Attention {
 			// the run's outcome and pauses here again if the ticket still
 			// needs a fix.
 			const more = rerun(row, (s) => `Run ${s} once more`, "One more fix run in a fresh session. tkt auto goes on after it, and pauses again if it still needs a fix.");
-			return item("paused", "max rounds reached", `${id}: tkt auto paused after [auto] max_rounds fix runs. Read the review, then say what to do.`, true, more);
+			return item("paused", "max rounds reached", `${id}: tkt auto paused after [auto] max_rounds fix runs. Read the review, then say what to do.`, true, [...more, ...acceptable(row)]);
 		}
 		case "no_progress": {
 			const again = rerun(row, (s) => `Run ${s} again`, "The same step in a fresh session. tkt auto goes on if it changes something.");
-			return item("paused", "no progress", `${id}: the last step changed nothing on the same head. /show ${id} for what the agent said.`, true, again);
+			return item("paused", "no progress", `${id}: the last step changed nothing on the same head. /show ${id} for what the agent said.`, true, [...again, ...acceptable(row)]);
 		}
 		case "agent_missing":
 			return item("paused", "no agent", `${id}: no agent runs in its worktree. tkt resume ${id} brings it back, and tkt auto goes on.`, true, [resume]);
@@ -237,7 +245,7 @@ function watchPaused(row: Row, item: Make): Attention {
 	const w = row.watch!;
 	if (w.paused === "round_limit") {
 		const more = rerun(row, (s) => `Run ${s} once more`, "One more fix run in a fresh session.");
-		return item("paused", "max rounds reached", `${id}: tkt watch reached [auto] max_rounds fix runs since the plan's approval. Read the review, then say what to do.`, true, more);
+		return item("paused", "max rounds reached", `${id}: tkt watch reached [auto] max_rounds fix runs since the plan's approval. Read the review, then say what to do.`, true, [...more, ...acceptable(row)]);
 	}
 	const again = rerun(row, (s) => `Run ${s} again`, "The same step in a fresh session.");
 	const kind = w.last.slice(0, Math.max(0, w.last.indexOf("@")));

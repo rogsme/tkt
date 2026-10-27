@@ -6,7 +6,7 @@
 import type { Attention } from "../attention.ts";
 import { diffText } from "../board.ts";
 import type { Board } from "../mirror.ts";
-import { ago, type Row, since, type Verification } from "../model.ts";
+import { accepted, ago, type Row, since, type Verification } from "../model.ts";
 import { eventText, type HistoryResult, local, type Mark } from "../report.ts";
 import { cardActs, type Tab, tabs, ticketActs } from "./acts.ts";
 import { look, parseAnsi } from "./ansi.ts";
@@ -125,7 +125,10 @@ function PrTab({ r }: { r: Row }) {
 				${!c ? "none read" : html`<span class=${`state ${c.state}`}>${c.state}</span>, ${c.total} in all${c.pending ? `, ${c.pending} pending` : ""}${c.failing.length ? html`; failing: ${c.failing.join(", ")}` : ""}`}
 			</dd>
 			<dt>Review</dt>
-			<dd>${!r.review ? "none yet" : html`<code>${r.review.verdict}</code> on <code>${r.review.head.slice(0, 7)}</code>${r.review.at_head ? ", the head" : ", an older head"}`}</dd>
+			<dd>
+				${!r.review ? "none yet" : html`<code>${r.review.verdict}</code> on <code>${r.review.head.slice(0, 7)}</code>${r.review.at_head ? ", the head" : ", an older head"}`}
+				${accepted(r) && html`; you accepted it as it is${r.accepted?.at_head ? "" : ", carried over clean merges of the base"}: ${r.accepted?.reason}`}
+			</dd>
 			<dt>Base</dt>
 			<dd>${r.behind == null ? "unknown" : r.behind === 0 ? "up to date" : `${r.behind} commit${r.behind === 1 ? "" : "s"} behind`}</dd>
 			${r.merge &&
@@ -160,7 +163,7 @@ function StepsTab({ r, g, asked }: { r: Row; g: Go; asked: number }) {
 	const marks = s.marks ?? [];
 	return html`<div>
 		<p class="meta">
-			${s.source === "pull_request" ? `From pull request #${s.pr}'s body: the review bot cleared the head.` : `From review-pr's review of pull request #${s.pr}.`}
+			${s.source !== "pull_request" ? `From review-pr's review of pull request #${s.pr}.` : accepted(r) ? `From pull request #${s.pr}'s body: you accepted the review as it is.` : `From pull request #${s.pr}'s body: the review bot cleared the head.`}
 			${v && ` verify-pr: ${v.verification} on ${v.head.slice(0, 7)}${v.at_head || v.carried ? "" : ", an older head"}.`}
 		</p>
 		${buttons}

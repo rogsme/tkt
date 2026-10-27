@@ -255,6 +255,34 @@ func verifiedCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func acceptCmd(g *globals) *cobra.Command {
+	var o app.AcceptOpts
+	cmd := &cobra.Command{
+		Use:               "accept ID",
+		Short:             "Accept the review at the ticket's head as it is, and go on to human verification",
+		Long:              helpText("accept"),
+		Example:           `  tkt accept ACM-12 --reason "the finding is about the pull request's wording"`,
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(cmd *cobra.Command, args []string) error {
+			switch {
+			case len(args) != 1:
+				return usage("usage: tkt accept ID --reason TEXT")
+			case strings.TrimSpace(o.Reason) == "":
+				return usage("tkt accept needs --reason: why the review's findings can stay as they are")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Accept(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().StringVar(&o.Reason, "reason", "", "why the review's findings can stay as they are; the comment and finish-ticket's completion record it")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the comment command instead of running it")
+	return cmd
+}
+
 func mergeCmd(g *globals) *cobra.Command {
 	var o app.MergeOpts
 	cmd := &cobra.Command{

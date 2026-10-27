@@ -195,8 +195,27 @@ Act on the verdict, then review again:
 | `Verdict: CHANGES_REQUESTED`, or comments you left | `tkt run ACM-123 address` | `address-pr-review` first merges the base when it moved, resolving conflicts. Then it checks each finding, fixes the valid ones at their root cause, answers the rest with evidence, pushes, waits for CI and replies to every comment. It runs at most two rounds and never resolves a thread. |
 | `Status: BLOCKED_FOR_SYNC` with the branch behind, the bot's `STALE_BASE`, or a conflict | `tkt sync ACM-123` | tkt merges the base itself when the merge is clean, and pushes it in seconds. On a conflict, a fresh session runs the `resolve` stage, which only merges and resolves. See [Syncing with the base](#syncing-with-the-base). |
 | The checks fail at the head, with no review to address | `tkt run ACM-123 ci` | A fresh agent finds the cause, fixes it, and pushes once. An infrastructure failure gets a rerun instead of a code change. |
+| Findings at the head that do not matter, such as a remark on the pull request's description | `tkt accept ACM-123 --reason "the finding is about the description"` | tkt comments `## Review accepted` on the pull request, with the head and your reason. See [Accepting a review](#accepting-a-review). |
 
 `address` ends with `Status: READY_FOR_REVIEW`, which leads back to step 5, and so does a sync, since its new head needs a review too. On a re-review, `review-pr` checks each earlier thread against the new head and resolves the ones that are fixed.
+
+#### Accepting a review
+
+Some findings are not worth a fix round, such as a remark on the pull request's description. `tkt accept ACM-123 --reason "..."` takes the newest review at the head as it is: review-pr's `CHANGES_REQUESTED` or the bot's `FINDINGS`. It comments on the pull request:
+
+```
+## Review accepted
+
+The user accepts this review's findings as they are. Verification goes on from the pull request's Human verification section.
+
+Accepted head: `3f2a...`
+Accepted review: CHANGES_REQUESTED on `3f2a1b0`, submitted 2026-10-27T14:02:11Z
+Reason: the finding is about the description
+```
+
+finish-ticket and verify-pr take the comment in place of a clean review for that head, and for a later head that only clean merges of the base follow, so `tkt sync` keeps it. The steps come from the pull request's body, as after the bot's `CLEAR`. address-pr-review leaves the accepted findings alone, and review-pr raises them again only when a later commit changes the code they name. `tkt ls` gives the head the next step a clean one gets: `review_accepted` (`tkt run ACM-123 verify`), or verify-pr where agent verification is on, and `tkt auto` goes on to it. Any other commit, such as a fix after verify-pr found a failing step, voids the acceptance, and the next review runs as usual.
+
+tkt accept needs `--reason`, which the comment and finish-ticket's completion comment record. It refuses with `nothing_to_accept` when the newest review at the head has no findings, and with `agent_busy` while the ticket's agent works, since its push would void the acceptance. In the tkt agent, `/accept ACM-123` asks for the reason, and the board and the web page offer `Accept the review as it is` beside the fix.
 
 ### 7. verify-pr runs the steps, and you confirm them
 
