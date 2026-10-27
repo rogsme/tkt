@@ -16,9 +16,9 @@ import (
 )
 
 // Chore is an agent run a repository's .tkt/tkt.local.toml schedules, such as a
-// dependency upgrade. Each run is a branch and a pull request with no
-// ticket; that repository's tkt watch starts it when its schedule comes
-// round.
+// dependency upgrade. Each run is a branch, and a pull request unless PR is
+// false, with no ticket; that repository's tkt watch starts it when its
+// schedule comes round.
 type Chore struct {
 	Name string `json:"name"`
 	// Repo is the repository's primary worktree, as an absolute path.
@@ -30,6 +30,9 @@ type Chore struct {
 	// As is the preset its agents run on, or "" for the default.
 	As     string `json:"as"`
 	Prompt string `json:"prompt"`
+	// PR says its runs end in a pull request. A chore whose work lands
+	// elsewhere, such as a tag and a release, sets pr = false.
+	PR bool `json:"pr"`
 }
 
 // DefaultChoreBranch names a chore's runs when its table names none.
@@ -56,6 +59,7 @@ type choreTOML struct {
 	Branch   string `toml:"branch"`
 	As       string `toml:"as"`
 	Prompt   string `toml:"prompt"`
+	PR       *bool  `toml:"pr"`
 }
 
 type statusTOML struct {
@@ -81,7 +85,7 @@ func parseChores(c *Config, path, root string, in map[string]choreTOML) error {
 		if !choreName.MatchString(name) {
 			return bad("the name may hold lowercase letters, digits, '_' and '-', starting with a letter or digit")
 		}
-		ch := Chore{Name: name, Repo: filepath.Clean(root), Branch: or(t.Branch, DefaultChoreBranch), As: t.As, Prompt: strings.TrimSpace(t.Prompt)}
+		ch := Chore{Name: name, Repo: filepath.Clean(root), Branch: or(t.Branch, DefaultChoreBranch), As: t.As, Prompt: strings.TrimSpace(t.Prompt), PR: t.PR == nil || *t.PR}
 		switch {
 		case t.Repo != "":
 			return bad("it runs in this repository, so it takes no repo; drop the key")

@@ -28,8 +28,13 @@ const stageChore = "chore"
 
 // choreRule follows a chore's prompt. A run has no ticket, so no lifecycle
 // skill takes it: the rule says where the work goes and how the run ends,
-// the two things tkt reads from it.
-func choreRule(run, remote, base string) string {
+// the two things tkt reads from it. A run that opens no pull request must
+// leave its branch alone, since tkt done keeps a branch the base lacks.
+func choreRule(ch config.Chore, run, remote, base string) string {
+	if !ch.PR {
+		return "This is a scheduled chore with no ticket, on branch " + run + " in this worktree. It opens no pull request, and commits nothing on this branch: tkt removes the run once it ends. " +
+			"End with Status: DONE once the work is done, or with Status: BLOCKED and a Reason: line when it cannot be done. " + config.UnattendedLine
+	}
 	return "This is a scheduled chore with no ticket, on branch " + run + " in this worktree. Commit what you change on this branch, push it to " + remote +
 		", and open one pull request from it to " + base + ". End with Status: READY_FOR_REVIEW once the pull request is open, or with Status: DONE, and nothing committed or pushed, when there is nothing to change. " +
 		config.UnattendedLine
@@ -301,7 +306,7 @@ func (a *App) ChoreRun(ctx context.Context, o ChoreRunOpts) (*ChoreRunResult, er
 	// runs one goes alone, and the command says how the run ends.
 	text := ch.Prompt
 	if !strings.HasPrefix(text, "/") {
-		text += "\n\n" + choreRule(run, f.Remote, f.Base)
+		text += "\n\n" + choreRule(ch, run, f.Remote, f.Base)
 	}
 	sr, err := a.Start(ctx, StartOpts{Scratch: run, Prompt: prompt.Source{Text: text, Set: true}, As: ch.As, Dry: o.Dry, chore: ch.Name})
 	if err != nil {
@@ -319,7 +324,8 @@ type ChoresOpts struct{}
 
 // ChoreInfo is one chore of the repository: its settings, the last slot tkt
 // watch took or skipped (Last, "" before it first saw the chore), whether a
-// slot came since that it has not taken yet (Due), the next slot, and its
+// slot came since that it has not taken yet (Due), the next slot, whether its
+// runs open a pull request (PR), and its
 // runs that have a worktree, with the one still open, which holds the next
 // run back. Times are UTC.
 type ChoreInfo struct {
@@ -327,6 +333,7 @@ type ChoreInfo struct {
 	Schedule string   `json:"schedule"`
 	Branch   string   `json:"branch"`
 	As       string   `json:"as"`
+	PR       bool     `json:"pr"`
 	Last     string   `json:"last"`
 	Due      bool     `json:"due"`
 	Next     string   `json:"next"`
@@ -396,7 +403,7 @@ func (a *App) Chores(ctx context.Context, _ ChoresOpts) (*ChoresResult, error) {
 	stamps := choreStamps(c.Repo.Common)
 	now := c.Now()
 	for _, ch := range c.Cfg.Chores {
-		info := ChoreInfo{Name: ch.Name, Schedule: ch.Schedule.String(), Branch: ch.Branch, As: ch.As, Runs: []string{}}
+		info := ChoreInfo{Name: ch.Name, Schedule: ch.Schedule.String(), Branch: ch.Branch, As: ch.As, PR: ch.PR, Runs: []string{}}
 		if r, open := openRun(runs, ch.Name); open {
 			info.Open = r.ID
 		}

@@ -27,6 +27,7 @@ Upgrade the dependencies.
 
 [chores.changelog]
 schedule = "@daily"
+pr = false
 prompt = "Gather the changelog lines."
 `
 	root := repoWith(t, "", project)
@@ -40,6 +41,9 @@ prompt = "Gather the changelog lines."
 	deps, changelog := c.Chores[1], c.Chores[0]
 	if deps.Repo != root || deps.As != "fast" || deps.Prompt != "Upgrade the dependencies." || deps.Schedule.String() != "0 9 * * 1,4" {
 		t.Errorf("deps %+v", deps)
+	}
+	if !deps.PR || changelog.PR {
+		t.Errorf("pr: deps %v, changelog %v; want true, false", deps.PR, changelog.PR)
 	}
 	if changelog.Repo != root || changelog.Branch != DefaultChoreBranch {
 		t.Errorf("changelog %+v", changelog)

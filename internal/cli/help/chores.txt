@@ -1,5 +1,6 @@
 A chore is an agent run you schedule, such as a dependency upgrade. Each run
-is a branch and a pull request with no ticket. tkt ships no chores: you
+is a branch and, unless the chore sets pr = false, a pull request, with no
+ticket. tkt ships no chores: you
 define them in the repository's .tkt/tkt.local.toml, your own file in its
 main checkout, so each person's chores run once (tkt help config):
 
@@ -7,6 +8,7 @@ main checkout, so each person's chores run once (tkt help config):
   schedule = "0 9 * * 1,4"     # cron's five fields, in local time
   branch = "deps-{date}"       # {name}, {date} and {time}; the default is {name}-{date}
   as = "fast"                  # the preset; leave out for the default
+  pr = true                    # false when the work lands elsewhere; the default is true
   prompt = "Upgrade the dependencies. Read each migration guide, and note the breaking changes in the pull request."
 
 That repository's tkt watch starts a run when its slot comes. A run gets a
@@ -27,6 +29,21 @@ drop the run; tkt watch then removes the run, and removes at once a run that
 ended with nothing to change. tkt run refuses a run the stages that need a
 ticket, such as review and address, and tkt approve, tkt auto and tkt merge
 take tickets only.
+
+A chore whose work lands somewhere other than a pull request, such as a tag
+and a release on the forge, sets pr = false:
+
+  [chores.release]
+  schedule = "0 10 * * 5"
+  pr = false
+  prompt = "If main has commits since the last tag, tag main with the next version and publish its release with gh."
+
+Its agent gets another rule: open no pull request, commit nothing on the
+run's branch, and end with Status: DONE once the work is done, or with
+Status: BLOCKED and a Reason: line when it cannot be done. tkt watch removes
+a run that ended with Status: DONE at once, as it removes one with nothing
+to change, and a run that stopped with Status: BLOCKED waits for you. A
+commit on the branch keeps the run, since tkt done never drops one.
 
 A run whose start stopped before its agent got the prompt, as at a startup
 dialog or on a pre-start hook that failed, waits for you and holds the
