@@ -272,9 +272,11 @@ func NextStep(f Facts) Next {
 func cleared(f Facts) Next {
 	id := f.ID
 	switch {
-	case f.Yolo && !f.ReviewReady && !f.Accepted:
+	case !f.ReviewReady && !f.Accepted && (f.Yolo || f.Verdict == contract.VerdictClear):
 		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone, so a
-		// head only the bot cleared gets that review first.
+		// head only the bot cleared gets that review before anyone runs its
+		// steps: a finding there would undo them. With CI review on, the
+		// bot's CLEAR is ReviewReady.
 		return command(ReasonNeedsReview, "tkt", "run", id, "review")
 	case f.Yolo && f.VerifyHeld && f.Verification == contract.VerificationPassed:
 		return command(ReasonAutonomousMerge, "tkt", "merge", id, "--autonomous")

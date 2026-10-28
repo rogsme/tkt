@@ -184,7 +184,7 @@ tkt run ACM-123 review
 
 When the forge runs an automated reviewer in CI instead, it posts an `Automated review: CLEAR`, `FINDINGS` or `STALE_BASE` line, and tkt reads that the same way: the bot's `CLEAR` counts like `READY_FOR_HUMAN`, and the steps to verify are then the pull request's own Human verification section. A verdict counts only for the head it names, so after every push the ticket waits for a new review.
 
-Where `docs/agents/workflow.md` turns `CI review` on, which `/setup-rogs` does when it finds such a reviewer, the bot stands in for review-pr all the way to the merge: finish-ticket merges on its `CLEAR` for the exact head, and tkt never starts review-pr, not for a merge order on a head a sync made, and not when the bot goes silent. Without the row, finish-ticket merges only on review-pr's verdict, so tkt watch has review-pr review a head only the bot cleared before it carries out a merge order.
+Where `docs/agents/workflow.md` turns `CI review` on, which `/setup-rogs` does when it finds such a reviewer, the bot stands in for review-pr all the way to the merge: finish-ticket merges on its `CLEAR` for the exact head, and tkt never starts review-pr, not for a merge order on a head a sync made, and not when the bot goes silent. Without the row, finish-ticket merges only on review-pr's verdict. So a head only the bot cleared gets review-pr before anyone runs its steps: `tkt ls` names `tkt run ACM-123 review` as its next step, with the reason `needs_review`, and tkt auto runs it. A finding there would undo the steps, so they wait for it. tkt watch has review-pr review such a head too when it carries out a merge order you gave anyway.
 
 ### 6. The review loop
 
@@ -219,7 +219,7 @@ tkt accept needs `--reason`, which the comment and finish-ticket's completion co
 
 ### 7. verify-pr runs the steps, and you confirm them
 
-When the verdict is `READY_FOR_HUMAN`, or the bot's `CLEAR`, the numbered steps are next. `tkt show ACM-123 --steps` prints them from the review summary, or from the pull request's body after the bot.
+When the verdict is `READY_FOR_HUMAN`, or the bot's `CLEAR` with `CI review` on, the numbered steps are next. `tkt show ACM-123 --steps` prints them from the review summary, or from the pull request's body after the bot.
 
 ```bash
 tkt run ACM-123 verify
@@ -302,6 +302,7 @@ Status: DONE
 | Bot `STALE_BASE`, a conflict, or `BLOCKED_FOR_SYNC` behind the base | Syncs: when `git merge-tree` finds the merge clean, it merges and pushes it as `tkt sync` does, with no agent and no fix round; on a conflict it runs `tkt run ACM-123 resolve`. |
 | Bot `FINDINGS`, or `Verdict: CHANGES_REQUESTED` | Runs `tkt run ACM-123 address`, which merges the base first. |
 | Checks fail | Runs `tkt run ACM-123 ci`. |
+| Bot `CLEAR` at the head, with `CI review` off and no `Verdict: READY_FOR_HUMAN` there | Runs `tkt run ACM-123 review`, which spends no fix round. |
 | Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head, with agent verification on | Runs `tkt run ACM-123 verify`, which spends no fix round. |
 | verify-pr's `Verification: FAILED` | Runs `tkt run ACM-123 address`, a fix round. |
 | Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head, and verify-pr passed every step or could not run some, or agent verification is off | Stops: the ticket is yours to confirm and merge. |
@@ -334,7 +335,7 @@ flowchart TD
 - start-ticket posts an `## Autonomous run` comment on the ticket, which finish-ticket requires before it merges on the request, so a ticket you started by hand never merges this way.
 - review-plan, a model from another vendor, reviews the plan in place of you; a plan review that fails stops the run.
 - At a hard stop, the skill moves the ticket to `blocked` with a comment naming the decision a person has to make, and the loop pauses for you.
-- review-pr reviews every head, even one the review bot cleared, since finish-ticket merges on its verdict alone. Then verify-pr runs.
+- review-pr reviews every head, even one the review bot cleared, since finish-ticket merges on its verdict alone, unless `CI review` is on: then the bot's `CLEAR` is that verdict. Then verify-pr runs.
 - Once verify-pr passed every step, `tkt merge ACM-123 --autonomous` sends finish-ticket `Use the finish-ticket skill to merge the PR. This run is autonomous: ... verify-pr passed every human verification step on head 3f2a....` finish-ticket counts each step as waived on that report, keeps every other gate (green CI at the exact head, review-pr's verdict at the same head and base, no open feedback, an unmoved base), checks the hard stops once more, and records that no person verified the change.
 - Merges still go one at a time in the repository, through the same turn as `tkt merge`.
 - Steps verify-pr could not run pause the loop: a yolo ticket merges only when every step passed.

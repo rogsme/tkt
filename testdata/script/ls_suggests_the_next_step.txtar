@@ -1,4 +1,6 @@
-# tkt ls shows one row per ticket with the next step.
+# tkt ls shows one row per ticket with the next step. A head only the
+# review bot cleared gets review-pr before anyone runs its steps, since
+# finish-ticket merges on review-pr's verdict.
 mkprompt $WORK/p1.txt ACM-1
 mkprompt $WORK/p2.txt ACM-2
 mkprompt $WORK/p3.txt ACM-3
@@ -19,7 +21,7 @@ env FAKE_GH_PRS=$WORK/prs.json
 env 'FAKE_HERDR_SCREEN=Plan ready. Status: AWAITING_APPROVAL'
 exec tkt ls --no-fetch
 stdout '^TICKET'
-stdout '^ACM-1 +ready_for_human .*CLEAR.*tkt run ACM-1 verify'
+stdout '^ACM-1 +waiting_review .*CLEAR.*tkt run ACM-1 review'
 stdout '^ACM-1 .*ok 1'
 stdout '^ACM-2 .*CHANGES_REQUESTED.*tkt run ACM-2 address'
 stdout '^ACM-3 .*#3 merged.*tkt done ACM-3'
@@ -36,7 +38,7 @@ env FAKE_GH_FAIL=
 # Outside herdr the next step still shows.
 env HERDR_ENV=
 exec tkt ls --no-fetch
-stdout '^ACM-1 .*tkt run ACM-1 verify'
+stdout '^ACM-1 .*tkt run ACM-1 review'
 
 -- prs.json --
 [

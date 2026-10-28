@@ -1,6 +1,7 @@
 # When the review bot cleared the head, no review-pr summary holds the human
 # verification steps: tkt show --steps reads the pull request's own Human
-# verification section, which work-ticket writes.
+# verification section, which work-ticket writes. Without CI review, the
+# head still waits for review-pr before you run them.
 mkprompt $WORK/p.txt ACM-12
 stdin $WORK/p.txt
 exec tkt start ACM-12 --prompt -
@@ -8,7 +9,7 @@ env FAKE_GH_PRS=$WORK/prs.json
 exec tkt show ACM-12 --steps --json
 envelope '.result | [.source, .pr, (.steps | length), .steps[1].n]' '["pull_request",4,2,2]'
 exec tkt ls --no-fetch --json
-envelope '.result.rows[0] | [.phase, .next.reason]' '["ready_for_human","bot_clear"]'
+envelope '.result.rows[0] | [.phase, .next.reason]' '["waiting_review","needs_review"]'
 
 # A body with no such section has no steps to run.
 jqedit $WORK/prs.json '.[0].body = "## Summary\n\nNo steps here.\n"'

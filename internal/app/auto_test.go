@@ -43,7 +43,10 @@ func TestAutoStepTable(t *testing.T) {
 		// With a bot, tkt auto never reviews: the bot in CI does.
 		{with(open, func(f *Facts) { f.BotWait, f.Waited = time.Hour, time.Hour }), AutoPolicy{}, autoMemory{}, pause(StopBotSilent)},
 		{open, AutoPolicy{}, autoMemory{}, autoAct{Kind: actRun, Stage: "review"}},
-		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
+		// A head only the bot cleared gets review-pr before the steps, since
+		// finish-ticket merges on its verdict; with that verdict, it is yours.
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actRun, Stage: "review"}},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.ReviewReady = "CLEAR", true, true }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 1}, autoAct{Kind: actRun, Stage: "address"}},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, pause(StopRoundLimit)},
 		// Findings you accepted get no fix: the head is ready for you, or
@@ -108,7 +111,7 @@ func TestAutoStepTable(t *testing.T) {
 			f.Verdict, f.AtHead, f.AgentVerify, f.Verification, f.VerifyHeld = "READY_FOR_HUMAN", true, true, "FAILED", true
 		}), AutoPolicy{MaxRounds: 2}, autoMemory{Rounds: 2}, pause(StopRoundLimit)},
 		{with(open, func(f *Facts) {
-			f.Verdict, f.AtHead, f.AgentVerify, f.Verification, f.VerifyHeld = "CLEAR", true, true, "PASSED", true
+			f.Verdict, f.AtHead, f.ReviewReady, f.AgentVerify, f.Verification, f.VerifyHeld = "CLEAR", true, true, true, "PASSED", true
 		}), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
 		{with(open, func(f *Facts) {
 			f.Verdict, f.AtHead, f.AgentVerify, f.Verification, f.VerifyHeld = "READY_FOR_HUMAN", true, true, "INCOMPLETE", true
@@ -262,6 +265,11 @@ func verdict(v string) func(*Facts) {
 	return func(f *Facts) { f.Agent, f.Verdict, f.AtHead = "idle", v, true }
 }
 
+// reviewed is review-pr's turn that clears the head.
+func reviewed(f *Facts) {
+	f.Agent, f.LastStatus, f.Verdict, f.AtHead, f.ReviewReady = "idle", "READY_FOR_HUMAN", "READY_FOR_HUMAN", true, true
+}
+
 func TestAutoLoopDrivesToReadyForHuman(t *testing.T) {
 	w := &simWorld{
 		f:      Facts{ID: "ACM-1", Behind: -1, BotWait: 15 * time.Minute},
@@ -270,6 +278,7 @@ func TestAutoLoopDrivesToReadyForHuman(t *testing.T) {
 			idle("AWAITING_APPROVAL"), // the plan
 			pushed("h1"),              // work-ticket opens the pull request
 			pushed("h2"),              // address after the bot's findings
+			reviewed,                  // review-pr after the bot's CLEAR
 		},
 		polls: []func(*Facts){
 			func(f *Facts) { f.Checks = "ok" }, // CI passes on h1
@@ -282,17 +291,17 @@ func TestAutoLoopDrivesToReadyForHuman(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"start", "approve", "run:address"}
+	want := []string{"start", "approve", "run:address", "run:review"}
 	if !slices.Equal(w.acts, want) {
 		t.Errorf("acts: %v, want %v", w.acts, want)
 	}
-	if res.Stop != StopReadyForHuman || res.Rounds != 1 || len(res.Steps) != 3 || !slices.Equal(w.stops, []string{StopReadyForHuman}) {
+	if res.Stop != StopReadyForHuman || res.Rounds != 1 || len(res.Steps) != 4 || !slices.Equal(w.stops, []string{StopReadyForHuman}) {
 		t.Errorf("result: %+v, stops %v", res, w.stops)
 	}
 	// A slot counts an agent at work: one from the start through the plan's
-	// approval, given up while the loop waits for CI and the bot, and one
-	// more for address.
-	if w.slots != 2 || w.slot {
+	// approval, given up while the loop waits for CI and the bot, one
+	// more for address, and one for review-pr.
+	if w.slots != 3 || w.slot {
 		t.Errorf("slots taken %d, held at the end %v", w.slots, w.slot)
 	}
 }
@@ -311,7 +320,7 @@ func TestAutoLoopWaitsOutAnIncident(t *testing.T) {
 		func(*Facts) {},                    // still down: no ci run, no round
 		func(*Facts) { w.hold = "" },       // the incident ends
 		func(f *Facts) { f.Checks = "ok" }, // CI passes on the fix
-		verdict("CLEAR"),
+		verdict("READY_FOR_HUMAN"),
 	}
 	res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{MaxRounds: 5}, autoMemory{}, autoCarry{}, simPoll, false, false)
 	if err != nil {

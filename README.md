@@ -118,7 +118,7 @@ Where `docs/agents/workflow.md` turns on `Agent verification` (`/setup-rogs` ask
 - Every line its agents get says "This run is autonomous". The skills then decide what they would ask you, on the most conservative reading, and write each decision under `## Assumptions` in the plan and the pull request. Read those afterwards.
 - A model from another vendor reviews the plan in place of you, and tkt approves it.
 - At a hard stop that workflow.md lists, such as a migration or anything about payments, the ticket goes to `blocked` with a comment, and the loop pauses for you.
-- review-pr reviews every head, even one the review bot cleared, since finish-ticket merges on its verdict. Then verify-pr runs, and once it passed every step, finish-ticket merges with every other gate still in place: green CI at the exact head, the review at the same head and base, no open feedback.
+- review-pr reviews every head, even one the review bot cleared, since finish-ticket merges on its verdict, unless workflow.md turns `CI review` on: then the bot's `CLEAR` is that verdict. Then verify-pr runs, and once it passed every step, finish-ticket merges with every other gate still in place: green CI at the exact head, the review at the same head and base, no open feedback.
 - One merge goes at a time in the repository. When the checks on the base fail after the merge, the loop stops and notifies you, and nothing else happens.
 - A base branch whose protection requires a person's approval cannot merge this way.
 
