@@ -406,7 +406,7 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `ready to verify` | review-pr cleared the head, or the bot did where workflow.md turns `CI review` on. The text says what verify-pr's report found, or that the head waits for verify-pr. | `/check ID`. |
 | `verification incomplete` | A yolo loop paused: verify-pr could not run every step, and a yolo ticket merges only when it passed them all. | `/check ID`, run the rest, and merge it yourself. |
 | `post-merge CI failed` | A yolo ticket merged, and the checks on the base failed after it. | `/show ID` for finish-ticket's report, then fix the base. |
-| `merged` | The pull request merged. tkt watch removes the ticket once finish-ticket ends with `Status: DONE`. | Nothing while tkt watch runs; otherwise `/done ID`. |
+| `merged` | The pull request merged, and finish-ticket's agent is done. The item waits while the agent still works after the merge, such as on the tracker's completion comment. tkt watch removes the ticket once finish-ticket ends with `Status: DONE`. | Nothing while tkt watch runs; otherwise `/done ID`. |
 | `auto stalled` | The ticket is marked for auto, but no tkt auto loop runs, as after a reboot, and no tkt watch runs to start it again. | `/auto ID on`. |
 | `max rounds reached` | tkt auto or tkt watch made `[auto] max_rounds` fix runs since the plan's approval. | Read the review, then `Run STAGE once more` in `/inbox`, `Accept the review as it is` when its findings do not matter, or take over. |
 | `no progress` | The last step changed nothing on the same head. | `/show ID`, then `Run STAGE again` in `/inbox`. |
