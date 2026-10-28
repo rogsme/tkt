@@ -66,7 +66,7 @@ func TestWatchStepTable(t *testing.T) {
 		// Findings come before the checks in the rule list, and they are
 		// address's, which only you or tkt auto run.
 		{with(failing, func(f *Facts) { f.Verdict, f.AtHead = "FINDINGS", true }), p, watchMemory{}, leave(ReasonFindings)},
-		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), p, watchMemory{}, leave(ReasonBotClear)},
+		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "CLEAR", true }), p, watchMemory{}, leave(ReasonNeedsReview)},
 		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL", Behind: -1}, p, watchMemory{}, leave(ReasonPlanAwaitsApproval)},
 		// A merge order you left goes ahead without settling, once per head;
 		// on a branch behind its base, the sync comes first.

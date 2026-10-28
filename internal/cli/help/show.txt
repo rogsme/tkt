@@ -16,7 +16,9 @@ the lines it adds and removes, and its hunks.
 READY_FOR_HUMAN at the pull request's head, and with --json its numbered
 steps. When the review bot cleared the head instead, it reads the Human
 verification section of the pull request's body, which work-ticket writes;
-source says which. It reads pull requests through gh, so it supports GitHub
+source says which. Unless workflow.md turns CI review on, such a head still
+waits for review-pr, whose procedure then replaces the body's. It reads
+pull requests through gh, so it supports GitHub
 forges only, and it exits 4 with no_verification_steps when neither has
 steps. When verify-pr reported on the pull request, it prints the report's
 result for each step after the procedure, and says when the report is about

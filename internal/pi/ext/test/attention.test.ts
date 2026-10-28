@@ -259,6 +259,16 @@ test("verify-pr's report shapes the ready item", () => {
 	assert.equal(failed?.title, "verify-pr found a step that fails");
 });
 
+test("a merged ticket waits until finish-ticket's agent is done", () => {
+	const pr = { number: 12, state: "MERGED", head: "abc" };
+	const next = { kind: "command", reason: "merged", argv: ["tkt", "done", "ACM-12"], text: "tkt done ACM-12" };
+	assert.equal(attentionOf(row({ phase: "merged", pr, next, agent: working }), false), undefined);
+	assert.equal(attentionOf(row({ phase: "merged", pr, next, agent: { ...working, status: "idle", background: 1 } }), false), undefined);
+	const done = attentionOf(row({ phase: "merged", pr, next, agent: { ...working, status: "idle" }, last_status: "DONE" }), false);
+	assert.equal(done?.kind, "merged");
+	assert.equal(choicesOf(done!)[0].do, "done");
+});
+
 test("a yolo loop's pause and its failed base need you", () => {
 	const paused = attentionOf(row({ phase: "ready_for_human", auto: auto({ yolo: true, paused: "needs_you", why: "verify_incomplete" }) }), false);
 	assert.equal(paused?.title, "verification incomplete");

@@ -35,6 +35,26 @@ func TestLatestVerdict(t *testing.T) {
 	}
 }
 
+// The bot's brief can name other heads before its verdict line, such as a
+// stale one the pull request body still cites. Only the verdict line's head
+// is the one it reviewed.
+func TestReviewVerdictReadsTheHeadOnTheVerdictLine(t *testing.T) {
+	head := "e2fdfd5f8c0fe388481f6e238db5d41a106e1647"
+	body := "## Review brief\n\nUnknown: The PR brief is stale. It names head `ca15fd7b` and says the newer base is missing.\n\n" +
+		"1. **BUG** `docs/api.md:248`: one 404 for two cases\n" +
+		"**Automated review: FINDINGS** · head `" + head + "` · reviewed against ACM-1"
+	v, ok := ReviewVerdict(Review{Body: body, SubmittedAt: "2026-01-02T10:00:00Z", Commit: &struct {
+		Oid string `json:"oid"`
+	}{head}})
+	if !ok || v.Value != "FINDINGS" || v.Head != head {
+		t.Errorf("verdict: %+v", v)
+	}
+	body = "Head `1111111` matches the expected SHA but misses the base.\n\n**Automated review: STALE_BASE** · head `2222222`"
+	if v, _ := ReviewVerdict(Review{Body: body}); v.Value != "STALE_BASE" || v.Head != "2222222" {
+		t.Errorf("stale base: %+v", v)
+	}
+}
+
 func TestSummarize(t *testing.T) {
 	p := pr(t, `{"statusCheckRollup":[
 	  {"name":"tests","status":"COMPLETED","conclusion":"SUCCESS"},

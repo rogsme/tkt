@@ -30,7 +30,7 @@ func TestNextStepTable(t *testing.T) {
 		// git merge-tree finds a conflict before the forge reports one.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE", BaseMerge: "conflict", Behind: 3}, "tkt sync ACM-1", "command", ReasonBaseMoved},
 		// A base that merges clean is no reason to sync on its own.
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE", BaseMerge: "clean", Behind: 3}, "tkt run ACM-1 verify", "command", ReasonBotClear},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Mergeable: "MERGEABLE", BaseMerge: "clean", Behind: 3}, "tkt run ACM-1 verify", "command", ReasonReviewClear},
 		// review-pr also says BLOCKED_FOR_SYNC while CI is not green; with
 		// nothing behind, the review is what is missing.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED_FOR_SYNC", Behind: 0}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
@@ -57,7 +57,13 @@ func TestNextStepTable(t *testing.T) {
 		// A sync that failed on the head goes to a fresh session.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "STALE_BASE", AtHead: true, SyncFail: "failed"}, "tkt sync ACM-1", "command", ReasonSyncFailed},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending", SyncFail: "failed"}, "wait for CI", "wait", ReasonCIPending},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 verify", "command", ReasonBotClear},
+		// finish-ticket merges on review-pr's READY_FOR_HUMAN, so a head only
+		// the bot cleared gets that review before anyone runs its steps. With
+		// CI review on, or review-pr's verdict there too, the bot's CLEAR will do.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Mergeable: "MERGEABLE"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, AgentVerify: true}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, ReviewReady: true, CIReview: true}, "tkt run ACM-1 verify", "command", ReasonBotClear},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, ReviewReady: true}, "tkt run ACM-1 verify", "command", ReasonBotClear},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true}, "tkt run ACM-1 verify", "command", ReasonReviewClear},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: false, Mergeable: "MERGEABLE"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
 		// With agent verification on, a clean head gets verify-pr, whose
@@ -65,7 +71,7 @@ func TestNextStepTable(t *testing.T) {
 		// for you to confirm the evidence, and steps it could not run wait
 		// for you to run them. A report decides with the feature off too.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, AgentVerify: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, ReviewReady: true, CIReview: true, AgentVerify: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true, Verification: "FAILED", VerifyHeld: true}, "tkt run ACM-1 address", "command", ReasonVerifyFailed},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true, Verification: "PASSED", VerifyHeld: true},
 			"verify-pr passed every step: confirm them from its evidence (tkt show ACM-1 --steps), then tkt merge ACM-1 --passed all --evidence", "human", ReasonVerified},
@@ -190,7 +196,8 @@ func TestPhaseOf(t *testing.T) {
 		{Facts{}, PhaseNoAgent},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending"}, PhaseCI},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: time.Hour}, PhaseWaitingReview},
-		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true}, PhaseReadyForHuman},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true}, PhaseWaitingReview},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, ReviewReady: true}, PhaseReadyForHuman},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: time.Hour, Waited: time.Hour}, PhaseNeedsYou},
 		{Facts{PRState: "OPEN", Agent: "idle", Background: true, Stage: "work"}, PhaseBuilding},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true}, PhaseNeedsFix},

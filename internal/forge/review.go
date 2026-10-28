@@ -55,8 +55,11 @@ func ReviewVerdict(r Review) (Verdict, bool) {
 	v := Verdict{SubmittedAt: r.SubmittedAt}
 	switch {
 	case contract.AutomatedReviewRE.MatchString(r.Body):
-		v.Value = contract.AutomatedReviewRE.FindStringSubmatch(r.Body)[1]
-		v.Head = firstGroup(contract.AutomatedHeadRE, r.Body, oid)
+		// The brief above the verdict line can name other heads, so the
+		// head comes from that line, the last one, as the summary ends.
+		line := verdictLine(r.Body)
+		v.Value = contract.AutomatedReviewRE.FindStringSubmatch(line)[1]
+		v.Head = firstGroup(contract.AutomatedHeadRE, line, oid)
 	case contract.VerdictRE.MatchString(r.Body):
 		v.Value = contract.VerdictRE.FindStringSubmatch(r.Body)[1]
 		v.Head = firstGroup(contract.ReviewedHeadRE, r.Body, oid)
@@ -64,6 +67,19 @@ func ReviewVerdict(r Review) (Verdict, bool) {
 		return Verdict{}, false
 	}
 	return v, true
+}
+
+// verdictLine returns the last line of body that holds an "Automated
+// review:" verdict.
+func verdictLine(body string) string {
+	locs := contract.AutomatedReviewRE.FindAllStringIndex(body, -1)
+	at := locs[len(locs)-1][0]
+	start := strings.LastIndexByte(body[:at], '\n') + 1
+	end := len(body)
+	if i := strings.IndexByte(body[at:], '\n'); i >= 0 {
+		end = at + i
+	}
+	return body[start:end]
 }
 
 func firstGroup(re interface{ FindStringSubmatch(string) []string }, s, def string) string {

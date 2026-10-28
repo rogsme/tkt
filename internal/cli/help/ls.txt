@@ -28,8 +28,11 @@ The next step is the first of these rules that matches:
      failed a step, or the review at the head has findings: tkt run ID
      address.
   8. The checks fail: tkt run ID ci.
-  9. The review at the head is clear, from the bot or from review-pr. When
-     verify-pr's report for the head passed every step: confirm them from
+  9. The review at the head is clear, from the bot or from review-pr. A head
+     only the bot cleared gets tkt run ID review first, unless workflow.md
+     turns CI review on, since finish-ticket merges on review-pr's verdict
+     and a finding there would undo the steps. When verify-pr's report
+     for the head passed every step: confirm them from
      its evidence, then tkt merge ID --passed all --evidence. When it could
      not run some: run those yourself. Otherwise tkt run ID verify, which
      workflow.md's Agent verification row makes the step, or the steps

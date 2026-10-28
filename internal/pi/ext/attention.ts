@@ -144,6 +144,9 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 	const keyOf = (kind: AttentionKind) => (kind === "paused" ? `${kind}|${base}|${a?.paused ?? ""}|${a?.why ?? ""}` : `${kind}|${base}`);
 	const item = (kind: AttentionKind, title: string, text: string, byAuto = false, offers?: Choice[]): Attention => ({ key: keyOf(kind), ticket: id, kind, title, text, byAuto, offers, chore: !!row.chore });
 	if (row.phase === "merged" && a?.stop === "post_merge_failed") return item("failed", "post-merge CI failed", `${id} merged in yolo, but the checks on the base failed after it. /show ${id} for finish-ticket's report; tkt leaves the ticket as it is.`);
+	// finish-ticket goes on after the merge, with the tracker and the checks
+	// on the base, so the ticket waits until its agent is done.
+	if (row.phase === "merged" && (row.agent?.status === "working" || (row.agent?.background ?? 0) > 0)) return undefined;
 	if (row.phase === "merged") return item("merged", "merged", `${id} is merged. Say "remove it", or /done ${id}.`);
 	// A pull request closed without merging rejected the work; tkt watch
 	// removes the ticket, and the tracker is yours to move.

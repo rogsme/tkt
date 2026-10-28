@@ -35,7 +35,7 @@ stderr '--dry-run needs --once'
 
 resetlog
 exec tkt watch --once --dry-run --json
-envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + (.stage // "") + ":" + .reason]' '["ACM-1:run:ci:checks_fail","ACM-2:sync::base_moved","ACM-3:::hold","ACM-4:::agent_working","ACM-5:::bot_clear"]'
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + (.stage // "") + ":" + .reason]' '["ACM-1:run:ci:checks_fail","ACM-2:sync::base_moved","ACM-3:::hold","ACM-4:::agent_working","ACM-5:::needs_review"]'
 envelope '[.result.actions[].display]' '["tkt run ACM-1 ci","tkt sync ACM-2 --no-agent"]'
 ! logcontains 'herdr agent start'
 ! logcontains ' push '
