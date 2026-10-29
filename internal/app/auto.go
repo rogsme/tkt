@@ -336,7 +336,7 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 			return pause(StopNeedsYou)
 		}
 		return stop(StopReadyForHuman)
-	case ReasonReviewClear, ReasonBotClear, ReasonReviewAccepted, ReasonVerified:
+	case ReasonReviewClear, ReasonBotClear, ReasonReviewAccepted, ReasonVerified, ReasonStepsPassed:
 		return stop(StopReadyForHuman)
 	case ReasonAutonomousMerge:
 		return act(actMerge, "")
@@ -1061,6 +1061,8 @@ func autoNotice(stop, id, reason string) notice {
 	switch {
 	case stop == StopReadyForHuman && reason == ReasonVerified:
 		return notice{"ready for you", "verify-pr passed every human verification step; confirm them from its evidence", "done"}
+	case stop == StopReadyForHuman && reason == ReasonStepsPassed:
+		return notice{"ready for you", "every human verification step passed; merge it when you are ready", "done"}
 	case stop == StopReadyForHuman && reason == ReasonVerifyIncomplete:
 		return notice{"ready for you", "verify-pr could not run every human verification step; run the rest", "done"}
 	}

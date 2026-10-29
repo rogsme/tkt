@@ -240,6 +240,20 @@ test("a ticket whose pull request closed without merging goes with tkt watch", (
 	assert.match(attentionOf(closed, false, false)?.text ?? "", /ACM-12: pull request #9 was closed without merging\. \/done ACM-12 removes the ticket; move it in the tracker yourself\./);
 });
 
+test("steps you confirmed wait for your word to merge", () => {
+	const pr = { number: 4, state: "OPEN", head: "abc" };
+	const confirmed = { head: "abcdef0123", evidence: false, url: "", at_head: true, carried: false };
+	const next = { kind: "human", reason: "steps_passed", argv: null, text: "every step passed" };
+	const a = attentionOf(row({ phase: "ready_to_merge", pr, confirmed, next }), false);
+	assert.equal(a?.kind, "merge");
+	assert.equal(a?.title, "ready to merge");
+	assert.equal(sound(a!), "done");
+	assert.match(a?.text ?? "", /^ACM-12: every human verification step passed on abcdef0, and pull request #4 waits for your word to merge\. \/check ACM-12 merges it\.$/);
+	assert.deepEqual(choicesOf(a!).map((c) => c.do), ["check", "dismiss"]);
+	// A loop that stopped there says the same.
+	assert.equal(attentionOf(row({ phase: "ready_to_merge", pr, confirmed, next, auto: auto({ stop: "ready_for_human" }) }), false)?.kind, "merge");
+});
+
 test("verify-pr's report shapes the ready item", () => {
 	const pr = { number: 4, state: "OPEN", head: "abc" };
 	const steps = [{ n: 1, result: "PASSED" as const, text: "opened" }];

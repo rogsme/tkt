@@ -53,9 +53,9 @@ const keyVerifiedHead = "verified_head"
 func verifiedComment(steps []int, head string, evidence bool) string {
 	line := strings.ToUpper(config.StepsText(steps)[:1]) + config.StepsText(steps)[1:] + " passed on head " + head
 	if evidence {
-		line += ", confirmed from verify-pr's evidence"
+		line += ", " + forge.ConfirmedEvidence
 	}
-	return "Human verification passed ✅\n\n" + line + "."
+	return forge.ConfirmedHeading + " ✅\n\n" + line + "."
 }
 
 // Verified comments on a ticket's pull request that every human

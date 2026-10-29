@@ -105,6 +105,20 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CHANGES_REQUESTED", AtHead: true}, "tkt run ACM-1 address", "command", ReasonFindings},
 		// An order you confirmed from the evidence keeps saying so.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h1", MergeSteps: "1,2", MergeHead: "h1", MergeBy: "evidence"}, "tkt merge ACM-1 --passed 1,2 --head h1 --evidence", "command", ReasonMergeDue},
+		// Steps you confirmed with tkt verified wait for your word to
+		// merge, saying how you confirmed them. Anything that undoes them
+		// comes first, a yolo run merges on verify-pr's report, and a head
+		// no review cleared gets its review.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Confirmed: true, ConfirmedHead: "abcdef0123"},
+			"every step passed on abcdef0: tkt merge ACM-1 --passed all --head abcdef0123 when you want it merged", "human", ReasonStepsPassed},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Verification: "PASSED", VerifyHeld: true, Confirmed: true, ConfirmedHead: "abcdef0123", ConfirmedEvidence: true},
+			"every step passed on abcdef0: tkt merge ACM-1 --passed all --head abcdef0123 --evidence when you want it merged", "human", ReasonStepsPassed},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true, Accepted: true, Confirmed: true, ConfirmedHead: "abcdef0123"},
+			"every step passed on abcdef0: tkt merge ACM-1 --passed all --head abcdef0123 when you want it merged", "human", ReasonStepsPassed},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true, Confirmed: true, ConfirmedHead: "abcdef0123"}, "tkt run ACM-1 address", "command", ReasonFindings},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "fail", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Confirmed: true, ConfirmedHead: "abcdef0123"}, "tkt run ACM-1 ci", "command", ReasonChecksFail},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Yolo: true, Verification: "PASSED", VerifyHeld: true, Confirmed: true, ConfirmedHead: "abcdef0123"}, "tkt merge ACM-1 --autonomous", "command", ReasonAutonomousMerge},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, Confirmed: true, ConfirmedHead: "abcdef0123"}, "tkt run ACM-1 review", "command", ReasonNeedsReview},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 5 * time.Minute}, "wait for the review bot", "wait", ReasonAwaitingBot},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: 15 * time.Minute, Waited: 15 * time.Minute}, "the review bot has not reviewed this head; check its CI job, or run tkt run ACM-1 review", "human", ReasonBotSilent},
 		{Facts{PRState: "OPEN", Agent: "idle", Background: true}, "wait (the agent waits on a background task)", "wait", ReasonAgentWaiting},
@@ -203,6 +217,7 @@ func TestPhaseOf(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true}, PhaseNeedsFix},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true, Accepted: true}, PhaseReadyForHuman},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true}, PhaseReadyForHuman},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Confirmed: true, ConfirmedHead: "h1"}, PhaseReadyToMerge},
 		{Facts{Chore: "deps", Agent: "idle", LastStatus: "DONE"}, PhaseFinished},
 		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true}, PhaseNeedsYou},
 		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok"}, PhaseReadyForHuman},
