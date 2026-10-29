@@ -79,6 +79,15 @@ export function networkURLs(url: string, ifaces: Record<string, Iface[] | undefi
 	return out;
 }
 
+/** fromHere holds when a request's address is this machine's: loopback,
+ * or one of its own interfaces, as when a browser here opens the address
+ * /web prints for the network. */
+export function fromHere(addr: string, ifaces: Record<string, Iface[] | undefined>): boolean {
+	const a = addr.toLowerCase().replace(/^::ffff:/, "");
+	if (a === "::1" || a.startsWith("127.")) return true;
+	return Object.values(ifaces).some((list) => (list ?? []).some((i) => i.address.toLowerCase() === a));
+}
+
 function cookieOf(header: string | null, name: string): string | undefined {
 	for (const part of (header ?? "").split(";")) {
 		const [k, ...v] = part.trim().split("=");

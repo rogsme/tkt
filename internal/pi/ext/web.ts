@@ -12,14 +12,14 @@
 
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { marksAt } from "./actions.ts";
 import { type Entry, type Item, itemsOf, messageItems, pageView, slashName, terminalOnly } from "./chat.ts";
 import { mirrorTo, notify } from "./dialog.ts";
-import { gate } from "./gate.ts";
+import { fromHere, gate } from "./gate.ts";
 import type { Hub } from "./hub.ts";
 import { type Board, type Command, type Image, Mirror, type Page, type Query, type Theme } from "./mirror.ts";
 import type { Envelope } from "./model.ts";
@@ -31,11 +31,12 @@ declare const Bun: {
 };
 interface BunServer {
 	port: number;
-	upgrade(req: Request, o: { data: { page?: Page } }): boolean;
+	upgrade(req: Request, o: { data: { page?: Page; here?: boolean } }): boolean;
+	requestIP(req: Request): { address: string } | null;
 	stop(closeActive?: boolean): void;
 }
 interface Socket {
-	data: { page?: Page };
+	data: { page?: Page; here?: boolean };
 	send(text: string): void;
 }
 
@@ -68,6 +69,9 @@ export class Web {
 	private ctx?: ExtensionContext;
 	private server?: BunServer;
 	private token = "";
+	/** here holds the pages open in a browser on this machine, so tkt web
+	 * opens no second one. */
+	private readonly here = new Set<Page>();
 	private poll?: ReturnType<typeof setInterval>;
 	private streaming?: { items: Item[]; timer: ReturnType<typeof setTimeout> };
 	private js = new Map<string, string>();
@@ -155,6 +159,7 @@ export class Web {
 		const port = String(this.server.port);
 		this.server.stop(true);
 		this.server = undefined;
+		this.here.clear();
 		if (!quit || readState(this.file).pid !== String(process.pid)) return;
 		try {
 			writeState(this.file, { port, token: this.token });
@@ -189,6 +194,7 @@ export class Web {
 				open: (ws: Socket) => {
 					const page: Page = { send: (m) => ws.send(JSON.stringify(m)) };
 					ws.data.page = page;
+					if (ws.data.here) this.here.add(page);
 					this.mirror.join(page);
 				},
 				message: (ws: Socket, msg: string | Uint8Array) => {
@@ -200,7 +206,9 @@ export class Web {
 					}
 				},
 				close: (ws: Socket) => {
-					if (ws.data.page) this.mirror.leave(ws.data.page);
+					if (!ws.data.page) return;
+					this.mirror.leave(ws.data.page);
+					this.here.delete(ws.data.page);
 				},
 			},
 		});
@@ -214,8 +222,11 @@ export class Web {
 			if ("location" in v) return new Response(null, { status: 303, headers: { ...headers, location: v.location, "set-cookie": v.setCookie } });
 			return new Response(`tkt: ${v.reason}\n`, { status: v.status, headers: { ...headers, "content-type": "text/plain; charset=utf-8" } });
 		}
-		if (url.pathname === "/health") return Response.json({ file: this.file, repo: this.hub.repo }, { headers });
-		if (url.pathname === "/ws") return server.upgrade(req, { data: {} }) ? undefined : new Response("tkt: expected a WebSocket\n", { status: 400, headers });
+		if (url.pathname === "/health") return Response.json({ file: this.file, repo: this.hub.repo, here: this.here.size }, { headers });
+		if (url.pathname === "/ws") {
+			const here = fromHere(server.requestIP(req)?.address ?? "", networkInterfaces());
+			return server.upgrade(req, { data: { here } }) ? undefined : new Response("tkt: expected a WebSocket\n", { status: 400, headers });
+		}
 		if (req.method !== "GET") return new Response(null, { status: 405, headers });
 		if (url.pathname === "/") return this.index(server.port, h.get("host")!);
 		if (url.pathname.startsWith("/app/")) return this.asset(url.pathname.slice("/app/".length), pageDir);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cookieName, gate, type Knock, networkURLs } from "../gate.ts";
+import { cookieName, fromHere, gate, type Knock, networkURLs } from "../gate.ts";
 
 const port = 4310;
 const token = "a".repeat(48);
@@ -62,4 +62,15 @@ test("the network addresses leave out loopback, IPv6 and container bridges", () 
 	};
 	assert.deepEqual(networkURLs(url, ifaces), [`http://192.168.1.20:${port}/?token=${token}`, `http://100.64.0.3:${port}/?token=${token}`]);
 	assert.deepEqual(networkURLs(url, {}), []);
+});
+
+test("a page from this machine is one from loopback or its own interfaces", () => {
+	const ifaces = { lo: [{ address: "127.0.0.1", family: "IPv4", internal: true }], wlan0: [{ address: "192.168.1.20", family: "IPv4", internal: false }] };
+	assert.equal(fromHere("127.0.0.1", ifaces), true);
+	assert.equal(fromHere("::1", ifaces), true);
+	assert.equal(fromHere("::ffff:127.0.0.1", ifaces), true);
+	assert.equal(fromHere("192.168.1.20", ifaces), true);
+	assert.equal(fromHere("::ffff:192.168.1.20", ifaces), true);
+	// A phone on the same network is another machine.
+	assert.equal(fromHere("192.168.1.31", ifaces), false);
 });

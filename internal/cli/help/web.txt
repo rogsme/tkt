@@ -22,6 +22,10 @@ The address carries a token, which the page keeps in a cookie, so another web
 page in your browser cannot drive the chat. tkt web prints the address, so
 --no-open gives it to you without a browser.
 
+When a browser on this machine has the page open already, tkt web opens no
+other and says so; --new, or /web new in the chat, opens another tab anyway.
+A page open on a phone or another computer does not count.
+
 The page follows your system's light or dark setting until you pick one with
 its sun and moon button. It keeps that choice in
 ${XDG_STATE_HOME:-~/.local/state}/tkt/web.json for every repository.

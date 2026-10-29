@@ -210,20 +210,27 @@ var commands = map[string]func(ts *testscript.TestScript, neg bool, args []strin
 	"webserve":    cmdWebServe,
 }
 
-// webserve FILE: stand in for a tkt agent chat that serves the web page: a
-// server on 127.0.0.1 that answers /health as the extension does, named in
+// webserve FILE [HERE]: stand in for a tkt agent chat that serves the web
+// page: a server on 127.0.0.1 that answers /health as the extension does,
+// with HERE pages open in a browser on this machine (default 0), named in
 // FILE with this process's pid, its port and the token webToken.
 func cmdWebServe(ts *testscript.TestScript, neg bool, args []string) {
-	if neg || len(args) != 1 {
-		ts.Fatalf("usage: webserve FILE")
+	if neg || len(args) < 1 || len(args) > 2 {
+		ts.Fatalf("usage: webserve FILE [HERE]")
 	}
 	file := ts.MkAbs(args[0])
+	here := 0
+	if len(args) == 2 {
+		n, err := strconv.Atoi(args[1])
+		ts.Check(err)
+		here = n
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/health" || r.Header.Get("Authorization") != "Bearer "+webToken {
 			http.Error(w, "tkt: no token", http.StatusUnauthorized)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]string{"file": file, "repo": "app"})
+		json.NewEncoder(w).Encode(map[string]any{"file": file, "repo": "app", "here": here})
 	}))
 	ts.Defer(srv.Close)
 	_, port, _ := strings.Cut(strings.TrimPrefix(srv.URL, "http://"), ":")

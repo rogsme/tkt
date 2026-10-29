@@ -905,6 +905,7 @@ func webCmd(g *globals) *cobra.Command {
 		Long:  helpText("web"),
 		Example: `  tkt web
   tkt web --no-open --json
+  tkt web --new
   tkt web --dry-run`,
 		SuggestFor: []string{"browser", "ui"},
 		Args: func(_ *cobra.Command, args []string) error {
@@ -919,6 +920,7 @@ func webCmd(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&o.NoOpen, "no-open", false, "print the page's address without opening a browser")
+	cmd.Flags().BoolVar(&o.New, "new", false, "open the page even when a browser on this machine has it open")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print what tkt web would run instead of running it")
 	return cmd
 }
