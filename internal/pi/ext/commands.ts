@@ -307,6 +307,9 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 		description: "Open the chat's web page in your browser, unless it is open here already: /web [new]",
 		getArgumentCompletions: (prefix) => ("new".startsWith(prefix.trim()) ? [{ value: "new", label: "new", description: "Open another tab even if one has the page" }] : null),
 		handler: async (args, ctx) => {
+			// tkt web opens a new chat when none serves the page, so a chat
+			// whose server quit takes the page over first.
+			await web.takeOver();
 			if (web.why && !web.other) return say(`This chat serves no web page: ${web.why}.`);
 			const again = args.trim() === "new";
 			const env = await hub.tkt<{ url: string; opened: boolean; here: number }>(again ? ["web", "--new"] : ["web"]);
