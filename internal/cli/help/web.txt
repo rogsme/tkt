@@ -11,12 +11,17 @@ its diff, its agent's live screen and its history. Every button sends the
 slash command you could type, so the terminal shows what it did. /peek ID
 and /board typed in the page open the page's own views.
 
-The page lives inside a running chat, which serves it on 127.0.0.1 only. The
-first chat in a repository serves it; a second one says it serves none. When
-no chat serves the page, tkt web opens tkt agent in a new tab of this herdr
-workspace, waits for its page, and opens that. Outside herdr it refuses: run
-tkt agent in a herdr pane, then /web in the chat. When you quit the chat, the
-page says so and comes back by itself once a chat serves it again.
+The page lives inside a running chat, which serves it on every address of this
+machine, so a phone or another computer on your network can open it too. /web
+in the chat prints the page's address on each of this machine's network
+addresses, token and all. Anyone on the network who sees that address drives
+the chat, and the page uses plain HTTP, so open it only on a network you
+trust. The first chat in a repository serves it; a second one says it serves
+none. When no chat serves the page, tkt web opens tkt agent in a new tab of
+this herdr workspace, waits for its page, and opens that. Outside herdr it
+refuses: run tkt agent in a herdr pane, then /web in the chat. When you quit
+the chat, the page says so and comes back by itself once a chat serves it
+again.
 
 The address carries a token, which the page keeps in a cookie, so another web
 page in your browser cannot drive the chat. tkt web prints the address, so
