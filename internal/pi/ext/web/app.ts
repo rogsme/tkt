@@ -379,7 +379,7 @@ function ToastView({ t, dispatch }: { t: State["toasts"][number]; dispatch: (e: 
 		const timer = setTimeout(() => dispatch({ t: "dismiss", id: t.id }), 8000);
 		return () => clearTimeout(timer);
 	}, []);
-	return html`<div class=${`toast ${t.level}`} onClick=${() => dispatch({ t: "dismiss", id: t.id })}>${t.text}</div>`;
+	return html`<div class=${`toast ${t.level}`} title=${t.full ?? ""} onClick=${() => dispatch({ t: "dismiss", id: t.id })}>${t.text}</div>`;
 }
 
 render(html`<${App} />`, document.getElementById("app")!);

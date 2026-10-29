@@ -1867,7 +1867,7 @@ button:focus-visible {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	max-width: min(28rem, calc(100% - 32px));
+	max-width: min(22rem, calc(100% - 32px));
 	z-index: 20;
 }
 
@@ -1877,7 +1877,9 @@ button:focus-visible {
 	border-left: 4px solid var(--info);
 	border-radius: 8px;
 	box-shadow: var(--shadow);
-	padding: 8px 12px;
+	padding: 6px 10px;
+	font-size: 0.85rem;
+	line-height: 1.35;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	cursor: pointer;

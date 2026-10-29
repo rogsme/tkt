@@ -18,6 +18,8 @@ export interface Press {
 export interface Toast {
 	id: number;
 	text: string;
+	/** full is the whole text when text is its brief. */
+	full?: string;
 	level: Level;
 }
 
@@ -52,9 +54,8 @@ export type Event =
 	| { t: "unpress"; cmd: string }
 	| ToPage;
 
-/** maxToast bounds the text of a toast that shows the chat's answer; the
- * chat holds the whole of it. */
-const maxToast = 300;
+/** maxToast bounds a notice's brief. */
+const maxToast = 120;
 
 let toastId = 0;
 
@@ -93,7 +94,7 @@ export function apply(s: State, e: Event): State {
 			const had = new Set(s.items.map((it) => it.id));
 			const notes = e.items.flatMap((it) => (it.kind === "note" && !had.has(it.id) ? [it.text] : []));
 			if (notes.length === 0) return { ...s, items };
-			const toasts = notes.map((text) => ({ id: ++toastId, text: clip(text), level: "info" as const }));
+			const toasts = notes.map((text) => toast(text, "info"));
 			return { ...s, items, pressed: answered(s.pressed), toasts: [...s.toasts, ...toasts].slice(-5) };
 		}
 		case "live":
@@ -105,7 +106,7 @@ export function apply(s: State, e: Event): State {
 		case "closed":
 			return { ...s, dialogs: s.dialogs.filter((d) => d.id !== e.id) };
 		case "notify":
-			return { ...s, pressed: answered(s.pressed), toasts: [...s.toasts, { id: ++toastId, text: e.text, level: e.level }].slice(-5) };
+			return { ...s, pressed: answered(s.pressed), toasts: [...s.toasts, toast(e.text, e.level)].slice(-5) };
 		case "theme":
 			return { ...s, theme: e.theme };
 	}
@@ -126,8 +127,23 @@ export function ticketOf(cmd: string): string {
 	return w[1] ?? "";
 }
 
-function clip(text: string): string {
-	return text.length > maxToast ? `${text.slice(0, maxToast).trimEnd()}... The chat has the rest.` : text;
+/** toast is a notice for text. An info notice shows its brief, since the
+ * chat holds the whole and the notice shows it on hover; a warning or an
+ * error shows whole, since what went wrong is in the detail. */
+function toast(text: string, level: Level): Toast {
+	const short = level === "info" ? brief(text) : text;
+	return { id: ++toastId, text: short, full: short === text ? undefined : text, level };
+}
+
+/** brief is a text's first sentence, cut at a word when it runs past
+ * maxToast: "Queued: tkt sync for ACM-12. It merges..." is "Queued: tkt
+ * sync for ACM-12." */
+export function brief(text: string): string {
+	const first = text.trim().split(/(?<=[.!?])\s+/)[0];
+	if (first.length <= maxToast) return first;
+	const cut = first.slice(0, maxToast);
+	const space = cut.lastIndexOf(" ");
+	return `${(space > maxToast / 2 ? cut.slice(0, space) : cut).trimEnd()}...`;
 }
 
 /** completions are the slash commands a line starts to name, while you

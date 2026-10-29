@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Attention } from "../attention.ts";
 import type { Board } from "../mirror.ts";
-import { apply, completions, initial, type State, ticketOf, title } from "../web/state.ts";
+import { apply, brief, completions, initial, type State, ticketOf, title } from "../web/state.ts";
 
 const note = (id: string, text: string) => ({ kind: "note" as const, id, text });
 
@@ -108,7 +108,8 @@ test("a pressed button waits for tkt's answer, which gets a toast", () => {
 	assert.deepEqual(cmds(s), []);
 	s = apply(s, { t: "press", cmd: "/next ACM-12" });
 	s = apply(s, { t: "items", from: 3, items: [note("4", "x".repeat(400))] });
-	assert.ok(s.toasts.at(-1)!.text.endsWith("... The chat has the rest."));
+	assert.ok(s.toasts.at(-1)!.text.endsWith("..."));
+	assert.equal(s.toasts.at(-1)!.full, "x".repeat(400));
 	s = apply(s, { t: "press", cmd: "/hold ACM-12" });
 	s = apply(s, { t: "link", link: "closed" });
 	assert.deepEqual(cmds(s), []);
@@ -132,4 +133,15 @@ test("a press that started a job stays until the job ends", () => {
 	assert.deepEqual(cmds(s), []);
 	assert.equal(ticketOf("/run ACM-12 review"), "ACM-12");
 	assert.equal(ticketOf("/version"), "");
+});
+
+test("an info notice shows its first sentence; a warning shows whole", () => {
+	assert.equal(brief("Queued: tkt sync for ACM-12. It merges the base itself when the merge is clean."), "Queued: tkt sync for ACM-12.");
+	assert.equal(brief("ACM-12: merged its base and pushed abc1234."), "ACM-12: merged its base and pushed abc1234.");
+	assert.equal(brief("Open the web page at http://127.0.0.1:4000/?token=ab.cd"), "Open the web page at http://127.0.0.1:4000/?token=ab.cd");
+	assert.equal(brief(`${"word ".repeat(40)}end.`), `${"word ".repeat(24).trimEnd()}...`);
+	let s = apply(initial, { t: "notify", text: "Queued: tkt merge for ACM-12. finish-ticket merges it now.", level: "info" });
+	assert.deepEqual([s.toasts[0].text, s.toasts[0].full], ["Queued: tkt merge for ACM-12.", "Queued: tkt merge for ACM-12. finish-ticket merges it now."]);
+	s = apply(s, { t: "notify", text: "tkt sync failed. Next: tkt sync ACM-12.", level: "warning" });
+	assert.deepEqual([s.toasts[1].text, s.toasts[1].full], ["tkt sync failed. Next: tkt sync ACM-12.", undefined]);
 });
