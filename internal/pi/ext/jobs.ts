@@ -18,6 +18,51 @@ export interface Job {
 
 export type Runner = (args: string[], signal: AbortSignal) => Promise<Envelope>;
 
+/** SyncResult is the part of tkt sync's result a notice needs. */
+interface SyncResult {
+	outcome: string;
+	new_head: string;
+	conflicts: string[] | null;
+	failed: string;
+}
+
+/** doneText is the notice a job gives when it went through, so a button
+ * you pressed says how it ended, or "" for a job that failed, since the
+ * board shows that, or that reports its own result, as a quiet one's
+ * caller does and a then does. */
+export function doneText(job: Job, env: Envelope): string {
+	if (!env.ok || job.quiet || job.then) return "";
+	const t = job.ticket;
+	switch (job.args[0]) {
+		case "sync": {
+			const r = env.result as SyncResult | undefined;
+			const conflicts = r?.conflicts?.length ? `conflicts in ${r.conflicts.join(", ")}` : "a stop";
+			switch (r?.outcome) {
+				case "up_to_date":
+					return `${t}: already up to date with its base.`;
+				case "merged":
+					return `${t}: merged its base and pushed ${r.new_head ? r.new_head.slice(0, 7) : "the merge"}.`;
+				case "resolving":
+					return `${t}: merging its base hit ${conflicts}; a fresh session resolves it in a split.`;
+				case "fixing":
+					return `${t}: the sync failed${r.failed ? `: ${r.failed}` : ""}; a fresh session fixes it in a split.`;
+			}
+			return `${t}: merging its base hit ${conflicts}.`;
+		}
+		case "start":
+			return `${t}: started.`;
+		case "resume":
+			return `${t}: its newest session runs again.`;
+		case "run":
+			return `${t}: ${job.label} runs in a fresh session.`;
+		case "chore":
+			return `${t}: its run started.`;
+		case "send":
+			return `${t}: the agent got your message.`;
+	}
+	return `${t}: tkt ${job.args[0]} went through.`;
+}
+
 export class Jobs {
 	private queues = new Map<string, Job[]>();
 	private running = new Map<string, AbortController>();

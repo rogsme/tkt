@@ -42,6 +42,10 @@ interface Socket {
 
 /** extDir holds the extension, and pageDir the page's files beside it. */
 const extDir = dirname(fileURLToPath(import.meta.url));
+
+/** takeOverMs is how often a chat that serves no page checks whether the
+ * one that serves it is still there. */
+const takeOverMs = 5000;
 const pageDir = join(extDir, "web");
 
 /** shared are the extension's modules the page imports too. They import
@@ -73,6 +77,10 @@ export class Web {
 	 * opens no second one. */
 	private readonly here = new Set<Page>();
 	private poll?: ReturnType<typeof setInterval>;
+	/** watching checks, while another chat serves the page, whether it
+	 * still does, so this one takes the page over once it quits. */
+	private watching?: ReturnType<typeof setInterval>;
+	private claiming = false;
 	private streaming?: { items: Item[]; timer: ReturnType<typeof setTimeout> };
 	private js = new Map<string, string>();
 
@@ -108,6 +116,28 @@ export class Web {
 	 * first is the chat's first session, the only one that says so. */
 	async start(ctx: ExtensionContext, first: boolean): Promise<void> {
 		this.ctx = ctx;
+		if (this.claiming) return;
+		this.claiming = true;
+		try {
+			await this.open(ctx, first);
+		} finally {
+			this.claiming = false;
+		}
+		clearInterval(this.watching);
+		this.watching = undefined;
+		if (this.other) this.watching = setInterval(() => void this.takeOver(), takeOverMs);
+	}
+
+	/** takeOver serves the page from this chat when the chat that served
+	 * it is gone, so its open pages come back here and /web opens this
+	 * chat's page rather than a new chat in another tab. */
+	async takeOver(): Promise<void> {
+		if (this.server || !this.other || !this.ctx) return;
+		await this.start(this.ctx, false);
+		if (this.server) notify(this.ctx, "The chat that served the web page quit, so this chat serves it now.");
+	}
+
+	private async open(ctx: ExtensionContext, first: boolean): Promise<void> {
 		const claim = await this.claim();
 		if (typeof claim === "string") {
 			this.why = claim;
@@ -118,6 +148,12 @@ export class Web {
 		try {
 			this.serve(claim.port);
 		} catch {
+			// Another chat that saw the same chat quit took the page first.
+			if (await answers(claim.port, claim.token)) {
+				this.other = true;
+				this.why = "Another chat serves this repository's web page";
+				return;
+			}
 			// The port went to another program while no chat served it.
 			try {
 				this.serve(0);
@@ -152,6 +188,8 @@ export class Web {
 	 * another session serves the next session on the same port. */
 	stop(quit: boolean): void {
 		clearInterval(this.poll);
+		clearInterval(this.watching);
+		this.watching = undefined;
 		if (this.streaming) clearTimeout(this.streaming.timer);
 		this.streaming = undefined;
 		mirrorTo(undefined);

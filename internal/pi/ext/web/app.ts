@@ -34,7 +34,25 @@ function App() {
 		return () => removeEventListener("popstate", back);
 	}, []);
 	const send = useLink(dispatch, (o) => go(o.ticket ? { ticket: o.ticket, tab: o.tab as Tab } : { board: true }));
-	const g: Go = useMemo(() => ({ send, run: (cmd: string) => void send({ t: "send", text: cmd, images: [] }), go }), [send]);
+	const g: Go = useMemo(
+		() => ({
+			send,
+			run: (cmd: string) => {
+				if (send({ t: "send", text: cmd, images: [] })) dispatch({ t: "press", cmd });
+			},
+			go,
+			pressed: s.pressed.map((p) => p.cmd),
+		}),
+		[send, s.pressed],
+	);
+	// A command that answers with nothing the page sees, such as one that
+	// opens a view, lets its button go after a while. One whose job runs
+	// keeps it until the job ends.
+	const waiting = s.pressed.filter((p) => !p.job).map((p) => p.cmd);
+	useEffect(() => {
+		const timers = waiting.map((cmd) => setTimeout(() => dispatch({ t: "unpress", cmd }), 10_000));
+		return () => timers.forEach(clearTimeout);
+	}, [waiting.join("\n")]);
 	// asked counts the questions that closed, so a view that a question
 	// changes, such as the checklist's marks, reads again.
 	const asked = useClosed(s.dialogs);
@@ -361,7 +379,7 @@ function ToastView({ t, dispatch }: { t: State["toasts"][number]; dispatch: (e: 
 		const timer = setTimeout(() => dispatch({ t: "dismiss", id: t.id }), 8000);
 		return () => clearTimeout(timer);
 	}, []);
-	return html`<div class=${`toast ${t.level}`} onClick=${() => dispatch({ t: "dismiss", id: t.id })}>${t.text}</div>`;
+	return html`<div class=${`toast ${t.level}`} title=${t.full ?? ""} onClick=${() => dispatch({ t: "dismiss", id: t.id })}>${t.text}</div>`;
 }
 
 render(html`<${App} />`, document.getElementById("app")!);

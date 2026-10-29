@@ -10,11 +10,13 @@ import type { Send } from "./query.ts";
 import { html, useState } from "./vendor/preact.js";
 
 /** Go is what the page's views get to act with: run sends a slash command
- * through the chat, as if you typed it; go moves the center column. */
+ * through the chat, as if you typed it; go moves the center column.
+ * pressed holds the commands run sent that tkt is still on. */
 export interface Go {
 	send: Send;
 	run(cmd: string): void;
 	go(nav: Nav): void;
+	pressed: string[];
 }
 
 /** ActButtons draws acts as buttons. A reply act opens a box under them
@@ -22,14 +24,27 @@ export interface Go {
 export function ActButtons({ acts, ticket, g, small = false }: { acts: Act[]; ticket: string; g: Go; small?: boolean }) {
 	const [replying, setReplying] = useState(false);
 	const click = (a: Act) => {
-		if (a.cmd) g.run(a.cmd);
-		else if (a.tab) g.go({ ticket, tab: a.tab });
+		if (a.tab) g.go({ ticket, tab: a.tab });
 		else if (a.reply) setReplying((r) => !r);
 	};
 	return html`<div class=${`acts${small ? " small" : ""}`}>
-			${acts.map((a) => html`<button class=${`btn${a.main ? "" : " quiet"}`} title=${a.description ?? a.cmd ?? ""} onClick=${() => click(a)}>${a.label}</button>`)}
+			${acts.map((a) => {
+				const cls = a.main ? "btn" : "btn quiet";
+				if (a.cmd) return html`<${RunButton} g=${g} cmd=${a.cmd} cls=${cls} title=${a.description}>${a.label}<//>`;
+				return html`<button class=${cls} title=${a.description ?? ""} onClick=${() => click(a)}>${a.label}</button>`;
+			})}
 		</div>
 		${replying && html`<${Reply} ticket=${ticket} g=${g} done=${() => setReplying(false)} />`}`;
+}
+
+/** RunButton sends a slash command. Until tkt answers it, or until the
+ * job it started ends, it spins and takes no second press. */
+export function RunButton({ g, cmd, cls = "btn", title, disabled = false, onSent, children }: { g: Go; cmd: string; cls?: string; title?: string; disabled?: boolean; onSent?: () => void; children: unknown }) {
+	const busy = !!cmd && g.pressed.includes(cmd);
+	return html`<button class=${busy ? `${cls} busy` : cls} title=${busy ? `${cmd}: tkt is on it` : (title ?? cmd)} disabled=${busy || disabled || !cmd} aria-busy=${busy} onClick=${() => {
+		g.run(cmd);
+		onSent?.();
+	}}>${children}</button>`;
 }
 
 /** Reply is the box that tells a ticket's agent something, with /send. */

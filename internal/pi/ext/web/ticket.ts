@@ -10,7 +10,7 @@ import { accepted, ago, type Row, since, type Verification } from "../model.ts";
 import { eventText, type HistoryResult, local, type Mark } from "../report.ts";
 import { cardActs, type Tab, tabs, ticketActs } from "./acts.ts";
 import { look, parseAnsi } from "./ansi.ts";
-import { ActButtons, Failure, type Go, Loading, Md, Phase, Reply } from "./bits.ts";
+import { ActButtons, Failure, type Go, Loading, Md, Phase, Reply, RunButton } from "./bits.ts";
 import { type File, lines, section, total } from "./diff.ts";
 import { mdStep } from "./md.ts";
 import { useQuery } from "./query.ts";
@@ -153,8 +153,8 @@ function StepsTab({ r, g, asked }: { r: Row; g: Go; asked: number }) {
 	// The marks change as a /check closes, so the steps read again then.
 	const q = useQuery<Shown>(g.send, "steps", r.ticket, [r.pr?.head, asked]);
 	const buttons = html`<div class="acts">
-		<button class="btn" onClick=${() => g.run(`/check ${r.ticket}`)} title=${`/check ${r.ticket}`}>Walk the steps</button>
-		<button class="btn quiet" onClick=${() => g.run(`/run ${r.ticket} verify`)} title=${`/run ${r.ticket} verify`}>Run verify-pr</button>
+		<${RunButton} g=${g} cmd=${`/check ${r.ticket}`}>Walk the steps<//>
+		<${RunButton} g=${g} cmd=${`/run ${r.ticket} verify`} cls="btn quiet">Run verify-pr<//>
 	</div>`;
 	if (!q.env) return html`<${Loading} />`;
 	if (!q.env.ok || !q.env.result) return html`<div><${Failure} env=${q.env} />${r.pr && buttons}</div>`;

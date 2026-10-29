@@ -8,7 +8,7 @@ import type { Board } from "../mirror.ts";
 import { ago, type ChoresResult, since, type SuggestResult } from "../model.ts";
 import { local, type StatsResult } from "../report.ts";
 import { type Mode, startLine, suggestLine } from "./acts.ts";
-import { Failure, type Go, Loading, Md } from "./bits.ts";
+import { Failure, type Go, Loading, Md, RunButton } from "./bits.ts";
 import { useQuery } from "./query.ts";
 import { html, useState } from "./vendor/preact.js";
 
@@ -44,10 +44,7 @@ export function BoardView({ board, g, now }: { board?: Board; g: Go; now: number
 function Line({ line, g, label, onSent, danger }: { line: string; g: Go; label: string; onSent?: () => void; danger?: boolean }) {
 	return html`<div class="line-out">
 		<code>${line || " "}</code>
-		<button class=${danger ? "btn danger" : "btn"} disabled=${!line} onClick=${() => {
-			g.run(line);
-			onSent?.();
-		}}>${label}</button>
+		<${RunButton} g=${g} cmd=${line} cls=${danger ? "btn danger" : "btn"} title="" onSent=${onSent}>${label}<//>
 	</div>`;
 }
 
@@ -129,7 +126,7 @@ export function ChoresView({ g, now }: { g: Go; now: number }) {
 							e.preventDefault();
 							g.go({ ticket: id, tab: "message" });
 						}}>${id}</a> `) : "-"}</td>
-						<td><button class="btn small quiet" title=${`/chores run ${c.name}`} onClick=${() => g.run(`/chores run ${c.name}`)}>Run now</button></td>
+						<td><${RunButton} g=${g} cmd=${`/chores run ${c.name}`} cls="btn small quiet">Run now<//></td>
 					</tr>`,
 				)}
 			</tbody>
@@ -195,7 +192,7 @@ export function VersionView({ g }: { g: Go }) {
 			<dt>pi</dt><dd><code>${v.pi || "unknown"}</code></dd>
 		</dl>
 		${v.update ? html`<p>tkt ${v.update} is available. /update installs it, after you confirm, and offers to quit the chat so you reopen it on the new tkt.</p>
-			<button class="btn" onClick=${() => g.run("/update")}>Update to ${v.update}</button>` : html`<p class="muted">The chat checks for a newer tkt every six hours.</p>`}
-		<p><button class="btn quiet" onClick=${() => g.run("/version")} title="/version">Ask whether the installed tkt changed</button></p>
+			<${RunButton} g=${g} cmd="/update">Update to ${v.update}<//>` : html`<p class="muted">The chat checks for a newer tkt every six hours.</p>`}
+		<p><${RunButton} g=${g} cmd="/version" cls="btn quiet">Ask whether the installed tkt changed<//></p>
 	</div>`;
 }
