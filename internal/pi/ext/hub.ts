@@ -172,6 +172,7 @@ export class Hub {
 		]);
 		this.docked = { stack, root };
 		tui.setLayoutRoot(stack);
+		releaseMouse(tui);
 	}
 
 	private unpinBoard(tui: TUI): void {
@@ -415,6 +416,23 @@ export class Hub {
 		if (set.length) this.update();
 		return set.length;
 	}
+}
+
+/** mouseOff stops the reports that pi's fullscreen mode turns on: clicks,
+ * drags, motion, their SGR encoding and focus. */
+const mouseOff = "\x1b[?1006l\x1b[?1004l\x1b[?1003l\x1b[?1002l\x1b[?1000l";
+
+/** releaseMouse gives the mouse back to the terminal, so its own selection
+ * and copy work in the chat as in any other program. pi's fullscreen mode
+ * takes every click and drag for a selection of its own and has no setting
+ * to stop. With mouseEnabled false the TUI sends no mouse sequences when it
+ * comes back from an editor or a suspend, nor as it quits. The wheel goes
+ * with the mouse; PageUp and PageDown scroll. */
+function releaseMouse(tui: TUI): void {
+	const t = tui as unknown as { mouseEnabled?: boolean };
+	if (!t.mouseEnabled) return;
+	t.mouseEnabled = false;
+	tui.terminal.write(mouseOff);
 }
 
 /** layoutRoot is the fullscreen layout the TUI draws. */
