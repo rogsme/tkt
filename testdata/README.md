@@ -61,7 +61,7 @@ The scripts use these commands beyond testscript's own:
 | `envelope [EXPR WANT]` | stdout holds exactly one JSON envelope, and EXPR applied to it gives WANT. |
 | `unitvar VAR PATH` | Sets VAR to PATH as `systemd-escape --path` names it. |
 | `expand FILE [VAR...]` | Replaces `$WORK`, `$REPO`, `$HOME`, `$FAKE_DIR` and each VAR named in FILE with their values, for an archive file that names a path, such as a `config.toml`, or a value the script learned, such as a session id. |
-| `webserve FILE` | Stands in for a tkt agent chat that serves the web page: a server on 127.0.0.1 that answers `/health` as the extension does, named in FILE with its port and token. |
+| `webserve FILE [HERE]` | Stands in for a tkt agent chat that serves the web page: a server on 127.0.0.1 that answers `/health` as the extension does, with HERE pages open in a browser on this machine (default 0), named in FILE with its port and token. |
 
 ## Manual check in herdr
 

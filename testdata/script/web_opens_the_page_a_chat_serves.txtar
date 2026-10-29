@@ -17,6 +17,19 @@ exec tkt web --no-open
 stdout '^http://127.0.0.1:[0-9]+/\?token=0123456789abcdef0123456789abcdef0123456789abcdef$'
 ! logcontains 'http://127.0.0.1'
 
+# A browser on this machine has the page open, so tkt web opens no other,
+# and says how to open one anyway.
+webserve $REPO/.git/tkt/web 1
+resetlog
+exec tkt web --json
+envelope '[.result.opened, .result.here]' '[false,1]'
+envelope '.result.url | startswith("http://127.0.0.1:")' true
+stderr 'already open in a browser here; tkt web --new opens another'
+! logcontains 'http://127.0.0.1'
+exec tkt web --new --json
+envelope '[.result.opened, .result.here]' '[true,1]'
+waitgrep 'open http://127.0.0.1:[0-9]+/.*token=0123' $FAKE_LOG
+
 # A file that a crashed chat left, naming a port nothing answers on, is no
 # chat. Outside herdr, tkt web cannot open one, and says how.
 cp $WORK/stale $REPO/.git/tkt/web

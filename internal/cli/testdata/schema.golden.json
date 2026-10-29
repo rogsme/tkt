@@ -94,8 +94,8 @@
       "path": "web",
       "use": "web",
       "short": "Open the tkt agent's web page, a browser view of the chat",
-      "long": "tkt web opens the tkt agent's web page in your browser: the same chat as tkt\nagent, mirrored both ways. A message you send in either place shows in both,\nwith the model's answer as it streams in, its tool calls, and the times. A\nquestion the chat asks, such as \"Remove ACM-12?\", shows in both, and the first\nanswer wins. Slash commands work in the page as in the terminal.\n\nBeside the chat, the page shows the board: what needs you, as cards with\n/inbox's answers as buttons, and every ticket. Pick a ticket for its plan or\nthe agent's last message, its pull request, its human verification steps,\nits diff, its agent's live screen and its history. Every button sends the\nslash command you could type, so the terminal shows what it did. /peek ID\nand /board typed in the page open the page's own views.\n\nThe page lives inside a running chat, which serves it on 127.0.0.1 only. The\nfirst chat in a repository serves it; a second one says it serves none. When\nno chat serves the page, tkt web opens tkt agent in a new tab of this herdr\nworkspace, waits for its page, and opens that. Outside herdr it refuses: run\ntkt agent in a herdr pane, then /web in the chat. When you quit the chat, the\npage says so and comes back by itself once a chat serves it again.\n\nThe address carries a token, which the page keeps in a cookie, so another web\npage in your browser cannot drive the chat. tkt web prints the address, so\n--no-open gives it to you without a browser.\n\nThe page follows your system's light or dark setting until you pick one with\nits sun and moon button. It keeps that choice in\n${XDG_STATE_HOME:-~/.local/state}/tkt/web.json for every repository.\n\npi's own screens, such as /model, /login, /settings, /resume and /tree, open\nin the terminal only. Text you have typed but not sent stays where you typed\nit.",
-      "example": "  tkt web\n  tkt web --no-open --json\n  tkt web --dry-run",
+      "long": "tkt web opens the tkt agent's web page in your browser: the same chat as tkt\nagent, mirrored both ways. A message you send in either place shows in both,\nwith the model's answer as it streams in, its tool calls, and the times. A\nquestion the chat asks, such as \"Remove ACM-12?\", shows in both, and the first\nanswer wins. Slash commands work in the page as in the terminal.\n\nBeside the chat, the page shows the board: what needs you, as cards with\n/inbox's answers as buttons, and every ticket. Pick a ticket for its plan or\nthe agent's last message, its pull request, its human verification steps,\nits diff, its agent's live screen and its history. Every button sends the\nslash command you could type, so the terminal shows what it did. /peek ID\nand /board typed in the page open the page's own views.\n\nThe page lives inside a running chat, which serves it on every address of this\nmachine, so a phone or another computer on your network can open it too. /web\nin the chat prints the page's address on each of this machine's network\naddresses, token and all. Anyone on the network who sees that address drives\nthe chat, and the page uses plain HTTP, so open it only on a network you\ntrust. The first chat in a repository serves it; a second one says it serves\nnone. When no chat serves the page, tkt web opens tkt agent in a new tab of\nthis herdr workspace, waits for its page, and opens that. Outside herdr it\nrefuses: run tkt agent in a herdr pane, then /web in the chat. When you quit\nthe chat, the page says so and comes back by itself once a chat serves it\nagain.\n\nThe address carries a token, which the page keeps in a cookie, so another web\npage in your browser cannot drive the chat. tkt web prints the address, so\n--no-open gives it to you without a browser.\n\nWhen a browser on this machine has the page open already, tkt web opens no\nother and says so; --new, or /web new in the chat, opens another tab anyway.\nA page open on a phone or another computer does not count.\n\nThe page follows your system's light or dark setting until you pick one with\nits sun and moon button. It keeps that choice in\n${XDG_STATE_HOME:-~/.local/state}/tkt/web.json for every repository.\n\npi's own screens, such as /model, /login, /settings, /resume and /tree, open\nin the terminal only. Text you have typed but not sent stays where you typed\nit.",
+      "example": "  tkt web\n  tkt web --no-open --json\n  tkt web --new\n  tkt web --dry-run",
       "group": "lifecycle",
       "args": [],
       "flags": [
@@ -104,6 +104,12 @@
           "type": "bool",
           "default": "false",
           "usage": "print what tkt web would run instead of running it"
+        },
+        {
+          "name": "new",
+          "type": "bool",
+          "default": "false",
+          "usage": "open the page even when a browser on this machine has it open"
         },
         {
           "name": "no-open",
@@ -120,6 +126,7 @@
           }
         ],
         "dry_run": "boolean",
+        "here": "integer",
         "opened": "boolean",
         "pane": "string",
         "started": "boolean",

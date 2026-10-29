@@ -1,12 +1,14 @@
 // The slash commands: the same actions as the tools, with no model call in
 // between, for when you know exactly what you want.
 
+import { networkInterfaces } from "node:os";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import * as act from "./actions.ts";
 import { type Hub, reasonOf } from "./hub.ts";
 import { expandIds } from "./model.ts";
 import { ask, confirm, input, notify } from "./dialog.ts";
+import { networkURLs } from "./gate.ts";
 import { board } from "./ui.ts";
 import type { Web } from "./web.ts";
 
@@ -302,13 +304,18 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 	});
 
 	pi.registerCommand("web", {
-		description: "Open the chat's web page in your browser, mirrored both ways",
-		handler: async (_args, ctx) => {
+		description: "Open the chat's web page in your browser, unless it is open here already: /web [new]",
+		getArgumentCompletions: (prefix) => ("new".startsWith(prefix.trim()) ? [{ value: "new", label: "new", description: "Open another tab even if one has the page" }] : null),
+		handler: async (args, ctx) => {
 			if (web.why && !web.other) return say(`This chat serves no web page: ${web.why}.`);
-			const env = await hub.tkt<{ url: string; opened: boolean }>(["web"]);
+			const again = args.trim() === "new";
+			const env = await hub.tkt<{ url: string; opened: boolean; here: number }>(again ? ["web", "--new"] : ["web"]);
 			if (!env.ok || !env.result) return say(`tkt web failed: ${reasonOf(env)}`);
 			// The address holds the page's token, so it goes to you alone,
 			// never into the session the model reads.
+			const lan = networkURLs(env.result.url, networkInterfaces());
+			if (lan.length > 0) notify(ctx, `On your network: ${lan.join("  ")}`);
+			if (!env.result.opened && env.result.here > 0) return say("The web page is already open in a browser on this machine, so /web opened no other. /web new opens another tab.");
 			if (!env.result.opened) return notify(ctx, `Open the web page at ${env.result.url}`);
 			say(web.other ? "Opened the web page of the chat that serves it, which mirrors that chat." : "Opened the web page in your browser. What you type there shows here too.");
 		},

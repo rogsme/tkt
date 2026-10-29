@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cookieName, gate, type Knock } from "../gate.ts";
+import { cookieName, fromHere, gate, type Knock, networkURLs } from "../gate.ts";
 
 const port = 4310;
 const token = "a".repeat(48);
@@ -10,6 +10,15 @@ test("a request with the cookie passes, by either name of the host", () => {
 	assert.deepEqual(gate(knock(), port, token), { pass: true });
 	assert.deepEqual(gate(knock({ host: `localhost:${port}`, path: "/ws", origin: `http://localhost:${port}` }), port, token), { pass: true });
 	assert.deepEqual(gate(knock({ cookie: `other=1; ${cookieName(port)}=${token}` }), port, token), { pass: true });
+});
+
+test("another device on the network reaches it by this machine's address", () => {
+	assert.deepEqual(gate(knock({ host: `192.168.1.20:${port}`, path: "/ws", origin: `http://192.168.1.20:${port}` }), port, token), { pass: true });
+	assert.deepEqual(gate(knock({ host: `[fe80::1]:${port}` }), port, token), { pass: true });
+	// The origin must be the address the request names, not another one.
+	assert.equal((gate(knock({ host: `192.168.1.20:${port}`, path: "/ws", origin: `http://127.0.0.1:${port}` }), port, token) as { status: number }).status, 403);
+	// A name other than localhost may be one a site rebound.
+	assert.equal((gate(knock({ host: `git.example.com:${port}` }), port, token) as { status: number }).status, 403);
 });
 
 test("another host or another page's origin is refused, cookie or not", () => {
@@ -38,4 +47,30 @@ test("tkt web asks /health with the token as a bearer", () => {
 	assert.deepEqual(gate(knock({ path: "/health", cookie: null, authorization: `Bearer ${token}` }), port, token), { pass: true });
 	assert.equal((gate(knock({ path: "/health" }), port, token) as { status: number }).status, 401);
 	assert.equal((gate(knock({ path: "/health", cookie: null, authorization: "Bearer nope" }), port, token) as { status: number }).status, 401);
+});
+
+test("the network addresses leave out loopback, IPv6 and container bridges", () => {
+	const url = `http://127.0.0.1:${port}/?token=${token}`;
+	const ifaces = {
+		lo: [{ address: "127.0.0.1", family: "IPv4", internal: true }],
+		wlan0: [
+			{ address: "192.168.1.20", family: "IPv4", internal: false },
+			{ address: "fe80::1", family: "IPv6", internal: false },
+		],
+		docker0: [{ address: "172.17.0.1", family: "IPv4", internal: false }],
+		tailscale0: [{ address: "100.64.0.3", family: 4, internal: false }],
+	};
+	assert.deepEqual(networkURLs(url, ifaces), [`http://192.168.1.20:${port}/?token=${token}`, `http://100.64.0.3:${port}/?token=${token}`]);
+	assert.deepEqual(networkURLs(url, {}), []);
+});
+
+test("a page from this machine is one from loopback or its own interfaces", () => {
+	const ifaces = { lo: [{ address: "127.0.0.1", family: "IPv4", internal: true }], wlan0: [{ address: "192.168.1.20", family: "IPv4", internal: false }] };
+	assert.equal(fromHere("127.0.0.1", ifaces), true);
+	assert.equal(fromHere("::1", ifaces), true);
+	assert.equal(fromHere("::ffff:127.0.0.1", ifaces), true);
+	assert.equal(fromHere("192.168.1.20", ifaces), true);
+	assert.equal(fromHere("::ffff:192.168.1.20", ifaces), true);
+	// A phone on the same network is another machine.
+	assert.equal(fromHere("192.168.1.31", ifaces), false);
 });
