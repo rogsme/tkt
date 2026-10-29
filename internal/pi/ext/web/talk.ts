@@ -14,8 +14,10 @@ import { html, useEffect, useLayoutEffect, useRef, useState } from "./vendor/pre
 const maxImageBytes = 8 << 20;
 
 /** Transcript draws the items and the answer streaming in. It follows the
- * end while you are at the end, and stays put while you read further up. */
-export function Transcript({ items, live, link }: { items: Item[]; live: Item[]; link: State["link"] }) {
+ * end while you are at the end, and stays put while you read further up.
+ * A hidden column loses its scroll, so showing it again goes back to the
+ * end if you were there. */
+export function Transcript({ items, live, link, shown }: { items: Item[]; live: Item[]; link: State["link"]; shown: boolean }) {
 	const box = useRef<HTMLDivElement | null>(null);
 	const atEnd = useRef(true);
 	const onScroll = () => {
@@ -25,7 +27,7 @@ export function Transcript({ items, live, link }: { items: Item[]; live: Item[];
 	useLayoutEffect(() => {
 		const el = box.current;
 		if (el && atEnd.current) el.scrollTop = el.scrollHeight;
-	}, [items, live]);
+	}, [items, live, shown]);
 	// Times and notices such as the model's name are no conversation yet.
 	const empty = link === "open" && live.length === 0 && !items.some((it) => it.kind !== "info" && it.kind !== "stamp");
 	return html`<div class="scroll" ref=${box} onScroll=${onScroll}>

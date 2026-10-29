@@ -256,10 +256,21 @@ body {
 	padding: 16px 20px 40px;
 }
 
+.cols.no-chat {
+	grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+}
+
+.right[hidden] {
+	display: none;
+}
+
 @media (max-width: 1100px) {
 	.cols {
 		grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
 		grid-template-rows: minmax(0, 1fr) 45vh;
+	}
+	.cols.no-chat {
+		grid-template-rows: minmax(0, 1fr);
 	}
 	.right {
 		grid-column: 1 / -1;

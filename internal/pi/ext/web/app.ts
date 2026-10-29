@@ -44,16 +44,17 @@ function App() {
 	useEffect(() => {
 		if (s.theme) document.documentElement.dataset.theme = s.theme;
 	}, [s.theme]);
+	const [chat, setChat] = useChatShown();
 	const dialog = s.dialogs[0];
 	return html`<div class="app">
-		<${Top} s=${s} g=${g} dispatch=${dispatch} />
+		<${Top} s=${s} g=${g} dispatch=${dispatch} chat=${chat} setChat=${setChat} />
 		<${Banner} link=${s.link} />
 		<${Incidents} list=${s.board?.incidents ?? []} />
-		<div class="cols">
+		<div class=${`cols${chat ? "" : " no-chat"}`}>
 			<aside class="left"><${Left} board=${s.board} nav=${nav} g=${g} now=${now} /></aside>
 			<main class="center"><${Center} s=${s} nav=${nav} g=${g} now=${now} asked=${asked} /></main>
-			<section class="right" aria-label="Chat">
-				<${Transcript} items=${s.items} live=${s.live} link=${s.link} />
+			<section class="right" aria-label="Chat" hidden=${!chat}>
+				<${Transcript} items=${s.items} live=${s.live} link=${s.link} shown=${chat} />
 				<${Composer} s=${s} send=${send} />
 			</section>
 		</div>
@@ -90,6 +91,28 @@ function useNow(): number {
 		return () => clearInterval(t);
 	}, []);
 	return now;
+}
+
+/** useChatShown is whether the chat column shows. It stays mounted while
+ * hidden, so a half-typed message survives. The choice is this browser's
+ * alone, since a phone and a desktop want different ones. */
+function useChatShown(): [boolean, (on: boolean) => void] {
+	const [on, setOn] = useState(() => {
+		try {
+			return localStorage.getItem("tkt.chat") !== "hidden";
+		} catch {
+			return true;
+		}
+	});
+	const set = (v: boolean) => {
+		setOn(v);
+		try {
+			localStorage.setItem("tkt.chat", v ? "shown" : "hidden");
+		} catch {
+			// Storage refused, as in a private window: the choice lasts this visit.
+		}
+	};
+	return [on, set];
 }
 
 function useClosed(dialogs: Dialog[]): number {
@@ -170,7 +193,7 @@ async function why(): Promise<"closed" | "denied"> {
 	}
 }
 
-function Top({ s, g, dispatch }: { s: State; g: Go; dispatch: (e: Event) => void }) {
+function Top({ s, g, dispatch, chat, setChat }: { s: State; g: Go; dispatch: (e: Event) => void; chat: boolean; setChat: (on: boolean) => void }) {
 	const dark = s.theme ? s.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
 	const flip = () => {
 		const theme: Theme = dark ? "light" : "dark";
@@ -191,12 +214,16 @@ function Top({ s, g, dispatch }: { s: State; g: Go; dispatch: (e: Event) => void
 		}}>tkt ${s.board.update} is out</a>`}
 		<span class="spacer"></span>
 		${state && html`<span class="status" title="the model in the chat"><span class=${`dot ${s.busy ? "busy" : "on"}`}></span>model ${state}</span>`}
+		<button class="icon" onClick=${() => setChat(!chat)} aria-pressed=${chat} title=${chat ? "Hide the chat" : "Show the chat"} aria-label=${chat ? "Hide the chat" : "Show the chat"}>
+			${panel}
+		</button>
 		<button class="icon" onClick=${flip} title=${dark ? "Switch to light" : "Switch to dark"} aria-label=${dark ? "Switch to light" : "Switch to dark"}>
 			${dark ? sun : moon}
 		</button>
 	</header>`;
 }
 
+const panel = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></svg>`;
 const sun = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>`;
 const moon = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>`;
 
