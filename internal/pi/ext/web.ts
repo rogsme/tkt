@@ -1,4 +1,5 @@
-// The web page: an HTTP server inside the chat, on 127.0.0.1 only, that
+// The web page: an HTTP server inside the chat, on every address so other
+// devices on your network reach it, that
 // serves the page under web/ and carries the mirror's messages over a
 // WebSocket. The page reads its views, such as a ticket's diff, through
 // queries that run tkt with --json and change nothing; every change it makes
@@ -180,7 +181,7 @@ export class Web {
 
 	private serve(port: number): void {
 		this.server = Bun.serve({
-			hostname: "127.0.0.1",
+			hostname: "0.0.0.0",
 			port,
 			fetch: (req: Request, server: BunServer) => this.fetch(req, server),
 			websocket: {
@@ -216,7 +217,7 @@ export class Web {
 		if (url.pathname === "/health") return Response.json({ file: this.file, repo: this.hub.repo }, { headers });
 		if (url.pathname === "/ws") return server.upgrade(req, { data: {} }) ? undefined : new Response("tkt: expected a WebSocket\n", { status: 400, headers });
 		if (req.method !== "GET") return new Response(null, { status: 405, headers });
-		if (url.pathname === "/") return this.index(server.port);
+		if (url.pathname === "/") return this.index(server.port, h.get("host")!);
 		if (url.pathname.startsWith("/app/")) return this.asset(url.pathname.slice("/app/".length), pageDir);
 		// The page imports these as ../model.ts and the like, as the
 		// extension's tests do.
@@ -226,10 +227,10 @@ export class Web {
 
 	/** index is the page, with the theme you picked, so it paints in it
 	 * from the start. */
-	private index(port: number): Response {
+	private index(port: number, host: string): Response {
 		let html = readFileSync(join(pageDir, "index.html"), "utf8");
 		if (this.mirror.theme) html = html.replace("<html lang=\"en\">", `<html lang="en" data-theme="${this.mirror.theme}">`);
-		const self = `http://127.0.0.1:${port} http://localhost:${port} ws://127.0.0.1:${port} ws://localhost:${port}`;
+		const self = `http://127.0.0.1:${port} http://localhost:${port} ws://127.0.0.1:${port} ws://localhost:${port} http://${host} ws://${host}`;
 		const csp = `default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' ${self}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 		return new Response(html, { headers: { ...headers, "content-type": "text/html; charset=utf-8", "content-security-policy": csp } });
 	}
