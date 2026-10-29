@@ -362,3 +362,52 @@ func LatestAcceptance(p PR) *Acceptance {
 	}
 	return best
 }
+
+// The lines of tkt verified's comment, which tkt writes and reads back.
+// The skills read past it: it holds no status or verdict line.
+const (
+	ConfirmedHeading  = "Human verification passed"
+	ConfirmedEvidence = "confirmed from verify-pr's evidence"
+)
+
+var (
+	confirmedHeadingRE = regexp.MustCompile(`(?m)^` + ConfirmedHeading + `\b`)
+	confirmedHeadRE    = regexp.MustCompile(`passed on head ([0-9a-f]{7,40})`)
+)
+
+// Confirmation is tkt verified's comment: every human verification step
+// passed on Head, and Evidence says you confirmed them from verify-pr's
+// evidence.
+type Confirmation struct {
+	Head      string `json:"head"`
+	Evidence  bool   `json:"evidence"`
+	URL       string `json:"url"`
+	CreatedAt string `json:"created_at"`
+	// AtHead and Carried say what they say of a Verification.
+	AtHead  bool `json:"at_head"`
+	Carried bool `json:"carried"`
+}
+
+// Holds reports whether the confirmation counts for the pull request's
+// head.
+func (c *Confirmation) Holds() bool { return c != nil && (c.AtHead || c.Carried) }
+
+// LatestConfirmation returns the newest tkt verified comment on a pull
+// request, or nil.
+func LatestConfirmation(p PR) *Confirmation {
+	var best *Confirmation
+	for _, c := range p.Comments {
+		if !confirmedHeadingRE.MatchString(c.Body) {
+			continue
+		}
+		head := firstGroup(confirmedHeadRE, c.Body, "")
+		if head == "" || best != nil && best.CreatedAt > c.CreatedAt {
+			continue
+		}
+		best = &Confirmation{Head: head, Evidence: strings.Contains(c.Body, ConfirmedEvidence), URL: c.URL, CreatedAt: c.CreatedAt}
+	}
+	if best != nil {
+		best.AtHead = strings.HasPrefix(p.HeadRefOid, best.Head)
+	}
+	return best
+}

@@ -138,6 +138,8 @@ test("a chore's run shows as one, and its pull request is yours to merge", () =>
 	assert.match(head.text, /^TICKET {10}AGE/);
 	assert.match(line.text, /^deps-2026-10-26 +2h +ready to merge .*#44 .*chore  Upgrade the dependencies$/);
 	assert.equal(phaseLabel("ready_for_human"), "ready to verify");
+	assert.equal(phaseLabel("ready_to_merge"), "ready to merge");
+	assert.equal(columnOf(row({ phase: "ready_to_merge" })), "Ready");
 	assert.equal(columnOf(row({ phase: "finished" })), "Merged");
 });
 

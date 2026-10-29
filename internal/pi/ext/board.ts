@@ -20,7 +20,7 @@ export const columns: { title: string; phases: string[] }[] = [
 	{ title: "Blocked", phases: ["blocked"] },
 	{ title: "Building", phases: ["building", "ci", "working"] },
 	{ title: "Review", phases: ["waiting_review", "reviewing", "needs_fix", "fixing", "verifying"] },
-	{ title: "Ready", phases: ["ready_for_human", "merging"] },
+	{ title: "Ready", phases: ["ready_for_human", "ready_to_merge", "merging"] },
 	{ title: "Merged", phases: ["merged", "closed", "finished"] },
 ];
 
@@ -58,6 +58,7 @@ const hints: Record<AttentionKind, (id: string) => string> = {
 	blocked: (id) => `/show ${id}`,
 	check: (id) => `/peek ${id}`,
 	ready: (id) => `/check ${id}`,
+	merge: (id) => `/check ${id}`,
 	merged: (id) => `/done ${id}`,
 	next: (id) => `/next ${id}`,
 	paused: (id) => `/show ${id}`,
@@ -130,7 +131,7 @@ export function boardLines(s: BoardState, width: number): Line[] {
 		let tone: Tone = "text";
 		if (needs.has(r.ticket)) tone = "warning";
 		else if (r.stale) tone = "error";
-		else if (r.phase === "ready_for_human") tone = "success";
+		else if (r.phase === "ready_for_human" || r.phase === "ready_to_merge") tone = "success";
 		else if (r.phase === "merged" || r.phase === "closed" || r.phase === "queued" || r.phase === "finished") tone = "muted";
 		lines.push({ text: fit(rowText(r, s, w), width), tone });
 	}
@@ -147,6 +148,7 @@ export function boardLines(s: BoardState, width: number): Line[] {
  * for you to merge, as no skill merges one without a ticket. */
 export function phaseLabel(phase: string, chore = ""): string {
 	if (phase === "ready_for_human") return chore ? "ready to merge" : "ready to verify";
+	if (phase === "ready_to_merge") return "ready to merge";
 	return phase.replaceAll("_", " ");
 }
 

@@ -44,6 +44,10 @@ export interface Row {
 	 * with your reason. It counts for the head when at_head, or carried
 	 * over clean merges of the base, and stands in for a clean review. */
 	accepted?: { head: string; reason: string; url: string; at_head: boolean; carried: boolean } | null;
+	/** confirmed is tkt verified's comment: every human verification step
+	 * passed on head, from verify-pr's evidence when evidence. It counts for
+	 * the head when at_head, or carried over clean merges of the base. */
+	confirmed?: Confirmation | null;
 	/** behind counts the base's commits the branch lacks, or null. */
 	behind?: number | null;
 	next: Next;
@@ -89,6 +93,22 @@ export interface Verification {
 	at_head: boolean;
 	carried: boolean;
 	steps: { n: number; result: "PASSED" | "FAILED" | "NOT RUN"; text: string }[];
+}
+
+/** Confirmation is tkt verified's comment on a pull request. */
+export interface Confirmation {
+	head: string;
+	evidence: boolean;
+	url: string;
+	at_head: boolean;
+	carried: boolean;
+}
+
+/** confirmedAt returns your confirmation of the steps when the next step
+ * is the merge it allows. */
+export function confirmedAt(row: Row | undefined): Confirmation | undefined {
+	const c = row?.confirmed;
+	return c && row?.next?.reason === "steps_passed" ? c : undefined;
 }
 
 /** accepted says you accepted the review as it is, for the row's head or

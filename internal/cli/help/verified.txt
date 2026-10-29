@@ -19,5 +19,6 @@ head: a second run on the same head changes nothing.
 
 The comment holds no status, verdict or report line, so review-pr, verify-pr
 and finish-ticket read past it. tkt merge still sends finish-ticket the
-merge line; the comment is a record for the people reading the pull
-request.
+merge line. tkt ls reads the comment back: while it holds for the head, or
+across clean merges of the base, the ticket shows as ready_to_merge, with
+tkt merge as its next step, so a merge you put off waits for your word.

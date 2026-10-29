@@ -84,6 +84,7 @@ export function ticketActs(r: Row): Act[] {
 	const merged = r.phase === "merged" || r.phase === "closed";
 	if (r.phase === "awaiting_approval" && !r.chore) out.push({ label: "Approve", cmd: `/approve ${id}`, main: true }, { label: "Approve and go auto", cmd: `/approve ${id} auto` });
 	if (r.phase === "ready_for_human" && !r.chore) out.push({ label: "Verify", description: "Walk the human verification steps, and merge once they pass.", cmd: `/check ${id}`, main: true });
+	if (r.phase === "ready_to_merge") out.push({ label: "Merge", description: "Every human verification step passed; tkt merge hands it to finish-ticket.", cmd: `/check ${id}`, main: true });
 	if (merged) out.push({ label: "Remove it", description: "Close its tabs and remove its worktree, once tkt done confirms the merge.", cmd: `/done ${id}`, main: true });
 	if (!merged && r.next?.kind === "command") out.push({ label: "Next step", description: r.next.text, cmd: `/next ${id}` });
 	if (!merged && !r.chore && r.next?.reason === "findings") out.push({ label: "Accept review", description: "Take the review's findings as they are, for the reason you give, and go on to human verification.", cmd: `/accept ${id}` });

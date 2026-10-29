@@ -135,3 +135,24 @@ func TestLatestAcceptance(t *testing.T) {
 		t.Errorf("a pull request without comments has an acceptance")
 	}
 }
+
+func TestLatestConfirmation(t *testing.T) {
+	head := strings.Repeat("b2", 20)
+	p := PR{HeadRefOid: head, Comments: []Comment{
+		{Body: "Human verification passed ✅\n\nSteps 1 and 2 passed on head " + strings.Repeat("a1", 20) + ".", CreatedAt: "2026-01-02"},
+		{Body: "Human verification passed ✅\n\nStep 1 passed on head " + head + ", confirmed from verify-pr's evidence.", CreatedAt: "2026-01-03", URL: "https://github.com/acme/app/pull/7#issuecomment-3"},
+		{Body: "Human verification passed? Not yet, step 2 fails.", CreatedAt: "2026-01-04"},
+		{Body: "Looks fine to me.", CreatedAt: "2026-01-05"},
+	}}
+	c := LatestConfirmation(p)
+	if c == nil || c.Head != head || !c.Evidence || !c.AtHead || !c.Holds() || c.URL == "" {
+		t.Fatalf("LatestConfirmation = %+v", c)
+	}
+	p.Comments = p.Comments[:1]
+	if c := LatestConfirmation(p); c == nil || c.Evidence || c.AtHead || c.Holds() {
+		t.Errorf("a confirmation of an older head holds: %+v", c)
+	}
+	if LatestConfirmation(PR{HeadRefOid: head}) != nil {
+		t.Errorf("a pull request without comments has a confirmation")
+	}
+}

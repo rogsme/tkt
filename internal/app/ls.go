@@ -175,7 +175,11 @@ type Row struct {
 	// Accepted is the newest review you accepted as it is (tkt accept),
 	// and whether that holds for the head.
 	Accepted *forge.Acceptance `json:"accepted"`
-	Behind   *int              `json:"behind"`
+	// Confirmed is the newest tkt verified comment: every human
+	// verification step passed on its head, and whether that holds for the
+	// pull request's head.
+	Confirmed *forge.Confirmation `json:"confirmed"`
+	Behind    *int                `json:"behind"`
 	// BaseMerge says how merging the base into a pull request that is
 	// behind would go, clean or conflict, when tkt auto or tkt watch tried
 	// it with git merge-tree; tkt ls leaves it "".
@@ -355,7 +359,7 @@ func phaseStyle(phase string, you, ready, busy, faint lipgloss.Style) lipgloss.S
 	switch phase {
 	case PhaseAwaitingApproval, PhaseNeedsYou, PhaseNoAgent, PhaseUnknown:
 		return you
-	case PhaseReadyForHuman:
+	case PhaseReadyForHuman, PhaseReadyToMerge:
 		return ready
 	case PhaseMerged, PhaseClosed, PhaseQueued, PhaseBlocked:
 		return faint
@@ -747,6 +751,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 			}
 			row.Verification = forge.LatestVerification(p)
 			row.Accepted = forge.LatestAcceptance(p)
+			row.Confirmed = forge.LatestConfirmation(p)
 			row.Title = prTitle(p.Title, t.ID)
 		} else if p, ok := closedPR(l.gh.Mine(l.all, t.ID)); ok {
 			row.PR = &RowPR{Number: p.Number, State: p.State}
@@ -782,6 +787,12 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		// So does your acceptance of a review.
 		if h := c.Git.Rev(rctx, t.Path, a.Head+"^{commit}"); h != "" {
 			a.Carried, _ = c.Git.CleanMerges(rctx, t.Path, h, row.PR.Head, base)
+		}
+	}
+	if cf := row.Confirmed; cf != nil && !cf.AtHead && base != "" && row.PR != nil {
+		// Your steps carry over clean merges of the base too.
+		if h := c.Git.Rev(rctx, t.Path, cf.Head+"^{commit}"); h != "" {
+			cf.Carried, _ = c.Git.CleanMerges(rctx, t.Path, h, row.PR.Head, base)
 		}
 	}
 	if row.Accepted.Holds() {

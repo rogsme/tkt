@@ -45,6 +45,8 @@ test("a ticket's own buttons follow what its state allows", () => {
 	assert.deepEqual(labels(row({ phase: "awaiting_approval" })), ["/approve ACM-12", "/approve ACM-12 auto", "/auto ACM-12 on", "/hold ACM-12"]);
 	assert.deepEqual(labels(row({ phase: "ready_for_human", behind: 2, hold: true })), ["/check ACM-12", "/sync ACM-12", "/auto ACM-12 on", "/hold ACM-12 off"]);
 	assert.deepEqual(labels(row({ phase: "merged" })), ["/done ACM-12"]);
+	const merge = ticketActs(row({ phase: "ready_to_merge", next: { kind: "human", reason: "steps_passed", argv: null, text: "" } }))[0];
+	assert.deepEqual([merge.label, merge.cmd, merge.main], ["Merge", "/check ACM-12", true]);
 	assert.deepEqual(labels(row({ phase: "needs_fix", agent: null, next: { kind: "command", reason: "findings", argv: [], text: "tkt run ACM-12 address" } })), ["/next ACM-12", "/accept ACM-12", "/relaunch ACM-12", "/auto ACM-12 on", "/hold ACM-12"]);
 	// A chore's run has no plan and no tkt auto.
 	assert.deepEqual(labels(row({ ticket: "chore-deps-1", chore: "deps", phase: "ready_for_human" })), ["/hold chore-deps-1"]);

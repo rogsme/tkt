@@ -5,7 +5,7 @@
 
 import { type Row, type Unblocked, verifiedAt } from "./model.ts";
 
-export type AttentionKind = "plan" | "question" | "blocked" | "check" | "ready" | "merged" | "next" | "paused" | "stalled" | "failed" | "unblocked" | "chore";
+export type AttentionKind = "plan" | "question" | "blocked" | "check" | "ready" | "merge" | "merged" | "next" | "paused" | "stalled" | "failed" | "unblocked" | "chore";
 
 export interface Attention {
 	/** key is the same while the ticket stays in the same situation, so a
@@ -62,6 +62,7 @@ const usual: Record<AttentionKind, Choice[]> = {
 	blocked: [...look, dismiss],
 	paused: [...look, dismiss],
 	ready: [{ label: "Open the checklist", do: "check" }, dismiss],
+	merge: [{ label: "Merge it", description: "/check asks once more, then tkt merge hands it to finish-ticket.", do: "check" }, dismiss],
 	chore: [{ label: "Show its last message", do: "show" }, dismiss],
 	next: [
 		{ label: "Continue", do: "next" },
@@ -169,6 +170,7 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 		if (a.paused) return paused(row, item);
 		// The loop runs verify-pr itself; it stops when the steps need you.
 		if (row.phase === "ready_for_human" && reason !== "needs_verify") return item("ready", "ready to verify", readyText(row), true);
+		if (row.phase === "ready_to_merge") return item("merge", "ready to merge", readyToMergeText(row), true);
 		return undefined;
 	}
 	// A running tkt watch starts such a loop again by itself.
@@ -196,6 +198,8 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 			return item("plan", "plan ready", planText(id));
 		case "ready_for_human":
 			return item("ready", "ready to verify", readyText(row));
+		case "ready_to_merge":
+			return item("merge", "ready to merge", readyToMergeText(row));
 		case "no_agent":
 			return item("check", "no agent", `${id}: no agent runs in its worktree. tkt resume ${id} brings it back.`, false, [resume]);
 		case "needs_you":
@@ -288,6 +292,13 @@ function planText(id: string): string {
 	return `${id}: the plan is ready. /show ${id} to read it, /approve ${id} to go on, or say what to change.`;
 }
 
+function readyToMergeText(row: Row): string {
+	const id = row.ticket;
+	const pr = row.pr ? ` pull request #${row.pr.number}` : " its pull request";
+	const head = row.confirmed?.head.slice(0, 7) ?? "its head";
+	return `${id}: every human verification step passed on ${head}, and${pr} waits for your word to merge. /check ${id} merges it.`;
+}
+
 function readyText(row: Row): string {
 	const id = row.ticket;
 	const pr = row.pr ? ` Pull request #${row.pr.number}` : " The pull request";
@@ -310,5 +321,5 @@ export function unblockedOf(u: Unblocked): Attention {
 
 /** sound picks the herdr notification sound for an item. */
 export function sound(a: Attention): "done" | "request" {
-	return a.kind === "ready" || a.kind === "merged" || a.kind === "unblocked" || a.kind === "chore" ? "done" : "request";
+	return a.kind === "ready" || a.kind === "merge" || a.kind === "merged" || a.kind === "unblocked" || a.kind === "chore" ? "done" : "request";
 }

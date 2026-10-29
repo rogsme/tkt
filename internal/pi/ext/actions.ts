@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
+import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, confirmedAt, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult, withEvidence } from "./report.ts";
 import { ask, checklist, confirm, editor, input } from "./dialog.ts";
 import { peek, type Step } from "./ui.ts";
@@ -132,8 +132,8 @@ export function sync(hub: Hub, id: string): string {
 /** merge hands a ticket whose steps all passed on head to finish-ticket:
  * tkt merge sends it the merge line now, or leaves an order that tkt watch
  * carries out once the checks pass. */
-export function merge(hub: Hub, id: string, steps: number[], head: string, evidence = false): string {
-	const args = ["merge", id, "--passed", steps.join(","), ...(head ? ["--head", head] : []), ...(evidence ? ["--evidence"] : [])];
+export function merge(hub: Hub, id: string, steps: number[] | "all", head: string, evidence = false): string {
+	const args = ["merge", id, "--passed", steps === "all" ? steps : steps.join(","), ...(head ? ["--head", head] : []), ...(evidence ? ["--evidence"] : [])];
 	hub.add({ ticket: id, label: "merge", args, then: (env) => (env.ok && env.result ? hub.post(mergeText(env.result as MergeResult)) : undefined) });
 	return `Queued: tkt merge for ${id}. finish-ticket merges it now when the checks passed at its head; otherwise tkt watch hands it over once they do.`;
 }
@@ -254,6 +254,7 @@ export async function next(hub: Hub, id: string): Promise<string> {
 		case "plan_awaits_approval":
 			return `${id}'s plan waits for your approval: /show ${id}, then /approve ${id}.`;
 		case "ready_for_human":
+			if (r.next.reason === "steps_passed") return `${id}'s human verification passed, and it waits for your word to merge: /check ${id}.`;
 			return `${id} is ready for human verification: /check ${id}.`;
 		case "merge_ordered":
 			return `${id}'s merge order is due: tkt watch sends finish-ticket the merge line.`;
@@ -328,6 +329,13 @@ export function restoreMarks(entries: { type: string; customType?: string; data?
 /** check walks the human verification steps: verify first if you want,
  * then the checklist, then a fix session for a failed step. */
 export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promise<string> {
+	// Steps you confirmed already wait only for your word to merge.
+	const cf = confirmedAt(hub.row(id));
+	if (cf) {
+		const go = await askMerge(hub, ctx, id, `${id}: every step passed on ${cf.head.slice(0, 7)}${cf.evidence ? ", confirmed from verify-pr's evidence" : ""}. Merge it?`);
+		if (!go) return `${id}: every step passed. /check ${id} merges it when you are ready.`;
+		return merge(hub, id, "all", cf.head, cf.evidence);
+	}
 	// Your steps can run on the code that will merge, or carry over the
 	// clean sync a merge order gets.
 	const behind = hub.row(id)?.behind ?? 0;
@@ -378,8 +386,17 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	// check only against the head they ran on.
 	if (!head) return `${id}: every step passed, but the board has no head for its pull request yet. /check ${id} again in a moment to merge it.`;
 	const said = await verified(hub, id, steps.map((s) => s.n), head);
-	const pending = hub.row(id)?.checks?.state === "pending";
-	const go = await ask(ctx, `${id}: every step passed. Merge it?`, [
+	if (!(await askMerge(hub, ctx, id, `${id}: every step passed. Merge it?`))) return `${id}: every step passed. ${said} /check ${id} merges it when you are ready.`;
+	return `${said} ${merge(hub, id, steps.map((s) => s.n), head)}`;
+}
+
+/** askMerge asks whether to merge a ticket whose steps passed, naming how
+ * tkt merge goes on from where the ticket stands. */
+async function askMerge(hub: Hub, ctx: ExtensionContext, id: string, question: string): Promise<boolean> {
+	const row = hub.row(id);
+	const behind = row?.behind ?? 0;
+	const pending = row?.checks?.state === "pending";
+	const go = await ask(ctx, question, [
 		behind > 0
 			? { label: "Merge once synced", description: "tkt merge leaves an order: tkt watch merges the base, has the new head reviewed, and sends finish-ticket the merge line once the checks pass." }
 			: pending
@@ -387,8 +404,7 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 				: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab, or leaves an order while another ticket merges." },
 		{ label: "Not yet" },
 	], false);
-	if (!go?.answer.startsWith("Merge")) return `${id}: every step passed. ${said} /check ${id} merges it when you are ready.`;
-	return `${said} ${merge(hub, id, steps.map((s) => s.n), head)}`;
+	return !!go?.answer.startsWith("Merge");
 }
 
 /** verified comments on the pull request that every step passed, with tkt

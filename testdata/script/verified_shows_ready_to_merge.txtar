@@ -1,0 +1,54 @@
+# Once tkt verified comments that every step passed, the ticket is ready to
+# merge: tkt ls reads the comment and gives the merge as your next step,
+# which waits for your word. The steps carry over a clean sync, and a new
+# commit sends the ticket back to verification.
+exec tkt start ACM-12
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H1 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "idle"'
+
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .phase, .confirmed]' '["review_clear","ready_for_human",null]'
+
+exec tkt verified ACM-12 --passed all --head $H1
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .next.kind, .phase, .confirmed.at_head, .confirmed.evidence]' '["steps_passed","human","ready_to_merge",true,false]'
+exec tkt ls
+stdout 'every step passed on [0-9a-f]{7}: tkt merge ACM-12 --passed all --head '$H1' when you want it merged'
+
+# tkt auto has nothing to do: the merge is yours.
+exec tkt auto ACM-12 --once --json
+envelope '.result.stop' ready_for_human
+
+# The base moves; tkt sync merges it with no agent, and the steps hold.
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+exec tkt sync ACM-12
+gitvar H2 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H2 | .[0].reviews[0].commit.oid = $H2 | .[0].reviews[0].body |= sub("Reviewed head: [0-9a-f]+"; "Reviewed head: " + $H2)'
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .phase, .confirmed.at_head, .confirmed.carried]' '["steps_passed","ready_to_merge",false,true]'
+
+# A new commit voids them: its steps need another run.
+realgit -C $FAKE_WT_ROOT/ACM-12 commit -q --allow-empty -m 'fix the login page'
+realgit -C $FAKE_WT_ROOT/ACM-12 push -q origin ACM-12
+gitvar H3 $FAKE_WT_ROOT/ACM-12 HEAD
+jqedit $WORK/prs.json '.[0].headRefOid = $H3 | .[0].reviews[0].commit.oid = $H3 | .[0].reviews[0].body |= sub("Reviewed head: [0-9a-f]+"; "Reviewed head: " + $H3)'
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .phase, .confirmed.carried]' '["review_clear","ready_for_human",false]'
+
+# Confirmed from verify-pr's evidence, the merge says so.
+jqedit $WORK/prs.json '.[0].reviews += [{"body": ("## Agent verification\n\nVerified head: " + $H3 + "\n\n1. PASSED: the page shows\n2. PASSED: the dashboard shows\n\nCleanup: done\nVerification: PASSED"), "submittedAt": "2026-01-03T00:00:00Z", "commit": {"oid": $H3}}]'
+exec tkt verified ACM-12 --passed all --evidence
+exec tkt ls --json
+envelope '.result.rows[0] | [.next.reason, .confirmed.evidence]' '["steps_passed",true]'
+envelope '.result.rows[0].next.text | endswith(" --evidence when you want it merged")' true
+houserules
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"},
+  "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n2. Sign in with the code sent by text.\n   Expected: the dashboard.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

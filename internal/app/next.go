@@ -53,6 +53,10 @@ const (
 	ReasonVerifyFailed     = "verify_failed"
 	ReasonVerified         = "verified"
 	ReasonVerifyIncomplete = "verify_incomplete"
+	// ReasonStepsPassed is a head whose steps you confirmed with tkt
+	// verified, or across clean merges of the base since: the merge waits
+	// for your word.
+	ReasonStepsPassed = "steps_passed"
 	// ReasonAutonomousMerge is a yolo ticket's: review-pr cleared the head
 	// and verify-pr passed every step, so finish-ticket merges it.
 	ReasonAutonomousMerge = "autonomous_merge"
@@ -121,46 +125,52 @@ func human(reason, text string) Next {
 // ended with. SyncFail is the kind of the sync that failed on the head:
 // conflict, failed, or "". CIReview says workflow.md turns CI review on: a
 // reviewer in CI stands in for review-pr, its CLEAR at the head counts as
-// ReviewReady, and tkt never starts review-pr.
+// ReviewReady, and tkt never starts review-pr. Confirmed says tkt verified's
+// comment counts for the head: every step passed on ConfirmedHead, which
+// clean merges of the base may have left behind, and ConfirmedEvidence says
+// you confirmed them from verify-pr's evidence.
 type Facts struct {
-	ID           string
-	Chore        string
-	PRState      string
-	Agent        string
-	Background   bool
-	Hold         bool
-	AutoRunning  bool
-	WatchPause   string
-	ForgeLag     bool
-	Idle         time.Duration
-	LastStatus   string
-	Checks       string
-	Verdict      string
-	AtHead       bool
-	Mergeable    string
-	BaseMerge    string
-	Head         string
-	Behind       int
-	Stage        string
-	Launch       string
-	AutoWait     string
-	AutoPause    string
-	MergeSteps   string
-	MergeHead    string
-	MergeAs      string
-	MergeBy      string
-	ReviewReady  bool
-	AgentVerify  bool
-	Verification string
-	VerifyHeld   bool
-	Yolo         bool
-	BotWait      time.Duration
-	Waited       time.Duration
-	Fix          string
-	FixStatus    string
-	SyncFail     string
-	CIReview     bool
-	Accepted     bool
+	ID                string
+	Chore             string
+	PRState           string
+	Agent             string
+	Background        bool
+	Hold              bool
+	AutoRunning       bool
+	WatchPause        string
+	ForgeLag          bool
+	Idle              time.Duration
+	LastStatus        string
+	Checks            string
+	Verdict           string
+	AtHead            bool
+	Mergeable         string
+	BaseMerge         string
+	Head              string
+	Behind            int
+	Stage             string
+	Launch            string
+	AutoWait          string
+	AutoPause         string
+	MergeSteps        string
+	MergeHead         string
+	MergeAs           string
+	MergeBy           string
+	ReviewReady       bool
+	AgentVerify       bool
+	Verification      string
+	VerifyHeld        bool
+	Yolo              bool
+	BotWait           time.Duration
+	Waited            time.Duration
+	Fix               string
+	FixStatus         string
+	SyncFail          string
+	CIReview          bool
+	Accepted          bool
+	Confirmed         bool
+	ConfirmedHead     string
+	ConfirmedEvidence bool
 }
 
 // NextStep applies the rules in order and returns the first that matches.
@@ -244,6 +254,13 @@ func NextStep(f Facts) Next {
 			argv = append(argv, "--as", f.MergeAs)
 		}
 		return command(ReasonMergeDue, argv...)
+	case f.Confirmed && (f.ReviewReady || f.Accepted) && !f.Yolo:
+		// Merging is your word alone, so this waits for it.
+		merge := "tkt merge " + id + " --passed all --head " + f.ConfirmedHead
+		if f.ConfirmedEvidence {
+			merge += " --evidence"
+		}
+		return human(ReasonStepsPassed, "every step passed on "+short(f.ConfirmedHead)+": "+merge+" when you want it merged")
 	case f.Accepted:
 		// Your acceptance stands in for the review, so no review waits.
 		return cleared(f)
@@ -314,17 +331,20 @@ const (
 	// person's answer, or you put it on hold.
 	PhaseBlocked       = "blocked"
 	PhaseReadyForHuman = "ready_for_human"
-	PhaseMerging       = "merging"
-	PhaseMerged        = "merged"
-	PhaseClosed        = "closed"
-	PhaseNoAgent       = "no_agent"
-	PhaseUnknown       = "unknown"
+	// PhaseReadyToMerge is a ticket whose steps you confirmed, which waits
+	// for your word to merge.
+	PhaseReadyToMerge = "ready_to_merge"
+	PhaseMerging      = "merging"
+	PhaseMerged       = "merged"
+	PhaseClosed       = "closed"
+	PhaseNoAgent      = "no_agent"
+	PhaseUnknown      = "unknown"
 	// PhaseFinished is a chore's run that ended with nothing to change.
 	PhaseFinished = "finished"
 )
 
 // WaitingOnYou lists the phases where a ticket waits for a person.
-var WaitingOnYou = []string{PhaseAwaitingApproval, PhaseNeedsYou, PhaseReadyForHuman}
+var WaitingOnYou = []string{PhaseAwaitingApproval, PhaseNeedsYou, PhaseReadyForHuman, PhaseReadyToMerge}
 
 // PhaseOf names where a ticket stands, from its facts and next step. A
 // working agent's phase comes from the stage it was given.
@@ -388,6 +408,8 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseNeedsFix
 	case ReasonReviewClear, ReasonBotClear, ReasonReviewAccepted, ReasonNeedsVerify, ReasonVerified, ReasonVerifyIncomplete:
 		return PhaseReadyForHuman
+	case ReasonStepsPassed:
+		return PhaseReadyToMerge
 	case ReasonMergeDue, ReasonAutonomousMerge:
 		return PhaseMerging
 	}
@@ -429,6 +451,9 @@ func factsFor(r Row) Facts {
 		f.Fix, f.FixStatus = r.Fix.Status, r.Fix.LastStatus
 	}
 	f.CIReview, f.Accepted = r.CIReview, r.Accepted.Holds()
+	if cf := r.Confirmed; cf.Holds() {
+		f.Confirmed, f.ConfirmedHead, f.ConfirmedEvidence = true, cf.Head, cf.Evidence
+	}
 	if r.Sync != nil && r.PR != nil && r.PR.State == "OPEN" {
 		f.SyncFail = r.Sync.Kind
 	}

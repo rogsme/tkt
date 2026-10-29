@@ -845,7 +845,7 @@
       "path": "verified",
       "use": "verified ID",
       "short": "Comment on the ticket's pull request that every human verification step passed",
-      "long": "tkt verified comments on a ticket's pull request that every human\nverification step passed:\n\n  Human verification passed (a green check mark)\n\n  Steps 1 to 3 passed on head HEAD.\n\n/check in tkt agent runs it once you mark every step passed, before it asks\nwhether to merge, so the pull request says so even when you merge later.\nWith --evidence, the comment says you confirmed the steps from verify-pr's\nevidence, and tkt verified checks that verify-pr's report for the head marks\neach one passed.\n\n--passed names the steps that passed, as tkt merge reads it: every step of\nthe procedure, since a partial pass is no pass. --head names the head the\nsteps ran on; the steps hold across clean merges of the base, so tkt\nverified refuses only a head that changed beyond them. It comments once per\nhead: a second run on the same head changes nothing.\n\nThe comment holds no status, verdict or report line, so review-pr, verify-pr\nand finish-ticket read past it. tkt merge still sends finish-ticket the\nmerge line; the comment is a record for the people reading the pull\nrequest.",
+      "long": "tkt verified comments on a ticket's pull request that every human\nverification step passed:\n\n  Human verification passed (a green check mark)\n\n  Steps 1 to 3 passed on head HEAD.\n\n/check in tkt agent runs it once you mark every step passed, before it asks\nwhether to merge, so the pull request says so even when you merge later.\nWith --evidence, the comment says you confirmed the steps from verify-pr's\nevidence, and tkt verified checks that verify-pr's report for the head marks\neach one passed.\n\n--passed names the steps that passed, as tkt merge reads it: every step of\nthe procedure, since a partial pass is no pass. --head names the head the\nsteps ran on; the steps hold across clean merges of the base, so tkt\nverified refuses only a head that changed beyond them. It comments once per\nhead: a second run on the same head changes nothing.\n\nThe comment holds no status, verdict or report line, so review-pr, verify-pr\nand finish-ticket read past it. tkt merge still sends finish-ticket the\nmerge line. tkt ls reads the comment back: while it holds for the head, or\nacross clean merges of the base, the ticket shows as ready_to_merge, with\ntkt merge as its next step, so a merge you put off waits for your word.",
       "example": "  tkt verified ACM-12 --passed all --head a1b2c3d\n  tkt verified ACM-12 --passed all --evidence",
       "group": "lifecycle",
       "args": [
@@ -1303,6 +1303,17 @@
             },
             "chore": "string",
             "ci_review": "boolean",
+            "confirmed": {
+              "fields": {
+                "at_head": "boolean",
+                "carried": "boolean",
+                "created_at": "string",
+                "evidence": "boolean",
+                "head": "string",
+                "url": "string"
+              },
+              "nullable": true
+            },
             "diff": {
               "fields": {
                 "added": "integer",
