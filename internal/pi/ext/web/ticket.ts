@@ -77,7 +77,7 @@ function Head({ r, g, now, job, items }: { r: Row; g: Go; now: number; job?: str
 			${diffText(r) !== "-" && html`<span title="what the branch changes">${diffText(r)}</span>`}
 			${r.chore && html`<span class="tag">chore ${r.chore}</span>`}
 			${r.hold && html`<span class="tag">hold</span>`}
-			${r.auto?.running && html`<span class="tag">${r.auto.yolo ? "yolo" : "auto"}${r.auto.paused ? ", paused" : ""}</span>`}
+			${r.auto?.running && html`<span class=${r.auto.yolo ? "tag yolo" : "tag"}>${r.auto.yolo ? "yolo" : "auto"}${r.auto.paused ? ", paused" : ""}</span>`}
 			${job && html`<span class="tag job">${job}...</span>`}
 		</div>
 		${r.next?.text && html`<p class="next">Next: ${r.next.text}</p>`}

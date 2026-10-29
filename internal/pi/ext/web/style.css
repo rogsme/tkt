@@ -21,6 +21,8 @@
 	--on-accent: #ffffff;
 	--line: #50fa7b;
 	--error: #d1383d;
+	--on-error: #ffffff;
+	--danger-bg: #fbe5e6;
 	--warning: #8a6514;
 	--info: #0062d1;
 	--success: #1a7a3a;
@@ -50,6 +52,8 @@
 		--on-accent: #000000;
 		--line: #50fa7b;
 		--error: #e06c75;
+		--on-error: #000000;
+		--danger-bg: #43262a;
 		--warning: #e5c07b;
 		--info: #6ba1e6;
 		--success: #50fa7b;
@@ -77,6 +81,8 @@
 	--on-accent: #000000;
 	--line: #50fa7b;
 	--error: #e06c75;
+	--on-error: #000000;
+	--danger-bg: #43262a;
 	--warning: #e5c07b;
 	--info: #6ba1e6;
 	--success: #50fa7b;
@@ -435,6 +441,11 @@ code {
 
 .tag.job {
 	border-color: var(--line);
+}
+
+.tag.yolo {
+	border-color: var(--error);
+	color: var(--error);
 }
 
 .acts {
@@ -1118,6 +1129,31 @@ legend {
 	display: block;
 }
 
+/* Yolo merges with nobody watching, so its choice and its warning are red. */
+.form label.radio.yolo {
+	background: var(--danger-bg);
+	border: 1px solid var(--error);
+	border-radius: 6px;
+	padding: 6px 8px;
+}
+
+.form label.radio.yolo b {
+	color: var(--error);
+}
+
+.danger-box {
+	background: var(--danger-bg);
+	border: 1px solid var(--error);
+	border-left: 4px solid var(--error);
+	border-radius: 8px;
+	padding: 10px 12px;
+	margin: 0;
+}
+
+.danger-box b {
+	color: var(--error);
+}
+
 .line-out {
 	display: flex;
 	gap: 10px;
@@ -1579,6 +1615,12 @@ button:focus-visible {
 .btn:disabled {
 	opacity: 0.5;
 	cursor: default;
+}
+
+.btn.danger {
+	background: var(--error);
+	border-color: var(--error);
+	color: var(--on-error);
 }
 
 .btn.quiet {

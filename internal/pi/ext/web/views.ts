@@ -39,11 +39,12 @@ export function BoardView({ board, g, now }: { board?: Board; g: Go; now: number
 	</div>`;
 }
 
-/** Line shows the command a form sends, and sends it. */
-function Line({ line, g, label, onSent }: { line: string; g: Go; label: string; onSent?: () => void }) {
+/** Line shows the command a form sends, and sends it. danger draws the
+ * button red, for a line nobody checks the result of. */
+function Line({ line, g, label, onSent, danger }: { line: string; g: Go; label: string; onSent?: () => void; danger?: boolean }) {
 	return html`<div class="line-out">
 		<code>${line || " "}</code>
-		<button class="btn" disabled=${!line} onClick=${() => {
+		<button class=${danger ? "btn danger" : "btn"} disabled=${!line} onClick=${() => {
 			g.run(line);
 			onSent?.();
 		}}>${label}</button>
@@ -58,18 +59,21 @@ export function StartView({ g }: { g: Go }) {
 		{ mode: "auto", label: "Auto after I approve the plan", text: "You approve the plan; tkt auto drives it to human verification." },
 		{ mode: "manual", label: "Manual", text: "start-ticket plans it; you approve the plan, and drive each step." },
 		{ mode: "auto-plan", label: "Auto-plan", text: "tkt auto approves the plan too, and drives it until it is reviewed clean." },
+		{ mode: "yolo", label: "Yolo", text: "Agents plan, build, review, verify and merge it. No person checks anything before it merges." },
 	];
+	const yolo = mode === "yolo";
 	return html`<div class="view form">
 		<h2>Start tickets</h2>
 		<label>Tickets <input value=${ids} placeholder="ACM-12 ACM-13, or ACM-12 to ACM-15" onInput=${(e: InputEvent) => setIds((e.target as HTMLInputElement).value)} /></label>
 		<fieldset>
 			<legend>How</legend>
 			${modes.map(
-				(m) => html`<label class="radio"><input type="radio" name="mode" checked=${mode === m.mode} onChange=${() => setMode(m.mode)} /> <span><b>${m.label}</b><span class="muted small">${m.text}</span></span></label>`,
+				(m) => html`<label class=${m.mode === "yolo" ? "radio yolo" : "radio"}><input type="radio" name="mode" checked=${mode === m.mode} onChange=${() => setMode(m.mode)} /> <span><b>${m.label}</b><span class="muted small">${m.text}</span></span></label>`,
 			)}
 		</fieldset>
+		${yolo && html`<p class="danger-box"><b>Nobody watches a yolo run.</b> Agents approve the plan, review, verify and merge, and no person checks anything before it merges. It runs only where workflow.md turns on Autonomous runs, Agent verification and Plan review, and the chat asks once more before it starts.</p>`}
 		<label>Preset <input value=${as} placeholder="the default; or a preset from config.toml, such as opencode" onInput=${(e: InputEvent) => setAs((e.target as HTMLInputElement).value)} /></label>
-		<${Line} line=${startLine(ids, mode, as)} g=${g} label="Start" onSent=${() => setIds("")} />
+		<${Line} line=${startLine(ids, mode, as)} g=${g} label=${yolo ? "Start in yolo" : "Start"} danger=${yolo} onSent=${() => setIds("")} />
 	</div>`;
 }
 

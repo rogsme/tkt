@@ -157,7 +157,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | Command | What it does |
 |---|---|
 | `/suggest [N \| REQUEST] [as PRESET]` | Does what `tkt suggest` does; `/suggest` alone asks you to type the request. You read the picks in the suggest tab, or in the web page's Suggest view, and `/start` the ones you want. |
-| `/start ID... [auto \| auto-plan \| manual] [as PRESET]` | Starts tickets, on a preset you name: in auto by default, where tkt auto takes over once you approve the plan; in auto-plan, which approves the plan too; or manual. Say "start ACM-12 in yolo" for a yolo run. |
+| `/start ID... [auto \| auto-plan \| manual \| yolo] [as PRESET]` | Starts tickets, on a preset you name: in auto by default, where tkt auto takes over once you approve the plan; in auto-plan, which approves the plan too; or manual. `yolo` asks once, then carries them to the merge with nobody watching; so does "start ACM-12 in yolo". |
 | `/approve ID [auto]` | Approves the plan; with `auto`, `tkt auto` takes over. |
 | `/next ID` | Takes the ticket's next step, as `tkt auto` would. |
 | `/auto ID on \| off \| full \| yolo` | Turns `tkt auto` on or off for a ticket; `yolo` asks once, then carries it to the merge with nobody watching. |

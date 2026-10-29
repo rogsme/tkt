@@ -98,7 +98,7 @@ export function ticketActs(r: Row): Act[] {
 	return out;
 }
 
-export type Mode = "auto" | "manual" | "auto-plan";
+export type Mode = "auto" | "manual" | "auto-plan" | "yolo";
 
 /** startLine is the /start line for the tickets you typed. */
 export function startLine(ids: string, mode: Mode, as: string): string {
