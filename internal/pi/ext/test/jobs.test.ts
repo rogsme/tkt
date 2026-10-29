@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Jobs } from "../jobs.ts";
+import { doneText, Jobs } from "../jobs.ts";
 import type { Envelope } from "../model.ts";
 
 const ok: Envelope = { ok: true, command: "x", warnings: [] };
@@ -62,4 +62,19 @@ test("stop cancels what runs and drops what waits", async () => {
 	await new Promise((r) => setTimeout(r, 0));
 	assert.ok(aborted);
 	assert.equal(jobs.inFlight("ACM-1"), false);
+});
+
+test("a job that went through gives a notice, and one that reports itself gives none", () => {
+	const sync = { ticket: "ACM-12", label: "sync", args: ["sync", "ACM-12"] };
+	const synced = (result: unknown): Envelope => ({ ...ok, result });
+	assert.equal(doneText(sync, synced({ outcome: "merged", new_head: "abc1234def", conflicts: [], failed: "" })), "ACM-12: merged its base and pushed abc1234.");
+	assert.equal(doneText(sync, synced({ outcome: "up_to_date", new_head: "", conflicts: null, failed: "" })), "ACM-12: already up to date with its base.");
+	assert.equal(
+		doneText(sync, synced({ outcome: "resolving", new_head: "", conflicts: ["go.mod", "main.go"], failed: "" })),
+		"ACM-12: merging its base hit conflicts in go.mod, main.go; a fresh session resolves it in a split.",
+	);
+	assert.equal(doneText({ ticket: "ACM-12", label: "review", args: ["run", "ACM-12", "review"] }, ok), "ACM-12: review runs in a fresh session.");
+	assert.equal(doneText(sync, { ...ok, ok: false }), "");
+	assert.equal(doneText({ ...sync, quiet: true }, ok), "");
+	assert.equal(doneText({ ...sync, then: () => {} }, ok), "");
 });

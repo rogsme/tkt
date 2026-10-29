@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Attention } from "../attention.ts";
 import type { Board } from "../mirror.ts";
-import { apply, completions, initial, title } from "../web/state.ts";
+import { apply, completions, initial, type State, ticketOf, title } from "../web/state.ts";
 
 const note = (id: string, text: string) => ({ kind: "note" as const, id, text });
 
@@ -82,4 +82,54 @@ test("a new item on the board gets a toast once, and the title counts what needs
 	assert.equal(s.toasts.length, 1);
 	s = apply(s, { t: "dialog", dialog: { id: "d1", kind: "confirm", title: "Remove ACM-12?" } });
 	assert.equal(title(s), "(3) tkt app");
+});
+
+test("a pressed button waits for tkt's answer, which gets a toast", () => {
+	const cmds = (s: State) => s.pressed.map((p) => p.cmd);
+	let s = apply(initial, { t: "hello", repo: "app", theme: "", busy: false, items: [note("1", "earlier")], live: [], dialogs: [], commands: [] });
+	s = apply(s, { t: "items", from: 1, items: [note("2", "not asked for")] });
+	assert.deepEqual(s.toasts, []);
+	s = apply(s, { t: "press", cmd: "/hold ACM-12" });
+	s = apply(s, { t: "press", cmd: "/hold ACM-12" });
+	assert.deepEqual(cmds(s), ["/hold ACM-12"]);
+	s = apply(s, { t: "items", from: 1, items: [note("2", "not asked for"), note("3", "ACM-12 is on hold.")] });
+	assert.deepEqual(cmds(s), []);
+	assert.deepEqual(
+		s.toasts.map((t) => t.text),
+		["ACM-12 is on hold."],
+	);
+	s = apply(s, { t: "press", cmd: "/accept ACM-12" });
+	s = apply(s, { t: "dialog", dialog: { id: "d1", kind: "input", title: "Why accept it?" } });
+	assert.deepEqual(cmds(s), []);
+	s = apply(s, { t: "press", cmd: "/done ACM-12" });
+	s = apply(s, { t: "unpress", cmd: "/sync ACM-12" });
+	assert.deepEqual(cmds(s), ["/done ACM-12"]);
+	s = apply(s, { t: "unpress", cmd: "/done ACM-12" });
+	assert.deepEqual(cmds(s), []);
+	s = apply(s, { t: "press", cmd: "/next ACM-12" });
+	s = apply(s, { t: "items", from: 3, items: [note("4", "x".repeat(400))] });
+	assert.ok(s.toasts.at(-1)!.text.endsWith("... The chat has the rest."));
+	s = apply(s, { t: "press", cmd: "/hold ACM-12" });
+	s = apply(s, { t: "link", link: "closed" });
+	assert.deepEqual(cmds(s), []);
+});
+
+test("a press that started a job stays until the job ends", () => {
+	const board = (jobs: Record<string, string>): Board => ({ rows: [], items: [], jobs, incidents: [] });
+	const cmds = (s: State) => s.pressed.map((p) => p.cmd);
+	let s = apply(initial, { t: "hello", repo: "app", theme: "", busy: false, items: [], live: [], dialogs: [], commands: [], board: board({}) });
+	s = apply(s, { t: "press", cmd: "/sync ACM-12" });
+	s = apply(s, { t: "press", cmd: "/chores run deps" });
+	s = apply(s, { t: "board", board: board({ "ACM-12": "sync", "chore deps": "chore" }) });
+	s = apply(s, { t: "items", from: 0, items: [note("1", "Queued: tkt sync for ACM-12.")] });
+	s = apply(s, { t: "unpress", cmd: "/sync ACM-12" });
+	assert.deepEqual(cmds(s), ["/sync ACM-12", "/chores run deps"]);
+	s = apply(s, { t: "notify", text: "ACM-12: merged its base and pushed abc1234.", level: "info" });
+	assert.deepEqual(cmds(s), ["/sync ACM-12", "/chores run deps"]);
+	s = apply(s, { t: "board", board: board({ "chore deps": "chore" }) });
+	assert.deepEqual(cmds(s), ["/chores run deps"]);
+	s = apply(s, { t: "board", board: board({}) });
+	assert.deepEqual(cmds(s), []);
+	assert.equal(ticketOf("/run ACM-12 review"), "ACM-12");
+	assert.equal(ticketOf("/version"), "");
 });

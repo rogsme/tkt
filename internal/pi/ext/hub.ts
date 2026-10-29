@@ -9,7 +9,7 @@ import { type Component, isViewportTUI, type TUI, VStack } from "@earendil-works
 import { type Attention, attentionOf, sound, unblockedOf } from "./attention.ts";
 import { notify } from "./dialog.ts";
 import type { BoardState } from "./board.ts";
-import { Jobs, type Job } from "./jobs.ts";
+import { doneText, Jobs, type Job } from "./jobs.ts";
 import { type Incident, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, type Envelope, type LsResult, type Row, rowsOf, type Unblocked, type UpdateResult, updateNotice } from "./model.ts";
 import { hud } from "./ui.ts";
 
@@ -334,6 +334,8 @@ export class Hub {
 			const text = `${job.ticket}: ${job.label} failed: ${reasonOf(env)}`;
 			this.failed.push({ item: { key: `failed|${job.ticket}|${Date.now()}`, ticket: job.ticket, kind: "failed", title: `${job.label} failed`, text, byAuto: false }, at: Date.now() });
 		}
+		const done = doneText(job, env);
+		if (done) notify(this.ctx, done);
 		void this.refresh();
 	}
 
