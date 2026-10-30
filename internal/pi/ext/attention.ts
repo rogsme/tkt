@@ -182,7 +182,7 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 		const pr = row.pr ? `pull request #${row.pr.number}` : "pull request";
 		switch (reason) {
 			case "chore_ready":
-				return item("chore", "ready to merge", `${id}: chore ${row.chore}'s ${pr} is ready. Review it and merge it yourself; tkt watch removes the run after the merge.`);
+				return item("chore", "ready to merge", `${id}: chore ${row.chore}'s ${pr} is ready. Review it and merge it yourself; /done ${id} removes the run after the merge.`);
 			case "chore_findings":
 				return item("chore", "review found something", `${id}: the review found something on chore ${row.chore}'s ${pr}. Read it, then tell its agent what to fix, or merge it as it is.`, false, [reply]);
 			case "no_changes":

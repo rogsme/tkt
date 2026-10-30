@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
-	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/herdr"
 	"gitlab.com/rogs/tkt/internal/history"
 	"gitlab.com/rogs/tkt/internal/lock"
@@ -207,8 +206,8 @@ func (a watchAct) key(head string) string { return a.Kind + ":" + a.Stage + "@" 
 
 // watchStep decides what tkt watch does for one ticket, from the rule tkt
 // ls applies, as autoStep does for tkt auto. watch takes only the upkeep
-// nobody needs to decide on: it removes a ticket once finish-ticket ends
-// with Status: DONE or its pull request closed without merging, syncs a moved base, fixes failing checks, once per head
+// nobody needs to decide on: it removes a ticket whose pull request closed
+// without merging, never one that merged, syncs a moved base, fixes failing checks, once per head
 // and up to [auto] max_rounds, and carries out the merge order you left with
 // tkt merge, reviewing the head a sync made for one first. The plan,
 // reviews and findings stay with you and with tkt auto, and a ticket on
@@ -252,11 +251,9 @@ func watchStep(n Next, f Facts, p WatchPolicy, m watchMemory) watchAct {
 	}
 	switch n.Reason {
 	case ReasonMerged:
-		// You merge a chore's pull request yourself, so no finish-ticket
-		// says it is done: its run goes once no agent works there.
-		if p.DoneAfterMerge && (f.LastStatus == contract.StatusDone || f.Chore != "" && f.Agent != herdr.Working && f.Agent != herdr.Blocked) {
-			return act(actDone, "")
-		}
+		// You may still want the worktree of what merged, so only your tkt
+		// done removes it, whatever [watch] says.
+		return leave(n.Reason)
 	case ReasonNoChanges:
 		return act(actDone, "")
 	case ReasonClosed:
@@ -311,16 +308,12 @@ func watchArgv(a watchAct, id string, n Next) []string {
 // next step it answered.
 func doneText(chore, why string) string {
 	switch {
-	case chore == "" && why == ReasonClosed:
-		return "its pull request was closed without merging, so tkt watch removed its tabs and worktree; move the ticket in the tracker yourself"
 	case chore == "":
-		return "finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree"
+		return "its pull request was closed without merging, so tkt watch removed its tabs and worktree; move the ticket in the tracker yourself"
 	case why == ReasonNoChanges:
 		return "the run ended with Status: DONE and nothing to merge, so tkt watch removed its tabs and worktree"
-	case why == ReasonClosed:
-		return "you closed the run's pull request, so tkt watch removed its tabs and worktree"
 	}
-	return "you merged the run's pull request, so tkt watch removed its tabs and worktree"
+	return "you closed the run's pull request, so tkt watch removed its tabs and worktree"
 }
 
 // watchPauseText says why tkt watch leaves a ticket for you, from the
@@ -883,8 +876,7 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		kv = append(kv, "rounds", strconv.Itoa(mem.Rounds+1))
 	}
 	c.save(ts, kv...)
-	done, err := w.do(ctx, a, act, t.ID, ts)
-	if err != nil {
+	if err := w.do(ctx, a, act, t.ID, ts); err != nil {
 		var waits orderWaits
 		if errors.As(err, &waits) {
 			c.save(ts, "watch_last", mem.Last)
@@ -914,9 +906,6 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	case actDone:
 		body := doneText(t.Chore, act.Why)
 		c.UI.Info("%s: %s", t.ID, body)
-		if done != nil && len(done.Tickets) > 0 && len(done.Tickets[0].Unblocked) > 0 {
-			body += "; the merge unblocked " + idsText(done.Tickets[0].Unblocked)
-		}
 		c.notify(t.ID, notice{"removed", body, "done"})
 	case actMerge:
 		w.turn = t.ID
@@ -978,31 +967,32 @@ func watchRunText(stage string, synced bool) string {
 // do takes a step, and returns what tkt done did when it took that. It
 // finishes the step even when tkt watch is asked to stop meanwhile, so it
 // never leaves a merge half done.
-func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *ticketState) (*DoneResult, error) {
+func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *ticketState) error {
 	ctx = context.WithoutCancel(ctx)
 	switch act.Kind {
 	case actDone:
-		return a.Done(ctx, DoneOpts{IDs: []string{id}})
+		_, err := a.Done(ctx, DoneOpts{IDs: []string{id}})
+		return err
 	case actMerge:
 		by := ts.st["merge_by"]
 		r, err := a.Merge(ctx, MergeOpts{ID: id, Passed: ts.st["merge_steps"], Head: ts.st["merge_head"], As: ts.st["merge_as"],
 			Evidence: by == mergeByEvidence, Autonomous: by == mergeByAutonomous, order: true})
 		if err == nil && r.Action != MergeMerging {
-			return nil, orderWaits(r.Waits)
+			return orderWaits(r.Waits)
 		}
-		return nil, err
+		return err
 	case actSync:
 		_, err := a.Sync(ctx, SyncOpts{ID: id, NoAgent: true})
 		// The base moved again since the look, and now conflicts, or the
 		// sync failed another way: tkt sync kept why, and the next pass
 		// hands it to a fresh session.
 		if err != nil && (apperr.As(err).Code == apperr.SyncConflict || fixable(err)) {
-			return nil, nil
+			return nil
 		}
-		return nil, err
+		return err
 	}
 	_, err := a.Run(ctx, RunOpts{ID: id, Stage: act.Stage})
-	return nil, err
+	return err
 }
 
 // failed reports a step that failed: once for each step, head and reason,

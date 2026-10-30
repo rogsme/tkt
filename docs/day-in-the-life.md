@@ -68,8 +68,9 @@ The first time the chat opened, `/login` signed in to the model provider, and Ct
 You go to the herdr pane in `~/code/acme/app` and type `tkt`. In a herdr pane inside a configured repository, `tkt` alone opens the chat, as `tkt agent` does. The board pins itself to the top:
 
 ```
-tkt  app  3 tickets  4 need you  watch on
+tkt  app  4 tickets  4 need you  watch on
 TICKET          AGE  PHASE             TIME AGENT    PR     DIFF        NOTES
+ACM-118         2d   merged            9h   idle     #471   +64 -9      Lock an account after failed logins
 ACM-121         22h  needs you         9h   blocked  -      +212 -40    paused
 ACM-127         16h  needs fix         13h  idle     #479   +88 -12     Retry failed webhook deliveries with backoff
 deps-2026-10-29 1h   ready to merge    1h   idle     #482   +1.2k -1.1k chore  Upgrade 14 dependencies, two with breaking changes
@@ -77,13 +78,13 @@ deps-2026-10-29 1h   ready to merge    1h   idle     #482   +1.2k -1.1k chore  U
 ! ACM-121 asks a question   /peek ACM-121
 ! ACM-127 the review has findings to address   /next ACM-127
 ! deps-2026-10-29 ready to merge   /show deps-2026-10-29
-! ACM-124 unblocked   /start ACM-124
+! ACM-118 merged   /done ACM-118
 /update to v0.6.1  /board  /inbox  /board hide
 ```
 
 Each row is a ticket's worktree, a chore's run, or a ticket that waits for a slot to start: AGE counts from `tkt start`, TIME from the start of the current phase, DIFF is what the branch changes against main, and the notes end with the pull request's title. Under the rows is what needs you, each item with the command that acts on it. The heading's `watch on` means the `tkt watch` service keeps every ticket moving. A newer tkt is out, the footer says; that can wait for the evening. When the board is out of view, pi's status line keeps the count: `tkt: 4 need you (/inbox)`.
 
-Between the board and the night's herdr notifications, the night is easy to read. Yesterday you left a merge order on ACM-118, and tkt watch carried it out. It merged main into the branch with no agent and waited for the bot to clear the new head. Then it sent finish-ticket the word to merge. finish-ticket merged at 23:15 and named the tickets the merge unblocked, and tkt watch removed the worktree and tab. That is why ACM-124, which waited on ACM-118, shows as unblocked.
+Between the board and the night's herdr notifications, the night is easy to read. Yesterday you left a merge order on ACM-118, and tkt watch carried it out. It merged main into the branch with no agent and waited for the bot to clear the new head. Then it sent finish-ticket the word to merge. finish-ticket merged at 23:15 and named the tickets the merge unblocked. tkt watch stops there: it never removes a merged ticket, so ACM-118 waits on the board with its worktree and tab.
 
 The rest of the night was quieter. The `flaky` chore ran at 06:00, found nothing to change, and tkt watch removed its run at once. The `deps` chore started at 07:00 and opened pull request #482, which the review bot cleared. ACM-127's review came back at 19:30 with findings. ACM-121 runs in full auto, and has waited since 23:10 for an answer to its agent's question.
 
@@ -118,7 +119,7 @@ continue 127
 
 The chat takes the step tkt auto would take, here `address` in a fresh session, and answers that it is queued. Your message named the ticket, so it did not ask first. tkt watch never answers findings by itself: plans, findings and the word to merge stay with you or with tkt auto. To have tkt auto drive ACM-127 from here instead, `/auto ACM-127 on` hands it over.
 
-Next is the deps chore. `/show deps-2026-10-29` prints its agent's last message: the fourteen upgrades, and the two breaking changes it handled. No skill reviews or merges a pull request without a ticket, so a chore's pull request is yours: you read #482 on GitHub and merge it there. Within a minute tkt watch sees the merge, closes the run's tab and removes its worktree. Closing the pull request instead would drop the run the same way. While you are at it:
+Next is the deps chore. `/show deps-2026-10-29` prints its agent's last message: the fourteen upgrades, and the two breaking changes it handled. No skill reviews or merges a pull request without a ticket, so a chore's pull request is yours: you read #482 on GitHub and merge it there. Within a minute the row reads `merged`, and `/done deps-2026-10-29` closes the run's tab and removes its worktree. Closing the pull request instead would drop the run by itself: tkt watch removes it. While you are at it:
 
 ```
 when does deps run next?
@@ -126,7 +127,7 @@ when does deps run next?
 
 The chat lists the chores with their schedules and next runs: `deps` on Monday at 07:00, `flaky` tomorrow at 06:00. `/chores` shows the same list without the model.
 
-Last comes ACM-124. It lets an admin unlock an account that ACM-118's lockout locked, and that merge freed it. You want to read its plan, and nothing after that:
+Last comes ACM-118. You have finished with its worktree, so `/done ACM-118` removes it and the tab, and the board now offers ACM-124 as unblocked. ACM-124 lets an admin unlock an account that ACM-118's lockout locked, and that merge freed it. You want to read its plan, and nothing after that:
 
 ```
 /start ACM-124
@@ -232,7 +233,7 @@ Confirm the steps from this and merge?
 
 You open the third capture to see the dates yourself, then pick `Confirm and merge now`. verify-pr's report is evidence, never your word: `tkt verified ACM-130 --passed all --evidence` comments on the pull request that human verification passed, confirmed from verify-pr's evidence, and `tkt merge ACM-130 --passed all --evidence` tells finish-ticket you confirmed the steps from it, which finish-ticket records in its completion comment.
 
-With CI review on, the bot's CLEAR is the review finish-ticket merges on, so `tkt merge` sends finish-ticket the word to merge at once, in a fresh session, naming your steps and the head they passed on. Without CI review, finish-ticket merges only on review-pr's verdict, so the loop would have had review-pr review the head before verify-pr ran. finish-ticket checks CI, the review and the open feedback at that exact head, merges, moves ACM-130 to done in the tracker, and waits for CI on main. At 12:05 it ends with `Status: DONE`, and tkt watch closes the tab and removes the worktree. Without a watch, `/done ACM-130`, or "ACM-130 is merged, remove it", does that after asking.
+With CI review on, the bot's CLEAR is the review finish-ticket merges on, so `tkt merge` sends finish-ticket the word to merge at once, in a fresh session, naming your steps and the head they passed on. Without CI review, finish-ticket merges only on review-pr's verdict, so the loop would have had review-pr review the head before verify-pr ran. finish-ticket checks CI, the review and the open feedback at that exact head, merges, moves ACM-130 to done in the tracker, and waits for CI on main. At 12:05 it ends with `Status: DONE`, and the board shows ACM-130 as merged. Its worktree stays until you are finished with it: `/done ACM-130`, or "ACM-130 is merged, remove it", closes the tab and removes the worktree after asking.
 
 ## 12:45 Bring an agent back
 
@@ -340,7 +341,7 @@ ACM-124: every step passed. Merge it?
   2. Not yet
 ```
 
-tkt watch takes it from there. It merges main into the branch itself, in seconds, since the merge is clean. Once CI passes and the bot clears the new head, it sends finish-ticket the merge line. The line names your steps, the head they passed on, and the head after the clean merge, and finish-ticket checks that merge itself before it merges, at 16:15. The line before its `Status: DONE` names the tickets the merge unblocked, and tkt watch's notification passes it on: ACM-125, which emails a user when an admin unlocks their account. The board offers to start it for a week, or until it starts.
+tkt watch takes it from there. It merges main into the branch itself, in seconds, since the merge is clean. Once CI passes and the bot clears the new head, it sends finish-ticket the merge line. The line names your steps, the head they passed on, and the head after the clean merge, and finish-ticket checks that merge itself before it merges, at 16:15. tkt watch leaves the merged ticket for you. `/done ACM-124` removes it, and reads the line before its `Status: DONE`, which names the tickets the merge unblocked: ACM-125, which emails a user when an admin unlocks their account. The board offers to start it for a week, or until it starts.
 
 ACM-125 is small, well specified, and touches none of the hard stops, so you hand it over whole, merge included:
 
@@ -384,7 +385,7 @@ what failed in ACM-121?
 
 The chat answers from ACM-121's history: the bot's formula finding on three heads in a row, the pause at the round limit, the commit that escaped the cells, and the conflict that dropped its merge order. `/stats` shows how long tickets took from `tkt start` to the merge, how much of that waited on you, and how many fix rounds each needed, with the median and the 90th percentile of the merged ones.
 
-ACM-133 stays on hold, its plan waiting, until the data team answers. ACM-125's yolo loop is at verify-pr; it merges at 18:40, after you leave, and tkt watch removes it. herdr's notification is the first thing you see tomorrow, and the `## Assumptions` section of pull request #493 the second: two lines, both the reading you would have picked.
+ACM-133 stays on hold, its plan waiting, until the data team answers. ACM-125's yolo loop is at verify-pr; it merges at 18:40, after you leave, and waits on the board for your `/done ACM-125`. herdr's notification is the first thing you see tomorrow, and the `## Assumptions` section of pull request #493 the second: two lines, both the reading you would have picked.
 
 Last, `/update` checks the new release, asks you to confirm, installs v0.6.1 with `tkt update`, and offers to quit, since the chat runs the old tkt until you reopen it. You quit, and the chat prints the command that resumes it, `tkt agent --session ID`. Nothing waited for the chat, and nothing else needs you: tkt watch stops when its binary changes, and its unit starts it again on the new one, and ACM-125's tkt auto loop restarts on the new tkt at its next look. Both go on overnight and notify through herdr. Tomorrow `tkt agent --continue` picks up this conversation, and `/version` there says the chat runs v0.6.1.
 
@@ -407,7 +408,7 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `ready to merge` | Every human verification step passed, and you answered `Not yet` to the merge. `tkt verified`'s comment on the pull request keeps it there across clean syncs; a new commit sends it back to `ready to verify`. | `/check ID`, which goes straight to the merge. |
 | `verification incomplete` | A yolo loop paused: verify-pr could not run every step, and a yolo ticket merges only when it passed them all. | `/check ID`, run the rest, and merge it yourself. |
 | `post-merge CI failed` | A yolo ticket merged, and the checks on the base failed after it. | `/show ID` for finish-ticket's report, then fix the base. |
-| `merged` | The pull request merged, and finish-ticket's agent is done. The item waits while the agent still works after the merge, such as on the tracker's completion comment. tkt watch removes the ticket once finish-ticket ends with `Status: DONE`. | Nothing while tkt watch runs; otherwise `/done ID`. |
+| `merged` | The pull request merged, and finish-ticket's agent is done. The item waits while the agent still works after the merge, such as on the tracker's completion comment. tkt watch never removes it, so the worktree stays until you finish with it. | `/done ID`. |
 | `auto stalled` | The ticket is marked for auto, but no tkt auto loop runs, as after a reboot, and no tkt watch runs to start it again. | `/auto ID on`. |
 | `max rounds reached` | tkt auto or tkt watch made `[auto] max_rounds` fix runs since the plan's approval. | Read the review, then `Run STAGE once more` in `/inbox`, `Accept the review as it is` when its findings do not matter, or take over. |
 | `no progress` | The last step changed nothing on the same head. | `/show ID`, then `Run STAGE again` in `/inbox`. |

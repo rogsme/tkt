@@ -58,7 +58,7 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 				const item = hub.items.find((x) => x.ticket === r.ticket);
 				const lines = [
 					`${r.ticket}: ${phaseLabel(r.phase, r.chore)}${r.phase_since ? ` since ${r.phase_since}` : ""}, stage ${r.stage || "-"}${r.hold ? "; on hold, so tkt watch and tkt auto leave it alone" : ""}`,
-					...(r.chore ? [`a run of chore ${r.chore}, with no ticket: the user merges its pull request, and tkt watch then removes it`] : []),
+					...(r.chore ? [`a run of chore ${r.chore}, with no ticket: the user merges its pull request, then removes it with tkt done`] : []),
 					...(r.title ? [`title: ${r.title}`] : []),
 					`agent: ${agent}; last status: ${r.last_status || "none"}`,
 					`pull request: ${r.pr ? `#${r.pr.number} ${r.pr.state}` : "none"}; checks: ${r.checks?.state ?? "-"}; review: ${r.review ? `${r.review.verdict}${r.review.at_head ? "" : " (old head)"}` : "-"}`,

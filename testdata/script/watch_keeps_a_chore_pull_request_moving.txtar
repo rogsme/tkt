@@ -44,15 +44,17 @@ envelope '.result.rows[0] | [.next.reason, .phase]' '["chore_findings","needs_yo
 exec tkt watch --once --json
 envelope '.result.tickets[0] | [.action, .reason]' '["","chore_findings"]'
 
-# You merge it: the next pass removes the run, with no Status: DONE.
+# You merge it: the run stays, whatever tkt watch sees, until you run tkt done.
 realgit -C $REPO merge -q --no-ff -m 'Merge deps-run' deps-run
 realgit -C $REPO push -q origin main
 jqedit $FAKE_DIR/prs.json '.[0].state = "MERGED"'
 resetlog
 exec tkt watch --once --json
-envelope '.result.tickets' '[{"action":"done","reason":"merged","ticket":"deps-run"}]'
+envelope '.result.tickets' '[{"action":"","reason":"merged","ticket":"deps-run"}]'
+exists $WT
+! logged wt -C $REPO remove deps-run
+exec tkt done deps-run
 logged wt -C $REPO remove deps-run --foreground --reap --format json
-logged herdr notification show 'deps-run: removed' --body 'you merged the run''s pull request, so tkt watch removed its tabs and worktree'
 ! exists $WT
 grep '"ticket":"deps-run","event":"merged","pr":44' $HOME/.local/state/tkt/history.jsonl
 houserules

@@ -281,7 +281,7 @@ export function mergeText(r: MergeResult): string {
 	}
 	if (r.action === "cancelled") return r.sent ? `${r.ticket} has no merge order now. finish-ticket got the merge line at ${r.sent}; to stop it, tell its agent in the ticket's tab.` : `${r.ticket} has no merge order now.`;
 	if (r.action === "none") return r.sent ? `${r.ticket} has no merge order: finish-ticket got the merge line at ${r.sent}. To stop it, tell its agent in the ticket's tab.` : `${r.ticket} has no merge order.`;
-	return `${r.ticket}: finish-ticket merges pull request #${r.pr} in a fresh session in its tab. Once it ends with Status: DONE, tkt watch removes the ticket, or /done ${r.ticket} does.`;
+	return `${r.ticket}: finish-ticket merges pull request #${r.pr} in a fresh session in its tab. Once it ends with Status: DONE, /done ${r.ticket} removes the ticket when you finish with it.`;
 }
 
 /** ago renders milliseconds for people: 45s, 12m, 3h, 2d. */

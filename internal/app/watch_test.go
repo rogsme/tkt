@@ -27,7 +27,7 @@ func TestWatchStepTable(t *testing.T) {
 	}{
 		// finish-ticket's Status: DONE after the merge removes the ticket; a
 		// merge without it, such as one in the forge's page, waits for you.
-		{with(open, func(f *Facts) { f.PRState, f.LastStatus = "MERGED", "DONE" }), p, watchMemory{}, watchAct{Kind: actDone, Why: ReasonMerged}},
+		{with(open, func(f *Facts) { f.PRState, f.LastStatus = "MERGED", "DONE" }), p, watchMemory{}, leave(ReasonMerged)},
 		{with(open, func(f *Facts) { f.PRState = "MERGED" }), p, watchMemory{}, leave(ReasonMerged)},
 		// A pull request closed without merging rejected the work.
 		{with(open, func(f *Facts) { f.PRState = "CLOSED" }), p, watchMemory{}, watchAct{Kind: actDone, Why: ReasonClosed}},
@@ -93,7 +93,7 @@ func TestWatchStepTable(t *testing.T) {
 		// You merge a chore's pull request yourself, so its run goes once no
 		// agent works there, with no Status: DONE; one that ended with
 		// nothing to change goes at once. The rest is yours.
-		{with(open, func(f *Facts) { f.Chore, f.PRState = "deps", "MERGED" }), p, watchMemory{}, watchAct{Kind: actDone, Why: ReasonMerged}},
+		{with(open, func(f *Facts) { f.Chore, f.PRState = "deps", "MERGED" }), p, watchMemory{}, leave(ReasonMerged)},
 		{with(open, func(f *Facts) { f.Chore, f.PRState, f.Agent = "deps", "MERGED", "working" }), p, watchMemory{}, leave(ReasonMerged)},
 		{with(open, func(f *Facts) { f.Chore, f.PRState = "deps", "MERGED" }), WatchPolicy{MaxRounds: 2}, watchMemory{}, leave(ReasonMerged)},
 		{Facts{ID: "deps-1", Chore: "deps", Agent: "idle", LastStatus: "DONE", Behind: -1}, p, watchMemory{}, watchAct{Kind: actDone, Why: ReasonNoChanges}},
@@ -107,7 +107,7 @@ func TestWatchStepTable(t *testing.T) {
 			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps = "READY_FOR_HUMAN", true, true, "1,2"
 		}), WatchPolicy{MaxRounds: 2, Hold: "x"}, watchMemory{}, leave(WatchIncident)},
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead = "STALE_BASE", true }), WatchPolicy{MaxRounds: 2, Hold: "x"}, watchMemory{}, watchAct{Kind: actSync, Why: ReasonBaseMoved}},
-		{with(open, func(f *Facts) { f.PRState, f.LastStatus = "MERGED", "DONE" }), WatchPolicy{MaxRounds: 2, DoneAfterMerge: true, Hold: "x"}, watchMemory{}, watchAct{Kind: actDone, Why: ReasonMerged}},
+		{with(open, func(f *Facts) { f.PRState = "CLOSED" }), WatchPolicy{MaxRounds: 2, DoneAfterMerge: true, Hold: "x"}, watchMemory{}, watchAct{Kind: actDone, Why: ReasonClosed}},
 	}
 	for _, tc := range cases {
 		if got := watchStep(NextStep(tc.f), tc.f, tc.p, tc.m); got != tc.want {
@@ -133,7 +133,7 @@ func TestWatchPausesNeedYou(t *testing.T) {
 	if got := doneText("", ReasonClosed); !strings.Contains(got, "closed without merging") || strings.Contains(got, "finish-ticket") {
 		t.Errorf("doneText for a closed ticket: %q", got)
 	}
-	for _, why := range []string{ReasonMerged, ReasonNoChanges, ReasonClosed} {
+	for _, why := range []string{ReasonNoChanges, ReasonClosed} {
 		if got := doneText("deps", why); strings.Contains(got, "finish-ticket") {
 			t.Errorf("doneText for a chore's run, %s: %q", why, got)
 		}
