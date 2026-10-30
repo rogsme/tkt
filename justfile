@@ -25,6 +25,10 @@ install dir=env("TKT_INSTALL_DIR", home_directory() / ".local/bin"): fetch-pi
     go build -tags bundled_pi -trimpath -ldflags '{{ ldflags }}' -o '{{ dir }}/tkt' .
     '{{ dir }}/tkt' --version
 
+# Serve the web page with made-up tickets, to try every button without a chat: just play [--port N] [--network]
+play *args:
+    bun internal/pi/ext/play/main.ts {{ args }}
+
 # Download pi for this system, or for SYSTEMS such as linux/arm64, and check it against pi.lock.
 fetch-pi *systems:
     go run ./internal/pi/fetch {{ systems }}
