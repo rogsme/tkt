@@ -8,7 +8,7 @@ import type { Attention } from "../attention.ts";
 import { diffText } from "../board.ts";
 import type { Board } from "../mirror.ts";
 import { accepted, ago, findings, type Row, since, type Verification } from "../model.ts";
-import { eventText, type HistoryResult, latestReview, local, type Mark } from "../report.ts";
+import { eventText, type HistoryResult, latestReview, local, type Mark, stepsText } from "../report.ts";
 import { cardActs, type Tab, tabs, ticketActs } from "./acts.ts";
 import { look, parseAnsi } from "./ansi.ts";
 import { ActButtons, Failure, type Go, Loading, Md, Phase, Reply, RunButton } from "./bits.ts";
@@ -134,7 +134,7 @@ function PrTab({ r, g }: { r: Row; g: Go }) {
 			<dd>${r.behind == null ? "unknown" : r.behind === 0 ? "up to date" : `${r.behind} commit${r.behind === 1 ? "" : "s"} behind`}</dd>
 			${r.merge &&
 			html`<dt>Merge order</dt>
-				<dd>for <code>${r.merge.head.slice(0, 7)}</code>, steps ${r.merge.steps.join(", ")}${r.merge.sent ? `; finish-ticket got the merge line at ${local(r.merge.sent)}` : "; tkt watch sends it once the checks pass"}</dd>`}
+				<dd>for <code>${r.merge.head.slice(0, 7)}</code>, steps ${r.merge.steps.join(", ")}${r.merge.waived?.length ? `, ${stepsText(r.merge.waived)} skipped: ${r.merge.reason}` : ""}${r.merge.sent ? `; finish-ticket got the merge line at ${local(r.merge.sent)}` : "; tkt watch sends it once the checks pass"}</dd>`}
 		</dl>
 		${r.review && html`<${ReviewSummary} key=${r.ticket} r=${r} g=${g} />`}
 		${v && html`<${Report} v=${v} />`}

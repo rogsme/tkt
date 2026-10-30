@@ -114,8 +114,9 @@ var FixStages = []string{"ci", "resolve", "sync-fix"}
 type Watch struct {
 	// Interval is the time between two passes over the tickets.
 	Interval time.Duration
-	// DoneAfterMerge runs tkt done once finish-ticket ends with
-	// Status: DONE.
+	// DoneAfterMerge runs tkt done once a pull request closes without
+	// merging. Despite its name, nothing makes tkt watch run tkt done after
+	// a merge; the key stays so files that set it still load.
 	DoneAfterMerge bool
 	// Autostart lets every tkt command in a herdr pane start tkt watch for
 	// its repository when none runs.
@@ -191,6 +192,15 @@ func EvidenceMergeLine(steps []int, verified, head string) string {
 	line := MergeLine(steps, verified, head)
 	at := "passed on head " + verified + "."
 	return strings.Replace(line, at, "passed on head "+verified+": the user confirmed them from verify-pr's evidence.", 1)
+}
+
+// WaivedMergeLine adds the steps the user waived to a merge line, with why:
+// finish-ticket takes a step waived with a reason in place of a pass.
+func WaivedMergeLine(line string, waived []int, reason string) string {
+	if len(waived) == 0 {
+		return line
+	}
+	return line + " The user waived " + StepsText(waived) + ": " + strings.TrimRight(reason, ".") + "."
 }
 
 // StepsText names steps for people: step 2, steps 1 and 2, steps 1 to 3,

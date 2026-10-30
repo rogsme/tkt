@@ -231,6 +231,7 @@ func verifiedCmd(g *globals) *cobra.Command {
 		Short: "Comment on the ticket's pull request that every human verification step passed",
 		Long:  helpText("verified"),
 		Example: `  tkt verified ACM-12 --passed all --head a1b2c3d
+  tkt verified ACM-12 --passed all --waived 3 --reason 'it needs production credentials'
   tkt verified ACM-12 --passed all --evidence`,
 		ValidArgsFunction: g.completeTickets(false),
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -240,7 +241,7 @@ func verifiedCmd(g *globals) *cobra.Command {
 			case !cmd.Flags().Changed("passed"):
 				return usage("tkt verified needs --passed: the human verification steps that passed, such as 1-3, or all")
 			}
-			return nil
+			return needWaiverReason(cmd)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.ID = args[0]
@@ -249,6 +250,8 @@ func verifiedCmd(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&o.Passed, "passed", "", "the human verification steps that passed: numbers and ranges such as 1-3 or 1,2,4, or all")
+	cmd.Flags().StringVar(&o.Waived, "waived", "", "the human verification steps you skipped, which the comment names; needs --reason")
+	cmd.Flags().StringVar(&o.Reason, "reason", "", "why the --waived steps can stay unrun")
 	cmd.Flags().StringVar(&o.Head, "head", "", "the head the steps ran on; tkt verified refuses once the pull request moved past it")
 	cmd.Flags().BoolVar(&o.Evidence, "evidence", false, "say you confirmed the steps from verify-pr's evidence, on the head it ran on")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the comment command instead of running it")
@@ -291,6 +294,7 @@ func mergeCmd(g *globals) *cobra.Command {
 		Long:  helpText("merge"),
 		Example: `  tkt merge ACM-12 --passed 1-3
   tkt merge ACM-12 --passed all --head a1b2c3d
+  tkt merge ACM-12 --passed all --waived 3 --reason 'it needs production credentials'
   tkt merge ACM-12 --passed all --evidence
   tkt merge ACM-12 --cancel`,
 		SuggestFor:        []string{"ship", "finish"},
@@ -302,7 +306,7 @@ func mergeCmd(g *globals) *cobra.Command {
 			case !cmd.Flags().Changed("passed") && !o.Cancel && !o.Autonomous:
 				return usage("tkt merge needs --passed: the human verification steps that passed, such as 1-3, or all")
 			}
-			return nil
+			return needWaiverReason(cmd)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.ID = args[0]
@@ -311,6 +315,8 @@ func mergeCmd(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&o.Passed, "passed", "", "the human verification steps that passed: numbers and ranges such as 1-3 or 1,2,4, or all")
+	cmd.Flags().StringVar(&o.Waived, "waived", "", "the human verification steps you skipped, which the merge line says you waived; needs --reason")
+	cmd.Flags().StringVar(&o.Reason, "reason", "", "why the --waived steps can stay unrun")
 	cmd.Flags().StringVar(&o.Head, "head", "", "the head the steps ran on; tkt merge refuses once the pull request moved past it")
 	cmd.Flags().StringVar(&o.As, "as", "", "run finish-ticket on PRESET instead of the ticket's")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
@@ -322,7 +328,18 @@ func mergeCmd(g *globals) *cobra.Command {
 	cmd.MarkFlagsMutuallyExclusive("evidence", "cancel")
 	cmd.MarkFlagsMutuallyExclusive("evidence", "autonomous")
 	cmd.MarkFlagsMutuallyExclusive("autonomous", "cancel")
+	cmd.MarkFlagsMutuallyExclusive("waived", "cancel")
+	cmd.MarkFlagsMutuallyExclusive("waived", "autonomous")
 	return cmd
+}
+
+// needWaiverReason refuses --waived without --reason, and the reverse:
+// finish-ticket takes a waived step only with a reason.
+func needWaiverReason(cmd *cobra.Command) error {
+	if cmd.Flags().Changed("waived") != cmd.Flags().Changed("reason") {
+		return usage("--waived and --reason go together: the steps you skipped, and why")
+	}
+	return nil
 }
 
 func suggestCmd(g *globals) *cobra.Command {

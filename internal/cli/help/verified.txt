@@ -1,21 +1,30 @@
 tkt verified comments on a ticket's pull request that every human
-verification step passed:
+verification step passed, or that you skipped it:
 
   Human verification passed (a green check mark)
 
   Steps 1 to 3 passed on head HEAD.
 
-/check in tkt agent runs it once you mark every step passed, before it asks
+/check in tkt agent runs it once you mark every step, before it asks
 whether to merge, so the pull request says so even when you merge later.
 With --evidence, the comment says you confirmed the steps from verify-pr's
 evidence, and tkt verified checks that verify-pr's report for the head marks
 each one passed.
 
 --passed names the steps that passed, as tkt merge reads it: every step of
-the procedure, since a partial pass is no pass. --head names the head the
+the procedure you did not skip, since a partial pass is no pass. --waived
+names the steps you skipped, and --reason says why, which finish-ticket
+needs before it takes a step as waived. The comment then ends with
+
+  Skipped steps: 4
+  Reason: it needs production credentials
+
+and tkt ls reads them back. At least one step must pass, and all in --passed
+means every step you did not skip. --head names the head the
 steps ran on; the steps hold across clean merges of the base, so tkt
 verified refuses only a head that changed beyond them. It comments once per
-head: a second run on the same head changes nothing.
+head: a second run on the same head changes nothing, unless the skipped
+steps changed.
 
 The comment holds no status, verdict or report line, so review-pr, verify-pr
 and finish-ticket read past it. tkt merge still sends finish-ticket the

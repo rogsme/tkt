@@ -77,7 +77,7 @@ export interface Row {
 	 * head: tkt watch hands them to finish-ticket once the head is synced,
 	 * reviewed and green. It holds across clean merges of the base, and sent
 	 * says when finish-ticket last got the line. */
-	merge?: { head: string; steps: number[]; at: string; sent?: string; by?: string } | null;
+	merge?: { head: string; steps: number[]; waived?: number[]; reason?: string; at: string; sent?: string; by?: string } | null;
 	phase: string;
 	phase_since: string;
 	started: string;
@@ -99,6 +99,9 @@ export interface Verification {
 export interface Confirmation {
 	head: string;
 	evidence: boolean;
+	/** waived names the steps you skipped, and reason why. */
+	waived?: number[];
+	reason?: string;
 	url: string;
 	at_head: boolean;
 	carried: boolean;
@@ -246,6 +249,7 @@ export interface MergeResult {
 	head: string;
 	verified?: string;
 	steps: number[];
+	waived?: number[];
 	action: "merging" | "ordered" | "cancelled" | "none";
 	waits?: "sync" | "review" | "bot" | "checks" | "turn" | "";
 	after?: string;

@@ -341,6 +341,8 @@ ACM-124: every step passed. Merge it?
   2. Not yet
 ```
 
+Had you skipped a step, say one that needs production credentials, /check would have stopped first to offer `Post it`, then asked why. It posts the same comment with `Skipped steps: 3` and your reason under it, the ticket shows as ready to merge, and the merge line tells finish-ticket you waived step 3 and why.
+
 tkt watch takes it from there. It merges main into the branch itself, in seconds, since the merge is clean. Once CI passes and the bot clears the new head, it sends finish-ticket the merge line. The line names your steps, the head they passed on, and the head after the clean merge, and finish-ticket checks that merge itself before it merges, at 16:15. tkt watch leaves the merged ticket for you. `/done ACM-124` removes it, and reads the line before its `Status: DONE`, which names the tickets the merge unblocked: ACM-125, which emails a user when an admin unlocks their account. The board offers to start it for a week, or until it starts.
 
 ACM-125 is small, well specified, and touches none of the hard stops, so you hand it over whole, merge included:

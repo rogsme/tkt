@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cycle, fixPrompt, type HistoryResult, historyText, latestReview, statsText, tally, withEvidence } from "../report.ts";
+import { cycle, fixPrompt, type HistoryResult, historyText, latestReview, marked, statsText, stepsText, tally, withEvidence } from "../report.ts";
 
 test("statsText", () => {
 	const text = statsText({
@@ -128,4 +128,17 @@ test("historyText words what tkt watch and tkt merge did", () => {
 		"sync failed: git push to origin failed: pre-push hook failed", "tkt watch could not sync: git fetch origin failed"]) {
 		assert.match(text, new RegExp(`^- 2026-01-01 0\\d:00 ${want}$`, "m"), want);
 	}
+});
+
+test("stepsText names steps as tkt does", () => {
+	assert.equal(stepsText([2]), "step 2");
+	assert.equal(stepsText([1, 2]), "steps 1 and 2");
+	assert.equal(stepsText([1, 2, 3]), "steps 1 to 3");
+	assert.equal(stepsText([1, 2, 4]), "steps 1, 2 and 4");
+});
+
+test("marked picks the steps a mark names", () => {
+	const steps = [{ n: 1 }, { n: 2 }, { n: 3 }];
+	assert.deepEqual(marked(steps, ["pass", "skip", "pass"], "pass"), [1, 3]);
+	assert.deepEqual(marked(steps, ["pass", "skip"], "skip"), [2]);
 });

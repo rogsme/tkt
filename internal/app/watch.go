@@ -975,7 +975,7 @@ func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *t
 		return err
 	case actMerge:
 		by := ts.st["merge_by"]
-		r, err := a.Merge(ctx, MergeOpts{ID: id, Passed: ts.st["merge_steps"], Head: ts.st["merge_head"], As: ts.st["merge_as"],
+		r, err := a.Merge(ctx, MergeOpts{ID: id, Passed: ts.st["merge_steps"], Waived: ts.st["merge_waived"], Reason: ts.st["merge_reason"], Head: ts.st["merge_head"], As: ts.st["merge_as"],
 			Evidence: by == mergeByEvidence, Autonomous: by == mergeByAutonomous, order: true})
 		if err == nil && r.Action != MergeMerging {
 			return orderWaits(r.Waits)

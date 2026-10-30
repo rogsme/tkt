@@ -10,7 +10,7 @@ import { statusText } from "../board.ts";
 import { type Item, pageView, slashName, terminalOnly } from "../chat.ts";
 import { type Board, type Command, type Dialog, type Image, Mirror, type Option, type Page, type Query } from "../mirror.ts";
 import { choresText, normalizeId, type Row, stampText, verifiedAt, versionText } from "../model.ts";
-import { historyText, type Mark, statsText, tally, withEvidence } from "../report.ts";
+import { historyText, type Mark, marked, statsText, stepsText, tally, withEvidence } from "../report.ts";
 import { cardActs } from "../web/acts.ts";
 import * as answers from "./answers.ts";
 import { headOf, incident, report, repo, row, type Scenario, scenario } from "./scenario.ts";
@@ -523,7 +523,9 @@ export class Fake {
 		const id = r.ticket;
 		if (!r.pr) return this.say(`${id} has no pull request yet, so no steps to walk.`);
 		if (r.confirmed && r.next?.reason === "steps_passed") {
-			if (!(await this.askMerge(r, `${id}: every step passed on ${r.confirmed.head.slice(0, 7)}${r.confirmed.evidence ? ", confirmed from verify-pr's evidence" : ""}. Merge it?`))) return this.say(`${id}: every step passed. /check ${id} merges it when you are ready.`);
+			const skipped = r.confirmed.waived ?? [];
+			const state = skipped.length ? `${stepsText(skipped)} skipped, and the others passed` : "every step passed";
+			if (!(await this.askMerge(r, `${id}: ${state} on ${r.confirmed.head.slice(0, 7)}${r.confirmed.evidence ? ", confirmed from verify-pr's evidence" : ""}. Merge it?`))) return this.say(`${id}: ${state}. /check ${id} merges it when you are ready.`);
 			return this.merge(r);
 		}
 		const behind = r.behind ?? 0;
@@ -572,12 +574,24 @@ export class Fake {
 			return this.say(`${id}: ${t.fail} step${t.fail === 1 ? "" : "s"} failed.`);
 		}
 		if (t.open > 0) return this.say(`${id}: ${t.pass} passed, ${t.skip} skipped, ${t.open} not run yet. /check ${id} goes on.`);
-		if (t.skip > 0) return this.say(`${id}: ${t.pass} passed and ${t.skip} skipped. finish-ticket merges only when each step passed or you waived it with a reason: tell its agent in the tab which steps passed and why you skip the others.`);
-		const said = `Commented on pull request #${r.pr.number} that human verification passed.`;
-		r.confirmed = { head: r.pr.head ?? "", evidence: false, url: `${r.pr.url}#issuecomment-3`, at_head: true, carried: false };
-		Object.assign(r, { phase: "ready_to_merge", next: { kind: "human", reason: "steps_passed", argv: null, text: "every step passed: merge it" } });
+		if (t.pass === 0) return this.say(`${id}: no step passed, since you skipped them all, so tkt posts nothing. To waive every step, tell its agent in the tab why.`);
+		const passed = marked(steps, got, "pass");
+		const skipped = marked(steps, got, "skip");
+		let reason = "";
+		if (skipped.length) {
+			const a = await this.ask(`${id}: ${stepsText(passed)} passed and ${stepsText(skipped)} skipped. Post that human verification passed, with the skipped steps?`, [
+				{ label: "Post it", description: "tkt verified comments on the pull request, naming the skipped steps and your reason; finish-ticket then takes them as waived." },
+				{ label: "Not yet" },
+			]);
+			if (a?.answer.startsWith("Post")) reason = (await this.question<string>({ kind: "input", title: `Why can ${stepsText(skipped)} stay unrun?`, placeholder: "it needs production credentials" }))?.trim() ?? "";
+			if (!reason) return this.say(`${id}: ${stepsText(passed)} passed and ${t.skip} skipped; nothing posted. /check ${id} goes on.`);
+		}
+		const state = skipped.length ? `${stepsText(passed)} passed and ${stepsText(skipped)} skipped` : "every step passed";
+		const said = `Commented on pull request #${r.pr.number} that human verification passed${skipped.length ? `, with ${stepsText(skipped)} skipped` : ""}.`;
+		r.confirmed = { head: r.pr.head ?? "", evidence: false, waived: skipped, reason, url: `${r.pr.url}#issuecomment-3`, at_head: true, carried: false };
+		Object.assign(r, { phase: "ready_to_merge", next: { kind: "human", reason: "steps_passed", argv: null, text: `${state}: merge it` } });
 		this.push();
-		if (!(await this.askMerge(r, `${id}: every step passed. Merge it?`))) return this.say(`${id}: every step passed. ${said} /check ${id} merges it when you are ready.`);
+		if (!(await this.askMerge(r, `${id}: ${state}. Merge it?`))) return this.say(`${id}: ${state}. ${said} /check ${id} merges it when you are ready.`);
 		this.say(said);
 		return this.merge(r);
 	}

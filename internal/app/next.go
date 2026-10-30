@@ -3,8 +3,10 @@ package app
 import (
 	"time"
 
+	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/contract"
 	"gitlab.com/rogs/tkt/internal/herdr"
+	"gitlab.com/rogs/tkt/internal/runner"
 )
 
 // Next is the step tkt ls suggests for a ticket. Kind is command (run Argv),
@@ -156,6 +158,8 @@ type Facts struct {
 	MergeHead         string
 	MergeAs           string
 	MergeBy           string
+	MergeWaived       string
+	MergeReason       string
 	ReviewReady       bool
 	AgentVerify       bool
 	Verification      string
@@ -171,6 +175,8 @@ type Facts struct {
 	Confirmed         bool
 	ConfirmedHead     string
 	ConfirmedEvidence bool
+	ConfirmedWaived   string
+	ConfirmedReason   string
 }
 
 // NextStep applies the rules in order and returns the first that matches.
@@ -244,6 +250,9 @@ func NextStep(f Facts) Next {
 		return Next{Kind: "wait", Reason: ReasonAwaitingBot, Text: "wait for the review bot"}
 	case f.MergeSteps != "" && (f.ReviewReady || f.Accepted):
 		argv := []string{"tkt", "merge", id, "--passed", f.MergeSteps, "--head", f.MergeHead}
+		if f.MergeWaived != "" {
+			argv = append(argv, "--waived", f.MergeWaived, "--reason", f.MergeReason)
+		}
 		switch f.MergeBy {
 		case mergeByEvidence:
 			argv = append(argv, "--evidence")
@@ -260,7 +269,12 @@ func NextStep(f Facts) Next {
 		if f.ConfirmedEvidence {
 			merge += " --evidence"
 		}
-		return human(ReasonStepsPassed, "every step passed on "+short(f.ConfirmedHead)+": "+merge+" when you want it merged")
+		said := "every step passed on " + short(f.ConfirmedHead)
+		if f.ConfirmedWaived != "" {
+			merge += " --waived " + f.ConfirmedWaived + " --reason " + runner.BashQuote(f.ConfirmedReason)
+			said = config.StepsText(parseStepList(f.ConfirmedWaived)) + " skipped, and the others passed on " + short(f.ConfirmedHead)
+		}
+		return human(ReasonStepsPassed, said+": "+merge+" when you want it merged")
 	case f.Accepted:
 		// Your acceptance stands in for the review, so no review waits.
 		return cleared(f)
@@ -443,6 +457,7 @@ func factsFor(r Row) Facts {
 	}
 	if r.Merge != nil {
 		f.MergeSteps, f.MergeHead, f.MergeAs, f.MergeBy = stepList(r.Merge.Steps), r.Merge.Head, r.Merge.As, r.Merge.By
+		f.MergeWaived, f.MergeReason = stepList(r.Merge.Waived), r.Merge.Reason
 	}
 	if v := r.Verification; v != nil {
 		f.Verification, f.VerifyHeld = v.Value, v.Holds()
@@ -453,6 +468,7 @@ func factsFor(r Row) Facts {
 	f.CIReview, f.Accepted = r.CIReview, r.Accepted.Holds()
 	if cf := r.Confirmed; cf.Holds() {
 		f.Confirmed, f.ConfirmedHead, f.ConfirmedEvidence = true, cf.Head, cf.Evidence
+		f.ConfirmedWaived, f.ConfirmedReason = stepList(cf.Waived), cf.Reason
 	}
 	if r.Sync != nil && r.PR != nil && r.PR.State == "OPEN" {
 		f.SyncFail = r.Sync.Kind

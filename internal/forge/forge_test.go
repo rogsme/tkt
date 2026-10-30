@@ -2,6 +2,7 @@ package forge
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -151,6 +152,12 @@ func TestLatestConfirmation(t *testing.T) {
 	p.Comments = p.Comments[:1]
 	if c := LatestConfirmation(p); c == nil || c.Evidence || c.AtHead || c.Holds() {
 		t.Errorf("a confirmation of an older head holds: %+v", c)
+	}
+	// The steps you skipped come back, and a reason that quotes the evidence
+	// line says nothing about how the others passed.
+	p.Comments = append(p.Comments, Comment{Body: "Human verification passed ✅\n\nSteps 1 and 3 passed on head " + head + ".\n\nSkipped steps: 2, 4\nReason: step 2 is " + ConfirmedEvidence + " at best", CreatedAt: "2026-01-05"})
+	if c := LatestConfirmation(p); c == nil || c.Evidence || !slices.Equal(c.Waived, []int{2, 4}) || c.Reason != "step 2 is "+ConfirmedEvidence+" at best" {
+		t.Errorf("skipped steps = %+v", c)
 	}
 	if LatestConfirmation(PR{HeadRefOid: head}) != nil {
 		t.Errorf("a pull request without comments has a confirmation")

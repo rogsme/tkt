@@ -158,7 +158,7 @@ export function eventText(e: HistoryEvent): string {
 		case "closed":
 			return `#${e.pr} closed without merging`;
 		case "verified":
-			return e.action === "evidence" ? `human verification passed, from verify-pr's evidence; commented on #${e.pr}` : `human verification passed; commented on #${e.pr}`;
+			return `human verification passed${e.note ? `, ${e.note} skipped` : ""}${e.action === "evidence" ? ", from verify-pr's evidence" : ""}; commented on #${e.pr}`;
 		case "hold":
 			return e.action === "off" ? "taken off hold" : "put on hold";
 		case "sync":
@@ -202,6 +202,27 @@ export function withEvidence<S extends { n: number }>(steps: S[], v: { steps: { 
 		const r = v.steps.find((x) => x.n === s.n);
 		return r ? { ...s, verified: r.result } : s;
 	});
+}
+
+/** stepsText names steps for people, as tkt does: step 2, steps 1 and 2,
+ * steps 1 to 3, steps 1, 2 and 4. */
+export function stepsText(steps: number[]): string {
+	const run = steps.length > 2 && steps.every((n, i) => i === 0 || n === steps[i - 1] + 1);
+	if (steps.length === 1) return `step ${steps[0]}`;
+	if (run) return `steps ${steps[0]} to ${steps[steps.length - 1]}`;
+	return `steps ${steps.slice(0, -1).join(", ")} and ${steps[steps.length - 1]}`;
+}
+
+/** Waiver is the steps you skipped, and why: finish-ticket takes a step
+ * waived with a reason in place of a pass. */
+export interface Waiver {
+	steps: number[];
+	reason: string;
+}
+
+/** marked returns the numbers of the steps marked m. */
+export function marked<S extends { n: number }>(steps: S[], marks: Mark[], m: Mark): number[] {
+	return steps.filter((_, i) => (marks[i] ?? "") === m).map((s) => s.n);
 }
 
 /** tally counts the marks over n steps. */

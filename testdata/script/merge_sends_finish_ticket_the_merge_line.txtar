@@ -15,7 +15,7 @@ env FAKE_GH_PRS=$WORK/prs.json
 ! exec tkt merge ACM-12 --passed 1 --json
 rc 2
 envelope '.error.code' steps_incomplete
-envelope '.error.message' '--passed names step 1, but the pull request''s procedure has steps 1 and 2: finish-ticket merges only when every step passed'
+envelope '.error.message' '--passed names step 1, but the pull request''s procedure has steps 1 and 2: finish-ticket merges only when every step passed or you waived it'
 ! exec tkt merge ACM-12 --passed 1-x --json
 rc 2
 envelope '.error.code' usage

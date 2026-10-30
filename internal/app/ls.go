@@ -123,6 +123,9 @@ type RowSync struct {
 type RowMerge struct {
 	Head  string `json:"head"`
 	Steps []int  `json:"steps"`
+	// Waived names the steps you skipped, and Reason why.
+	Waived []int  `json:"waived"`
+	Reason string `json:"reason"`
 	// As is the preset finish-ticket runs on, or "" for the ticket's own.
 	As string `json:"as"`
 	// By says who confirmed the steps: "" for you, by running them, or
@@ -877,7 +880,7 @@ func (c *Ctx) mergeOrder(ctx context.Context, path string, st state.State, pr *R
 			return nil, ""
 		}
 	}
-	return &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), As: st["merge_as"], By: st["merge_by"], At: st["merge_at"], Sent: st["merge_sent"]}, ""
+	return &RowMerge{Head: h, Steps: parseStepList(st["merge_steps"]), Waived: parseStepList(st["merge_waived"]), Reason: st["merge_reason"], As: st["merge_as"], By: st["merge_by"], At: st["merge_at"], Sent: st["merge_sent"]}, ""
 }
 
 // probeBaseMerge tries merging the base into the pull request's head, or
