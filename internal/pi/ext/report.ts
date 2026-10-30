@@ -76,13 +76,28 @@ export interface HistoryPR {
 	deletions: number;
 	changed_files: number;
 	commits: { at: string; oid: string; subject: string }[];
-	reviews: { at: string; author: string; verdict: string; head: string; body: string }[];
+	reviews: HistoryReview[];
+}
+
+export interface HistoryReview {
+	at: string;
+	author: string;
+	verdict: string;
+	head: string;
+	body: string;
 }
 
 export interface HistoryResult {
 	repo: string;
 	forge: string;
 	tickets: { ticket: string; timeline: StatsTicket | null; events: HistoryEvent[]; pull_requests: HistoryPR[] }[];
+}
+
+/** latestReview is the newest review with a verdict on pull request pr,
+ * the one tkt ls reads. tkt history sorts them oldest first. */
+export function latestReview(h: HistoryResult, pr: number): HistoryReview | undefined {
+	const p = h.tickets.flatMap((t) => t.pull_requests).find((x) => x.number === pr);
+	return p?.reviews.filter((v) => v.verdict).at(-1);
 }
 
 /** bodyLimit bounds one review's body in historyText, so a long review

@@ -4,7 +4,7 @@
 // time but the extension's pure modules, so node --test covers it.
 
 import type { ChoresResult, Envelope, Row, SuggestResult } from "../model.ts";
-import type { HistoryResult, Mark, StatsResult } from "../report.ts";
+import type { HistoryResult, HistoryReview, Mark, StatsResult } from "../report.ts";
 import type { File } from "../web/diff.ts";
 import { headOf, repo } from "./scenario.ts";
 
@@ -150,6 +150,19 @@ export function stepList(): { n: number; text: string }[] {
 	return stepTexts.map((text, i) => ({ n: i + 1, text }));
 }
 
+/** newestReview is the review a row's verdict comes from, in the words the
+ * review bot or review-pr would post. */
+function newestReview(id: string, r: Row | undefined, at: string): HistoryReview {
+	const head = headOf(id).slice(0, 7);
+	switch (r?.review?.verdict) {
+		case "FINDINGS":
+			return { at, author: "claude", verdict: "FINDINGS", head, body: `## Review brief\n\nAdds what ${id} asks for, and tests for it.\n\n**Automated review: FINDINGS** · head \`${head}\` · reviewed against ${id}\n1. **BUG** \`api/limit.go:31\`: two requests in the same second share one counter, so a client gets twice its limit.\n2. **BUG** \`api/limit.go:58\`: a store error lets the request through without a limit.` };
+		case "CHANGES_REQUESTED":
+			return { at, author: "review-pr", verdict: "CHANGES_REQUESTED", head, body: `Reviewed head: ${headOf(id)}\nReviewed against: ${id}\n1. BUG \`search/index.go:112\`: the index never drops a deleted row (inline)\n2. QUESTION \`search/index.go:140\`: should a rebuild hold the write lock? (inline)\nResolved: none. Not reviewed: none.\nVerdict: CHANGES_REQUESTED` };
+	}
+	return { at, author: "review-pr", verdict: "CLEAR", head, body: `Verdict: CLEAR\nReviewed head: ${headOf(id)}` };
+}
+
 /** history is tkt history's answer for a ticket. */
 export function history(id: string, r: Row | undefined, now: number): Envelope<HistoryResult> {
 	const at = (min: number) => new Date(now - min * 60_000).toISOString();
@@ -191,7 +204,7 @@ export function history(id: string, r: Row | undefined, now: number): Envelope<H
 								],
 								reviews: [
 									{ at: at(95), author: "review-pr", verdict: "CHANGES_REQUESTED", head: "a1b2c3d", body: "Verdict: CHANGES_REQUESTED\n\n1. **api/reports.go:47**: a write error is dropped. Return it." },
-									{ at: at(40), author: "review-pr", verdict: "CLEAR", head: headOf(id).slice(0, 7), body: "Verdict: CLEAR\nReviewed head: " + headOf(id) },
+									newestReview(id, r, at(40)),
 								],
 							},
 						],

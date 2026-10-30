@@ -744,6 +744,18 @@ dd {
 	margin: 0 0 6px;
 }
 
+details.report {
+	margin-bottom: 16px;
+}
+
+details.report summary {
+	cursor: pointer;
+}
+
+details.report summary h3 {
+	display: inline;
+}
+
 .results li,
 .steps li,
 .checklist li {

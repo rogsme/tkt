@@ -4,7 +4,7 @@
 // at run time but the extension's pure modules, so node --test covers it.
 
 import { type Attention, choicesOf } from "../attention.ts";
-import type { Row } from "../model.ts";
+import { accepted, findings, type Row } from "../model.ts";
 
 /** Act is one button: cmd is the slash command it sends, tab the ticket's
  * tab it opens, and reply opens a box for what to tell the ticket's agent,
@@ -31,10 +31,11 @@ export const tabs: { tab: Tab; label: string }[] = [
 ];
 
 /** cardActs are an item's answers, as /inbox offers them, each as a
- * button. */
+ * button. While the review at the head has findings, one more opens them,
+ * since you answer them better once you have read them. */
 export function cardActs(a: Attention, row: Row | undefined): Act[] {
 	const id = a.ticket;
-	return choicesOf(a).map((c, i) => {
+	const acts = choicesOf(a).map((c, i): Act => {
 		const act: Act = { label: c.label, description: c.description, main: i === 0 };
 		switch (c.do) {
 			case "approve":
@@ -74,6 +75,8 @@ export function cardActs(a: Attention, row: Row | undefined): Act[] {
 		}
 		return act;
 	});
+	if (row?.review?.at_head && findings(row.review.verdict) && !accepted(row)) acts.push({ label: "Read the findings", description: "What the review found, in the Pull request tab.", tab: "pr" });
+	return acts;
 }
 
 /** ticketActs are the buttons a ticket's view always has, for what its

@@ -40,6 +40,20 @@ test("each answer /inbox offers is a button that sends the slash command you cou
 	assert.equal(cardActs(attentionOf(fix, false)!, fix)[1].cmd, "/accept ACM-12");
 });
 
+test("a card opens the findings of the review at the head", () => {
+	const read = (over: Parameters<typeof row>[0]) => {
+		const r = row({ phase: "needs_fix", next: { kind: "command", reason: "findings", argv: ["tkt", "run", "ACM-12", "address"], text: "tkt run ACM-12 address" }, ...over });
+		return cardActs(attentionOf(r, false)!, r).find((a) => a.tab === "pr");
+	};
+	const at = (verdict: string, at_head = true) => ({ review: { verdict, head: "abc1234", at_head } });
+	assert.equal(read(at("FINDINGS"))?.label, "Read the findings");
+	assert.equal(read(at("CHANGES_REQUESTED"))?.label, "Read the findings");
+	assert.equal(read(at("FINDINGS"))?.main, undefined);
+	assert.equal(read(at("FINDINGS", false)), undefined);
+	assert.equal(read(at("CLEAR")), undefined);
+	assert.equal(read({ ...at("FINDINGS"), accepted: { head: "abc1234", reason: "not worth it", url: "", at_head: true, carried: false } }), undefined);
+});
+
 test("a ticket's own buttons follow what its state allows", () => {
 	const labels = (r: ReturnType<typeof row>) => ticketActs(r).map((a) => a.cmd);
 	assert.deepEqual(labels(row({ phase: "awaiting_approval" })), ["/approve ACM-12", "/approve ACM-12 auto", "/auto ACM-12 on", "/hold ACM-12"]);

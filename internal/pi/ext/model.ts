@@ -118,6 +118,10 @@ export function accepted(row: Row | undefined): boolean {
 	return !!a && (a.at_head || a.carried);
 }
 
+/** findings says a verdict asks for changes, from the review bot or from
+ * review-pr. */
+export const findings = (verdict: string | undefined): boolean => verdict === "FINDINGS" || verdict === "CHANGES_REQUESTED";
+
 /** verifiedAt returns the report when it counts for the row's head. */
 export function verifiedAt(row: Row | undefined): Verification | undefined {
 	const v = row?.verification;

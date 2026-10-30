@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cycle, fixPrompt, type HistoryResult, historyText, statsText, tally, withEvidence } from "../report.ts";
+import { cycle, fixPrompt, type HistoryResult, historyText, latestReview, statsText, tally, withEvidence } from "../report.ts";
 
 test("statsText", () => {
 	const text = statsText({
@@ -96,6 +96,20 @@ test("historyText", () => {
 	const short = historyText({ ...r, forge: "failed" }, false);
 	assert.doesNotMatch(short, /BUG/);
 	assert.match(short, /could not read the pull requests/);
+});
+
+test("latestReview is the newest review with a verdict on that pull request", () => {
+	const review = (at: string, verdict: string, body: string) => ({ at, author: "claude", verdict, head: "abc1234", body });
+	const pr = (number: number, reviews: ReturnType<typeof review>[]) => ({ number, title: "", url: "", state: "OPEN", additions: 0, deletions: 0, changed_files: 0, commits: [], reviews });
+	const h: HistoryResult = {
+		repo: "r",
+		forge: "ok",
+		tickets: [{ ticket: "ACM-12", timeline: null, events: [], pull_requests: [pr(3, [review("1", "FINDINGS", "older pull request")]), pr(4, [review("2", "CLEAR", "first"), review("3", "FINDINGS", "found"), review("4", "", "a person's comment")])] }],
+	};
+	assert.equal(latestReview(h, 4)?.body, "found");
+	assert.equal(latestReview(h, 3)?.body, "older pull request");
+	assert.equal(latestReview(h, 5), undefined);
+	assert.equal(latestReview({ ...h, tickets: [] }, 4), undefined);
 });
 
 test("historyText words what tkt watch and tkt merge did", () => {
