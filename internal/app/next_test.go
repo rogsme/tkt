@@ -113,6 +113,8 @@ func TestNextStepTable(t *testing.T) {
 			"every step passed on abcdef0: tkt merge ACM-1 --passed all --head abcdef0123 when you want it merged", "human", ReasonStepsPassed},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Verification: "PASSED", VerifyHeld: true, Confirmed: true, ConfirmedHead: "abcdef0123", ConfirmedEvidence: true},
 			"every step passed on abcdef0: tkt merge ACM-1 --passed all --head abcdef0123 --evidence when you want it merged", "human", ReasonStepsPassed},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Confirmed: true, ConfirmedHead: "abcdef0123", ConfirmedWaived: "3,4", ConfirmedReason: "it needs a card"},
+			`steps 3 and 4 skipped, and the others passed on abcdef0: tkt merge ACM-1 --passed all --head abcdef0123 --waived 3,4 --reason it\ needs\ a\ card when you want it merged`, "human", ReasonStepsPassed},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true, Accepted: true, Confirmed: true, ConfirmedHead: "abcdef0123"},
 			"every step passed on abcdef0: tkt merge ACM-1 --passed all --head abcdef0123 when you want it merged", "human", ReasonStepsPassed},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "FINDINGS", AtHead: true, Confirmed: true, ConfirmedHead: "abcdef0123"}, "tkt run ACM-1 address", "command", ReasonFindings},

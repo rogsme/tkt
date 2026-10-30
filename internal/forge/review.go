@@ -368,19 +368,26 @@ func LatestAcceptance(p PR) *Acceptance {
 const (
 	ConfirmedHeading  = "Human verification passed"
 	ConfirmedEvidence = "confirmed from verify-pr's evidence"
+	ConfirmedSkipped  = "Skipped steps: "
+	ConfirmedReason   = "Reason: "
 )
 
 var (
 	confirmedHeadingRE = regexp.MustCompile(`(?m)^` + ConfirmedHeading + `\b`)
-	confirmedHeadRE    = regexp.MustCompile(`passed on head ([0-9a-f]{7,40})`)
+	confirmedHeadRE    = regexp.MustCompile(`passed on head ([0-9a-f]{7,40})(, ` + ConfirmedEvidence + `)?`)
+	confirmedSkippedRE = regexp.MustCompile(`(?m)^` + ConfirmedSkipped + `([0-9, ]+)$`)
+	confirmedReasonRE  = regexp.MustCompile(`(?m)^` + ConfirmedReason + `(.+)$`)
+	stepNumberRE       = regexp.MustCompile(`[0-9]+`)
 )
 
 // Confirmation is tkt verified's comment: every human verification step
-// passed on Head, and Evidence says you confirmed them from verify-pr's
-// evidence.
+// passed on Head, or you skipped it, which Waived names, for Reason.
+// Evidence says you confirmed the others from verify-pr's evidence.
 type Confirmation struct {
 	Head      string `json:"head"`
 	Evidence  bool   `json:"evidence"`
+	Waived    []int  `json:"waived"`
+	Reason    string `json:"reason"`
 	URL       string `json:"url"`
 	CreatedAt string `json:"created_at"`
 	// AtHead and Carried say what they say of a Verification.
@@ -400,11 +407,16 @@ func LatestConfirmation(p PR) *Confirmation {
 		if !confirmedHeadingRE.MatchString(c.Body) {
 			continue
 		}
-		head := firstGroup(confirmedHeadRE, c.Body, "")
-		if head == "" || best != nil && best.CreatedAt > c.CreatedAt {
+		m := confirmedHeadRE.FindStringSubmatch(c.Body)
+		if m == nil || best != nil && best.CreatedAt > c.CreatedAt {
 			continue
 		}
-		best = &Confirmation{Head: head, Evidence: strings.Contains(c.Body, ConfirmedEvidence), URL: c.URL, CreatedAt: c.CreatedAt}
+		best = &Confirmation{Head: m[1], Evidence: m[2] != "", Waived: []int{}, Reason: firstGroup(confirmedReasonRE, c.Body, ""), URL: c.URL, CreatedAt: c.CreatedAt}
+		for _, n := range stepNumberRE.FindAllString(firstGroup(confirmedSkippedRE, c.Body, ""), -1) {
+			if s, err := strconv.Atoi(n); err == nil {
+				best.Waived = append(best.Waived, s)
+			}
+		}
 	}
 	if best != nil {
 		best.AtHead = strings.HasPrefix(p.HeadRefOid, best.Head)

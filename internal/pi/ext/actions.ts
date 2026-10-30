@@ -6,7 +6,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
 import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, confirmedAt, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
-import { fixPrompt, type HistoryResult, historyText, statsText, tally, type Mark, type StatsResult, withEvidence } from "./report.ts";
+import { fixPrompt, type HistoryResult, historyText, marked, statsText, stepsText, tally, type Mark, type StatsResult, type Waiver, withEvidence } from "./report.ts";
 import { ask, checklist, confirm, editor, input } from "./dialog.ts";
 import { peek, type Step } from "./ui.ts";
 
@@ -129,11 +129,11 @@ export function sync(hub: Hub, id: string): string {
 	return `Queued: tkt sync for ${id}. It merges the base itself when the merge is clean, and hands a conflict or any other failure to a fresh session in a split beside the agent.`;
 }
 
-/** merge hands a ticket whose steps all passed on head to finish-ticket:
- * tkt merge sends it the merge line now, or leaves an order that tkt watch
- * carries out once the checks pass. */
-export function merge(hub: Hub, id: string, steps: number[] | "all", head: string, evidence = false): string {
-	const args = ["merge", id, "--passed", steps === "all" ? steps : steps.join(","), ...(head ? ["--head", head] : []), ...(evidence ? ["--evidence"] : [])];
+/** merge hands a ticket whose steps passed on head, or that you waived, to
+ * finish-ticket: tkt merge sends it the merge line now, or leaves an order
+ * that tkt watch carries out once the checks pass. */
+export function merge(hub: Hub, id: string, steps: number[] | "all", head: string, evidence = false, waived?: Waiver): string {
+	const args = ["merge", id, "--passed", steps === "all" ? steps : steps.join(","), ...(head ? ["--head", head] : []), ...(evidence ? ["--evidence"] : []), ...waiverArgs(waived)];
 	hub.add({ ticket: id, label: "merge", args, then: (env) => (env.ok && env.result ? hub.post(mergeText(env.result as MergeResult)) : undefined) });
 	return `Queued: tkt merge for ${id}. finish-ticket merges it now when the checks passed at its head; otherwise tkt watch hands it over once they do.`;
 }
@@ -332,9 +332,11 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	// Steps you confirmed already wait only for your word to merge.
 	const cf = confirmedAt(hub.row(id));
 	if (cf) {
-		const go = await askMerge(hub, ctx, id, `${id}: every step passed on ${cf.head.slice(0, 7)}${cf.evidence ? ", confirmed from verify-pr's evidence" : ""}. Merge it?`);
-		if (!go) return `${id}: every step passed. /check ${id} merges it when you are ready.`;
-		return merge(hub, id, "all", cf.head, cf.evidence);
+		const waived = cf.waived?.length ? { steps: cf.waived, reason: cf.reason ?? "" } : undefined;
+		const state = waived ? `${stepsText(waived.steps)} skipped, and the others passed` : "every step passed";
+		const go = await askMerge(hub, ctx, id, `${id}: ${state} on ${cf.head.slice(0, 7)}${cf.evidence ? ", confirmed from verify-pr's evidence" : ""}. Merge it?`);
+		if (!go) return `${id}: ${state}. /check ${id} merges it when you are ready.`;
+		return merge(hub, id, "all", cf.head, cf.evidence, waived);
 	}
 	// Your steps can run on the code that will merge, or carry over the
 	// clean sync a merge order gets.
@@ -379,15 +381,37 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 		return `${id}: ${t.fail} step${t.fail === 1 ? "" : "s"} failed.`;
 	}
 	if (t.open > 0) return `${id}: ${t.pass} passed, ${t.skip} skipped, ${t.open} not run yet. /check ${id} goes on.`;
-	// finish-ticket merges only when every step passed, or you waived it
-	// with a reason, which only you can give.
-	if (t.skip > 0) return `${id}: ${t.pass} passed and ${t.skip} skipped. finish-ticket merges only when each step passed or you waived it with a reason: tell its agent in the tab which steps passed and why you skip the others.`;
+	// A comment that says human verification passed needs a step that did.
+	if (t.pass === 0) return `${id}: no step passed, since you skipped them all, so tkt posts nothing. To waive every step, tell its agent in the tab why.`;
 	// tkt merge refuses a head that moved since the steps ran, which it can
 	// check only against the head they ran on.
-	if (!head) return `${id}: every step passed, but the board has no head for its pull request yet. /check ${id} again in a moment to merge it.`;
-	const said = await verified(hub, id, steps.map((s) => s.n), head);
-	if (!(await askMerge(hub, ctx, id, `${id}: every step passed. Merge it?`))) return `${id}: every step passed. ${said} /check ${id} merges it when you are ready.`;
-	return `${said} ${merge(hub, id, steps.map((s) => s.n), head)}`;
+	if (!head) return `${id}: the steps are marked, but the board has no head for its pull request yet. /check ${id} again in a moment.`;
+	const passed = marked(steps, got, "pass");
+	const waived = t.skip > 0 ? await askWaiver(ctx, id, passed, marked(steps, got, "skip")) : undefined;
+	if (t.skip > 0 && !waived) return `${id}: ${stepsText(passed)} passed and ${t.skip} skipped; nothing posted. /check ${id} goes on.`;
+	const state = waived ? `${stepsText(passed)} passed and ${stepsText(waived.steps)} skipped` : "every step passed";
+	const said = await verified(hub, id, passed, head, false, waived);
+	if (!(await askMerge(hub, ctx, id, `${id}: ${state}. Merge it?`))) return `${id}: ${state}. ${said} /check ${id} merges it when you are ready.`;
+	return `${said} ${merge(hub, id, passed, head, false, waived)}`;
+}
+
+/** askWaiver offers to post the steps you skipped along with the ones that
+ * passed, and asks why you skipped them, which finish-ticket needs before it
+ * takes a step as waived. Only you can give the reason. */
+async function askWaiver(ctx: ExtensionContext, id: string, passed: number[], skipped: number[]): Promise<Waiver | undefined> {
+	const a = await ask(ctx, `${id}: ${stepsText(passed)} passed and ${stepsText(skipped)} skipped. Post that human verification passed, with the skipped steps?`, [
+		{ label: "Post it", description: "tkt verified comments on the pull request, naming the skipped steps and your reason; finish-ticket then takes them as waived." },
+		{ label: "Not yet" },
+	], false);
+	if (!a?.answer.startsWith("Post") || !ctx.hasUI) return undefined;
+	const reason = (await input(ctx, `Why can ${stepsText(skipped)} stay unrun?`, "it needs production credentials"))?.trim();
+	return reason ? { steps: skipped, reason } : undefined;
+}
+
+/** waiverArgs are the flags tkt verified and tkt merge take for skipped
+ * steps. */
+function waiverArgs(w: Waiver | undefined): string[] {
+	return w ? ["--waived", w.steps.join(","), "--reason", w.reason] : [];
 }
 
 /** askMerge asks whether to merge a ticket whose steps passed, naming how
@@ -407,14 +431,15 @@ async function askMerge(hub: Hub, ctx: ExtensionContext, id: string, question: s
 	return !!go?.answer.startsWith("Merge");
 }
 
-/** verified comments on the pull request that every step passed, with tkt
- * verified, before the merge question: the pull request says so even when
- * you merge later. It returns a sentence that says how that went. */
-async function verified(hub: Hub, id: string, steps: number[], head: string, evidence = false): Promise<string> {
-	const env = await hub.tkt<{ action: string; pr: number; url: string }>(["verified", id, "--passed", steps.join(","), "--head", head, ...(evidence ? ["--evidence"] : [])]);
+/** verified comments on the pull request that the steps passed, or that
+ * you skipped them, with tkt verified, before the merge question: the pull
+ * request says so even when you merge later. It returns a sentence that
+ * says how that went. */
+async function verified(hub: Hub, id: string, steps: number[], head: string, evidence = false, waived?: Waiver): Promise<string> {
+	const env = await hub.tkt<{ action: string; pr: number; url: string }>(["verified", id, "--passed", steps.join(","), "--head", head, ...(evidence ? ["--evidence"] : []), ...waiverArgs(waived)]);
 	if (!env.ok || !env.result) return `tkt verified could not comment on the pull request: ${env.error?.message ?? "no answer"}.`;
 	if (env.result.action === "none") return `Pull request #${env.result.pr} says so already.`;
-	return `Commented on pull request #${env.result.pr} that human verification passed.`;
+	return `Commented on pull request #${env.result.pr} that human verification passed${waived ? `, with ${stepsText(waived.steps)} skipped` : ""}.`;
 }
 
 /** howOptions are /check's first answers: confirm from verify-pr's

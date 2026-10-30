@@ -4,6 +4,7 @@
 // an item goes away as soon as its ticket moves on.
 
 import { type Row, type Unblocked, verifiedAt } from "./model.ts";
+import { stepsText } from "./report.ts";
 
 export type AttentionKind = "plan" | "question" | "blocked" | "check" | "ready" | "merge" | "merged" | "next" | "paused" | "stalled" | "failed" | "unblocked" | "chore";
 
@@ -182,7 +183,7 @@ export function attentionOf(row: Row, inFlight: boolean, watching = false): Atte
 		const pr = row.pr ? `pull request #${row.pr.number}` : "pull request";
 		switch (reason) {
 			case "chore_ready":
-				return item("chore", "ready to merge", `${id}: chore ${row.chore}'s ${pr} is ready. Review it and merge it yourself; tkt watch removes the run after the merge.`);
+				return item("chore", "ready to merge", `${id}: chore ${row.chore}'s ${pr} is ready. Review it and merge it yourself; /done ${id} removes the run after the merge.`);
 			case "chore_findings":
 				return item("chore", "review found something", `${id}: the review found something on chore ${row.chore}'s ${pr}. Read it, then tell its agent what to fix, or merge it as it is.`, false, [reply]);
 			case "no_changes":
@@ -296,7 +297,9 @@ function readyToMergeText(row: Row): string {
 	const id = row.ticket;
 	const pr = row.pr ? ` pull request #${row.pr.number}` : " its pull request";
 	const head = row.confirmed?.head.slice(0, 7) ?? "its head";
-	return `${id}: every human verification step passed on ${head}, and${pr} waits for your word to merge. /check ${id} merges it.`;
+	const waived = row.confirmed?.waived ?? [];
+	const state = waived.length ? `${stepsText(waived)} skipped, the other human verification steps passed on ${head}` : `every human verification step passed on ${head}`;
+	return `${id}: ${state}, and${pr} waits for your word to merge. /check ${id} merges it.`;
 }
 
 function readyText(row: Row): string {

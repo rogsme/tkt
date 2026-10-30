@@ -1,13 +1,14 @@
 // The center column's ticket: where it stands, its buttons, and its tabs:
-// the agent's last message, such as the plan, the pull request, the human
-// verification steps, the diff, the agent's live screen, and the history.
-// The tabs read through queries; the buttons send slash commands.
+// the agent's last message, such as the plan, the pull request and what its
+// review found, the human verification steps, the diff, the agent's live
+// screen, and the history. The tabs read through queries; the buttons send
+// slash commands.
 
 import type { Attention } from "../attention.ts";
 import { diffText } from "../board.ts";
 import type { Board } from "../mirror.ts";
-import { accepted, ago, type Row, since, type Verification } from "../model.ts";
-import { eventText, type HistoryResult, local, type Mark } from "../report.ts";
+import { accepted, ago, findings, type Row, since, type Verification } from "../model.ts";
+import { eventText, type HistoryResult, latestReview, local, type Mark, stepsText } from "../report.ts";
 import { cardActs, type Tab, tabs, ticketActs } from "./acts.ts";
 import { look, parseAnsi } from "./ansi.ts";
 import { ActButtons, Failure, type Go, Loading, Md, Phase, Reply, RunButton } from "./bits.ts";
@@ -52,7 +53,7 @@ export function Ticket({ id, tab, board, g, now, asked }: { id: string; tab: Tab
 		</nav>
 		<div class="tab-body" role="tabpanel">
 			${tab === "message" && html`<${MessageTab} r=${row} g=${g} now=${now} />`}
-			${tab === "pr" && html`<${PrTab} r=${row} />`}
+			${tab === "pr" && html`<${PrTab} r=${row} g=${g} />`}
 			${tab === "steps" && html`<${StepsTab} r=${row} g=${g} asked=${asked} />`}
 			${tab === "diff" && html`<${DiffTab} r=${row} g=${g} />`}
 			${tab === "screen" && html`<${ScreenTab} r=${row} g=${g} />`}
@@ -109,7 +110,7 @@ function MessageTab({ r, g, now }: { r: Row; g: Go; now: number }) {
 	</div>`;
 }
 
-function PrTab({ r }: { r: Row }) {
+function PrTab({ r, g }: { r: Row; g: Go }) {
 	if (!r.pr) return html`<p class="muted">${r.ticket} has no pull request yet.</p>`;
 	const c = r.checks;
 	const v = r.verification;
@@ -133,10 +134,27 @@ function PrTab({ r }: { r: Row }) {
 			<dd>${r.behind == null ? "unknown" : r.behind === 0 ? "up to date" : `${r.behind} commit${r.behind === 1 ? "" : "s"} behind`}</dd>
 			${r.merge &&
 			html`<dt>Merge order</dt>
-				<dd>for <code>${r.merge.head.slice(0, 7)}</code>, steps ${r.merge.steps.join(", ")}${r.merge.sent ? `; finish-ticket got the merge line at ${local(r.merge.sent)}` : "; tkt watch sends it once the checks pass"}</dd>`}
+				<dd>for <code>${r.merge.head.slice(0, 7)}</code>, steps ${r.merge.steps.join(", ")}${r.merge.waived?.length ? `, ${stepsText(r.merge.waived)} skipped: ${r.merge.reason}` : ""}${r.merge.sent ? `; finish-ticket got the merge line at ${local(r.merge.sent)}` : "; tkt watch sends it once the checks pass"}</dd>`}
 		</dl>
+		${r.review && html`<${ReviewSummary} key=${r.ticket} r=${r} g=${g} />`}
 		${v && html`<${Report} v=${v} />`}
 	</div>`;
+}
+
+/** ReviewSummary is the newest review's summary, which lists what it found,
+ * and starts open when it found something. tkt reads no line comments, so
+ * the longer version of each finding stays on the forge. */
+function ReviewSummary({ r, g }: { r: Row; g: Go }) {
+	const q = useQuery<HistoryResult>(g.send, "history", r.ticket, [r.pr?.head, r.review?.verdict, r.review?.head]);
+	if (!q.env) return html`<${Loading} />`;
+	if (!q.env.ok || !q.env.result) return html`<${Failure} env=${q.env} />`;
+	const v = latestReview(q.env.result, r.pr?.number ?? 0);
+	if (!v) return html`<p class="muted">tkt could not read the review's summary from the forge.</p>`;
+	return html`<details class="report" open=${findings(v.verdict)}>
+		<summary><h3>${findings(v.verdict) ? "What the review found" : "The review's summary"}: <code>${v.verdict}</code> on <code>${v.head}</code> by ${v.author}</h3></summary>
+		<${Md} text=${v.body} />
+		${r.pr?.url && html`<p class="meta"><a href=${r.pr.url + "/files"} target="_blank" rel="noopener noreferrer">Any line comments are on the forge</a>.</p>`}
+	</details>`;
 }
 
 /** Report is verify-pr's report: its result, and each step's. */

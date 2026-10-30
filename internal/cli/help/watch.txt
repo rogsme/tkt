@@ -3,10 +3,10 @@ ones you hand to tkt auto. Every [watch] interval (60s) it fetches, reads
 every ticket with a fixed number of gh calls, and takes at most one step per
 ticket, from the same rules as tkt ls:
 
-  - finish-ticket ended with Status: DONE after the merge, or the pull
-    request was closed without merging and no agent works on it: it runs
-    tkt done, unless [watch] done_after_merge = false; after a close, the
-    tracker is yours to move;
+  - the pull request was closed without merging and no agent works on it:
+    it runs tkt done, unless [watch] done_after_merge = false, and the
+    tracker is yours to move. It never runs tkt done after a merge: a
+    merged ticket or run keeps its tabs and worktree until you run it;
   - the base moved at a moment a sync is due (a conflict, the bot's
     STALE_BASE, BLOCKED_FOR_SYNC behind the base): it merges a clean base
     itself, as tkt sync does, with no agent, and runs resolve on a conflict;
@@ -48,8 +48,9 @@ It also starts the repository's chores, the agent runs its
 .tkt/tkt.local.toml schedules, when their slot comes (tkt help chores): once per slot, however
 many slots passed while no watch ran, and never while the chore's last run
 is still open. A chore's run is a row like a ticket's: watch syncs its base
-when a sync is due, fixes its checks, and removes the run once you merged
-its pull request, or once its agent ended with nothing to change.
+when a sync is due, fixes its checks, and removes the run once you closed
+its pull request, or once its agent ended with nothing to change. A run you
+merged waits for your tkt done.
 
 The [status.NAME] tables in config.toml and the .tkt files name status pages, such as GitHub's
 (tkt help config). tkt watch reads them every five minutes. While one

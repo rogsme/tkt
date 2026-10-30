@@ -333,6 +333,16 @@ func TestEvidenceMergeLineSaysHowTheStepsWereConfirmed(t *testing.T) {
 	}
 }
 
+func TestWaivedMergeLineSaysWhy(t *testing.T) {
+	line := MergeLine([]int{1, 2}, "aaa", "aaa")
+	if got := WaivedMergeLine(line, []int{}, ""); got != line {
+		t.Errorf("no waiver: %s", got)
+	}
+	if got, want := WaivedMergeLine(line, []int{3}, "it needs a real card."), line+" The user waived step 3: it needs a real card."; got != want {
+		t.Errorf("got %s\nwant %s", got, want)
+	}
+}
+
 func TestMergeLineNamesEveryStep(t *testing.T) {
 	for _, tc := range []struct {
 		steps []int

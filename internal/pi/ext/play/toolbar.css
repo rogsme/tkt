@@ -1,0 +1,80 @@
+/* The playground's toolbar, in the page's own colors so it follows the
+   theme. */
+
+.play-bar {
+	position: fixed;
+	left: 50%;
+	bottom: 16px;
+	transform: translateX(-50%);
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	max-width: calc(100% - 32px);
+	font-family: var(--sans);
+	font-size: 13px;
+}
+
+.play-toggle {
+	border: 1px dashed var(--accent);
+	background: var(--raised);
+	color: var(--accent);
+	border-radius: 999px;
+	padding: 4px 12px;
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+	box-shadow: var(--shadow);
+}
+
+.play-panel {
+	background: var(--raised);
+	color: var(--fg);
+	border: 1px dashed var(--accent);
+	border-radius: 8px;
+	box-shadow: var(--shadow);
+	padding: 10px 12px;
+	width: 22rem;
+	max-width: 100%;
+	max-height: 70vh;
+	overflow: auto;
+}
+
+.play-panel[hidden] {
+	display: none;
+}
+
+.play-note {
+	margin: 0 0 8px;
+	color: var(--muted);
+}
+
+.play-group h3 {
+	margin: 8px 0 4px;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--dim);
+}
+
+.play-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.play-btn {
+	border: 1px solid var(--border);
+	background: var(--panel);
+	color: var(--fg);
+	border-radius: 4px;
+	padding: 3px 8px;
+	font: inherit;
+	cursor: pointer;
+}
+
+.play-btn:hover,
+.play-toggle:hover {
+	border-color: var(--accent);
+}

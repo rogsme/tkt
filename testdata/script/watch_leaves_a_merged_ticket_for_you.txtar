@@ -1,7 +1,7 @@
-# Once finish-ticket ends with Status: DONE after the merge, tkt watch runs
-# tkt done, and its notification names the tickets the merge unblocked. A
-# merge without that status, such as one made in the forge's page, waits for
-# you, and so does every merge with done_after_merge off.
+# tkt watch never runs tkt done after a merge: not on a merge made in the
+# forge's page, not after finish-ticket's Status: DONE, and not with
+# done_after_merge on. The ticket waits for you, and your tkt done names the
+# tickets the merge unblocked.
 exec tkt start ACM-12
 env WT=$FAKE_WT_ROOT/ACM-12
 realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
@@ -16,17 +16,17 @@ exists $WT
 
 cp $WORK/screen.txt $FAKE_DIR/screen
 mkdir $HOME/.config/tkt
-cp $WORK/off.toml $HOME/.config/tkt/config.toml
-exec tkt watch --once --json
-envelope '.result.tickets[0].reason' merged
-exists $WT
-
-rm $HOME/.config/tkt/config.toml
+cp $WORK/on.toml $HOME/.config/tkt/config.toml
 resetlog
 exec tkt watch --once --json
-envelope '.result.tickets' '[{"action":"done","reason":"merged","ticket":"ACM-12"}]'
+envelope '.result.tickets' '[{"action":"","reason":"merged","ticket":"ACM-12"}]'
+exec tkt ls --json
+envelope '.result.rows[0].next | [.reason, .text]' '["merged","tkt done ACM-12"]'
+exists $WT
+
+exec tkt done ACM-12
+stdout 'the merge unblocked ACM-15'
 logged wt -C $REPO remove ACM-12 --foreground --reap --format json
-logged herdr notification show 'ACM-12: removed' --body 'finish-ticket ended with Status: DONE, so tkt watch removed its tabs and worktree; the merge unblocked ACM-15'
 ! exists $WT
 houserules
 
@@ -36,6 +36,6 @@ houserules
 Merged and verified.
 Unblocked: ACM-15
 Status: DONE
--- off.toml --
+-- on.toml --
 [watch]
-done_after_merge = false
+done_after_merge = true

@@ -4,7 +4,7 @@
 // at run time but the extension's pure modules, so node --test covers it.
 
 import { type Attention, choicesOf } from "../attention.ts";
-import type { Row } from "../model.ts";
+import { accepted, findings, type Row } from "../model.ts";
 
 /** Act is one button: cmd is the slash command it sends, tab the ticket's
  * tab it opens, and reply opens a box for what to tell the ticket's agent,
@@ -31,10 +31,11 @@ export const tabs: { tab: Tab; label: string }[] = [
 ];
 
 /** cardActs are an item's answers, as /inbox offers them, each as a
- * button. */
+ * button. While the review at the head has findings, one more opens them,
+ * since you answer them better once you have read them. */
 export function cardActs(a: Attention, row: Row | undefined): Act[] {
 	const id = a.ticket;
-	return choicesOf(a).map((c, i) => {
+	const acts = choicesOf(a).map((c, i): Act => {
 		const act: Act = { label: c.label, description: c.description, main: i === 0 };
 		switch (c.do) {
 			case "approve":
@@ -74,6 +75,8 @@ export function cardActs(a: Attention, row: Row | undefined): Act[] {
 		}
 		return act;
 	});
+	if (row?.review?.at_head && findings(row.review.verdict) && !accepted(row)) acts.push({ label: "Read the findings", description: "What the review found, in the Pull request tab.", tab: "pr" });
+	return acts;
 }
 
 /** ticketActs are the buttons a ticket's view always has, for what its
@@ -84,7 +87,7 @@ export function ticketActs(r: Row): Act[] {
 	const merged = r.phase === "merged" || r.phase === "closed";
 	if (r.phase === "awaiting_approval" && !r.chore) out.push({ label: "Approve", cmd: `/approve ${id}`, main: true }, { label: "Approve and go auto", cmd: `/approve ${id} auto` });
 	if (r.phase === "ready_for_human" && !r.chore) out.push({ label: "Verify", description: "Walk the human verification steps, and merge once they pass.", cmd: `/check ${id}`, main: true });
-	if (r.phase === "ready_to_merge") out.push({ label: "Merge", description: "Every human verification step passed; tkt merge hands it to finish-ticket.", cmd: `/check ${id}`, main: true });
+	if (r.phase === "ready_to_merge") out.push({ label: "Merge", description: "Human verification passed; tkt merge hands it to finish-ticket.", cmd: `/check ${id}`, main: true });
 	if (merged) out.push({ label: "Remove it", description: "Close its tabs and remove its worktree, once tkt done confirms the merge.", cmd: `/done ${id}`, main: true });
 	if (!merged && r.next?.kind === "command") out.push({ label: "Next step", description: r.next.text, cmd: `/next ${id}` });
 	if (!merged && !r.chore && r.next?.reason === "findings") out.push({ label: "Accept review", description: "Take the review's findings as they are, for the reason you give, and go on to human verification.", cmd: `/accept ${id}` });

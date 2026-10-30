@@ -250,6 +250,8 @@ test("steps you confirmed wait for your word to merge", () => {
 	assert.equal(sound(a!), "done");
 	assert.match(a?.text ?? "", /^ACM-12: every human verification step passed on abcdef0, and pull request #4 waits for your word to merge\. \/check ACM-12 merges it\.$/);
 	assert.deepEqual(choicesOf(a!).map((c) => c.do), ["check", "dismiss"]);
+	const skipped = attentionOf(row({ phase: "ready_to_merge", pr, confirmed: { ...confirmed, waived: [3], reason: "it needs a card" }, next }), false);
+	assert.match(skipped?.text ?? "", /^ACM-12: step 3 skipped, the other human verification steps passed on abcdef0, and pull request #4 waits/);
 	// A loop that stopped there says the same.
 	assert.equal(attentionOf(row({ phase: "ready_to_merge", pr, confirmed, next, auto: auto({ stop: "ready_for_human" }) }), false)?.kind, "merge");
 });

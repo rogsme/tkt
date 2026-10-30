@@ -51,9 +51,9 @@ watch. These are the defaults:
 
   [watch]
   interval = "60s"      # how often tkt watch looks at every ticket
-  done_after_merge = true  # run tkt done once finish-ticket ends with
-                        # Status: DONE, or the pull request closed
-                        # without merging
+  done_after_merge = true  # run tkt done once a pull request closed
+                        # without merging; after a merge, only you
+                        # run it
   autostart = true      # let tkt commands in a herdr pane start tkt watch
 
 A [suggest] table names the preset tkt suggest runs suggest-tickets on, such

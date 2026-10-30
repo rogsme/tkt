@@ -18,11 +18,14 @@ import (
 )
 
 // MergeOpts are tkt merge's arguments. Passed names the human verification
-// steps that passed, such as 1-3, 1,2,4 or all; Head is the head they ran
-// on. Cancel drops the ticket's merge order instead.
+// steps that passed, such as 1-3, 1,2,4 or all, and Waived the ones you
+// skipped, for Reason; Head is the head they ran on. Cancel drops the
+// ticket's merge order instead.
 type MergeOpts struct {
 	ID     string
 	Passed string
+	Waived string
+	Reason string
 	Head   string
 	As     string
 	// Evidence says you confirmed the steps from verify-pr's evidence
@@ -53,6 +56,7 @@ type MergeResult struct {
 	Head     string `json:"head"`
 	Verified string `json:"verified"`
 	Steps    []int  `json:"steps"`
+	Waived   []int  `json:"waived"`
 	Action   string `json:"action"`
 	// Waits is what an order waits for: sync (tkt watch merges the base
 	// into the branch first), review (a review of the head a sync made),
@@ -105,6 +109,9 @@ func (r *MergeResult) Text(w io.Writer) {
 		if r.Verified != r.Head {
 			passed += " on " + short(r.Verified) + " and clean merges of the base since"
 		}
+		if len(r.Waived) > 0 {
+			passed += " and " + config.StepsText(r.Waived) + " waived"
+		}
 		fmt.Fprintf(w, "%s  %s finish-ticket the merge line for %s at %s, with %s, in pane %s\n", r.Ticket, sent, forge.Ref(r.PR), short(r.Head), passed, r.Run.Pane)
 	case r.Action == MergeOrdered && r.DryRun:
 		fmt.Fprintf(w, "%s  would leave a merge order for %s, which merges once %s\n", r.Ticket, forge.Ref(r.PR), r.waitText())
@@ -153,6 +160,7 @@ func (r *MergeResult) waitText() string {
 // is sent, so a --cancel either drops the order first or finds the line
 // sent.
 func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
+	o.Reason = strings.Join(strings.Fields(o.Reason), " ")
 	c, err := a.begin(ctx, o.Dry, false)
 	if err != nil {
 		return nil, err
@@ -198,7 +206,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		}
 	}
 	base := c.LC.Forge.Remote + "/" + c.LC.Forge.Base
-	res := &MergeResult{Ticket: id, Steps: []int{}, Sent: ts.st["merge_sent"], DryRun: c.Dry, Actions: []Action{}, base: base}
+	res := &MergeResult{Ticket: id, Steps: []int{}, Waived: []int{}, Sent: ts.st["merge_sent"], DryRun: c.Dry, Actions: []Action{}, base: base}
 	res.Head, res.Verified = ts.st["merge_head"], ts.st["merge_head"]
 	switch {
 	case o.Cancel && res.Head == "":
@@ -209,7 +217,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		c.dropOrder(ts, id, MergeCancelled)
 		res.Action = MergeCancelled
 		return res, nil
-	case o.order && (res.Head != o.Head || ts.st["merge_steps"] != o.Passed || ts.st["merge_as"] != o.As || ts.st["merge_by"] != o.by()):
+	case o.order && (res.Head != o.Head || ts.st["merge_steps"] != o.Passed || ts.st["merge_waived"] != o.Waived || ts.st["merge_reason"] != o.Reason || ts.st["merge_as"] != o.As || ts.st["merge_by"] != o.by()):
 		// Cancelled, or replaced, since tkt watch read it.
 		res.Action = MergeNone
 		return res, nil
@@ -271,11 +279,11 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	// The line says the steps passed on the verified head, so they are the
 	// numbers of its procedure; after a sync, finish-ticket matches them
 	// with the new review's steps by what they do.
-	got, err := c.passedSteps(id, res.Verified, o.Passed)
+	got, waived, err := c.passedSteps(id, res.Verified, o.Passed, o.Waived, o.Reason)
 	if err != nil {
 		return nil, err
 	}
-	res.Steps = got
+	res.Steps, res.Waived = got, waived
 	if v := row.Verification; v.Holds() && v.Value == contract.VerificationFailed {
 		// The report is open feedback, which finish-ticket refuses to
 		// merge over until address-pr-review answers it.
@@ -324,7 +332,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 		}
 		// A new order is a new word from you: tkt watch forgets that it
 		// sent one on this head already.
-		kv := []string{"merge_head", res.Verified, "merge_steps", stepList(got), "merge_as", o.As, "merge_by", o.by(), "merge_at", c.Now().UTC().Format(history.TimeFormat), "merge_sent", ""}
+		kv := []string{"merge_head", res.Verified, "merge_steps", stepList(got), "merge_waived", stepList(waived), "merge_reason", o.Reason, "merge_as", o.As, "merge_by", o.by(), "merge_at", c.Now().UTC().Format(history.TimeFormat), "merge_sent", ""}
 		if strings.HasPrefix(ts.st["watch_last"], actMerge+":") {
 			kv = append(kv, "watch_last", "", "watch_pause", "", "watch_head", "")
 		}
@@ -343,7 +351,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	// The lock stays held, so the order cannot change while the line goes
 	// out, and a --cancel after it finds the line sent. So does the turn,
 	// so no other merge line goes out before this one shows as in flight.
-	run, err := c.run(RunOpts{ID: id, Stage: "merge", As: o.As, Dry: o.Dry, line: o.line(got, res.Verified, res.Head)})
+	run, err := c.run(RunOpts{ID: id, Stage: "merge", As: o.As, Dry: o.Dry, line: o.line(got, waived, res.Verified, res.Head)})
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +360,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	// and sends the line again on the new head. watch_last keeps it from
 	// sending the line twice on one head.
 	sent := c.Now().UTC().Format(history.TimeFormat)
-	c.save(ts, "merge_head", res.Verified, "merge_steps", stepList(got), "merge_as", o.As, "merge_by", o.by(), "merge_at", or(ts.st["merge_at"], sent),
+	c.save(ts, "merge_head", res.Verified, "merge_steps", stepList(got), "merge_waived", stepList(waived), "merge_reason", o.Reason, "merge_as", o.As, "merge_by", o.by(), "merge_at", or(ts.st["merge_at"], sent),
 		"merge_sent", sent, "watch_last", watchAct{Kind: actMerge}.key(res.Head))
 	res.Action, res.Run, res.Sent = MergeMerging, run, sent
 	res.Actions = append(res.Actions, run.Actions...)
@@ -388,16 +396,16 @@ func (c *Ctx) yoloAllowed(id string) error {
 		WithHint("run /setup-rogs in this repository to turn them on, or tkt auto %s --approve-plan", id).With("off", off)
 }
 
-// line is the merge line for the steps that passed on verified, with the
-// pull request at head.
-func (o MergeOpts) line(steps []int, verified, head string) string {
+// line is the merge line for the steps that passed on verified, and the
+// ones you waived, with the pull request at head.
+func (o MergeOpts) line(steps, waived []int, verified, head string) string {
 	if o.Autonomous {
 		return config.AutonomousMergeLine(verified, head)
 	}
 	if o.Evidence {
-		return config.EvidenceMergeLine(steps, verified, head)
+		return config.WaivedMergeLine(config.EvidenceMergeLine(steps, verified, head), waived, o.Reason)
 	}
-	return config.MergeLine(steps, verified, head)
+	return config.WaivedMergeLine(config.MergeLine(steps, verified, head), waived, o.Reason)
 }
 
 // evidenceFor checks that verify-pr's report holds for the head the steps
@@ -425,12 +433,16 @@ func evidenceFor(id string, v *forge.Verification, verified string, steps []int)
 	return nil
 }
 
-// passedSteps reads --passed against the human verification procedure at
-// head: every step, since finish-ticket merges only when each one passed.
-func (c *Ctx) passedSteps(id, head, passed string) ([]int, error) {
+// passedSteps reads --passed and --waived against the human verification
+// procedure at head: every step, since finish-ticket merges only when each
+// one passed or you waived it with a reason. At least one must have passed:
+// the comment and the merge line say human verification passed, which is
+// not true of a head nobody ran a step on. all in --passed means every step
+// you did not waive.
+func (c *Ctx) passedSteps(id, head, passed, waived, reason string) (got, skip []int, err error) {
 	proc := &ShowResult{}
 	if err := c.stepsAt(id, head, proc); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var want []int
 	for _, s := range proc.Steps {
@@ -439,15 +451,33 @@ func (c *Ctx) passedSteps(id, head, passed string) ([]int, error) {
 		}
 	}
 	slices.Sort(want)
-	got, err := parsePassed(passed, want)
-	if err != nil {
-		return nil, err
+	skip = []int{}
+	if waived != "" {
+		if reason == "" {
+			return nil, nil, apperr.New(apperr.Usage, "--waived needs --reason: why the steps can stay unrun")
+		}
+		if skip, err = parsePassed(waived, want); err != nil {
+			return nil, nil, apperr.New(apperr.Usage, "--waived takes step numbers and ranges, such as 3 or 2,4; not %q", waived).
+				WithHint("tkt show %s --steps", id)
+		}
 	}
-	if !slices.Equal(got, want) {
-		return nil, apperr.New(apperr.StepsIncomplete, "--passed names %s, but the pull request's procedure has %s: finish-ticket merges only when every step passed", config.StepsText(got), config.StepsText(want)).
+	rest := slices.DeleteFunc(slices.Clone(want), func(n int) bool { return slices.Contains(skip, n) })
+	if len(rest) == 0 || len(rest)+len(skip) != len(want) {
+		return nil, nil, apperr.New(apperr.StepsIncomplete, "--waived names %s, but the pull request's procedure has %s, and at least one step must pass", config.StepsText(skip), config.StepsText(want)).
 			WithHint("tkt show %s --steps", id).With("steps", want)
 	}
-	return got, nil
+	if got, err = parsePassed(passed, rest); err != nil {
+		return nil, nil, err
+	}
+	if !slices.Equal(got, rest) {
+		left := config.StepsText(want)
+		if len(skip) > 0 {
+			left += ", with " + config.StepsText(skip) + " waived"
+		}
+		return nil, nil, apperr.New(apperr.StepsIncomplete, "--passed names %s, but the pull request's procedure has %s: finish-ticket merges only when every step passed or you waived it", config.StepsText(got), left).
+			WithHint("tkt show %s --steps", id).With("steps", want)
+	}
+	return got, skip, nil
 }
 
 // mergeTurnLock is the lock a tkt merge holds from its check that no other
@@ -514,7 +544,7 @@ func (c *Ctx) mergeInFlight(agents []herdr.Agent, except string) (string, error)
 // dropOrder forgets a ticket's merge order and records why: cancelled by
 // tkt merge --cancel, or dropped by a new head.
 func (c *Ctx) dropOrder(ts *ticketState, id, why string) {
-	c.save(ts, "merge_head", "", "merge_steps", "", "merge_as", "", "merge_by", "", "merge_at", "", "merge_sent", "")
+	c.save(ts, "merge_head", "", "merge_steps", "", "merge_waived", "", "merge_reason", "", "merge_as", "", "merge_by", "", "merge_at", "", "merge_sent", "")
 	c.record(history.Event{Ticket: id, Event: history.Merge, Action: why})
 }
 

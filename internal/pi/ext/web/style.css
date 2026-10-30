@@ -744,6 +744,18 @@ dd {
 	margin: 0 0 6px;
 }
 
+details.report {
+	margin-bottom: 16px;
+}
+
+details.report summary {
+	cursor: pointer;
+}
+
+details.report summary h3 {
+	display: inline;
+}
+
 .results li,
 .steps li,
 .checklist li {
@@ -1436,7 +1448,9 @@ table.grid th {
 	overflow-y: auto;
 }
 
-.note {
+/* Under .chat, since a diff's "No newline" row is a note too: the "tkt"
+   label put a cell of its own in that row and broke the table's columns. */
+.chat .note {
 	background: var(--panel);
 	border-radius: 6px;
 	padding: 8px 12px;
@@ -1445,7 +1459,7 @@ table.grid th {
 	font-size: 0.95rem;
 }
 
-.note::before {
+.chat .note::before {
 	content: "tkt";
 	display: block;
 	font-family: var(--mono);

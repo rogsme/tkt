@@ -45,7 +45,7 @@ cleared gets review-pr first; then verify-pr runs, and once its report
 passes every step the loop sends finish-ticket
 the autonomous merge line with tkt merge --autonomous, one merge at a time
 in the repository. It waits for finish-ticket after the merge: Status: DONE
-ends it with merged, and tkt watch removes the ticket; a failure of the
+ends it with merged, and the ticket waits for your tkt done; a failure of the
 checks on the base ends it with post_merge_failed and a notification, and
 nothing else happens. Steps verify-pr could not run pause it (needs_you).
 The ticket stays a yolo one when its loop starts again, and every line tkt

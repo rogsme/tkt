@@ -24,9 +24,10 @@ From there tkt watch treats the pull request as it does a ticket's: it
 merges a moved base when a sync is due, and runs ci once per head when the
 checks fail. No skill reviews, fixes or merges a pull request without a
 ticket, so tkt ls says when the review bot found something, and when the
-pull request is ready for you to merge. Merge it yourself, or close it to
-drop the run; tkt watch then removes the run, and removes at once a run that
-ended with nothing to change. tkt run refuses a run the stages that need a
+pull request is ready for you to merge. Merge it yourself and run tkt done
+once you finish with the run, or close it to drop the run: tkt watch then
+removes the run, and removes at once a run that ended with nothing to
+change. tkt run refuses a run the stages that need a
 ticket, such as review and address, and tkt approve, tkt auto and tkt merge
 take tickets only.
 

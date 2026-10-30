@@ -77,7 +77,7 @@ export interface Row {
 	 * head: tkt watch hands them to finish-ticket once the head is synced,
 	 * reviewed and green. It holds across clean merges of the base, and sent
 	 * says when finish-ticket last got the line. */
-	merge?: { head: string; steps: number[]; at: string; sent?: string; by?: string } | null;
+	merge?: { head: string; steps: number[]; waived?: number[]; reason?: string; at: string; sent?: string; by?: string } | null;
 	phase: string;
 	phase_since: string;
 	started: string;
@@ -99,6 +99,9 @@ export interface Verification {
 export interface Confirmation {
 	head: string;
 	evidence: boolean;
+	/** waived names the steps you skipped, and reason why. */
+	waived?: number[];
+	reason?: string;
 	url: string;
 	at_head: boolean;
 	carried: boolean;
@@ -117,6 +120,10 @@ export function accepted(row: Row | undefined): boolean {
 	const a = row?.accepted;
 	return !!a && (a.at_head || a.carried);
 }
+
+/** findings says a verdict asks for changes, from the review bot or from
+ * review-pr. */
+export const findings = (verdict: string | undefined): boolean => verdict === "FINDINGS" || verdict === "CHANGES_REQUESTED";
 
 /** verifiedAt returns the report when it counts for the row's head. */
 export function verifiedAt(row: Row | undefined): Verification | undefined {
@@ -242,6 +249,7 @@ export interface MergeResult {
 	head: string;
 	verified?: string;
 	steps: number[];
+	waived?: number[];
 	action: "merging" | "ordered" | "cancelled" | "none";
 	waits?: "sync" | "review" | "bot" | "checks" | "turn" | "";
 	after?: string;
@@ -281,7 +289,7 @@ export function mergeText(r: MergeResult): string {
 	}
 	if (r.action === "cancelled") return r.sent ? `${r.ticket} has no merge order now. finish-ticket got the merge line at ${r.sent}; to stop it, tell its agent in the ticket's tab.` : `${r.ticket} has no merge order now.`;
 	if (r.action === "none") return r.sent ? `${r.ticket} has no merge order: finish-ticket got the merge line at ${r.sent}. To stop it, tell its agent in the ticket's tab.` : `${r.ticket} has no merge order.`;
-	return `${r.ticket}: finish-ticket merges pull request #${r.pr} in a fresh session in its tab. Once it ends with Status: DONE, tkt watch removes the ticket, or /done ${r.ticket} does.`;
+	return `${r.ticket}: finish-ticket merges pull request #${r.pr} in a fresh session in its tab. Once it ends with Status: DONE, /done ${r.ticket} removes the ticket when you finish with it.`;
 }
 
 /** ago renders milliseconds for people: 45s, 12m, 3h, 2d. */

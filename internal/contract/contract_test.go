@@ -387,6 +387,22 @@ func TestEvidenceLineIsAConfirmationFinishTicketTakes(t *testing.T) {
 	}
 }
 
+func TestWaivedLineIsAWaiverFinishTicketTakes(t *testing.T) {
+	skill := read(t, "finish-ticket-authorization.md")
+	// finish-ticket takes a step the user waived with a reason, which /check
+	// asks for and the line names.
+	if want := "explicitly confirmed as passed by the user, or explicitly waived by the user with a reason"; !strings.Contains(skill, want) {
+		t.Errorf("finish-ticket no longer says %q", want)
+	}
+	head := strings.Repeat("a1", 20)
+	line := config.WaivedMergeLine(config.MergeLine([]int{1, 2}, head, head), []int{3}, "it needs a real card")
+	for _, want := range []string{"merge the PR", "steps 1 and 2 passed on head " + head, "The user waived step 3: it needs a real card."} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the line %q does not say %q", line, want)
+		}
+	}
+}
+
 func TestStepsCarryOverCleanMerges(t *testing.T) {
 	skill := read(t, "finish-ticket-authorization.md")
 	if !strings.Contains(skill, "\n"+contract.CarryOverRule) {
