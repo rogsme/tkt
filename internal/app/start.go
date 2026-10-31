@@ -151,9 +151,11 @@ func (a *App) Start(ctx context.Context, o StartOpts) (*StartResult, error) {
 			o.Autonomous = true
 		}
 	}
-	preset, err := c.Cfg.Pick(o.As, text, o.Force)
-	if err != nil {
-		return nil, err
+	preset := c.Cfg.Default()
+	if o.As != "" {
+		if preset, err = c.Cfg.Preset(o.As); err != nil {
+			return nil, err
+		}
 	}
 	name := prompt.AgentName(id)
 	again, stage, busy := "tkt start "+id, "start", "use tkt run or tkt resume, or close it"

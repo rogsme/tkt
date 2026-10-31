@@ -109,7 +109,7 @@ tkt plays no part here. It needs only the id.
 
 To pick which ready tickets to start, run `tkt suggest 3`, or `/suggest 3` in the tkt agent. To narrow the picks, put your own words after it, such as `tkt suggest five tickets tagged feedback`: tkt sends them as suggest-tickets' request, which sets the count and narrows the candidates by a label, an area or a model. Either way, a fresh session in a suggest tab at the repository's root runs `suggest-tickets`, which only reads: it keeps the ready tickets whose blockers are all done, ranks them by how many tickets wait on each and then by priority, and drops one that would collide with work in flight, judged from the files each in-flight branch changes, or with another pick. With model routing on, a batch gets at most one heavy ticket. It lists what waits on you first, then the picks, each with the model it runs on when model routing is on, and what it left out and why.
 
-tkt acts on none of the answer. It stays in the suggest tab: read it there, or with `tkt suggest --show`, which the web page's Suggest view shows as it comes, ask its agent about it, and start the tickets you want with `tkt start`, or `/start` in the tkt agent, adding `--as` for a ticket whose model another preset serves. `[suggest] as` in `config.toml` names a cheap preset for the run.
+tkt acts on none of the answer. It stays in the suggest tab: read it there, or with `tkt suggest --show`, which the web page's Suggest view shows as it comes, ask its agent about it, and start the tickets you want with `tkt start`, or `/start` in the tkt agent, adding `--as` for a ticket that should run on another preset. `[suggest] as` in `config.toml` names a cheap preset for the run.
 
 ### 2. tkt start creates the workspace
 
@@ -117,7 +117,7 @@ tkt acts on none of the answer. It stays in the suggest tab: read it there, or w
 tkt start ACM-123
 ```
 
-To send a longer prompt, such as a start-ticket block with a `Model:` line, pipe it in: `xclip -selection clipboard -o | tkt start --prompt -`.
+To send a longer prompt, such as a start-ticket block, pipe it in: `xclip -selection clipboard -o | tkt start --prompt -`.
 
 ```mermaid
 sequenceDiagram
@@ -147,7 +147,7 @@ The new branch starts from the base on the remote: tkt fetches it first, so the 
 
 The tab's `TMPDIR` is a private directory for the ticket, such as `/tmp/tkt-acme-app-ACM-123-123456`, so `mktemp`, Python, Node, Go and `gh` in two tickets' agents never write the same temporary file. Claude Code runs its tools in the tab, so its agents have it. OpenCode runs every agent's tools in its one background service instead, which the tab's environment never reaches: `tkt hook tmp --install` puts tkt's plugin into OpenCode, which gives each shell in a ticket's worktree that ticket's `TMPDIR`, and moves into the ticket's directory a new `/tmp` path, such as `/tmp/pr-body.md`, that a file tool names or a shell command uses unquoted. A path in quotes, as in a search or a message, stays as written. `tkt doctor` warns while it is missing.
 
-tkt keeps the ticket's preset, session, tab and pane in the worktree's git directory, so the record disappears with the worktree. The prompt's `Model:` line, when it has one, picks the first preset that serves that model.
+tkt keeps the ticket's preset, session, tab and pane in the worktree's git directory, so the record disappears with the worktree. A ticket runs on the first preset unless `--as` names another. tkt never reads a ticket's `## Model routing` section or a prompt's `Model:` line; those are for the skills and for you.
 
 ### 3. start-ticket plans
 

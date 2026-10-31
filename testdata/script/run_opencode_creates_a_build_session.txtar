@@ -14,14 +14,11 @@ grep 'address the review on this branch' $FAKE_DIR/prompts
 -- config.toml --
 [presets.claude]
 harness = "claude"
-serves = ["frontier"]
 
 [presets.big]
 harness = "opencode"
 model = "acme/big#high"
-serves = ["frontier"]
 
 [presets.fast]
 harness = "opencode"
 model = "acme/fast#max"
-serves = ["small"]

@@ -124,7 +124,7 @@ func startCmd(g *globals) *cobra.Command {
 	cmd.Flags().StringVar(&o.Scratch, "scratch", "", "start an agent in worktree NAME with no ticket, and send it nothing")
 	cmd.MarkFlagsMutuallyExclusive("scratch", "prompt")
 	cmd.MarkFlagsMutuallyExclusive("scratch", "prompt-file")
-	cmd.Flags().StringVar(&o.As, "as", "", "run on PRESET instead of the one the prompt's Model: line picks")
+	cmd.Flags().StringVar(&o.As, "as", "", "run on PRESET instead of the default one")
 	cmd.RegisterFlagCompletionFunc("as", g.completePresets)
 	var manual, auto, autoPlan, yolo bool
 	cmd.Flags().BoolVar(&manual, "manual", false, "drive the ticket yourself: start no tkt auto loop")

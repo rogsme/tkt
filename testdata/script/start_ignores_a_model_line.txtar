@@ -1,0 +1,27 @@
+# A prompt's Model: line picks nothing: the default preset runs the ticket, and
+# --as runs any preset, whatever the prompt says. A serves key from older
+# settings loads and does nothing.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+mkprompt $WORK/p.txt ACM-6 'Model: small'
+stdin $WORK/p.txt
+exec tkt start ACM-6 --prompt -
+state $FAKE_WT_ROOT/ACM-6 preset claude
+
+mkprompt $WORK/q.txt ACM-7 'Model: frontier'
+stdin $WORK/q.txt
+exec tkt start ACM-7 --as fast --prompt -
+state $FAKE_WT_ROOT/ACM-7 preset fast
+
+! exec tkt start ACM-8 --as nope --json
+envelope '.error.code' unknown_preset
+
+-- config.toml --
+[presets.claude]
+harness = "claude"
+serves = ["frontier"]
+
+[presets.fast]
+harness = "opencode"
+model = "acme/fast#max"
+serves = []

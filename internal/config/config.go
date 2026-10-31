@@ -3,7 +3,6 @@
 package config
 
 import (
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,13 +24,6 @@ type Preset struct {
 	// Model is empty for the harness's default model. A Claude model reads
 	// model#effort; an OpenCode model reads provider/model#variant.
 	Model string `json:"model,omitempty"`
-	// Serves lists the prompt Model: values the preset serves; "*" serves any.
-	Serves []string `json:"serves"`
-}
-
-// ServesModel reports whether the preset serves a prompt's Model: value.
-func (p Preset) ServesModel(v string) bool {
-	return slices.Contains(p.Serves, "*") || slices.Contains(p.Serves, v)
 }
 
 // Config is the loaded settings. Presets keep their file order: the first
@@ -288,8 +280,8 @@ var BuiltinStages = map[string]string{
 // BuiltinPresets apply when the settings define none.
 func BuiltinPresets() []Preset {
 	return []Preset{
-		{Name: Claude, Harness: Claude, Serves: []string{"*"}},
-		{Name: OpenCode, Harness: OpenCode, Serves: []string{"*"}},
+		{Name: Claude, Harness: Claude},
+		{Name: OpenCode, Harness: OpenCode},
 	}
 }
 

@@ -19,8 +19,7 @@ they must match. Without a prompt, it sends the start stage line. --prompt -
 reads the prompt from stdin, which keeps a long prompt out of your shell
 history; --prompt-file reads it from a file.
 
-The prompt's Model: line, when it has one, picks the preset (tkt help config);
---as picks one yourself.
+The ticket runs on the first preset (tkt help config); --as picks another.
 
 After the start, tkt start starts a tkt auto loop for the ticket, in a
 session of its own, so the ticket drives itself once you approve the plan:

@@ -90,12 +90,10 @@ houserules
 -- config.toml --
 [presets.claude]
 harness = "claude"
-serves = ["frontier"]
 
 [presets.cheap]
 harness = "claude"
 model = "haiku"
-serves = ["acme-small-2"]
 
 [suggest]
 as = "cheap"

@@ -37,13 +37,13 @@ func loadLegacy(dir string) (Config, error) {
 	return c, nil
 }
 
-// parsePresets reads "name harness model serves" lines; "-" is the default
-// model and an empty serves column serves any model.
+// parsePresets reads "name harness model" lines; "-" is the default model.
+// A fourth column, the old serves, is allowed and ignored.
 func parsePresets(c *Config, src string) error {
 	f := c.Source
 	for _, line := range lines(src) {
 		fields := strings.Fields(line)
-		name, harness, model, serves := fields[0], field(fields, 1), field(fields, 2), field(fields, 3)
+		name, harness, model := fields[0], field(fields, 1), field(fields, 2)
 		if harness != Claude && harness != OpenCode {
 			return apperr.New(apperr.ConfigInvalid, "%s: preset '%s': the harness must be claude or opencode", f, name)
 		}
@@ -59,10 +59,7 @@ func parsePresets(c *Config, src string) error {
 		if model == "-" {
 			model = ""
 		}
-		if serves == "" {
-			serves = "*"
-		}
-		c.Presets = append(c.Presets, Preset{Name: name, Harness: harness, Model: model, Serves: strings.Split(serves, ",")})
+		c.Presets = append(c.Presets, Preset{Name: name, Harness: harness, Model: model})
 	}
 	if len(c.Presets) == 0 {
 		return apperr.New(apperr.ConfigInvalid, "%s: no presets", f)
