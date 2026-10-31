@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { AttentionKind } from "../attention.ts";
 import { boardColumns, columns } from "../board.ts";
 import type { Board, Page, ToPage } from "../mirror.ts";
+import type { ChoresResult } from "../model.ts";
 import { commandsOf, Fake } from "../play/fake.ts";
 import { triggers } from "../play/triggers.ts";
 
@@ -99,4 +100,10 @@ test("the page's queries get tkt's envelopes", () => {
 	}
 	assert.equal((fake.query({ what: "diff", ticket: "ACM-101" }) as { ok: boolean }).ok, false);
 	assert.equal((fake.query({ what: "message", ticket: "ACM-999" }) as { ok: boolean }).ok, false);
+});
+
+test("the chores view gets a chore that opens a pull request and one that does not", () => {
+	const { fake } = setup();
+	const env = fake.query({ what: "chores" }) as { result: ChoresResult };
+	assert.deepEqual([...new Set(env.result.chores.map((c) => c.pr))].sort(), [false, true]);
 });
