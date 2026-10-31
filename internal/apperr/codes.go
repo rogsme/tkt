@@ -29,9 +29,6 @@ const (
 	InvalidScratchName   Code = "invalid_scratch_name"
 	UnknownPreset        Code = "unknown_preset"
 	UnknownStage         Code = "unknown_stage"
-	PresetModelMismatch  Code = "preset_model_mismatch"
-	AmbiguousModel       Code = "ambiguous_model"
-	NoPresetForModel     Code = "no_preset_for_model"
 	PromptTooLarge       Code = "prompt_too_large"
 	PromptEmpty          Code = "prompt_empty"
 	PromptShellEscape    Code = "prompt_shell_escape"
@@ -142,9 +139,6 @@ var Registry = []Info{
 	{InvalidScratchName, ExitUsage, "the --scratch name is not a plain branch name, or it is a ticket id"},
 	{UnknownPreset, ExitUsage, "no preset has that name"},
 	{UnknownStage, ExitUsage, "no stage has that name"},
-	{PresetModelMismatch, ExitUsage, "the chosen preset does not serve the prompt's Model: value"},
-	{AmbiguousModel, ExitUsage, "the prompt names several Model: values"},
-	{NoPresetForModel, ExitUsage, "no preset serves the prompt's Model: value"},
 	{PromptTooLarge, ExitUsage, "the prompt is over the size limit"},
 	{PromptEmpty, ExitUsage, "the prompt is empty"},
 	{PromptShellEscape, ExitUsage, "the prompt starts with '!', which switches the agent to shell mode"},

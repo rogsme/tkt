@@ -14,17 +14,14 @@ import (
 const settings = `# Presets in order: the first is the default.
 [presets.claude]
 harness = "claude"
-serves = ["frontier"]
 
 [presets.big]
 harness = "opencode"
 model = "acme/big#high"
-serves = ["frontier"]
 
 [presets.fast]
 harness = "opencode"
 model = "acme/fast#max"
-serves = ["small"]
 `
 
 const legacyPresets = `# name  harness   model              serves
@@ -73,7 +70,7 @@ func TestUserPresetsKeepHashInModels(t *testing.T) {
 		t.Errorf("presets %v", got)
 	}
 	fast, _ := c.Preset("fast")
-	if fast.Model != "acme/fast#max" || !slices.Equal(fast.Serves, []string{"small"}) {
+	if fast.Model != "acme/fast#max" {
 		t.Errorf("fast %+v", fast)
 	}
 	if claude, _ := c.Preset("claude"); claude.Model != "" {
@@ -86,7 +83,6 @@ func TestSettingsErrors(t *testing.T) {
 		"[presets.odd]\nharness = \"vim\"\n",
 		"[presets.x]\nharness = \"claude\"\nmodle = \"opus\"\n",
 		"[presets.x]\nharness = \"opencode\"\nmodel = \"fast\"\n",
-		"[presets.x]\nharness = \"claude\"\nserves = []\n",
 		"[presets.\"-x\"]\nharness = \"claude\"\n",
 		"[stages]\nlint = \"  \"\n",
 		"[stages]\nLint = \"Run it.\"\n",
@@ -109,7 +105,7 @@ func TestPresetOrderFollowsTheFile(t *testing.T) {
 	if got := c.PresetNames(); !slices.Equal(got, []string{"zeta", "alpha"}) {
 		t.Errorf("order %v", got)
 	}
-	if p := c.Default(); p.Name != "zeta" || !slices.Equal(p.Serves, []string{"*"}) {
+	if p := c.Default(); p.Name != "zeta" {
 		t.Errorf("default %+v", p)
 	}
 }
@@ -146,7 +142,7 @@ func TestLegacyFilesAreConverted(t *testing.T) {
 	if got := c.PresetNames(); !slices.Equal(got, []string{"claude", "big", "fast"}) {
 		t.Errorf("presets %v", got)
 	}
-	if fast, _ := c.Preset("fast"); fast.Model != "acme/fast#max" || !slices.Equal(fast.Serves, []string{"small"}) {
+	if fast, _ := c.Preset("fast"); fast.Model != "acme/fast#max" {
 		t.Errorf("fast %+v", fast)
 	}
 	if got, _ := c.StageLine("lint", "ACM-1"); got != `Run "the" linter on ACM-1.` {
@@ -154,50 +150,6 @@ func TestLegacyFilesAreConverted(t *testing.T) {
 	}
 	if len(c.IgnoredLegacy) != 2 {
 		t.Errorf("ignored %v", c.IgnoredLegacy)
-	}
-}
-
-func TestPickFollowsModelLine(t *testing.T) {
-	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}), "")
-	cases := []struct{ as, prompt, want string }{
-		{"", "- Model: `small` (acme/fast)", "fast"},
-		{"", "Model: frontier.", "claude"},
-		{"", "no model", "claude"},
-		{"big", "Model: frontier", "big"},
-	}
-	for _, tc := range cases {
-		p, err := c.Pick(tc.as, tc.prompt, false)
-		if err != nil || p.Name != tc.want {
-			t.Errorf("Pick(%q, %q) = %s, %v; want %s", tc.as, tc.prompt, p.Name, err, tc.want)
-		}
-	}
-}
-
-func TestPickRefusesConflicts(t *testing.T) {
-	c, _ := Load(dirWith(t, map[string]string{"config.toml": settings}), "")
-	if _, err := c.Pick("claude", "Model: small", false); code(err) != apperr.PresetModelMismatch {
-		t.Errorf("--as against the Model line: %v", err)
-	}
-	if _, err := c.Pick("", "Model: small\nModel: frontier", false); code(err) != apperr.AmbiguousModel {
-		t.Errorf("two Model values: %v", err)
-	}
-	if _, err := c.Pick("", "Model: huge", false); code(err) != apperr.NoPresetForModel {
-		t.Errorf("nothing serves the value: %v", err)
-	}
-	if _, err := c.Pick("nope", "", false); code(err) != apperr.UnknownPreset {
-		t.Errorf("unknown preset: %v", err)
-	}
-	if p, err := c.Pick("claude", "Model: small", true); err != nil || p.Name != "claude" {
-		t.Errorf("--force: %s, %v", p.Name, err)
-	}
-}
-
-func TestModelValues(t *testing.T) {
-	if got := ModelValues("Model: frontier.\n- `Model: frontier`, not small"); !slices.Equal(got, []string{"frontier"}) {
-		t.Errorf("got %v", got)
-	}
-	if got := ModelValues("nothing"); len(got) != 0 {
-		t.Errorf("got %v", got)
 	}
 }
 

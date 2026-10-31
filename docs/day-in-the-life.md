@@ -12,12 +12,10 @@ The short version: keep the chat open in a herdr pane all day. Its board shows e
 [presets.claude]
 harness = "claude"
 model = "opus#high"
-serves = ["frontier"]
 
 [presets.fast]
 harness = "opencode"
 model = "acme/small#max"
-serves = ["small"]
 
 [stages]
 explain = "Explain what this branch changes for someone who has not read the code: what users see, and what could go wrong. Change nothing and post nothing."
@@ -46,7 +44,7 @@ as = "fast"
 prompt = "Read the last day of CI runs on main. When a test failed and then passed on a rerun, find out why and fix it."
 ```
 
-The first preset is the default, so a ticket runs on Claude Code unless its model routing asks for a small model, which `fast` serves through OpenCode. suggest-tickets runs on `fast` too, since it only reads. `deps` upgrades the dependencies on Monday and Thursday mornings. `flaky` looks for flaky tests every weekday, and on most days finds none. `explain` is a stage of your own: `tkt run ACM-131 explain` sends its line to a fresh session, as the built-in stages do.
+The first preset is the default, so a ticket runs on Claude Code unless you start it on `fast`, a small model through OpenCode. suggest-tickets runs on `fast` too, since it only reads. `deps` upgrades the dependencies on Monday and Thursday mornings. `flaky` looks for flaky tests every weekday, and on most days finds none. `explain` is a stage of your own: `tkt run ACM-131 explain` sends its line to a fresh session, as the built-in stages do.
 
 Everything else keeps its default, which suits this day. The review bot gets fifteen minutes to review each head (`[review] bot_wait`), and three agents that tkt auto and tkt watch set to work run at once (`[auto] max_parallel`). A loop pauses after five fix runs (`[auto] max_rounds`), and an agent that sits idle with no status line for two hours is marked stale (`[board] stale_after`). tkt watch looks at every ticket each minute (`[watch] interval`). `tkt help config` lists every setting.
 
@@ -430,7 +428,7 @@ The chat fits most of the day. Use it when several tickets are in flight and you
 Every action in the chat is a tkt command underneath, so a terminal can always take the same step. `/approve ID` is `tkt approve ID`, and `/approve ID auto` also starts `tkt auto ID`. `/send` is `tkt send --steer`, and text queued until the agent stops is `tkt send --wait`. `/hold` is `tkt hold`, `/sync` is `tkt sync`, `/accept` is `tkt accept --reason`, `/chores` is `tkt chores` and `tkt chore run`, `/suggest` is `tkt suggest` with the same words, and `/update` is `tkt update`. `/version` has no terminal twin: `tkt --version` names the tkt on disk, which a chat opened before an update no longer runs. `/web` is `tkt web`, and the page it opens is the chat again, not a third place: use it for reading long answers, pasting a screenshot, or clicking through a question, and keep the terminal for pi's own screens such as `/model`. `/auto ID on` runs `tkt auto ID`, `/auto ID full` adds `--approve-plan`, `/auto ID yolo` adds `--yolo`, `/auto ID off` is `tkt auto ID --stop`, and `/start ID as fast` is `tkt start ID --as fast`. Reach for a terminal:
 
 - to set up, stop and check the tools, with `tkt doctor`, `tkt watch --install`, `--stop` and `--uninstall`, `tkt hook tmp --install` and `tkt completion`;
-- for the steps the chat does not take, such as `tkt merge ID --cancel`, a start-ticket block with its `Model:` line piped in from the clipboard (`xclip -selection clipboard -o | tkt start --prompt -`, or `--prompt-file` for a file), work with no ticket (`tkt start --scratch spike-pdf`, removed later with `wt remove spike-pdf`), and `tkt done --all` after a time without tkt watch;
+- for the steps the chat does not take, such as `tkt merge ID --cancel`, a start-ticket block piped in from the clipboard (`xclip -selection clipboard -o | tkt start --prompt -`, or `--prompt-file` for a file), work with no ticket (`tkt start --scratch spike-pdf`, removed later with `wt remove spike-pdf`), and `tkt done --all` after a time without tkt watch;
 - to look before a step, with `tkt watch --once --dry-run`, `tkt auto ACM-127 --once --dry-run`, or `--dry-run` on most commands that change something;
 - for scripts, with `tkt ls --json`, `tkt wait ACM-131 --notify`, `tkt schema`, and the stable error codes and exit statuses; `tkt ls --json | jq -r '.result.rows[] | select(.phase == "ready_for_human" and .chore == "") | .ticket'` lists the tickets ready to verify;
 - to read what happened, with `tkt history ACM-124`, `tkt stats --since 720h`, `tkt show ACM-131 --steps` to paste the steps elsewhere, and `journalctl --user -u 'tkt-watch@*'` for every step tkt watch took.

@@ -17,14 +17,11 @@ logcontains '--label ACM-12\ \(big\)'
 -- config.toml --
 [presets.claude]
 harness = "claude"
-serves = ["frontier"]
 
 [presets.big]
 harness = "opencode"
 model = "acme/big#high"
-serves = ["frontier"]
 
 [presets.fast]
 harness = "opencode"
 model = "acme/fast#max"
-serves = ["small"]

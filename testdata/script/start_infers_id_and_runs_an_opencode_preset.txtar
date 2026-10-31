@@ -1,10 +1,10 @@
-# Without an id, tkt start takes the prompt's first ticket, and the prompt's
-# Model: line picks the preset.
+# Without an id, tkt start takes the prompt's first ticket, and --as runs it
+# on an OpenCode preset.
 mkdir $HOME/.config/tkt
 cp $WORK/config.toml $HOME/.config/tkt/config.toml
-mkprompt $WORK/p.txt ACM-5 'Model: small (acme/fast)'
+mkprompt $WORK/p.txt ACM-5
 stdin $WORK/p.txt
-exec tkt start --prompt -
+exec tkt start --as fast --prompt -
 stderr 'ticket ACM-5 \(the first id in the prompt\)'
 logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-5 --label 'ACM-5 (fast)'
 logged opencode api POST /api/session -d
@@ -18,14 +18,11 @@ houserules
 -- config.toml --
 [presets.claude]
 harness = "claude"
-serves = ["frontier"]
 
 [presets.big]
 harness = "opencode"
 model = "acme/big#high"
-serves = ["frontier"]
 
 [presets.fast]
 harness = "opencode"
 model = "acme/fast#max"
-serves = ["small"]

@@ -6,9 +6,7 @@ mkdir $HOME/.config/tkt
 cp $WORK/config.toml $HOME/.config/tkt/config.toml
 mkdir $REPO/.tkt
 cp $WORK/tkt.toml $REPO/.tkt/tkt.toml
-mkprompt $WORK/p.txt ACM-5 'Model: small (acme/fast)'
-stdin $WORK/p.txt
-exec tkt start --prompt -
+exec tkt start ACM-5
 logged herdr tab create --workspace w1 --cwd $FAKE_WT_ROOT/ACM-5 --label 'ACM-5 (claude)'
 logged herdr agent start acm-5 --kind claude
 state $FAKE_WT_ROOT/ACM-5 harness claude
@@ -21,11 +19,9 @@ stdout '^ok    config           presets claude, fast from .*/\.tkt/tkt\.toml and
 [presets.fast]
 harness = "opencode"
 model = "acme/fast#max"
-serves = ["small"]
 
 [presets.claude]
 harness = "claude"
-serves = ["frontier"]
 -- tkt.toml --
 [presets.claude]
 harness = "claude"

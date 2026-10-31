@@ -201,14 +201,11 @@ as = "claude"
 	if got := c.PresetNames(); !slices.Equal(got, []string{"claude", "fast"}) {
 		t.Errorf("presets %v", got)
 	}
-	if p := c.Default(); p.Model != "opus#high" || !p.ServesModel("small") {
+	if p := c.Default(); p.Model != "opus#high" {
 		t.Errorf("default %+v", p)
 	}
 	if !slices.Equal(c.PresetFiles, []string{SharedPath(root)}) || c.Verify.As != "claude" {
 		t.Errorf("preset files %v, verify %+v", c.PresetFiles, c.Verify)
-	}
-	if p, _ := c.Pick("", "Model: small", false); p.Name != "claude" {
-		t.Errorf("Model: small picked %s", p.Name)
 	}
 
 	local := `[presets.mine]

@@ -41,9 +41,10 @@ var (
 )
 
 type presetTOML struct {
-	Harness string   `toml:"harness"`
-	Model   string   `toml:"model"`
-	Serves  []string `toml:"serves"`
+	Harness string `toml:"harness"`
+	Model   string `toml:"model"`
+	// Serves is read and ignored, so a file from before tkt dropped it loads.
+	Serves any `toml:"serves"`
 }
 
 type agentTOML struct {
@@ -185,14 +186,8 @@ func readPresets(path string, f fileTOML, md toml.MetaData) ([]Preset, error) {
 			return nil, bad("the harness must be claude or opencode")
 		case p.Harness == OpenCode && p.Model != "" && !openCode.MatchString(p.Model):
 			return nil, bad("an OpenCode model looks like provider/model or provider/model#variant")
-		case md.IsDefined("presets", name, "serves") && len(p.Serves) == 0:
-			return nil, bad("serves is empty; leave it out to serve any model")
 		}
-		serves := p.Serves
-		if serves == nil {
-			serves = []string{"*"}
-		}
-		out = append(out, Preset{Name: name, Harness: p.Harness, Model: p.Model, Serves: serves})
+		out = append(out, Preset{Name: name, Harness: p.Harness, Model: p.Model})
 	}
 	return out, nil
 }
@@ -426,18 +421,11 @@ func legacyError(dir string, files []string) error {
 // and the stages the user defined.
 func RenderTOML(c Config) string {
 	var b strings.Builder
-	b.WriteString("# tkt settings. The first preset is the default, and tkt tries the presets in\n# this order when a prompt names a model.\n")
+	b.WriteString("# tkt settings. The first preset is the default.\n")
 	for _, p := range c.Presets {
 		fmt.Fprintf(&b, "\n[presets.%s]\nharness = %s\n", tomlKey(p.Name), tomlString(p.Harness))
 		if p.Model != "" {
 			fmt.Fprintf(&b, "model = %s\n", tomlString(p.Model))
-		}
-		if len(p.Serves) > 0 && !(len(p.Serves) == 1 && p.Serves[0] == "*") {
-			q := make([]string, len(p.Serves))
-			for i, s := range p.Serves {
-				q[i] = tomlString(s)
-			}
-			fmt.Fprintf(&b, "serves = [%s]\n", strings.Join(q, ", "))
 		}
 	}
 	if len(c.OwnStages) > 0 {
