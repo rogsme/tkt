@@ -1212,6 +1212,130 @@ table.grid th {
 	font-weight: 500;
 }
 
+/* The chores view: a card per chore, its prompt folded along the bottom. */
+
+.chores {
+	list-style: none;
+	margin: 12px 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.chore-card {
+	background: var(--raised);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.chore-card .card-head {
+	align-items: center;
+	flex-wrap: wrap;
+	padding: 10px 14px 0;
+}
+
+.tag.due {
+	border-color: var(--warning);
+	color: var(--warning);
+}
+
+.chore-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 28px;
+	margin: 8px 0 0;
+	padding: 0 14px 12px;
+}
+
+.chore-facts dt {
+	color: var(--dim);
+	font-size: 0.78rem;
+}
+
+.chore-facts dd {
+	margin: 0;
+	font-size: 0.9rem;
+	white-space: nowrap;
+}
+
+.chore-facts .runs dd {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.chore-prompt {
+	border-top: 1px solid var(--border);
+}
+
+.chore-prompt summary {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 8px 14px;
+	cursor: pointer;
+	font-size: 0.9rem;
+	list-style: none;
+}
+
+.chore-prompt summary::-webkit-details-marker {
+	display: none;
+}
+
+.chore-prompt summary::before {
+	content: "";
+	flex: none;
+	width: 6px;
+	height: 6px;
+	border-right: 1.5px solid var(--dim);
+	border-bottom: 1.5px solid var(--dim);
+	transform: translateY(-2px) rotate(-45deg);
+	transition: transform 0.12s ease;
+}
+
+.chore-prompt[open] summary::before {
+	transform: translateY(-3px) rotate(45deg);
+}
+
+.chore-prompt summary:hover {
+	background: var(--panel);
+}
+
+/* Inset, since the card's rounded corners clip what sits outside it. */
+.chore-prompt summary:focus-visible {
+	outline: 2px solid var(--line);
+	outline-offset: -2px;
+}
+
+.chore-prompt b {
+	flex: none;
+	font-weight: 500;
+}
+
+.chore-prompt .preview {
+	flex: 1;
+	min-width: 0;
+	color: var(--dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chore-prompt[open] .preview {
+	display: none;
+}
+
+.chore-prompt .text {
+	background: var(--panel);
+	border-top: 1px solid var(--border);
+	padding: 10px 14px 12px;
+	font-size: 0.9rem;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
 .tiles {
 	display: flex;
 	flex-wrap: wrap;

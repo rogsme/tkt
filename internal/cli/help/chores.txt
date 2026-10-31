@@ -64,7 +64,9 @@ chore starts its first run at its next slot. While a status page reports an
 incident, a due run waits, as every agent run does (tkt help watch).
 
 tkt chores lists the repository's chores: the next slot, the last one tkt
-watch took or skipped, and the run still open. tkt chore run NAME starts a
+watch took or skipped, and the run still open. With --json each chore also
+carries its prompt, as you wrote it, without the rule tkt adds. The tkt
+agent's web page shows it under the chore. tkt chore run NAME starts a
 run now, and refuses while the chore's last run is open, unless that run's
 start stopped before its agent got the prompt: then it goes on with it.
 

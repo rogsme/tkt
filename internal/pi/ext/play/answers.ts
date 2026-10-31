@@ -231,9 +231,9 @@ export function chores(now: number, watching: boolean, open: string[]): Envelope
 		repo,
 		watch: { running: watching },
 		chores: [
-			{ name: "deps", schedule: "0 6 * * 1", as: "", last: at(-50), due: false, next: at(110), pr: true, runs: open, open: open[0] ?? "" },
-			{ name: "flaky-tests", schedule: "30 2 * * *", as: "opencode", last: at(-30), due: true, next: at(-1), pr: true, runs: [], open: "" },
-			{ name: "release", schedule: "0 9 1 * *", as: "", last: "", due: false, next: at(70), pr: false, runs: [], open: "" },
+			{ name: "deps", schedule: "0 6 * * 1", as: "", prompt: "Upgrade the dependencies.\n\nRead each migration guide, and note the breaking changes in the pull request. Run the whole test suite before you push.\n\nLeave the major version of the web framework alone: that upgrade has its own ticket.", last: at(-50), due: false, next: at(110), pr: true, runs: open, open: open[0] ?? "" },
+			{ name: "flaky-tests", schedule: "30 2 * * *", as: "opencode", prompt: "/fix-flaky-tests", last: at(-30), due: true, next: at(-1), pr: true, runs: [], open: "" },
+			{ name: "release", schedule: "0 9 1 * *", as: "", prompt: "If main has commits since the last tag, tag main with the next version and publish its release with gh.", last: "", due: false, next: at(70), pr: false, runs: [], open: "" },
 		],
 	});
 }
