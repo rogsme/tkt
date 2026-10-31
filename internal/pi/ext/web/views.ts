@@ -117,7 +117,7 @@ export function ChoresView({ g, now }: { g: Go; now: number }) {
 			<tbody>
 				${r.chores.map(
 					(c) => html`<tr>
-						<td><b>${c.name}</b>${c.due && html` <span class="tag">due</span>`}</td>
+						<td><b>${c.name}</b> <span class="tag" title=${c.pr ? "Its runs open a pull request." : "Its runs open no pull request."}>${c.pr ? "PR" : "no PR"}</span>${c.due && html` <span class="tag">due</span>`}</td>
 						<td><code>${c.schedule}</code></td>
 						<td>${c.as || "default"}</td>
 						<td>${c.last ? `${since(c.last, now)} ago` : "never"}</td>

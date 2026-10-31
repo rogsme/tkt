@@ -231,9 +231,9 @@ export function chores(now: number, watching: boolean, open: string[]): Envelope
 		repo,
 		watch: { running: watching },
 		chores: [
-			{ name: "deps", schedule: "0 6 * * 1", as: "", last: at(-50), due: false, next: at(110), runs: open, open: open[0] ?? "" },
-			{ name: "flaky-tests", schedule: "30 2 * * *", as: "opencode", last: at(-30), due: true, next: at(-1), runs: [], open: "" },
-			{ name: "docs-links", schedule: "0 9 1 * *", as: "", last: "", due: false, next: at(70), runs: [], open: "" },
+			{ name: "deps", schedule: "0 6 * * 1", as: "", last: at(-50), due: false, next: at(110), pr: true, runs: open, open: open[0] ?? "" },
+			{ name: "flaky-tests", schedule: "30 2 * * *", as: "opencode", last: at(-30), due: true, next: at(-1), pr: true, runs: [], open: "" },
+			{ name: "release", schedule: "0 9 1 * *", as: "", last: "", due: false, next: at(70), pr: false, runs: [], open: "" },
 		],
 	});
 }
