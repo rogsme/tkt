@@ -160,12 +160,12 @@ export interface LsResult {
 }
 
 /** ChoresResult is what tkt chores prints: the repository's chores, each
- * with its next and last slot, in UTC, whether its runs open a pull
- * request, and the run still open. */
+ * with its prompt, its next and last slot, in UTC, whether its runs open a
+ * pull request, and the run still open. */
 export interface ChoresResult {
 	repo: string;
 	watch: { running: boolean };
-	chores: { name: string; schedule: string; as: string; last: string; due: boolean; next: string; pr: boolean; runs: string[]; open: string }[];
+	chores: { name: string; schedule: string; as: string; prompt: string; last: string; due: boolean; next: string; pr: boolean; runs: string[]; open: string }[];
 }
 
 /** choresText lists the chores for the chat, with times in local time. */

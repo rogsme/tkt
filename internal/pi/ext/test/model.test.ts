@@ -87,7 +87,7 @@ test("mergeText says what tkt merge did", () => {
 });
 
 test("choresText lists the chores with the run that holds the next one back", () => {
-	const chore = { name: "deps", schedule: "0 9 * * 1,4", as: "", last: "", due: false, next: "2026-10-26T12:00:00Z", pr: true, runs: ["deps-2026-10-22"], open: "deps-2026-10-22" };
+	const chore = { name: "deps", schedule: "0 9 * * 1,4", as: "", prompt: "Upgrade the dependencies.", last: "", due: false, next: "2026-10-26T12:00:00Z", pr: true, runs: ["deps-2026-10-22"], open: "deps-2026-10-22" };
 	const text = choresText({ repo: "/w/app", watch: { running: false }, chores: [chore] });
 	assert.match(text, /^- deps \(0 9 \* \* 1,4\): next .*Oct 26.*; deps-2026-10-22 is still open/);
 	assert.match(text, /tkt watch does not run for this repository/);

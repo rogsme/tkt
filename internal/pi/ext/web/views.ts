@@ -112,27 +112,40 @@ export function ChoresView({ g, now }: { g: Go; now: number }) {
 	return html`<div class="view">
 		<h2>Chores</h2>
 		${!r.watch.running && html`<p class="warn">tkt watch does not run, so no chore runs on its schedule.</p>`}
-		${r.chores.length === 0 ? html`<p class="muted">This repository has no chores. They live in .tkt files; see tkt chores --help.</p>` : html`<table class="grid">
-			<thead><tr><th>Chore</th><th>Schedule</th><th>Preset</th><th>Last run</th><th>Next run</th><th>Open runs</th><th></th></tr></thead>
-			<tbody>
-				${r.chores.map(
-					(c) => html`<tr>
-						<td><b>${c.name}</b> <span class="tag" title=${c.pr ? "Its runs open a pull request." : "Its runs open no pull request."}>${c.pr ? "PR" : "no PR"}</span>${c.due && html` <span class="tag">due</span>`}</td>
-						<td><code>${c.schedule}</code></td>
-						<td>${c.as || "default"}</td>
-						<td>${c.last ? `${since(c.last, now)} ago` : "never"}</td>
-						<td>${c.next ? local(c.next) : "-"}</td>
-						<td>${c.runs.length ? c.runs.map((id) => html`<a href="#" onClick=${(e: MouseEvent) => {
-							e.preventDefault();
-							g.go({ ticket: id, tab: "message" });
-						}}>${id}</a> `) : "-"}</td>
-						<td><${RunButton} g=${g} cmd=${`/chores run ${c.name}`} cls="btn small quiet">Run now<//></td>
-					</tr>`,
-				)}
-			</tbody>
-		</table>`}
+		${r.chores.length === 0 ? html`<p class="muted">This repository has no chores. They live in .tkt files; see tkt chores --help.</p>` : html`<ul class="chores">${r.chores.map((c) => html`<${ChoreCard} key=${c.name} c=${c} g=${g} now=${now} />`)}</ul>`}
 		<button class="link" onClick=${q.reload}>${q.loading ? "reading..." : "read again"}</button>
 	</div>`;
+}
+
+/** ChoreCard is one chore, with its prompt folded under it. A card and not a
+ * table row: the facts already wrapped inside their columns at 1280 pixels,
+ * and a prompt needs the whole width. A closed prompt shows its start, so
+ * the list says what each chore does without a click. details takes no open
+ * prop, so a chore you opened stays open when the view reads the chores again. */
+function ChoreCard({ c, g, now }: { c: ChoresResult["chores"][number]; g: Go; now: number }) {
+	return html`<li class="chore-card">
+		<div class="card-head">
+			<b class="what">${c.name}</b>
+			<span class="tag" title=${c.pr ? "Its runs open a pull request." : "Its runs open no pull request."}>${c.pr ? "PR" : "no PR"}</span>
+			${c.due && html`<span class="tag due">due</span>`}
+			<span class="spacer"></span>
+			<${RunButton} g=${g} cmd=${`/chores run ${c.name}`} cls="btn small quiet">Run now<//>
+		</div>
+		<dl class="chore-facts">
+			<div><dt>Schedule</dt><dd><code>${c.schedule}</code></dd></div>
+			<div><dt>Preset</dt><dd>${c.as || "default"}</dd></div>
+			<div><dt>Last run</dt><dd>${c.last ? `${since(c.last, now)} ago` : "never"}</dd></div>
+			<div><dt>Next run</dt><dd>${c.next ? local(c.next) : "-"}</dd></div>
+			${c.runs.length > 0 && html`<div class="runs"><dt>Open runs</dt><dd>${c.runs.map((id) => html`<a href="#" onClick=${(e: MouseEvent) => {
+				e.preventDefault();
+				g.go({ ticket: id, tab: "message" });
+			}}>${id}</a> `)}</dd></div>`}
+		</dl>
+		<details class="chore-prompt">
+			<summary><b>Prompt</b><span class="preview">${c.prompt}</span></summary>
+			<div class="text">${c.prompt}</div>
+		</details>
+	</li>`;
 }
 
 export function StatsView({ g }: { g: Go }) {

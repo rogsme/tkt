@@ -322,17 +322,18 @@ func (a *App) ChoreRun(ctx context.Context, o ChoreRunOpts) (*ChoreRunResult, er
 // ChoresOpts are tkt chores's arguments.
 type ChoresOpts struct{}
 
-// ChoreInfo is one chore of the repository: its settings, the last slot tkt
-// watch took or skipped (Last, "" before it first saw the chore), whether a
-// slot came since that it has not taken yet (Due), the next slot, whether its
-// runs open a pull request (PR), and its
-// runs that have a worktree, with the one still open, which holds the next
-// run back. Times are UTC.
+// ChoreInfo is one chore of the repository: its settings, the prompt its
+// agents get before any rule tkt adds, the last slot tkt watch took or skipped
+// (Last, "" before it first saw the chore), whether a slot came since that it
+// has not taken yet (Due), the next slot, whether its runs open a pull request
+// (PR), and its runs that have a worktree, with the one still open, which
+// holds the next run back. Times are UTC.
 type ChoreInfo struct {
 	Name     string   `json:"name"`
 	Schedule string   `json:"schedule"`
 	Branch   string   `json:"branch"`
 	As       string   `json:"as"`
+	Prompt   string   `json:"prompt"`
 	PR       bool     `json:"pr"`
 	Last     string   `json:"last"`
 	Due      bool     `json:"due"`
@@ -403,7 +404,7 @@ func (a *App) Chores(ctx context.Context, _ ChoresOpts) (*ChoresResult, error) {
 	stamps := choreStamps(c.Repo.Common)
 	now := c.Now()
 	for _, ch := range c.Cfg.Chores {
-		info := ChoreInfo{Name: ch.Name, Schedule: ch.Schedule.String(), Branch: ch.Branch, As: ch.As, PR: ch.PR, Runs: []string{}}
+		info := ChoreInfo{Name: ch.Name, Schedule: ch.Schedule.String(), Branch: ch.Branch, As: ch.As, Prompt: ch.Prompt, PR: ch.PR, Runs: []string{}}
 		if r, open := openRun(runs, ch.Name); open {
 			info.Open = r.ID
 		}

@@ -107,3 +107,11 @@ test("the chores view gets a chore that opens a pull request and one that does n
 	const env = fake.query({ what: "chores" }) as { result: ChoresResult };
 	assert.deepEqual([...new Set(env.result.chores.map((c) => c.pr))].sort(), [false, true]);
 });
+
+test("the chores view gets a prompt of many lines and one that runs a command", () => {
+	const { fake } = setup();
+	const env = fake.query({ what: "chores" }) as { result: ChoresResult };
+	const prompts = env.result.chores.map((c) => c.prompt);
+	assert.ok(prompts.some((p) => p.includes("\n")));
+	assert.ok(prompts.some((p) => p.startsWith("/")));
+});
