@@ -4,7 +4,7 @@ import { test } from "node:test";
 import type { AttentionKind } from "../attention.ts";
 import { boardColumns, columns } from "../board.ts";
 import type { Board, Page, ToPage } from "../mirror.ts";
-import type { ChoresResult } from "../model.ts";
+import type { ChoresResult, PresetsResult } from "../model.ts";
 import { commandsOf, Fake } from "../play/fake.ts";
 import { triggers } from "../play/triggers.ts";
 
@@ -106,6 +106,16 @@ test("the chores view gets a chore that opens a pull request and one that does n
 	const { fake } = setup();
 	const env = fake.query({ what: "chores" }) as { result: ChoresResult };
 	assert.deepEqual([...new Set(env.result.chores.map((c) => c.pr))].sort(), [false, true]);
+});
+
+test("the forms get the presets to choose from, and the one suggest runs on", () => {
+	const { fake } = setup();
+	const env = fake.query({ what: "presets" }) as { result: PresetsResult };
+	assert.deepEqual(
+		env.result.presets.map((p) => p.name),
+		["claude", "opencode", "fast"],
+	);
+	assert.equal(env.result.suggest, "fast");
 });
 
 test("the chores view gets a prompt of many lines and one that runs a command", () => {

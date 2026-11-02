@@ -37,13 +37,14 @@ function App() {
 	const g: Go = useMemo(
 		() => ({
 			send,
+			link: s.link,
 			run: (cmd: string) => {
 				if (send({ t: "send", text: cmd, images: [] })) dispatch({ t: "press", cmd });
 			},
 			go,
 			pressed: s.pressed.map((p) => p.cmd),
 		}),
-		[send, s.pressed],
+		[send, s.link, s.pressed],
 	);
 	// A command that answers with nothing the page sees, such as one that
 	// opens a view, lets its button go after a while. One whose job runs

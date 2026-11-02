@@ -15,7 +15,8 @@ Presets choose the agent. Each is a [presets.NAME] table:
 Order matters. The first preset is the default. A ticket's tab names its
 preset, the default one too: "ACM-12 (claude)", "ACM-12 (fast)". tkt resume
 picks the first preset of the session's harness. --as NAME picks one
-yourself. tkt ignores a serves key from older settings.
+yourself. tkt presets lists them. tkt ignores a serves key from older
+settings.
 
 A Claude Code model reads model#effort, such as "opus#high". An OpenCode model
 reads provider/model#variant.

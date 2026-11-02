@@ -1,0 +1,8 @@
+Lists the presets --as takes in this repository, each with its harness and
+model. The repository's own files go first, then config.toml. The first
+preset is the default.
+
+With --json, suggest names the preset tkt suggest runs on without --as, and
+is empty when that is the default one.
+
+tkt help config says how to define presets.

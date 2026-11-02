@@ -226,6 +226,8 @@ export class Fake {
 				return answers.chores(now, this.s.watch === "on", this.s.rows.filter((x) => x.chore === "deps").map((x) => x.ticket));
 			case "suggest":
 				return answers.suggest(this.suggestion, now);
+			case "presets":
+				return answers.presets();
 			case "version":
 				return answers.version(this.s.update);
 		}

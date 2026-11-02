@@ -5,7 +5,7 @@
 
 import { boardColumns } from "../board.ts";
 import type { Board } from "../mirror.ts";
-import { ago, type ChoresResult, since, type SuggestResult } from "../model.ts";
+import { ago, type ChoresResult, type PresetsResult, since, type SuggestResult } from "../model.ts";
 import { local, type StatsResult } from "../report.ts";
 import { type Mode, startLine, suggestLine } from "./acts.ts";
 import { Failure, type Go, Loading, Md, RunButton } from "./bits.ts";
@@ -48,6 +48,20 @@ function Line({ line, g, label, onSent, danger }: { line: string; g: Go; label: 
 	</div>`;
 }
 
+/** PresetSelect picks one of the repository's presets. The first choice,
+ * None, sends no preset; none(r) says what then runs. A form works without
+ * the list, so a failed read leaves None and says why. A page opened on a
+ * form reads before its link opens, so the link is a key: it reads again. */
+function PresetSelect({ g, value, onChange, none }: { g: Go; value: string; onChange: (name: string) => void; none: (r: PresetsResult) => string }) {
+	const q = useQuery<PresetsResult>(g.send, "presets", "", [g.link]);
+	const r = q.env?.ok ? q.env.result : undefined;
+	return html`<select value=${value} onChange=${(e: Event) => onChange((e.target as HTMLSelectElement).value)}>
+			<option value="">${r ? `None (${none(r)})` : "None"}</option>
+			${r?.presets.map((p) => html`<option key=${p.name} value=${p.name}>${p.name} (${p.model || p.harness})</option>`)}
+		</select>
+		${g.link === "open" && q.env && !q.env.ok && html`<span class="muted small">Could not read the presets: ${q.env.error?.message}</span>`}`;
+}
+
 export function StartView({ g }: { g: Go }) {
 	const [ids, setIds] = useState("");
 	const [mode, setMode] = useState<Mode>("auto");
@@ -69,7 +83,7 @@ export function StartView({ g }: { g: Go }) {
 			)}
 		</fieldset>
 		${yolo && html`<p class="danger-box"><b>Nobody watches a yolo run.</b> Agents approve the plan, review, verify and merge, and no person checks anything before it merges. It runs only where workflow.md turns on Autonomous runs, Agent verification and Plan review, and the chat asks once more before it starts.</p>`}
-		<label>Preset <input value=${as} placeholder="the default; or a preset from config.toml, such as opencode" onInput=${(e: InputEvent) => setAs((e.target as HTMLInputElement).value)} /></label>
+		<label>Preset <${PresetSelect} g=${g} value=${as} onChange=${setAs} none=${(r: PresetsResult) => `the default, ${r.presets[0]?.name}`} /></label>
 		<${Line} line=${startLine(ids, mode, as)} g=${g} label=${yolo ? "Start in yolo" : "Start"} danger=${yolo} onSent=${() => setIds("")} />
 	</div>`;
 }
@@ -82,7 +96,7 @@ export function SuggestView({ g, now }: { g: Go; now: number }) {
 		<h2>Suggest tickets</h2>
 		<p class="muted">suggest-tickets reads the tracker in a suggest tab, and picks tickets that can run side by side. It changes nothing: read its picks below, then start the ones you want.</p>
 		<label>What to look for <input value=${request} placeholder="empty for 3 tickets of any kind; or a number, or what you want, such as five tickets tagged feedback" onInput=${(e: InputEvent) => setRequest((e.target as HTMLInputElement).value)} /></label>
-		<label>Run it on <input value=${as} placeholder="the [suggest] preset, or the default one" onInput=${(e: InputEvent) => setAs((e.target as HTMLInputElement).value)} /><span class="muted small">The preset, from config.toml, whose agent and model run suggest-tickets. It does not filter the tickets: say that in what to look for.</span></label>
+		<label>Run it on <${PresetSelect} g=${g} value=${as} onChange=${setAs} none=${(r: PresetsResult) => (r.suggest ? `the [suggest] preset, ${r.suggest}` : `the default, ${r.presets[0]?.name}`)} /><span class="muted small">The preset whose agent and model run suggest-tickets. It does not filter the tickets: say that in what to look for.</span></label>
 		<${Line} line=${suggestLine(request, as)} g=${g} label="Suggest" onSent=${() => setRequest("")} />
 		<h3>Last run</h3>
 		${!q.env ? html`<${Loading} />` : !q.env.ok || !q.env.result ? q.env.error?.code === "agent_missing" ? html`<p class="muted">${q.env.error.message}.</p>` : html`<${Failure} env=${q.env} />` : html`<${SuggestAnswer} r=${q.env.result} now=${now} loading=${q.loading} reload=${q.reload} />`}

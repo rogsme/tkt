@@ -1118,7 +1118,8 @@ details.report summary h3 {
 	font-weight: 500;
 }
 
-.form input:not([type="radio"]) {
+.form input:not([type="radio"]),
+.form select {
 	font: inherit;
 	font-weight: 400;
 	color: var(--fg);
@@ -1744,6 +1745,7 @@ textarea {
 
 textarea:focus,
 input:focus,
+select:focus,
 button:focus-visible {
 	outline: 2px solid var(--line);
 	outline-offset: 1px;

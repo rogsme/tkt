@@ -168,6 +168,14 @@ export interface ChoresResult {
 	chores: { name: string; schedule: string; as: string; prompt: string; last: string; due: boolean; next: string; pr: boolean; runs: string[]; open: string }[];
 }
 
+/** PresetsResult is what tkt presets prints: the presets --as takes, the
+ * default first, and the one tkt suggest runs on without --as, empty for
+ * the default. */
+export interface PresetsResult {
+	presets: { name: string; harness: string; model?: string }[];
+	suggest: string;
+}
+
 /** choresText lists the chores for the chat, with times in local time. */
 export function choresText(r: ChoresResult): string {
 	if (r.chores.length === 0) return "No chore runs in this repository: a [chores.NAME] table in its .tkt/tkt.local.toml adds one.";
