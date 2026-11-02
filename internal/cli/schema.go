@@ -37,6 +37,7 @@ var resultTypes = map[string]any{
 	"done":       app.DoneResult{},
 	"chores":     app.ChoresResult{},
 	"chore run":  app.ChoreRunResult{},
+	"presets":    app.PresetsResult{},
 	"ls":         app.LsResult{},
 	"wait":       app.WaitResult{},
 	"doctor":     app.DoctorResult{},

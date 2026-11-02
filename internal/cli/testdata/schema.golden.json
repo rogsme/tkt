@@ -1630,6 +1630,26 @@
       }
     },
     {
+      "path": "presets",
+      "use": "presets",
+      "short": "List the presets --as takes in this repository",
+      "long": "Lists the presets --as takes in this repository, each with its harness and\nmodel. The repository's own files go first, then config.toml. The first\npreset is the default.\n\nWith --json, suggest names the preset tkt suggest runs on without --as, and\nis empty when that is the default one.\n\ntkt help config says how to define presets.",
+      "example": "  tkt presets\n  tkt presets --json",
+      "group": "inspect",
+      "args": [],
+      "flags": [],
+      "result": {
+        "presets": [
+          {
+            "harness": "string",
+            "model": "string",
+            "name": "string"
+          }
+        ],
+        "suggest": "string"
+      }
+    },
+    {
       "path": "stats",
       "use": "stats [ID...]",
       "short": "Show how long tickets took from start to merge, and how long they waited for you",

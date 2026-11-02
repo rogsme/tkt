@@ -825,6 +825,22 @@ func showCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func presetsCmd(g *globals) *cobra.Command {
+	var o app.PresetsOpts
+	return &cobra.Command{
+		Use:   "presets",
+		Short: "List the presets --as takes in this repository",
+		Long:  helpText("presets"),
+		Example: `  tkt presets
+  tkt presets --json`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().Presets(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+}
+
 func statsCmd(g *globals) *cobra.Command {
 	var o app.StatsOpts
 	cmd := &cobra.Command{

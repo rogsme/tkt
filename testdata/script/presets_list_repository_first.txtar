@@ -1,0 +1,28 @@
+# tkt presets lists what --as takes here, in the order tkt tries them: the
+# repository's own first, so its first preset is the default. The web page
+# fills its preset lists from the JSON.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+mkdir $REPO/.tkt
+cp $WORK/tkt.toml $REPO/.tkt/tkt.toml
+exec tkt presets
+stdout '^claude \(default\) +claude +default model$'
+stdout '^fast +opencode +acme/fast#max$'
+exec tkt presets --json
+envelope '[.result.presets[].name]' '["claude","fast"]'
+envelope '.result.presets[1].model' 'acme/fast#max'
+envelope .result.suggest fast
+
+-- config.toml --
+[presets.fast]
+harness = "opencode"
+model = "acme/fast#max"
+
+[suggest]
+as = "fast"
+
+[presets.claude]
+harness = "claude"
+-- tkt.toml --
+[presets.claude]
+harness = "claude"
