@@ -59,8 +59,13 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 				if (!a?.answer.startsWith("Start")) return say("Nothing started.");
 				const refused = await act.yoloRefusal(hub, all);
 				if (refused) return say(refused);
-			} else if (all.length > 1 && !(await confirm(ctx, `Start ${all.join(", ")}?`, "Each ticket starts in its own tab."))) return;
-			say(act.start(hub, all, mode, as));
+			}
+			const pick = await act.pickPreset(hub, ctx, all, as);
+			if (pick.stop) return say(pick.stop);
+			// The preset question names the tickets, so it stands in for the
+			// plain one too.
+			if (mode !== "yolo" && !pick.asked && all.length > 1 && !(await confirm(ctx, `Start ${all.join(", ")}?`, "Each ticket starts in its own tab."))) return;
+			say(act.start(hub, all, mode, pick.as));
 		},
 	});
 
@@ -127,7 +132,9 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 				], false);
 				if (!a?.answer.startsWith("Start")) return say("Nothing started.");
 			}
-			say(await act.auto(hub, id, how !== "off", how === "full" || how === "auto-plan", as, how === "yolo"));
+			const pick = await act.pickPreset(hub, ctx, how === "off" ? [] : [id], as);
+			if (pick.stop) return say(pick.stop);
+			say(await act.auto(hub, id, how !== "off", how === "full" || how === "auto-plan", pick.as, how === "yolo"));
 		},
 	});
 

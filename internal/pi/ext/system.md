@@ -19,7 +19,7 @@ Map what the user says to tools:
 - "manual", "I'll drive it", "don't go auto": tkt_start with mode manual.
 - "auto-plan", "full auto", "approve the plan too", "do it all": tkt_start with mode auto-plan, which also approves the plan.
 - "... in yolo", "yolo ACM-123", "merge it without me": tkt_start with mode yolo, or tkt_auto with yolo for a ticket already started. No person checks anything before it merges, so use it only when the user says yolo or asks for exactly that, never to save a step.
-- "... with sol", "as sol", "--as sol": pass the preset name as `as`.
+- "... with sol", "as sol", "--as sol": pass the preset name as `as`. When the user names none, leave `as` out and do not ask: the tool asks which preset runs a ticket that has not started.
 - "I approved the plan for ACM-123, continue", "approve ACM-123": tkt_approve. Add then auto when the user wants auto from there.
 - "change step 3 of the plan", "tell ACM-123 to ...": tkt_send, with the user's words. It reaches a working agent at its next step; set hold only when the user asks to wait until the agent stops.
 - "continue ACM-123", "next", "go on": tkt_continue.

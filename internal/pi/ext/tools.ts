@@ -28,7 +28,7 @@ function list(ids: string[]): string {
 	return ids.length < 2 ? ids.join("") : `${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]}`;
 }
 
-const preset = Type.Optional(Type.String({ description: "A preset from the user's config.toml or the repository's .tkt files, such as sol or claude, when the user names one ('as sol', 'with sol', '--as sol'); otherwise leave it out" }));
+const preset = Type.Optional(Type.String({ description: "A preset from the user's config.toml or the repository's .tkt files, such as sol or claude, when the user names one ('as sol', 'with sol', '--as sol'); otherwise leave it out, and the tool asks the user which one runs a ticket that has not started" }));
 
 export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	const id = (raw: string) => hub.idOf(raw);
@@ -116,7 +116,9 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 				const refused = await act.yoloRefusal(hub, ids);
 				if (refused) return text(refused);
 			}
-			return text(act.start(hub, ids, mode, p.as ?? ""));
+			const pick = await act.pickPreset(hub, ctx, ids, p.as ?? "");
+			if (pick.stop) return text(pick.stop);
+			return text(act.start(hub, ids, mode, pick.as));
 		},
 	});
 
@@ -245,7 +247,9 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 			const question = yolo ? `Carry ${t} to the merge in yolo?` : p.on ? `Turn tkt auto on for ${t}?` : `Turn tkt auto off for ${t}?`;
 			const what = yolo ? "No person checks anything before it merges." : p.on ? "tkt auto drives the ticket in the background." : "Its loop ends at its next look.";
 			if (!(await guard(hub, ctx, [t], question, what))) return text("The user did not confirm; nothing changed.");
-			return text(await act.auto(hub, t, p.on, p.approve_plan ?? false, p.as ?? "", yolo));
+			const pick = await act.pickPreset(hub, ctx, p.on ? [t] : [], p.as ?? "");
+			if (pick.stop) return text(pick.stop);
+			return text(await act.auto(hub, t, p.on, p.approve_plan ?? false, pick.as, yolo));
 		},
 	});
 

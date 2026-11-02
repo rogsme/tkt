@@ -44,7 +44,7 @@ as = "fast"
 prompt = "Read the last day of CI runs on main. When a test failed and then passed on a rerun, find out why and fix it."
 ```
 
-The first preset is the default, so a ticket runs on Claude Code unless you start it on `fast`, a small model through OpenCode. suggest-tickets runs on `fast` too, since it only reads. `deps` upgrades the dependencies on Monday and Thursday mornings. `flaky` looks for flaky tests every weekday, and on most days finds none. `explain` is a stage of your own: `tkt run ACM-131 explain` sends its line to a fresh session, as the built-in stages do.
+The first preset is the default, so `tkt start` runs a ticket on Claude Code unless you name `fast`, a small model through OpenCode, and the chat lists it first when it asks which preset to use. suggest-tickets runs on `fast` too, since it only reads. `deps` upgrades the dependencies on Monday and Thursday mornings. `flaky` looks for flaky tests every weekday, and on most days finds none. `explain` is a stage of your own: `tkt run ACM-131 explain` sends its line to a fresh session, as the built-in stages do.
 
 Everything else keeps its default, which suits this day. The review bot gets fifteen minutes to review each head (`[review] bot_wait`), and three agents that tkt auto and tkt watch set to work run at once (`[auto] max_parallel`). A loop pauses after five fix runs (`[auto] max_rounds`), and an agent that sits idle with no status line for two hours is marked stale (`[board] stale_after`). tkt watch looks at every ticket each minute (`[watch] interval`). `tkt help config` lists every setting.
 
@@ -131,7 +131,7 @@ Last comes ACM-118. You have finished with its worktree, so `/done ACM-118` remo
 /start ACM-124
 ```
 
-The chat answers at once, `Queued: ACM-124 starting in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket until it is ready for human verification.`, and the prompt is yours again while worktrunk makes the worktree and start-ticket reads the code. Auto is the default; `/start ACM-124 manual` stops at the plan and leaves every step to you, and `/start ACM-124 auto-plan` approves the plan too.
+You named no preset, so the chat asks `Which preset runs ACM-124?` and lists yours, the default first. `/start ACM-124 as claude` skips the question. You pick `claude`, and the chat answers at once, `Queued: ACM-124 starting on claude in auto. The board shows each plan when it is ready; after you approve it, tkt drives the ticket until it is ready for human verification.`, and the prompt is yours again while worktrunk makes the worktree and start-ticket reads the code. Auto is the default; `/start ACM-124 manual` stops at the plan and leaves every step to you, and `/start ACM-124 auto-plan` approves the plan too.
 
 ## 09:15 Pick the next tickets
 

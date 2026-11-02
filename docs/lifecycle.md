@@ -147,7 +147,7 @@ The new branch starts from the base on the remote: tkt fetches it first, so the 
 
 The tab's `TMPDIR` is a private directory for the ticket, such as `/tmp/tkt-acme-app-ACM-123-123456`, so `mktemp`, Python, Node, Go and `gh` in two tickets' agents never write the same temporary file. Claude Code runs its tools in the tab, so its agents have it. OpenCode runs every agent's tools in its one background service instead, which the tab's environment never reaches: `tkt hook tmp --install` puts tkt's plugin into OpenCode, which gives each shell in a ticket's worktree that ticket's `TMPDIR`, and moves into the ticket's directory a new `/tmp` path, such as `/tmp/pr-body.md`, that a file tool names or a shell command uses unquoted. A path in quotes, as in a search or a message, stays as written. `tkt doctor` warns while it is missing.
 
-tkt keeps the ticket's preset, session, tab and pane in the worktree's git directory, so the record disappears with the worktree. A ticket runs on the first preset unless `--as` names another. tkt never reads a ticket's `## Model routing` section or a prompt's `Model:` line; those are for the skills and for you.
+tkt keeps the ticket's preset, session, tab and pane in the worktree's git directory, so the record disappears with the worktree. `tkt start` and `tkt auto` run a ticket on the first preset unless `--as` names another. A start in `tkt agent`'s chat or on its web page that names no preset asks which one, when the repository has more than one; cancelling the question starts nothing. tkt never reads a ticket's `## Model routing` section or a prompt's `Model:` line; those are for the skills and for you.
 
 ### 3. start-ticket plans
 

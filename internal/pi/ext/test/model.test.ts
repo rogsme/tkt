@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ago, choresText, expandIds, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, mentions, mergeText, normalizeId, rowsOf, stampText, updateNotice, stepText, versionText } from "../model.ts";
+import { ago, choresText, expandIds, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, mentions, mergeText, normalizeId, presetOptions, presetQuestion, rowsOf, stampText, updateNotice, stepText, versionText } from "../model.ts";
 import { row } from "./fixtures.ts";
+
+test("the preset question keeps the order and marks only the first as the default", () => {
+	const options = presetOptions({ presets: [{ name: "opus", harness: "claude", model: "opus#high" }, { name: "plain", harness: "opencode" }], suggest: "" });
+	assert.deepEqual(options, [
+		{ label: "opus", description: "claude, opus#high, the default preset" },
+		{ label: "plain", description: "opencode, its default model" },
+	]);
+	assert.equal(presetQuestion(["ACM-1"]), "Which preset runs ACM-1?");
+	assert.equal(presetQuestion(["ACM-1", "ACM-2"]), "Which preset runs ACM-1, ACM-2?");
+});
 
 test("normalizeId", () => {
 	assert.equal(normalizeId("acm-12", "ACM"), "ACM-12");
