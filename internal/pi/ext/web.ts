@@ -256,6 +256,8 @@ export class Web {
 				return this.hub.tkt(["chores"]);
 			case "suggest":
 				return this.hub.tkt(["suggest", "--show"]);
+			case "presets":
+				return this.hub.tkt(["presets"]);
 			case "version":
 				return { ok: true, result: { tkt: process.env.TKT_VERSION ?? "", pi: process.env.TKT_PI_VERSION ?? "", bin: this.hub.bin, update: this.hub.newer ?? "" } };
 		}

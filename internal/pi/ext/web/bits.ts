@@ -7,13 +7,16 @@ import type { Envelope, Row } from "../model.ts";
 import { type Act, type Nav, sendLine, type Tab } from "./acts.ts";
 import { md } from "./md.ts";
 import type { Send } from "./query.ts";
+import type { Link } from "./state.ts";
 import { html, useState } from "./vendor/preact.js";
 
 /** Go is what the page's views get to act with: run sends a slash command
  * through the chat, as if you typed it; go moves the center column.
- * pressed holds the commands run sent that tkt is still on. */
+ * pressed holds the commands run sent that tkt is still on, and link says
+ * whether send can reach the chat. */
 export interface Go {
 	send: Send;
+	link: Link;
 	run(cmd: string): void;
 	go(nav: Nav): void;
 	pressed: string[];

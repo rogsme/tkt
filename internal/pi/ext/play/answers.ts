@@ -1,9 +1,9 @@
 // The playground's answers to the page's queries, shaped as tkt's --json
 // envelopes for show, show --screen, show --diff, show --steps, history,
-// stats, chores, suggest and the chat's version. It imports nothing at run
-// time but the extension's pure modules, so node --test covers it.
+// stats, chores, suggest, presets and the chat's version. It imports nothing
+// at run time but the extension's pure modules, so node --test covers it.
 
-import type { ChoresResult, Envelope, Row, SuggestResult } from "../model.ts";
+import type { ChoresResult, Envelope, PresetsResult, Row, SuggestResult } from "../model.ts";
 import type { HistoryResult, HistoryReview, Mark, StatsResult } from "../report.ts";
 import type { File } from "../web/diff.ts";
 import { headOf, repo } from "./scenario.ts";
@@ -235,6 +235,18 @@ export function chores(now: number, watching: boolean, open: string[]): Envelope
 			{ name: "flaky-tests", schedule: "30 2 * * *", as: "opencode", prompt: "/fix-flaky-tests", last: at(-30), due: true, next: at(-1), pr: true, runs: [], open: "" },
 			{ name: "release", schedule: "0 9 1 * *", as: "", prompt: "If main has commits since the last tag, tag main with the next version and publish its release with gh.", last: "", due: false, next: at(70), pr: false, runs: [], open: "" },
 		],
+	});
+}
+
+/** presets is tkt presets's answer. */
+export function presets(): Envelope<PresetsResult> {
+	return ok("presets", {
+		presets: [
+			{ name: "claude", harness: "claude" },
+			{ name: "opencode", harness: "opencode" },
+			{ name: "fast", harness: "opencode", model: "acme/small#max" },
+		],
+		suggest: "fast",
 	});
 }
 
