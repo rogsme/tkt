@@ -83,7 +83,7 @@ export function StartView({ g }: { g: Go }) {
 			)}
 		</fieldset>
 		${yolo && html`<p class="danger-box"><b>Nobody watches a yolo run.</b> Agents approve the plan, review, verify and merge, and no person checks anything before it merges. It runs only where workflow.md turns on Autonomous runs, Agent verification and Plan review, and the chat asks once more before it starts.</p>`}
-		<label>Preset <${PresetSelect} g=${g} value=${as} onChange=${setAs} none=${(r: PresetsResult) => `the default, ${r.presets[0]?.name}`} /></label>
+		<label>Preset <${PresetSelect} g=${g} value=${as} onChange=${setAs} none=${(r: PresetsResult) => (r.presets.length > 1 ? "the chat asks" : `the default, ${r.presets[0]?.name}`)} /></label>
 		<${Line} line=${startLine(ids, mode, as)} g=${g} label=${yolo ? "Start in yolo" : "Start"} danger=${yolo} onSent=${() => setIds("")} />
 	</div>`;
 }

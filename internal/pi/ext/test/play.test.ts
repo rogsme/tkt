@@ -86,6 +86,68 @@ test("/check offers a skipped step as a waiver, and asks why", async () => {
 	assert.equal(n?.phase, "ready_to_merge");
 });
 
+/** picker joins a page that answers each ask with pick, or cancels, and
+ * confirms the rest, and keeps what the chat said. */
+function picker(pick?: string) {
+	const fake = new Fake({ commands, pace: 0 });
+	const titles: string[] = [];
+	const said: string[] = [];
+	const page: Page = {
+		send: (msg) => {
+			if (msg.t !== "dialog") return said.push(JSON.stringify(msg));
+			const d = msg.dialog;
+			titles.push(d.title);
+			const value = d.kind !== "ask" ? true : pick ? { answer: pick, typed: false } : null;
+			queueMicrotask(() => fake.mirror.receive({ t: "answer", id: d.id, value }, page));
+		},
+	};
+	fake.mirror.join(page);
+	return { fake, page, titles, said: () => said.join("\n") };
+}
+
+test("/start with no preset asks which one, and starts on the answer", async () => {
+	const { fake, page, titles, said } = picker("fast");
+	await fake.handlers.start(["ACM-130"], page);
+	assert.deepEqual(titles, ["Which preset runs ACM-130?"]);
+	assert.match(said(), /ACM-130 starting on fast in auto/);
+	assert.ok(fake.board().rows.some((r) => r.ticket === "ACM-130"));
+});
+
+test("/start for several tickets asks once, in place of the plain confirm", async () => {
+	const { fake, page, titles } = picker("fast");
+	await fake.handlers.start(["ACM-130", "ACM-131"], page);
+	assert.deepEqual(titles, ["Which preset runs ACM-130, ACM-131?"]);
+});
+
+test("/start that names a preset does not ask", async () => {
+	const { fake, page, titles, said } = picker();
+	await fake.handlers.start(["ACM-130", "as", "opencode"], page);
+	assert.deepEqual(titles, []);
+	assert.match(said(), /ACM-130 starting on opencode in auto/);
+});
+
+test("cancelling the preset question starts nothing", async () => {
+	const { fake, page, titles, said } = picker();
+	await fake.handlers.start(["ACM-130"], page);
+	assert.deepEqual(titles, ["Which preset runs ACM-130?"]);
+	assert.match(said(), /No preset chosen; nothing started\./);
+	assert.ok(!fake.board().rows.some((r) => r.ticket === "ACM-130"));
+});
+
+test("/start for a ticket that already runs does not ask", async () => {
+	const { fake, page, titles } = picker();
+	await fake.handlers.start(["ACM-101"], page);
+	assert.deepEqual(titles, []);
+});
+
+test("an unblocked card's Start button reaches the preset question", async () => {
+	const { fake, page, titles } = picker("claude");
+	const item = fake.board().items.find((a) => a.kind === "unblocked")!;
+	fake.send(`/start ${item.ticket}`, [], page);
+	await new Promise((r) => setTimeout(r, 0));
+	assert.deepEqual(titles, [`Which preset runs ${item.ticket}?`]);
+});
+
 test("a command that opens a view opens it on the page that sent it", () => {
 	const { fake, got, page } = setup();
 	fake.send("/peek acm-102", [], page);

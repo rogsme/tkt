@@ -9,7 +9,7 @@ import { type Attention, attentionOf, choicesOf, type Choice, unblockedOf } from
 import { statusText } from "../board.ts";
 import { type Item, pageView, slashName, terminalOnly } from "../chat.ts";
 import { type Board, type Command, type Dialog, type Image, Mirror, type Option, type Page, type Query } from "../mirror.ts";
-import { choresText, normalizeId, type Row, stampText, verifiedAt, versionText } from "../model.ts";
+import { choresText, normalizeId, presetOptions, presetQuestion, type Row, stampText, verifiedAt, versionText } from "../model.ts";
 import { historyText, type Mark, marked, statsText, stepsText, tally, withEvidence } from "../report.ts";
 import { cardActs } from "../web/acts.ts";
 import * as answers from "./answers.ts";
@@ -301,7 +301,7 @@ export class Fake {
 	private async start(w: string[]): Promise<void> {
 		const modes = ["auto", "auto-plan", "manual", "yolo"];
 		const asAt = w.indexOf("as");
-		const as = asAt >= 0 ? (w[asAt + 1] ?? "") : "";
+		let as = asAt >= 0 ? (w[asAt + 1] ?? "") : "";
 		const words = asAt >= 0 ? w.slice(0, asAt) : w;
 		const mode = words.find((x) => modes.includes(x.toLowerCase()))?.toLowerCase() ?? "auto";
 		const ids = [...new Set(words.filter((x) => !modes.includes(x.toLowerCase()) && x !== "to").map((x) => normalizeId(x, "ACM")))];
@@ -312,8 +312,15 @@ export class Fake {
 				{ label: "Not now" },
 			]);
 			if (!a?.answer.startsWith("Start")) return this.say("Nothing started.");
-		} else if (ids.length > 1 && !(await this.question<boolean>({ kind: "confirm", title: `Start ${ids.join(", ")}?`, message: "Each ticket starts in its own tab." }))) return;
+		}
 		const fresh = ids.filter((id) => !this.rowOf(id));
+		const asks = !as && fresh.length > 0;
+		if (asks) {
+			const a = await this.ask(presetQuestion(ids), presetOptions(answers.presets().result!));
+			if (!a) return this.say("No preset chosen; nothing started.");
+			as = a.answer;
+		}
+		if (mode !== "yolo" && !asks && ids.length > 1 && !(await this.question<boolean>({ kind: "confirm", title: `Start ${ids.join(", ")}?`, message: "Each ticket starts in its own tab." }))) return;
 		const on = as ? ` on ${as}` : "";
 		const text: Record<string, string> = {
 			"auto-plan": `Queued: ${fresh.join(", ")} starting${on} in auto-plan. tkt approves the plan and drives each ticket until it is reviewed clean; the board shows when one needs you.`,

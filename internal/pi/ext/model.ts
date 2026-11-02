@@ -176,6 +176,17 @@ export interface PresetsResult {
 	suggest: string;
 }
 
+/** presetQuestion and presetOptions are what the chat asks when a start
+ * names no preset. A label is the preset's name, since ask returns only the
+ * label, and the first preset is the one a start without the answer gets. */
+export function presetQuestion(ids: string[]): string {
+	return `Which preset runs ${ids.join(", ")}?`;
+}
+
+export function presetOptions(r: PresetsResult): { label: string; description: string }[] {
+	return r.presets.map((p, i) => ({ label: p.name, description: `${p.harness}, ${p.model || "its default model"}${i === 0 ? ", the default preset" : ""}` }));
+}
+
 /** choresText lists the chores for the chat, with times in local time. */
 export function choresText(r: ChoresResult): string {
 	if (r.chores.length === 0) return "No chore runs in this repository: a [chores.NAME] table in its .tkt/tkt.local.toml adds one.";

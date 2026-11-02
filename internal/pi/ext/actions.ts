@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, confirmedAt, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
+import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, confirmedAt, presetOptions, presetQuestion, type PresetsResult, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, marked, statsText, stepsText, tally, type Mark, type StatsResult, type Waiver, withEvidence } from "./report.ts";
 import { ask, checklist, confirm, editor, input } from "./dialog.ts";
 import { peek, type Step } from "./ui.ts";
@@ -34,6 +34,28 @@ export function start(hub: Hub, ids: string[], mode: Mode, as = ""): string {
 			return `Queued: ${list} starting${on} in yolo. tkt carries each ticket to the merge with nobody watching; the board shows when one needs you, and the plan and pull request list the assumptions its agents made.`;
 	}
 	return `Queued: ${list} starting${on}, manual. The board shows each plan when it is ready, and you drive each step.`;
+}
+
+/** PresetPick is the preset a start runs on, "" for the default. stop says
+ * why nothing should start; asked says the chat put the question. */
+export interface PresetPick {
+	as: string;
+	asked: boolean;
+	stop?: string;
+}
+
+/** pickPreset asks which preset runs tickets that have not started, unless
+ * as already names one. A ticket with a row keeps the preset it started on,
+ * and a single preset leaves nothing to choose. Without a UI, the default
+ * stands. A failed read stops the start rather than take the default: the
+ * same settings would fail the start too. */
+export async function pickPreset(hub: Hub, ctx: ExtensionContext, ids: string[], as = ""): Promise<PresetPick> {
+	if (as || !ctx.hasUI || ids.every((id) => hub.row(id))) return { as, asked: false };
+	const env = await hub.tkt<PresetsResult>(["presets"]);
+	if (!env.ok || !env.result) return { as: "", asked: false, stop: `Nothing started: ${failure("presets", env)}` };
+	if (env.result.presets.length < 2) return { as: "", asked: false };
+	const a = await ask(ctx, presetQuestion(ids), presetOptions(env.result), false);
+	return a ? { as: a.answer, asked: true } : { as: "", asked: true, stop: "No preset chosen; nothing started." };
 }
 
 /** suggest opens a suggest tab where suggest-tickets picks the tickets to
@@ -543,11 +565,15 @@ async function answer(hub: Hub, ctx: ExtensionContext, a: Attention): Promise<st
 		case "resume":
 			return resume(hub, id);
 		case "start":
-			return start(hub, [id], "auto");
 		case "start_auto_plan":
-			return start(hub, [id], "auto-plan");
-		case "start_manual":
-			return start(hub, [id], "manual");
+		case "start_manual": {
+			const pick = await pickPreset(hub, ctx, [id]);
+			if (pick.stop) {
+				hub.post(pick.stop);
+				return undefined;
+			}
+			return start(hub, [id], c.do === "start" ? "auto" : c.do === "start_manual" ? "manual" : "auto-plan", pick.as);
+		}
 	}
 	return undefined;
 }
