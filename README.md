@@ -1,17 +1,332 @@
 # tkt
 
-`tkt` runs the mechanical steps around the [rogs-skills](https://gitlab.com/rogs/skills) ticket lifecycle from a [herdr](https://herdr.dev) pane. For each ticket it:
+`tkt` runs coding agents on your tickets, many at once. Each ticket gets its own git worktree, its own [herdr](https://herdr.dev) tab and its own agent, Claude Code or OpenCode. The agents follow the [rogs-skills](https://gitlab.com/rogs/skills) ticket lifecycle: one skill plans the ticket, one builds it, a fresh session reviews it, another runs its verification steps, and one merges it. tkt takes the mechanical steps between those stages. You decide at three points: the plan, the verification and the merge.
 
-- creates the ticket's worktree;
-- opens a tab named after the ticket and its preset, such as `ACM-12 (claude)`;
-- starts Claude Code or OpenCode in that tab;
-- hands the agent its prompt.
+You drive it from a chat in your terminal, or from the same chat on a web page. Both show a board with every ticket and what needs you.
 
-Each command is one step you take, and `tkt ls` suggests the next one. `tkt watch`, which tkt starts by itself, takes the upkeep steps for every ticket: it merges a moved base when a sync is due, fixes failing checks once per head, and removes a ticket whose pull request closed without merging. It never removes a merged ticket: you run `tkt done` for that when you finish with it. It also runs the chores you schedule, such as a weekly dependency upgrade, and holds its agents back, and `tkt auto`'s, while a service they depend on reports an incident. When you want, `tkt auto` takes all the steps for a ticket until it needs you: it approves the plan if you allow it, waits for CI and the review bot, and runs the review and the fixes. You still run the human verification steps and merge.
+![The tkt agent's web page: what needs you on the left, the board in the middle, the chat on the right](docs/images/web-board.png)
 
-People and programs both drive tkt. Every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
+The first part of this page shows how it works. The second part is the reference.
 
-To see how it all fits in a working day, read [`docs/day-in-the-life.md`](docs/day-in-the-life.md): one Thursday with several tickets in flight, mostly in the tkt agent's chat, and when the terminal does better.
+- [How it works](#how-it-works)
+- [A ticket from start to merge](#a-ticket-from-start-to-merge)
+- [Two ways to drive it: the chat and the web page](#two-ways-to-drive-it-the-chat-and-the-web-page)
+- [How much tkt drives](#how-much-tkt-drives)
+- [Quick start](#quick-start)
+- [Words used here](#words-used-here)
+- Reference: [Install](#install), [Use](#use), [The tkt agent](#the-tkt-agent), [Settings](#settings), [Development](#development)
+
+## How it works
+
+The work splits in two.
+
+- The skills do the thinking. Each lifecycle skill is one stage of a ticket: it plans, builds, reviews, verifies or merges. It ends with a status line, such as `Status: READY_FOR_REVIEW`, and it never starts the next skill.
+- tkt does the mechanics between the stages. For each ticket it creates the worktree, opens a tab named after the ticket and its preset, such as `ACM-124 (claude)`, starts the agent there, and types the line that starts the stage. It reads the status lines, the pull request and CI to find each ticket's next step.
+
+```mermaid
+flowchart TB
+  you(["You"])
+  chat["tkt agent<br/>the chat in your terminal"]
+  web["The web page<br/>the same chat in a browser"]
+  auto["tkt auto<br/>drives one ticket"]
+  watch["tkt watch<br/>keeps every ticket moving"]
+  cmds["tkt start, approve, run,<br/>sync, merge, done"]
+  wt["worktrunk<br/>a worktree per ticket"]
+  herdr["herdr<br/>a tab per ticket"]
+  agent[["Claude Code or OpenCode<br/>running a skill"]]
+  tracker[("Tracker<br/>the tickets")]
+  forge[("Forge<br/>branches and<br/>pull requests")]
+  ci[("CI and<br/>the review bot")]
+  you --> chat
+  you --> web
+  chat <-->|mirrored| web
+  chat --> cmds
+  auto --> cmds
+  watch --> cmds
+  cmds --> wt
+  cmds --> herdr
+  herdr --> agent
+  wt -.->|its worktree| agent
+  agent -->|moves the ticket| tracker
+  agent -->|push, pull request,<br/>review, merge| forge
+  forge --> ci
+  cmds -.->|reads checks<br/>and reviews| forge
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+  class you you
+  class chat,web,cmds,auto,watch,wt,herdr tkt
+  class agent skill
+  class tracker,forge,ci ext
+```
+
+In the diagrams on this page, a rounded yellow box is you. A square blue box is tkt or a tool it runs. A green box with double sides is an agent running a skill. A grey cylinder is a service outside your machine.
+
+The skills change the tracker and the forge. tkt never writes to the tracker, and it changes the forge in one way only: it pushes a clean merge of the base. People and programs both drive tkt: every command takes `--json`, every failure has a stable error code, and `tkt schema` describes the whole interface.
+
+## A ticket from start to merge
+
+A ticket moves through the same stages every time. Each arrow out of a stage is a status line or a verdict; each arrow into a stage is a step that you, `tkt auto` or `tkt watch` takes.
+
+```mermaid
+flowchart TD
+  create[["create-ticket<br/>optional: writes the tickets"]]
+  tracker[("ACM-124 in the tracker")]
+  suggest[["suggest-tickets<br/>optional: picks<br/>what to start next"]]
+  start["tkt start ACM-124<br/>worktree, tab, agent"]
+  plan[["start-ticket<br/>reads the code,<br/>writes a plan<br/>calls review-plan<br/>and present-plan"]]
+  approve(["You approve the plan"])
+  build[["work-ticket<br/>builds it test-first,<br/>opens the pull request<br/>calls tdd, commit,<br/>simplify-branch,<br/>playwright-cli, create-pr"]]
+  checks[("CI and the review bot<br/>check the exact head")]
+  review[["review-pr<br/>reviews it in a fresh session"]]
+  address[["address-pr-review<br/>fixes the findings"]]
+  upkeep["tkt sync, or tkt run ci<br/>merges a moved base,<br/>or fixes failing checks"]
+  verify[["verify-pr<br/>runs the human<br/>verification steps"]]
+  confirm(["You confirm the steps<br/>and say merge"])
+  finish[["finish-ticket<br/>merges, moves<br/>the ticket to done"]]
+  done(["You run tkt done<br/>the tab and the<br/>worktree go away"])
+
+  create -.-> tracker
+  tracker -.-> suggest
+  tracker --> start
+  suggest -.-> start
+  start --> plan
+  plan -->|"Status: AWAITING_APPROVAL"| approve
+  approve -.->|ask for changes| plan
+  approve --> build
+  build -->|"Status: READY_FOR_REVIEW"| checks
+  checks --> review
+  checks -.->|"the base moved, or checks fail"| upkeep
+  upkeep -.-> checks
+  review -.->|"Verdict: CHANGES_REQUESTED"| address
+  address -.->|"Status: READY_FOR_REVIEW"| checks
+  review -->|"Verdict: READY_FOR_HUMAN"| verify
+  verify -.->|"Verification: FAILED"| address
+  verify -->|"Verification: PASSED"| confirm
+  confirm --> finish
+  finish -->|"Status: DONE"| done
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+  class approve,confirm,done you
+  class start,upkeep tkt
+  class create,suggest,plan,build,review,address,verify,finish skill
+  class tracker,checks ext
+```
+
+Solid arrows are the path a ticket takes when nothing goes wrong. Dotted arrows are optional steps and the loops: a review with findings, a failed verification step, a moved base or failing checks each send the ticket back, and the new head gets a new review.
+
+| Skill | What it does | Ends with | Calls |
+|---|---|---|---|
+| `setup-rogs` | Runs once per repository. It asks about the tracker, the forge, CI and the optional features, and writes `docs/agents/*.md`, which every other skill reads. | `Status: CONFIGURED` | `writing-for-agents`, `commit` |
+| `create-ticket` | Audits the code and the tracker, drafts tickets, and creates them once you approve a preview. | `Status: AWAITING_CREATE_APPROVAL`, then `Status: TICKETS_CREATED` | |
+| `suggest-tickets` | Picks ready tickets that can run side by side, ranked by what each one unblocks. It changes nothing. | `Status: TICKETS_SUGGESTED` | |
+| `start-ticket` | Moves the ticket to in-progress, reads the code end to end, and writes a plan. It writes no code. | `Status: AWAITING_APPROVAL`, or `Status: PLAN_APPROVED` once you approve in the browser | `review-plan`, `present-plan`, `asd-ste100` |
+| `work-ticket` | Builds the plan in the same session: commits, the pull request, green CI on the exact head, and a handoff comment on the ticket. | `Status: READY_FOR_REVIEW` | `tdd`, `diagnosing-bugs`, `commit`, `simplify-branch`, `playwright-cli`, `create-pr` |
+| `review-pr` | Reviews the pull request at its exact head, in a session that did not write it, and posts its findings with a verdict. It never edits code. | `Verdict: CHANGES_REQUESTED` or `Verdict: READY_FOR_HUMAN` | |
+| `address-pr-review` | Merges the base, fixes each valid finding at its root cause, answers the rest with evidence, and replies to every comment. At most two rounds. | `Status: READY_FOR_REVIEW` | `tdd`, `diagnosing-bugs`, `commit` |
+| `verify-pr` | Runs the human verification steps the way you would, in a browser or with the step's commands, and posts what it saw on each step. It never edits code. | `Verification: PASSED`, `FAILED` or `INCOMPLETE` | `playwright-cli` |
+| `finish-ticket` | Merges on your word, checks the merge, moves the ticket to done, and names the tickets the merge unblocked. | `Status: DONE` | |
+
+Every skill can also stop with `Status: BLOCKED` and a reason, or with `Status: SETUP_REQUIRED` when the repository has no configuration. Four rules hold the stages together:
+
+- The agent that wrote a change never reviews it. Every review runs in a fresh session.
+- Every claim names the exact commit it holds for: CI passed on this head, the review cleared this head. A new push needs a new review.
+- Only finish-ticket merges, and only on your word, or in a yolo run you started.
+- Branches take the base by merging it. Nothing rebases or force-pushes.
+
+The tracker's board follows the ticket, since each skill moves it the moment its new state is true:
+
+```mermaid
+stateDiagram-v2
+  state "new" as new
+  state "in-progress" as progress
+  state "in-review" as review
+  state "done" as done
+  state "blocked" as blocked
+  [*] --> new: create-ticket, or by hand
+  new --> progress: start-ticket
+  progress --> review: work-ticket, once CI passes
+  review --> done: finish-ticket, after the merge
+  progress --> blocked: a skill stops on a blocker
+  blocked --> progress: the blocker merges
+  done --> [*]
+```
+
+review-pr and verify-pr never write to the tracker, and tkt never touches it.
+
+## Two ways to drive it: the chat and the web page
+
+In a herdr pane inside the repository, type `tkt`. It opens the tkt agent: a chat about the repository's tickets, with a board pinned on top. Say what you want in plain words, such as "start ACM-124" or "what needs me?", or type a slash command, such as `/approve ACM-124`. Type `/web`, and the same chat opens in your browser, beside the board. What you type in either place shows in both, and you can answer a question the chat asks in either one; the first answer counts. Every button on the page sends the slash command you could type, so the two never drift.
+
+```mermaid
+flowchart TB
+  you(["You"])
+  chat["tkt agent<br/>chat and board<br/>in the terminal"]
+  web["The web page<br/>chat, board and<br/>each ticket's views"]
+  tkt["tkt commands, with --json<br/>start, approve, run,<br/>merge, done"]
+  loops["tkt auto and tkt watch<br/>go on after<br/>the chat closes"]
+  tabs[["One herdr tab<br/>per ticket<br/>its agent runs a skill"]]
+  you -->|plain words or /commands| chat
+  you -->|buttons, forms or /commands| web
+  web <-->|mirrored both ways| chat
+  chat --> tkt
+  loops --> tkt
+  tkt --> tabs
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  class you you
+  class chat,web,tkt,loops tkt
+  class tabs skill
+```
+
+The chat only runs tkt. It cannot read code, run a shell or browse: each ticket's own agent does the work, in its own tab. The `tkt auto` loops and `tkt watch` run on their own, so closing the chat stops nothing.
+
+In the terminal, the board pinned above the chat lists every ticket, then what needs you, each item with the command that acts on it:
+
+```
+tkt  app  8 tickets  5 need you  watch on
+TICKET    AGE  PHASE             TIME AGENT    PR     DIFF        NOTES
+ACM-101   3h   awaiting approval 25m  idle     -      -           Export reports as CSV
+ACM-106   3h   needs fix         1h   idle     #43    +140 -9     Rate limit the public API
+ACM-107   3h   ready to verify   1h   idle     #44    +88 -20     Add a dark theme to emails
+ACM-109   3h   ready to merge    15m  idle     #46    +64 -18     Cache the pricing table
+ACM-110   3h   merged            20m  idle     #38    +12 -410    Drop the legacy login page
+ACM-104   3h   working           4m   waiting  #41    +293 -41    auto  Paginate the audit log
+ACM-116   3m   queued            3m   -        -      -           queued  Log slow queries
+ACM-117   6m   planning          6m   working  -      -           Add SSO for admins
+
+! ACM-101 plan ready   /show ACM-101, /approve ACM-101
+! ACM-106 the review has findings to address   /next ACM-106
+! ACM-107 ready to verify   /check ACM-107
+! ACM-109 ready to merge   /check ACM-109
+! ACM-110 merged   /done ACM-110
+/board  /inbox  /board hide
+```
+
+On the web page, the same items are cards with their answers as buttons. Pick a ticket, and the middle column shows it with six tabs: its last message, such as the plan, the pull request with its checks and reviews, the human verification steps, the diff, the agent's live screen, and its history.
+
+![A plan waiting for approval on the web page, with Approve and Ask for changes above it](docs/images/web-plan.png)
+
+![The human verification checklist on the web page, with what verify-pr saw beside each step](docs/images/web-checklist.png)
+
+One ticket in auto, the default mode, from the first look to the cleanup:
+
+| Step | In the chat | On the web page | What runs |
+|---|---|---|---|
+| Pick what to start | "what should I work on next?", or `/suggest 3` | Suggest, in the left column | suggest-tickets, in a suggest tab at the repository's root |
+| Start it | `/start ACM-124`; with more than one preset, the chat asks which | Start tickets, or Start it on a card for a ticket a merge unblocked | `tkt start`: the worktree, the tab, the agent and start-ticket. A `tkt auto` loop waits for your approval. |
+| Read the plan | `/show ACM-124` | Pick the ticket: its Last message tab draws the plan | |
+| Approve it, or ask for changes | `/approve ACM-124`, or "tell ACM-124 to keep the old field" | Approve, or Ask for changes | `tkt approve` or `tkt send`. work-ticket builds in the same session. |
+| Let it run | The board shows each phase, and herdr notifies you when a ticket needs you | The board's columns, and the Pull request, Diff and Screen tabs | `tkt auto` waits for CI and the review bot, and runs review-pr, address-pr-review, `tkt sync` and then verify-pr, each in a fresh session |
+| Answer what needs you | `/inbox`, or `/peek ACM-124` to see the agent's screen | The cards under Needs you | |
+| Verify | `/check ACM-124`: confirm from verify-pr's evidence, or walk the checklist | Open the checklist, or the Verification tab | `tkt verified` comments on the pull request that the steps passed |
+| Merge | `/check` ends with Confirm and merge now, or Merge now | Merge it | `tkt merge`: finish-ticket merges in a fresh session |
+| Clean up | `/done ACM-124` | Remove it | `tkt done` closes the tab, removes the worktree and names the tickets the merge unblocked |
+
+The same ticket, in time:
+
+```mermaid
+sequenceDiagram
+  box rgba(253,230,138,0.25) You
+    actor you as You
+  end
+  box rgba(191,219,254,0.25) tkt
+    participant chat as Chat or web page
+    participant auto as tkt auto
+  end
+  box rgba(187,247,208,0.25) The ticket's tab
+    participant agent as Agent running a skill
+  end
+  box rgba(229,231,235,0.25) Outside
+    participant forge as Forge and CI
+  end
+  you->>chat: /start ACM-124
+  chat->>agent: tkt start: worktree, tab, start-ticket
+  agent-->>chat: Status: AWAITING_APPROVAL, the board says plan ready
+  you->>chat: /approve ACM-124
+  chat->>agent: tkt approve: work-ticket builds the plan
+  agent->>forge: commits, pull request, green CI
+  agent-->>auto: Status: READY_FOR_REVIEW
+  loop until a review clears the head and verify-pr ran
+    auto->>forge: wait for CI and the review bot
+    auto->>agent: review, address, sync or verify, in a fresh session
+    agent->>forge: verdict, fixes, or verify-pr's evidence
+  end
+  auto-->>chat: the board says ready to verify
+  you->>chat: /check ACM-124, then Confirm and merge now
+  chat->>agent: tkt merge: finish-ticket, in a fresh session
+  agent->>forge: merge, then CI on the base
+  agent-->>chat: Status: DONE, the board says merged
+  you->>chat: /done ACM-124
+```
+
+## How much tkt drives
+
+You pick a mode when you start a ticket. The default, auto, leaves you the three decisions and takes every step between them.
+
+| Mode | The plan | Review and fixes | Verification | The merge | Start it with |
+|---|---|---|---|---|---|
+| manual | You approve it | You run each stage | You, or verify-pr when you run it | You say merge | `/start ACM-124 manual`, `tkt start ACM-124 --manual` |
+| auto, the default | You approve it | `tkt auto` | verify-pr runs the steps, you confirm them | You say merge | `/start ACM-124`, `tkt start ACM-124` |
+| auto-plan | `tkt auto` approves it | `tkt auto` | verify-pr runs the steps, you confirm them | You say merge | `/start ACM-124 auto-plan`, `tkt start ACM-124 --auto-plan` |
+| yolo | A model from another vendor reviews it, `tkt auto` approves it | `tkt auto` | verify-pr alone | finish-ticket merges once verify-pr passed every step | `/start ACM-124 yolo`, `tkt start ACM-124 --yolo` |
+
+On the web page, the Start tickets form has the same four choices. `/auto ACM-124 on` or `off` hands a ticket you started to `tkt auto`, or takes it back. In every mode, `tkt done` stays yours. Yolo runs only where the repository turns it on, and has rules of its own: see [Yolo](#yolo).
+
+Three things move a ticket:
+
+- You: approve plans, answer the agents' questions, confirm the human verification steps, say merge, and run `tkt done`.
+- `tkt auto ACM-124`, one loop per ticket: it takes every step a ticket in auto needs, and pauses where a person decides, such as when an agent asks a question or after five fix rounds. It goes on by itself once you act.
+- `tkt watch`, one per repository, which tkt commands start by themselves: every minute it merges a moved base when a sync is due, fixes failing checks once per head, removes a ticket whose pull request closed without merging, carries out the merge orders you left, and starts the chores you schedule. It never removes a merged ticket. While a service it depends on reports an incident, it starts no agent, and neither does `tkt auto`.
+
+`tkt ls` shows the next step for every ticket, so you can drive one by hand at any time. [`docs/lifecycle.md`](docs/lifecycle.md) follows a ticket through every loop in depth, and [`docs/day-in-the-life.md`](docs/day-in-the-life.md) follows a whole working day with several tickets in flight.
+
+## Quick start
+
+1. Install tkt (see [Install](#install)) and the skills:
+
+   ```bash
+   npx skills add https://gitlab.com/rogs/skills.git
+   ```
+
+2. In the repository, run `/setup-rogs` in Claude Code, or `@setup-rogs` in OpenCode. It asks about the tracker, the forge, CI and the optional features, and writes `docs/agents/*.md`. Commit those files to the base branch: ticket worktrees branch from it.
+3. In a terminal in the repository, check the setup and install the hooks that tell tkt what each agent does:
+
+   ```bash
+   tkt doctor
+   tkt hook claude --install   # for Claude Code
+   tkt hook tmp --install      # for OpenCode
+   tkt watch --install         # optional: tkt watch and herdr's server start at boot
+   ```
+
+4. In a herdr pane in the repository, type `tkt`. The first time, sign in to a model provider with `/login`. Type `/web` to open the web page.
+5. Say "start ACM-124", and follow the table in [Two ways to drive it](#two-ways-to-drive-it-the-chat-and-the-web-page).
+
+## Words used here
+
+| Word | Meaning |
+|---|---|
+| Ticket | A piece of work in the tracker, such as `ACM-124`. One ticket gets one branch, one worktree and one tab, all named after it. |
+| Base | The branch a ticket's branch starts from and merges into, such as `main`. |
+| Head | The newest commit on the ticket's branch. CI results, reviews and verification count only for the head they name. |
+| Worktree | Another checkout of the repository in a directory of its own, so tickets never share files. worktrunk creates and removes them. |
+| Tab | The herdr tab where the ticket's agent runs, such as `ACM-124 (claude, auto)`. |
+| Harness | The program that runs the agent: Claude Code or OpenCode. |
+| Preset | A harness and a model under one name, such as `claude` or `fast`, set in `config.toml`. |
+| Skill | Instructions an agent loads for one job. The lifecycle skills are the stages; the others help them. |
+| Stage | One skill's run on a ticket, started by a line tkt types, such as `review` or `verify`. |
+| Status line | The line a skill ends with, such as `Status: READY_FOR_REVIEW`. tkt reads it to find the next step. |
+| Verdict | review-pr's result for a head: `CHANGES_REQUESTED` or `READY_FOR_HUMAN`. |
+| Human verification steps | The numbered steps in the pull request that show the change works. You run them, or verify-pr runs them and you confirm. |
+| Merge order | What `tkt merge` leaves when finish-ticket cannot merge yet. `tkt watch` carries it out. |
+| Chore | An agent run you schedule, such as a weekly dependency upgrade. It opens a pull request but has no ticket. |
 
 ## Install
 
@@ -100,7 +415,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt hook claude --install` | Adds tkt's Claude Code hooks to the project's `.claude/settings.local.json`, or `settings.json` with `--shared`: they tell tkt each prompt, each turn's status lines and each skill start, so a plan approved in the viewer shows at once. `tkt doctor` checks for them. |
 | `tkt schema` | Describes every command, flag, result and error code as JSON. |
 
-A ticket from start to merge, in short:
+From a terminal alone, without the chat, a ticket goes like this:
 
 1. Run `tkt start ACM-12`, or pipe in the dispatcher's block with `tkt start --prompt -`.
 2. Read the plan with `tkt show ACM-12`, then `tkt approve ACM-12`.
