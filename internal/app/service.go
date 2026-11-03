@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -205,6 +206,25 @@ func (c *Ctx) serviceSpec() (service.Spec, error) {
 	return service.Spec{Herdr: h, Tkt: tkt, Path: c.Getenv("PATH")}, nil
 }
 
+// sessionDisplay is the desktop's display, as NAME=value: this shell's, or,
+// from a shell without one, such as a pane of a herdr that started before
+// the desktop, the one the desktop gave systemd at login. It is nil when
+// neither has one.
+func (a *App) sessionDisplay(ctx context.Context) []string {
+	var env []string
+	for _, k := range service.DisplayVars {
+		env = append(env, k+"="+a.Getenv(k))
+	}
+	if d := service.Display(env); d != nil {
+		return d
+	}
+	r := a.R.Run(ctx, runner.Cmd{Argv: service.SystemctlArgv("show-environment"), Timeout: 10 * time.Second})
+	if !r.OK() {
+		return nil
+	}
+	return service.Display(strings.Split(r.Out(), "\n"))
+}
+
 func sameFile(a, b string) bool {
 	x, err1 := os.Stat(a)
 	y, err2 := os.Stat(b)
@@ -212,6 +232,15 @@ func sameFile(a, b string) bool {
 }
 
 func (c *Ctx) installSystemd(s watchSvc, spec service.Spec, sr *ServiceResult, yes bool) error {
+	// Run from where no display is found, herdr's unit keeps the one it has.
+	old, _ := os.ReadFile(s.files[0])
+	was := service.Display(service.UnitEnv(string(old)))
+	if spec.Display = c.sessionDisplay(c.Ctx); spec.Display == nil {
+		spec.Display = was
+	}
+	if spec.Display == nil {
+		c.UI.Warn("found no DISPLAY or WAYLAND_DISPLAY in this shell or in systemd, so agents in herdr's panes cannot reach the clipboard, and pasting an image fails. Run tkt watch --install again from a terminal in your desktop session")
+	}
 	if err := c.writeServiceFile(s.files[0], service.HerdrUnitFile(spec)); err != nil {
 		return err
 	}
@@ -234,6 +263,11 @@ func (c *Ctx) installSystemd(s watchSvc, spec service.Spec, sr *ServiceResult, y
 		}
 		if err := c.startHerdr(s, sr, service.SystemctlArgv("start", s.herdr)); err != nil {
 			return err
+		}
+		// A restart ends every pane, and every agent in one, so it is yours
+		// to run.
+		if sr.Herdr == "service" && !slices.Equal(was, spec.Display) {
+			c.UI.Warn("%s keeps the environment it started with, so its panes get %s only when it starts again. If pasting an image fails in them, run systemctl --user restart %s once no agent works; that ends every pane", s.herdr, strings.Join(spec.Display, " "), s.herdr)
 		}
 	} else {
 		sr.Herdr = "off"
@@ -485,6 +519,9 @@ func (a *App) serviceCheck(ctx context.Context, root string, harnesses []string)
 	case !herdrOn && lingers:
 		return Check{ID: id, Status: CheckWarn, Message: s.unit + " runs, but herdr's server does not start with it",
 			Hint: "tkt watch --install"}
+	case s.manager == service.Systemd && herdrOn && !a.herdrHasDisplay(s) && a.sessionDisplay(ctx) != nil:
+		return Check{ID: id, Status: CheckWarn, Message: s.herdr + " sets no DISPLAY or WAYLAND_DISPLAY, so agents in herdr's panes cannot paste images",
+			Hint: "tkt watch --install, then systemctl --user restart " + s.herdr + " once no agent works"}
 	}
 	msg := s.unit + " runs tkt watch"
 	switch {
@@ -494,6 +531,12 @@ func (a *App) serviceCheck(ctx context.Context, root string, harnesses []string)
 		msg += "; herdr runs outside " + s.herdr + " until its next start"
 	}
 	return Check{ID: id, Status: CheckOK, Message: msg}
+}
+
+// herdrHasDisplay reports whether herdr's unit sets a display.
+func (a *App) herdrHasDisplay(s watchSvc) bool {
+	b, _ := os.ReadFile(s.files[0])
+	return service.Display(service.UnitEnv(string(b))) != nil
 }
 
 // lookIn reports whether a PATH finds an executable named tool.
