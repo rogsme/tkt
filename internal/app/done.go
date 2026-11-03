@@ -323,6 +323,15 @@ func (c *Ctx) doneCheck(gh forge.GH, t ticketWorktree, agents []herdr.Agent, pan
 			break
 		}
 	}
+	held, closeTabs := c.worktreeHeld(id, path, panes, tabs)
+	return append(reasons, held...), closeTabs, pr
+}
+
+// worktreeHeld lists the ticket's tabs to close before its worktree goes,
+// and why the worktree cannot go: tkt runs inside it, or a pane or the
+// OpenCode service that tkt did not open works there. tkt done and tkt drop
+// share it.
+func (c *Ctx) worktreeHeld(id, path string, panes []herdr.Pane, tabs []herdr.Tab) (reasons, closeTabs []string) {
 	if herdr.Inside(c.Cwd, path) {
 		reasons = append(reasons, "tkt runs inside the worktree; run it from another directory")
 	}
@@ -352,7 +361,7 @@ func (c *Ctx) doneCheck(gh forge.GH, t ticketWorktree, agents []herdr.Agent, pan
 	if openCodeServesFrom(path) {
 		reasons = append(reasons, "the OpenCode service runs from inside the worktree, and removing it would stop that service")
 	}
-	return reasons, closeTabs, pr
+	return reasons, closeTabs
 }
 
 func short(s string) string {

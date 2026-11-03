@@ -33,6 +33,10 @@ const (
 	// comments on the pull request, with Note giving your reason.
 	Accepted = "accepted"
 	Done     = "done"
+	// Dropped is a ticket tkt drop threw away before it merged: its tabs,
+	// worktree and branch, with Head the branch's last commit, and PR the
+	// pull request it closed, if any.
+	Dropped = "dropped"
 	// Hold is a ticket put on hold (Action on) or taken off it (off).
 	Hold = "hold"
 	// Sync is a base merge tkt made and pushed itself (Action merged), or
@@ -63,6 +67,8 @@ type Event struct {
 	Action string `json:"action,omitempty"`
 	Stop   string `json:"stop,omitempty"`
 	PR     int    `json:"pr,omitempty"`
+	// Head is the commit a dropped ticket's branch held.
+	Head string `json:"head,omitempty"`
 	// MergedAt is when the forge merged the pull request.
 	MergedAt string `json:"merged_at,omitempty"`
 	// OpenedAt is when the pull request was opened.

@@ -1,0 +1,18 @@
+# A chore's run drops like a ticket, by its branch, with no word about the
+# tracker.
+mkdir $REPO/.tkt
+cp $WORK/tkt.local.toml $REPO/.tkt/tkt.local.toml
+exec tkt chore run deps
+exists $FAKE_WT_ROOT/deps-run
+resetlog
+exec tkt drop deps-run --yes
+logged wt -C $REPO remove deps-run --foreground --reap --format json --force --force-delete
+! exists $FAKE_WT_ROOT/deps-run
+stdout '^deps-run  dropped:'
+! stdout 'tracker'
+
+-- tkt.local.toml --
+[chores.deps]
+schedule = "0 10 * * 1"
+branch = "{name}-run"
+prompt = "Upgrade the dependencies."

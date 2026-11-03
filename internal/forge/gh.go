@@ -116,6 +116,20 @@ func (g GH) Comment(ctx context.Context, n int, body string) (string, error) {
 	return strings.TrimSpace(r.Out()), nil
 }
 
+// CloseArgv is the gh command that closes pull request n without merging.
+func (g GH) CloseArgv(n int) []string {
+	return []string{"gh", "pr", "close", strconv.Itoa(n), "--repo", g.Repo}
+}
+
+// Close closes pull request n without merging.
+func (g GH) Close(ctx context.Context, n int) error {
+	r := g.R.Run(ctx, runner.Cmd{Argv: g.CloseArgv(n), Timeout: 60 * time.Second})
+	if !r.OK() {
+		return apperr.New(apperr.ForgeCloseFailed, "gh pr close %d failed: %s", n, runner.Head(strings.TrimSpace(r.ErrText()), 200))
+	}
+	return nil
+}
+
 // ListBodies returns the branch's open pull requests with their bodies.
 func (g GH) ListBodies(ctx context.Context, branch string) ([]PR, error) {
 	return g.list(ctx, "--head", branch, "--state", "open", "--limit", "10", "--json", "number,state,headRefName,headRefOid,headRepository,body")

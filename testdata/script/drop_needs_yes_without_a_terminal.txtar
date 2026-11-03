@@ -1,0 +1,17 @@
+# tkt drop asks you to type the ticket id before it removes anything, so
+# without a terminal it needs --yes.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+resetlog
+! exec tkt drop ACM-12 --json
+rc 2
+envelope '.error.code' confirmation_required
+envelope '.error.hint' 'tkt drop ACM-12 --dry-run lists what goes; tkt drop ACM-12 --yes drops it'
+! logcontains 'tab close'
+! logcontains 'remove ACM-12'
+exists $WT
+
+# A ticket with no worktree has nothing to drop.
+! exec tkt drop ACM-13 --yes --json
+rc 4
+envelope '.error.code' worktree_missing

@@ -1,0 +1,42 @@
+# tkt drop throws away a ticket that never merged: its tab and agent, its
+# worktree with the changes in it, its branch and its temporary directory.
+# It touches nothing on the forge when the branch never reached it.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+statevar $WT tmpdir TMP
+exists $TMP
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+cp $WORK/draft.txt $WT/notes.txt
+gitvar H1 $WT HEAD
+resetlog
+exec tkt drop ACM-12 --yes
+logged herdr tab close w1:t10
+logged wt -C $REPO remove ACM-12 --foreground --reap --format json --force --force-delete
+stdout '^ACM-12  dropped: closed w1:t10, removed '$WT' and branch ACM-12$'
+stdout '^ACM-12  branch ACM-12 was at [0-9a-f]{7}; git branch ACM-12 [0-9a-f]{7} brings it back until git gc prunes it$'
+stdout '^ACM-12  tkt never writes the tracker; move ACM-12 back there yourself$'
+! exists $WT
+! exists $TMP
+! exec git -C $REPO show-ref --verify --quiet refs/heads/ACM-12
+jqeq $FAKE_DIR/herdr.json '[.tabs[].tab_id]' '["w1:t1"]'
+! logcontains 'pr close'
+! logcontains '--delete'
+houserules
+
+# The history keeps the commit the branch held, and tkt stats leaves the
+# ticket out of its times.
+exec grep -c '"event":"dropped"' $HOME/.local/state/tkt/history.jsonl
+stdout '^1$'
+grep '"event":"dropped".*"head":"'$H1'"' $HOME/.local/state/tkt/history.jsonl
+exec tkt stats --json
+envelope '.result.summary | [.dropped, .in_progress, .merged]' '[1,0,0]'
+exec tkt history ACM-12
+stdout 'dropped with tkt drop; the branch was at [0-9a-f]{7}'
+
+# The ticket starts afresh, from a new branch.
+exec tkt start ACM-12
+exists $WT
+! exists $WT/notes.txt
+
+-- draft.txt --
+draft

@@ -92,7 +92,8 @@ func Claude() {
 
 // GH answers `gh pr list` from the JSON file in $FAKE_GH_PRS, and keeps
 // what `gh pr comment` posts, which later lists show among the pull
-// request's comments.
+// request's comments. `gh pr close` marks the pull request closed in that
+// file.
 func GH() {
 	logCall("gh")
 	args := os.Args[1:]
@@ -138,6 +139,34 @@ func GH() {
 			die(1, "%v", err)
 		}
 		fmt.Printf("https://github.com/acme/app/pull/%s#issuecomment-1\n", args[2])
+		os.Exit(0)
+	}
+	if len(args) >= 3 && args[0] == "pr" && args[1] == "close" {
+		if os.Getenv("FAKE_GH_CLOSE_FAIL") == "1" {
+			die(1, "HTTP 403")
+		}
+		path := filepath.Join(os.Getenv("FAKE_DIR"), "prs.json")
+		if _, err := os.Stat(path); err != nil {
+			path = os.Getenv("FAKE_GH_PRS")
+		}
+		var prs []map[string]any
+		if b, err := os.ReadFile(path); err != nil || json.Unmarshal(b, &prs) != nil {
+			die(1, "no pull requests found for %s", args[2])
+		}
+		found := false
+		for _, p := range prs {
+			if fmt.Sprint(p["number"]) == args[2] {
+				p["state"], found = "CLOSED", true
+			}
+		}
+		if !found {
+			die(1, "no pull requests found for %s", args[2])
+		}
+		b, _ := json.Marshal(prs)
+		if err := os.WriteFile(path, b, 0o644); err != nil {
+			die(1, "%v", err)
+		}
+		fmt.Printf("Closed pull request acme/app#%s\n", args[2])
 		os.Exit(0)
 	}
 	if len(args) < 2 || args[0] != "pr" || args[1] != "list" {
@@ -211,6 +240,8 @@ func OpenCode() {
 		}
 		body["id"] = fmt.Sprintf("ses_fake%d", n)
 		printJSON(map[string]any{"data": body})
+	case args[1] == "POST" && strings.HasPrefix(args[2], "/api/session/") && strings.HasSuffix(args[2], "/interrupt"):
+		fmt.Println(`{}`)
 	case args[1] == "GET" && args[2] == "/api/session/active":
 		if a := os.Getenv("FAKE_OC_ACTIVE"); a != "" {
 			fmt.Println(a)

@@ -35,6 +35,7 @@ var resultTypes = map[string]any{
 	"merge":      app.MergeResult{},
 	"resume":     app.ResumeResult{},
 	"done":       app.DoneResult{},
+	"drop":       app.DropResult{},
 	"chores":     app.ChoresResult{},
 	"chore run":  app.ChoreRunResult{},
 	"presets":    app.PresetsResult{},

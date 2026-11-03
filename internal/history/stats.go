@@ -18,8 +18,10 @@ type Ticket struct {
 	Merged   string `json:"merged"`
 	// Closed is when the pull request was closed without merging.
 	Closed string `json:"closed"`
-	Done   string `json:"done"`
-	PR     int    `json:"pr"`
+	// Dropped is when tkt drop threw the ticket away.
+	Dropped string `json:"dropped"`
+	Done    string `json:"done"`
+	PR      int    `json:"pr"`
 	// Total runs from the start to the merge, or to now while the ticket
 	// is in progress.
 	Total      int64 `json:"total_s"`
@@ -32,12 +34,13 @@ type Ticket struct {
 	Auto   bool `json:"auto"`
 }
 
-// Summary describes the merged tickets of a Timelines call. Closed tickets
-// count apart and stay out of the times: rejected work says nothing about
-// how long work takes to land.
+// Summary describes the merged tickets of a Timelines call. Closed and
+// dropped tickets count apart and stay out of the times: rejected or
+// mistaken work says nothing about how long work takes to land.
 type Summary struct {
 	Merged       int   `json:"merged"`
 	Closed       int   `json:"closed"`
+	Dropped      int   `json:"dropped"`
 	InProgress   int   `json:"in_progress"`
 	MedianTotal  int64 `json:"median_total_s"`
 	P90Total     int64 `json:"p90_total_s"`
@@ -103,6 +106,10 @@ func Timelines(events []Event, f Filter, waiting []string, now time.Time) ([]Tic
 			sum.InProgress++
 			continue
 		}
+		if t.Merged == "" && t.Closed == "" {
+			sum.Dropped++
+			continue
+		}
 		if t.Merged == "" {
 			sum.Closed++
 			continue
@@ -116,8 +123,8 @@ func Timelines(events []Event, f Filter, waiting []string, now time.Time) ([]Tic
 	return out, sum
 }
 
-// lastCycle keeps the events from the last start that follows a done, so a
-// ticket started again after its removal counts afresh.
+// lastCycle keeps the events from the last start that follows a done or a
+// drop, so a ticket started again after its removal counts afresh.
 func lastCycle(evs []Event) []Event {
 	start := 0
 	open := false
@@ -127,7 +134,7 @@ func lastCycle(evs []Event) []Event {
 			if !open {
 				start, open = i, true
 			}
-		case Done:
+		case Done, Dropped:
 			open = false
 		}
 	}
@@ -180,6 +187,11 @@ func timeline(evs []Event, waiting []string, now time.Time) (Ticket, bool) {
 			t.PR = e.PR
 		case Done:
 			t.Done = e.At
+		case Dropped:
+			t.Dropped = e.At
+			if e.PR > 0 {
+				t.PR = e.PR
+			}
 		}
 	}
 	start, ok := parse(t.Started)
@@ -191,6 +203,8 @@ func timeline(evs []Event, waiting []string, now time.Time) (Ticket, bool) {
 		end = m
 	} else if c, ok := parse(t.Closed); ok {
 		end = c
+	} else if d, ok := parse(t.Dropped); ok {
+		end = d
 	} else {
 		t.InProgress = true
 	}

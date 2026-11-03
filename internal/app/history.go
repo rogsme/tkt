@@ -50,6 +50,8 @@ type HistoryEvent struct {
 	Action string `json:"action,omitempty"`
 	Stop   string `json:"stop,omitempty"`
 	PR     int    `json:"pr,omitempty"`
+	// Head is the commit a dropped ticket's branch held.
+	Head string `json:"head,omitempty"`
 	// Unblocked lists the tickets finish-ticket said the merge unblocked.
 	Unblocked []string `json:"unblocked,omitempty"`
 	// Chore names the chore whose run started, on its start.
@@ -107,8 +109,11 @@ func (t *TicketHistory) text(w io.Writer) {
 	head := t.Ticket
 	if tl := t.Timeline; tl != nil {
 		total := dur(tl.Total) + " start to merge"
-		if tl.InProgress {
+		switch {
+		case tl.InProgress:
 			total = dur(tl.Total) + " so far"
+		case tl.Merged == "" && tl.Closed == "" && tl.Dropped != "":
+			total = dur(tl.Total) + " start to drop"
 		}
 		head += fmt.Sprintf("  %s, %s waiting on you, %d round%s", total, dur(tl.WaitingOnYou), tl.Rounds, plural(tl.Rounds))
 		if tl.Auto {
@@ -218,6 +223,8 @@ func (e HistoryEvent) line() string {
 		if len(e.Unblocked) > 0 {
 			return "removed; the merge unblocked " + idsText(e.Unblocked)
 		}
+	case history.Dropped:
+		return droppedLine(e.Head, e.PR)
 	}
 	return e.Event
 }
@@ -278,7 +285,7 @@ func (a *App) History(ctx context.Context, o HistoryOpts) (*HistoryResult, error
 		th := TicketHistory{Ticket: id, Events: []HistoryEvent{}, PullRequests: []PRHistory{}}
 		for _, e := range events {
 			if e.Repo == res.Repo && e.Ticket == id {
-				th.Events = append(th.Events, HistoryEvent{At: e.At, Event: e.Event, Phase: e.Phase, From: e.From, Stage: e.Stage, Action: e.Action, Stop: e.Stop, PR: e.PR, Unblocked: e.Unblocked, Chore: e.Chore, Note: e.Note})
+				th.Events = append(th.Events, HistoryEvent{At: e.At, Event: e.Event, Phase: e.Phase, From: e.From, Stage: e.Stage, Action: e.Action, Stop: e.Stop, PR: e.PR, Head: e.Head, Unblocked: e.Unblocked, Chore: e.Chore, Note: e.Note})
 			}
 		}
 		sort.SliceStable(th.Events, func(i, j int) bool { return th.Events[i].At < th.Events[j].At })

@@ -41,6 +41,8 @@ func (r *StatsResult) Text(w io.Writer) {
 			switch {
 			case t.InProgress:
 				total += " so far"
+			case t.Merged == "" && t.Closed == "":
+				total += " (dropped)"
 			case t.Merged == "":
 				total += " (closed)"
 			}
@@ -63,6 +65,9 @@ func (r *StatsResult) Text(w io.Writer) {
 	}
 	if s.Closed > 0 {
 		fmt.Fprintf(w, "%d closed without merging, left out of the times\n", s.Closed)
+	}
+	if s.Dropped > 0 {
+		fmt.Fprintf(w, "%d dropped with tkt drop, left out of the times\n", s.Dropped)
 	}
 	if s.WithoutStart > 0 {
 		fmt.Fprintf(w, "%d tickets have no recorded start and are left out\n", s.WithoutStart)
