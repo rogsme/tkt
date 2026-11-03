@@ -18,7 +18,7 @@ export function fail(command: string, code: string, message: string, hint = ""):
 
 const plan = (id: string, title: string) => `## Plan for ${id}: ${title}
 
-Status: PLAN_READY
+Status: AWAITING_APPROVAL
 
 ### What changes
 

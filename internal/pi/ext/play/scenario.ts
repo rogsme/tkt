@@ -78,7 +78,7 @@ export function report(id: string, failed: number[] = []): Verification {
 export function scenario(now: number): Scenario {
 	const ago = (min: number) => new Date(now - min * 60_000).toISOString();
 	const rows: Row[] = [
-		row("ACM-101", now, { title: "Export reports as CSV", phase: "awaiting_approval", stage: "start", last_status: "PLAN_READY", next: { kind: "human", reason: "plan_ready", argv: null, text: "read the plan, then approve it" }, phase_since: ago(25), idle_since: ago(25) }),
+		row("ACM-101", now, { title: "Export reports as CSV", phase: "awaiting_approval", stage: "start", last_status: "AWAITING_APPROVAL", next: { kind: "human", reason: "plan_ready", argv: null, text: "read the plan, then approve it" }, phase_since: ago(25), idle_since: ago(25) }),
 		row("ACM-102", now, { title: "Retry failed webhooks", phase: "needs_you", agent: { pane_id: "w1:p102", name: "acm-102", harness: "opencode", status: "blocked" }, next: { kind: "human", reason: "agent_blocked", argv: null, text: "the agent asks a question in its tab" }, phase_since: ago(8) }),
 		row("ACM-103", now, { title: "Move billing to the new API", phase: "blocked", last_status: "BLOCKED", blocked_reason: "waits for ACM-90's API to ship", next: { kind: "human", reason: "blocked", argv: null, text: "it waits on something outside it" }, phase_since: ago(300), started: ago(2000) }),
 		row("ACM-104", now, { title: "Paginate the audit log", phase: "working", agent: { pane_id: "w1:p104", name: "acm-104", harness: "claude", status: "working", background: 1 }, pr: pr("ACM-104", 41), checks: { state: "pending", total: 6, failing: [], pending: 2 }, diff: { files: 7, added: 293, removed: 41 }, auto: auto(), phase_since: ago(4) }),

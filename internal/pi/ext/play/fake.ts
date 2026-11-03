@@ -346,7 +346,7 @@ export class Fake {
 		await this.wait(4000);
 		if (!this.s.rows.includes(r)) return;
 		if (mode === "manual" || mode === "auto") {
-			Object.assign(r, { phase: "awaiting_approval", last_status: "PLAN_READY", agent: { ...r.agent!, status: "idle" }, idle_since: new Date().toISOString(), next: { kind: "human", reason: "plan_ready", argv: null, text: "read the plan, then approve it" } });
+			Object.assign(r, { phase: "awaiting_approval", last_status: "AWAITING_APPROVAL", agent: { ...r.agent!, status: "idle" }, idle_since: new Date().toISOString(), next: { kind: "human", reason: "plan_ready", argv: null, text: "read the plan, then approve it" } });
 			if (r.auto) r.auto.paused = "plan_awaits_approval";
 		} else Object.assign(r, { phase: "working", stage: "work", last_status: "PLAN_APPROVED" });
 		this.push();
