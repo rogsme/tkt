@@ -1,6 +1,6 @@
 # The ticket lifecycle
 
-This page follows one ticket, `ACM-123`, from the tracker to a merged pull request. It shows which tool does each step, which [rogs-skills](https://gitlab.com/rogs/skills) skill runs, what tkt does around it, and which line tells you a step is over. `tkt help lifecycle` has the short version for the terminal, and [`day-in-the-life.md`](day-in-the-life.md) follows a whole day with several tickets at once, mostly in the tkt agent's chat.
+This page follows one ticket, `ACM-123`, from the tracker to a merged pull request. It shows which tool does each step, which [rogs-skills](https://gitlab.com/rogs/skills) skill runs, what tkt does around it, and which line tells you a step is over. `tkt help lifecycle` has the short version for the terminal, and [`day-in-the-life.md`](day-in-the-life.md) follows a whole day with several tickets at once, mostly in the tkt agent's chat. For a first look, read the [README](../README.md#how-it-works): it shows the same flow in fewer diagrams, and both ways to drive it, the chat and the web page.
 
 ## The parts
 
@@ -24,13 +24,13 @@ flowchart LR
     tkt[tkt]
     wt[worktrunk<br/>one worktree per ticket]
     herdr[herdr<br/>one tab per ticket]
-    agent[Claude Code or OpenCode<br/>running a skill]
+    agent[[Claude Code or OpenCode<br/>running a skill]]
     config[docs/agents/*.md<br/>from /setup-rogs]
   end
   subgraph remote[Remote services]
     tracker[(Tracker)]
     forge[(Forge)]
-    ci[CI]
+    ci[(CI)]
   end
   you -->|runs commands| tkt
   you -->|approves, verifies, says merge| agent
@@ -44,7 +44,18 @@ flowchart LR
   agent -->|MCP or CLI| tracker
   agent -->|push, PR, review, merge| forge
   forge -->|every push| ci
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+  class you you
+  class tkt,wt,herdr tkt
+  class agent skill
+  class tracker,forge,ci ext
 ```
+
+In the diagrams on this page, a rounded yellow box is you. A square blue box is tkt or a tool it runs. A green box with double sides is an agent running a skill. A grey cylinder is a service outside your machine. A diamond is a question the next step depends on.
 
 tkt reads the forge through `gh`, the dotted line, and changes it in one way only: when a ticket's base moved and the merge is clean, `tkt sync` makes the merge commit and pushes it, with no agent (see [Syncing with the base](#syncing-with-the-base)). Everything else that changes the tracker or the forge happens inside an agent, under a skill's rules.
 
@@ -58,20 +69,20 @@ worktrunk must name each worktree's directory after its branch. Every lifecycle 
 
 ```mermaid
 flowchart TD
-  ticket[ACM-123 in the tracker, state new]
-  ct[create-ticket<br/>optional: audit, preview, create]
+  ticket[(ACM-123 in the tracker, state new)]
+  ct[[create-ticket<br/>optional: audit, preview, create]]
   start[tkt start ACM-123<br/>worktree, tab, agent, start line]
-  st[start-ticket<br/>move to in-progress, investigate, plan]
+  st[[start-ticket<br/>move to in-progress, investigate, plan]]
   plan{You read the plan}
-  wk[work-ticket<br/>commits, PR, exact-head CI, handoff]
-  review[tkt run ACM-123 review<br/>review-pr in a fresh session]
+  wk[[work-ticket<br/>commits, PR, exact-head CI, handoff]]
+  review[[tkt run ACM-123 review<br/>review-pr in a fresh session]]
   verdict{Verdict at the head}
-  address[tkt run ACM-123 address<br/>address-pr-review: merge the base, then at most two rounds]
+  address[[tkt run ACM-123 address<br/>address-pr-review: merge the base, then at most two rounds]]
   sync[tkt sync ACM-123<br/>merge a clean base, or resolve a conflict in a fresh session]
-  cifix[tkt run ACM-123 ci<br/>fix the failing checks, push once]
-  verify[tkt run ACM-123 verify<br/>verify-pr runs the steps, posts the evidence]
-  human[You confirm the steps<br/>from the evidence, or by running them]
-  merge[tkt merge ACM-123 --passed 1-3<br/>finish-ticket in a fresh session]
+  cifix[[tkt run ACM-123 ci<br/>fix the failing checks, push once]]
+  verify[[tkt run ACM-123 verify<br/>verify-pr runs the steps, posts the evidence]]
+  human([You confirm the steps<br/>from the evidence, or by running them])
+  merge[[tkt merge ACM-123 --passed 1-3<br/>finish-ticket in a fresh session]]
   done[tkt done ACM-123<br/>close the tab, remove the worktree]
 
   ct -.-> ticket
@@ -95,6 +106,15 @@ flowchart TD
   merge -->|Status: HUMAN_QA_FAILED| address
   merge -->|Status: BLOCKED_FOR_SYNC| sync
   merge -->|Status: DONE| done
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+  class plan,human you
+  class start,sync,done tkt
+  class ct,st,wk,review,address,cifix,verify,merge skill
+  class ticket ext
 ```
 
 Every arrow out of a stage is a status line or a verdict on the screen or the pull request. Every arrow into a stage is something you do: a tkt command or an answer in the tab. `tkt watch` takes the upkeep arrows for every ticket: it syncs a moved base, fixes failing checks once per head, and removes a ticket whose pull request closed without merging (see [tkt watch keeps the tickets moving](#tkt-watch-keeps-the-tickets-moving)). `tkt done` after a merge is always yours to run. The other arrows move only when you take them, or when you hand the ticket to `tkt auto`, which takes the same steps for you and pauses where a person decides (see [Letting tkt auto drive](#letting-tkt-auto-drive)). `tkt ls` reads the same facts and prints the next step for each ticket, and `tkt wait ACM-123` blocks until the agent finishes or needs you.
@@ -121,11 +141,17 @@ To send a longer prompt, such as a start-ticket block, pipe it in: `xclip -selec
 
 ```mermaid
 sequenceDiagram
-  participant you as You
-  participant tkt
-  participant wt as worktrunk
-  participant herdr
-  participant agent as Agent
+  box rgba(253,230,138,0.25) You
+    participant you as You
+  end
+  box rgba(191,219,254,0.25) tkt and the tools it runs
+    participant tkt
+    participant wt as worktrunk
+    participant herdr
+  end
+  box rgba(187,247,208,0.25) The ticket's tab
+    participant agent as Agent
+  end
   you->>tkt: tkt start ACM-123
   tkt->>tkt: read docs/agents/*.md, check the id
   tkt->>tkt: git fetch origin main
@@ -249,13 +275,21 @@ Use the finish-ticket skill to merge the PR. Human verification steps 1 to 3 pas
 
 ```mermaid
 flowchart LR
-  verified["your steps passed<br/>on head A"] --> behind{"behind the base?"}
+  verified(["your steps passed<br/>on head A"]) --> behind{"behind the base?"}
   behind -->|yes| sync["tkt watch merges the base:<br/>head B, a clean merge"]
-  sync --> review["review-pr reviews B"]
+  sync --> review[["review-pr reviews B"]]
   behind -->|no| green{"checks green,<br/>no other merge running?"}
   review --> green
-  green -->|yes| line["finish-ticket gets the line:<br/>steps passed on A, now at B"]
-  line --> merged["it checks the merges<br/>between A and B, and merges"]
+  green -->|yes| line[["finish-ticket gets the line:<br/>steps passed on A, now at B"]]
+  line --> merged[["it checks the merges<br/>between A and B, and merges"]]
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+  class verified you
+  class sync tkt
+  class review,line,merged skill
 ```
 
 The steps carry over clean merges of the base: finish-ticket counts a confirmation given on an earlier head when every commit after it is a merge commit whose tree equals what `git merge-tree` gives for its two parents, the merge `tkt sync` makes, and it checks each one itself. finish-ticket merges on review-pr's `READY_FOR_HUMAN` at the head it merges, so a sync brings a fresh review-pr review, and so does a head only the review bot cleared; `tkt watch` starts it. One merge goes at a time, since a second finish-ticket that checks the base before the first one merges would merge an integration nobody reviewed. So you can verify three tickets, leave three orders, and walk away: each one syncs, gets its review and merges after the one before it.
@@ -319,16 +353,24 @@ It runs only where workflow.md's feature table turns on `Autonomous runs`, `Agen
 
 ```mermaid
 flowchart TD
-  go["tkt auto ACM-123 --yolo"] --> plan["start-ticket: posts ## Autonomous run,<br/>plans, review-plan reviews the plan"]
-  plan -->|a hard stop| parked["the ticket goes to blocked;<br/>the loop pauses for you"]
-  plan --> work["tkt approves; work-ticket builds,<br/>writes ## Assumptions in the PR"]
-  work --> rev["review-pr reviews every head;<br/>address and sync as usual"]
-  rev --> ver["verify-pr runs the steps"]
+  go["tkt auto ACM-123 --yolo"] --> plan[["start-ticket: posts ## Autonomous run,<br/>plans, review-plan reviews the plan"]]
+  plan -->|a hard stop| parked(["the ticket goes to blocked;<br/>the loop pauses for you"])
+  plan --> work[["tkt approves; work-ticket builds,<br/>writes ## Assumptions in the PR"]]
+  work --> rev[["review-pr reviews every head;<br/>address and sync as usual"]]
+  rev --> ver[["verify-pr runs the steps"]]
   ver -->|FAILED| rev
   ver -->|INCOMPLETE| parked
-  ver -->|PASSED| fin["tkt merge --autonomous:<br/>finish-ticket merges"]
-  fin -->|Status: DONE| done["you run tkt done"]
+  ver -->|PASSED| fin[["tkt merge --autonomous:<br/>finish-ticket merges"]]
+  fin -->|Status: DONE| done(["you run tkt done"])
   fin -->|BLOCKED_POST_MERGE| alert["the loop stops and notifies you"]
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+  class parked,done you
+  class go,alert tkt
+  class plan,work,rev,ver,fin skill
 ```
 
 - Every line tkt sends a yolo ticket's agents, from the start line to the merge line and the stages `tkt watch` runs, ends with `This run is autonomous: no person reads this session or answers a question. Follow Autonomous runs in docs/agents/workflow.md wherever you would ask.` The skills then decide what they would ask you, on the most conservative reading the ticket, the code and the recorded decisions support, and write each decision under `## Assumptions` in the plan and in the pull request.
@@ -352,7 +394,7 @@ A yolo run starts with the ticket: `--yolo` refuses a ticket you started another
 
 ```mermaid
 flowchart TD
-  pass(["every 60s: one fetch, one read of every ticket"]) --> skip{"on hold, driven by tkt auto,<br/>locked, or agent working?"}
+  pass["every 60s: one fetch, one read of every ticket"] --> skip{"on hold, driven by tkt auto,<br/>locked, or agent working?"}
   skip -->|yes| leave["leave it for now"]
   skip -->|no| merged{"PR merged?"}
   merged -->|"yes: tkt done is yours"| leave
@@ -360,13 +402,20 @@ flowchart TD
   closed -->|yes| done["tkt done"]
   closed -->|no| behind{"the base moved at a moment<br/>a sync is due?"}
   behind -->|clean| sync["merge it, no agent"]
-  behind -->|conflict| resolve["resolve in a fresh session"]
+  behind -->|conflict| resolve[["resolve in a fresh session"]]
   behind -->|no| ci{"checks fail at the head?"}
-  ci -->|yes| fix["ci in a fresh session,<br/>once per head, up to max_rounds"]
+  ci -->|yes| fix[["ci in a fresh session,<br/>once per head, up to max_rounds"]]
   ci -->|no| order{"your merge order holds here,<br/>checks green?"}
-  order -->|"yes, reviewed, no other merge running"| merge["tkt merge: finish-ticket<br/>in a fresh session"]
-  order -->|"yes, a sync left it unreviewed"| review["review-pr in a fresh session"]
+  order -->|"yes, reviewed, no other merge running"| merge[["tkt merge: finish-ticket<br/>in a fresh session"]]
+  order -->|"yes, a sync left it unreviewed"| review[["review-pr in a fresh session"]]
   order -->|no| leave
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+  class pass,done,sync tkt
+  class resolve,fix,merge,review skill
 ```
 
 Plans, findings and human verification stay with you, or with `tkt auto`, and so do reviews and the word to merge: watch merges only through the merge order `tkt merge` leaves when you verified a head finish-ticket could not merge yet, and it reviews only the head a sync made for such an order. A step watch would repeat on the same head, or a fix run past `[auto] max_rounds`, waits for you instead: the ticket shows as `needs_you`, and herdr notifies once. Its agent runs take the same `[auto] max_parallel` slots as `tkt auto`'s, and every step goes into the history.
@@ -389,7 +438,7 @@ A chore is an agent run you schedule in the repository's `.tkt/tkt.local.toml`, 
 
 ```mermaid
 flowchart LR
-  slot(["the chore's slot comes"]) --> open{"its last run<br/>still open?"}
+  slot["the chore's slot comes"] --> open{"its last run<br/>still open?"}
   open -->|yes| skip["skip this slot"]
   open -->|no| run["a branch from origin/main,<br/>a worktree, a tab, an agent"]
   run --> change{"anything<br/>to change?"}
@@ -397,6 +446,13 @@ flowchart LR
   change -->|"yes: Status: READY_FOR_REVIEW"| pr["tkt watch syncs the base<br/>and fixes the checks"]
   pr --> you(["you merge it, or close it"])
   you --> gone
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+  class you you
+  class slot,skip,run,gone,pr tkt
 ```
 
 The repository's `tkt watch` starts a run when its slot comes, once per slot, however many passed while no watch ran; the first watch to see a chore starts its first run at the next slot. `tkt chore run deps` starts one now. Each run gets a branch from the base on the remote, named by the chore's `branch` setting, such as `deps-2026-10-26`, and never an older run's branch. Its agent gets the chore's prompt and one rule from tkt: commit on the run's branch, push it, open one pull request to the base, and end with `Status: READY_FOR_REVIEW`, or with `Status: DONE` and nothing pushed when there is nothing to change.
@@ -411,11 +467,19 @@ When another ticket merges, the base moves, and the branches still open fall beh
 
 ```mermaid
 flowchart LR
-  moved["the base moved"] --> probe{"git merge-tree<br/>HEAD origin/main"}
+  moved[("the base moved")] --> probe{"git merge-tree<br/>HEAD origin/main"}
   probe -->|clean| merge["tkt merges and pushes<br/>in seconds, no agent"]
-  probe -->|conflict| agent["fresh session in a split<br/>merges and resolves, pushes once"]
-  merge --> next["CI and the review bot<br/>run on the new head"]
+  probe -->|conflict| agent[["fresh session in a split<br/>merges and resolves, pushes once"]]
+  merge --> next[("CI and the review bot<br/>run on the new head")]
   agent --> next
+
+  classDef you fill:#fde68a,stroke:#b45309,color:#1f2937
+  classDef tkt fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+  classDef skill fill:#bbf7d0,stroke:#15803d,color:#1f2937
+  classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+  class merge tkt
+  class agent skill
+  class moved,next ext
 ```
 
 `git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge and hands the failure to the `sync-fix` stage, whose line says why and names the log of git's output. A conflict goes to the `resolve` stage, which merges the base, resolves each conflict from what both sides meant, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
