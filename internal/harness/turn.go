@@ -20,7 +20,8 @@ type Turn struct {
 	At time.Time
 	// Pending counts the background tasks the session started and has not
 	// heard back from. Claude Code ends a turn while a CI watcher or a
-	// subagent runs, and goes on when the task's notification arrives.
+	// subagent runs, and goes on when the task's notification arrives;
+	// OpenCode does the same with a background shell.
 	Pending int
 	// Skills names the skills the agent started in the turn, in order, as
 	// the Skill tool names them.
@@ -193,9 +194,24 @@ func lastTurnFromMessages(b []byte) (Turn, bool) {
 			Type    string `json:"type"`
 			Finish  string `json:"finish"`
 			Content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
+				Type  string `json:"type"`
+				Text  string `json:"text"`
+				Name  string `json:"name"`
+				State struct {
+					Input struct {
+						Background bool `json:"background"`
+					} `json:"input"`
+					Metadata struct {
+						ShellID string `json:"shellID"`
+					} `json:"metadata"`
+				} `json:"state"`
 			} `json:"content"`
+			// A synthetic message tells the session a background shell
+			// changed state.
+			Metadata struct {
+				ShellID string `json:"shellID"`
+				State   string `json:"state"`
+			} `json:"metadata"`
 			Time struct {
 				Created   int64 `json:"created"`
 				Completed int64 `json:"completed"`
@@ -206,6 +222,25 @@ func lastTurnFromMessages(b []byte) (Turn, bool) {
 		return Turn{}, false
 	}
 	var t Turn
+	// Like Claude Code, OpenCode ends a turn while a background shell, such
+	// as a CI watch, runs, and goes on when the shell's synthetic message
+	// arrives. Count over every message read, not only the last turn's.
+	started, finished := map[string]bool{}, map[string]bool{}
+	for _, m := range v.Data {
+		if m.Type == "synthetic" && m.Metadata.ShellID != "" && m.Metadata.State != "running" {
+			finished[m.Metadata.ShellID] = true
+		}
+		for _, p := range m.Content {
+			if p.Type == "tool" && p.Name == "shell" && p.State.Input.Background && p.State.Metadata.ShellID != "" {
+				started[p.State.Metadata.ShellID] = true
+			}
+		}
+	}
+	for id := range started {
+		if !finished[id] {
+			t.Pending++
+		}
+	}
 	var all []string
 	prompt := false
 	for _, m := range v.Data {

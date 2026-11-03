@@ -168,3 +168,35 @@ func TestLastTurnFromMessages(t *testing.T) {
 		t.Error("an empty session is known")
 	}
 }
+
+func TestLastTurnFromMessagesCountsPendingBackgroundShells(t *testing.T) {
+	// OpenCode ends the turn while a background shell runs, and goes on
+	// when its synthetic message reports the shell finished.
+	waiting := `
+	 {"id":"m5","type":"idle","time":{"created":1792448560000}},
+	 {"id":"m4","type":"assistant","finish":"stop","time":{"created":1792448550000},
+	  "content":[{"type":"text","text":"Waiting on CI for acme/app#12."}]},
+	 {"id":"m3","type":"assistant","finish":"tool-calls","time":{"created":1792448545000},
+	  "content":[{"type":"tool","name":"shell","state":{"status":"running",
+	   "input":{"command":"gh pr checks 12 --repo git.example.com/acme/app --watch","background":true},
+	   "metadata":{"status":"running","shellID":"sh_ci"}}},
+	  {"type":"tool","name":"shell","state":{"status":"completed",
+	   "input":{"command":"go test ./..."},"metadata":{"status":"completed","exit":0}}}]},
+	 {"id":"m2","type":"synthetic","metadata":{"source":"shell","shellID":"sh_old","state":"completed"},"time":{"created":1792448540000}},
+	 {"id":"m1","type":"user","text":"Use the work-ticket skill.","time":{"created":1792448530000}},
+	 {"id":"m0","type":"assistant","finish":"tool-calls",
+	  "content":[{"type":"tool","name":"shell","state":{"status":"running",
+	   "input":{"command":"sleep 5","background":true},"metadata":{"status":"running","shellID":"sh_old"}}}]}`
+	turn, ok := lastTurnFromMessages([]byte(`{"data":[` + waiting + `]}`))
+	if !ok || turn.Pending != 1 {
+		t.Fatalf("pending: %d %v", turn.Pending, ok)
+	}
+	done := `{"data":[
+	 {"id":"m7","type":"assistant","finish":"stop","time":{"created":1792448590000},
+	  "content":[{"type":"text","text":"CI passed.\nStatus: READY_FOR_REVIEW"}]},
+	 {"id":"m6","type":"synthetic","metadata":{"source":"shell","shellID":"sh_ci","state":"completed","exit":0},"time":{"created":1792448580000}},` + waiting + `]}`
+	turn, _ = lastTurnFromMessages([]byte(done))
+	if turn.Pending != 0 || !strings.Contains(turn.All, "Waiting on CI") || !strings.Contains(turn.All, "READY_FOR_REVIEW") {
+		t.Errorf("done: %+v", turn)
+	}
+}
