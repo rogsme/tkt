@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Item } from "../chat.ts";
 import { type Board, type Image, Mirror, type Page, type Query, type Theme, type ToPage } from "../mirror.ts";
+import { typedMatches } from "../model.ts";
 
 function setup() {
 	const sent: { text: string; images: Image[]; page: Page }[] = [];
@@ -87,6 +88,22 @@ test("each kind of question takes only its kind of answer, and null cancels", as
 	m.receive({ t: "answer", id: o.id, value: { answer: "  ", typed: true } }, nobody);
 	m.receive({ t: "answer", id: o.id, value: { answer: " after lunch ", typed: true } }, nobody);
 	assert.deepEqual(await o.answer, { answer: "after lunch", typed: true });
+	// A typed question takes only its text, typed out, and answers true.
+	const d = m.ask({ kind: "typed", title: "Drop ACM-12?", lines: ["worktree /wt/ACM-12"], expect: "ACM-12" });
+	m.receive({ t: "answer", id: d.id, value: true }, nobody);
+	m.receive({ t: "answer", id: d.id, value: "ACM-13" }, nobody);
+	m.receive({ t: "answer", id: d.id, value: "" }, nobody);
+	m.receive({ t: "answer", id: d.id, value: " acm-12 " }, nobody);
+	assert.equal(await d.answer, true);
+	const n = m.ask({ kind: "typed", title: "Drop ACM-12?", expect: "ACM-12" });
+	m.receive({ t: "answer", id: n.id, value: null }, nobody);
+	assert.equal(await n.answer, undefined);
+});
+
+test("typedMatches ignores case and the spaces around, and never matches an empty text", () => {
+	assert.equal(typedMatches(" acm-12\n", "ACM-12"), true);
+	assert.equal(typedMatches("ACM-1", "ACM-12"), false);
+	assert.equal(typedMatches("", ""), false);
 });
 
 test("a question answered in the terminal leaves the pages, and a late answer from a page does nothing", () => {

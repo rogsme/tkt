@@ -7,7 +7,7 @@ import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
 import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, confirmedAt, presetOptions, presetQuestion, type PresetsResult, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, marked, statsText, stepsText, tally, type Mark, type StatsResult, type Waiver, withEvidence } from "./report.ts";
-import { ask, checklist, confirm, editor, input } from "./dialog.ts";
+import { ask, checklist, confirm, editor, input, typed } from "./dialog.ts";
 import { peek, type Step } from "./ui.ts";
 
 /** Mode is how a ticket starts: manual drives nothing; auto, the default,
@@ -225,6 +225,39 @@ export async function done(hub: Hub, id: string): Promise<string> {
 	const took = t.elapsed_s > 0 ? ` It took ${duration(t.elapsed_s)} from start to merge.` : "";
 	const freed = t.unblocked?.length ? ` The merge unblocked ${t.unblocked.join(", ")}: /inbox offers to start ${t.unblocked.length === 1 ? "it" : "them"}.` : "";
 	return `${id} is done: its tabs are closed and its worktree is removed.${took}${freed}`;
+}
+
+/** DropResult is the part of tkt drop's result the chat shows. */
+interface DropResult {
+	chore: string;
+	head: string;
+	pr: number;
+	remote_branch: boolean;
+	kept: string;
+	lines: string[];
+}
+
+/** drop throws away a ticket started by mistake. tkt drop's dry run lists
+ * what goes, and you type the ticket's id, in the terminal or on a page,
+ * before anything is removed. */
+export async function drop(hub: Hub, ctx: ExtensionContext, id: string): Promise<string> {
+	const plan = await hub.run({ ticket: id, label: "drop check", args: ["drop", id, "--dry-run"], quiet: true });
+	if (!plan.ok) return failure(id, plan);
+	const lines = (plan.result as DropResult | undefined)?.lines ?? [];
+	if (!(await typed(ctx, `Drop ${id}? This removes for good:`, lines, id))) return `${id} is not dropped; nothing changed.`;
+	const env = await hub.run({ ticket: id, label: "drop", args: ["drop", id, "--yes"], quiet: true });
+	if (!env.ok) return failure(id, env);
+	return dropText(id, env.result as DropResult);
+}
+
+function dropText(id: string, r: DropResult): string {
+	let forge = "";
+	if (r.pr > 0 && r.remote_branch) forge = `, pull request #${r.pr} is closed, and its branch is gone from the remote`;
+	else if (r.remote_branch) forge = ", and its branch is gone from the remote";
+	const kept = r.kept ? ` It kept ${r.kept}.` : "";
+	const head = r.head ? ` git branch ${id} ${r.head.slice(0, 7)} brings the branch back until git gc prunes it.` : "";
+	const tracker = r.chore ? "" : ` tkt never writes the tracker, so move ${id} back there yourself.`;
+	return `${id} is dropped: its tabs are closed, and its worktree and branch are gone${forge}.${kept}${head}${tracker}`;
 }
 
 function duration(s: number): string {

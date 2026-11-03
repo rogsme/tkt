@@ -482,6 +482,6 @@ A ticket that waits on a blocker sits in `blocked`, with a `## Blocked` comment 
 | The agent waits for an answer | Answer it in the tab. `tkt ls` shows it as blocked. |
 | No agent runs for the ticket | `tkt resume ACM-123` brings back the last session and sends nothing. Use it, not `tkt run`, when the conversation matters, such as a plan waiting for approval. |
 | The pull request closed without merging | Closing it rejected the work. `tkt watch` removes the ticket's tabs and worktree once no agent works there, as `tkt done ACM-123` does, and keeps a worktree with commits that never reached the pull request. tkt never writes the tracker, so move the ticket there yourself. |
-| You started a ticket by mistake | `tkt drop ACM-123` throws the work away once you type the id: tabs, agents, worktree, branch, and your pull request and remote branch. Move the ticket back in the tracker yourself. |
+| You started a ticket by mistake | `tkt drop ACM-123`, or `/drop ACM-123` in the chat, throws the work away once you type the id: tabs, agents, worktree, branch, and your pull request and remote branch. Move the ticket back in the tracker yourself. |
 
 `tkt ls` applies these rules in order and prints the next step. `tkt help ls` lists the rules.

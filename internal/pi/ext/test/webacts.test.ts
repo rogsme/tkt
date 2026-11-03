@@ -56,15 +56,19 @@ test("a card opens the findings of the review at the head", () => {
 
 test("a ticket's own buttons follow what its state allows", () => {
 	const labels = (r: ReturnType<typeof row>) => ticketActs(r).map((a) => a.cmd);
-	assert.deepEqual(labels(row({ phase: "awaiting_approval" })), ["/approve ACM-12", "/approve ACM-12 auto", "/auto ACM-12 on", "/hold ACM-12"]);
-	assert.deepEqual(labels(row({ phase: "ready_for_human", behind: 2, hold: true })), ["/check ACM-12", "/sync ACM-12", "/auto ACM-12 on", "/hold ACM-12 off"]);
+	assert.deepEqual(labels(row({ phase: "awaiting_approval" })), ["/approve ACM-12", "/approve ACM-12 auto", "/auto ACM-12 on", "/hold ACM-12", "/drop ACM-12"]);
+	assert.deepEqual(labels(row({ phase: "ready_for_human", behind: 2, hold: true })), ["/check ACM-12", "/sync ACM-12", "/auto ACM-12 on", "/hold ACM-12 off", "/drop ACM-12"]);
 	assert.deepEqual(labels(row({ phase: "merged" })), ["/done ACM-12"]);
 	const merge = ticketActs(row({ phase: "ready_to_merge", next: { kind: "human", reason: "steps_passed", argv: null, text: "" } }))[0];
 	assert.deepEqual([merge.label, merge.cmd, merge.main], ["Merge", "/check ACM-12", true]);
-	assert.deepEqual(labels(row({ phase: "needs_fix", agent: null, next: { kind: "command", reason: "findings", argv: [], text: "tkt run ACM-12 address" } })), ["/next ACM-12", "/accept ACM-12", "/relaunch ACM-12", "/auto ACM-12 on", "/hold ACM-12"]);
+	assert.deepEqual(labels(row({ phase: "needs_fix", agent: null, next: { kind: "command", reason: "findings", argv: [], text: "tkt run ACM-12 address" } })), ["/next ACM-12", "/accept ACM-12", "/relaunch ACM-12", "/auto ACM-12 on", "/hold ACM-12", "/drop ACM-12"]);
 	// A chore's run has no plan and no tkt auto.
-	assert.deepEqual(labels(row({ ticket: "chore-deps-1", chore: "deps", phase: "ready_for_human" })), ["/hold chore-deps-1"]);
-	assert.deepEqual(labels(row({ auto: { wanted: true, approve_plan: false, running: true, rounds: 0, stop: "", waiting: "", paused: "", why: "" } })), ["/auto ACM-12 off", "/hold ACM-12"]);
+	assert.deepEqual(labels(row({ ticket: "chore-deps-1", chore: "deps", phase: "ready_for_human" })), ["/hold chore-deps-1", "/drop chore-deps-1"]);
+	assert.deepEqual(labels(row({ auto: { wanted: true, approve_plan: false, running: true, rounds: 0, stop: "", waiting: "", paused: "", why: "" } })), ["/auto ACM-12 off", "/hold ACM-12", "/drop ACM-12"]);
+	// Only Drop throws work away, and it is never offered once the ticket
+	// merged or closed: Remove it, which is tkt done, takes those.
+	assert.deepEqual(ticketActs(row({ phase: "awaiting_approval" })).filter((a) => a.risky).map((a) => a.cmd), ["/drop ACM-12"]);
+	assert.equal(ticketActs(row({ phase: "closed" })).some((a) => a.risky), false);
 });
 
 test("the forms build the line you could type", () => {

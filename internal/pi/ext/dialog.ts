@@ -6,7 +6,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Dialog, Level, Mirror, Option } from "./mirror.ts";
 import type { Mark } from "./report.ts";
-import { checklist as checklistView, question, type Step, textEditor } from "./ui.ts";
+import { checklist as checklistView, question, type Step, textEditor, typedConfirm } from "./ui.ts";
 
 let mirror: Mirror | undefined;
 
@@ -47,6 +47,15 @@ export function editor(ctx: ExtensionContext, title: string, prefill = ""): Prom
  * typed, or undefined when you cancelled. */
 export function ask(ctx: ExtensionContext, title: string, options: Option[], other = true): Promise<{ answer: string; typed: boolean } | undefined> {
 	return race(ctx, { kind: "ask", title, options, other }, (signal) => question(ctx, title, options, other, signal), (v) => v as { answer: string; typed: boolean } | undefined);
+}
+
+/** typed asks you to type expect, such as a ticket's id, before a step that
+ * loses work, under lines that say what goes. A plain yes is one keypress
+ * from a misclick; typing the id is not. It returns false when you
+ * cancelled, and when nobody can answer. */
+export async function typed(ctx: ExtensionContext, title: string, lines: string[], expect: string): Promise<boolean> {
+	if (!ctx.hasUI) return false;
+	return race(ctx, { kind: "typed", title, lines, expect }, (signal) => typedConfirm(ctx, title, lines, expect, signal), (v) => v === true);
 }
 
 /** checklist lets you mark each human verification step, and returns the

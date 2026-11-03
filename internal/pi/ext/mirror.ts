@@ -6,7 +6,7 @@
 
 import type { Attention } from "./attention.ts";
 import { type Item, patch } from "./chat.ts";
-import type { Incident, Row } from "./model.ts";
+import { type Incident, type Row, typedMatches } from "./model.ts";
 import type { Mark } from "./report.ts";
 
 export type Theme = "light" | "dark" | "";
@@ -18,12 +18,16 @@ export interface Option {
 }
 
 /** Dialog is a question the extension asks, as the page shows it. An ask
- * takes one of its options, or with other a text you type. */
+ * takes one of its options, or with other a text you type. A typed one
+ * guards a step that loses work: it lists what goes in lines, and takes
+ * only expect, typed out, such as the ticket's id. */
 export interface Dialog {
 	id: string;
-	kind: "ask" | "confirm" | "input" | "editor" | "checklist";
+	kind: "ask" | "confirm" | "input" | "editor" | "checklist" | "typed";
 	title: string;
 	message?: string;
+	lines?: string[];
+	expect?: string;
 	options?: Option[];
 	other?: boolean;
 	placeholder?: string;
@@ -247,9 +251,11 @@ export class Mirror {
 
 const invalid = Symbol("invalid");
 
+
 /** answerOf checks a page's answer against its question: a confirm takes
  * true or false, an input or editor a text, an ask one of its options or,
- * with other, a text you typed. null cancels any of them. */
+ * with other, a text you typed, and a typed one its expect, typed out,
+ * which answers true. null cancels any of them. */
 function answerOf(d: Dialog, v: unknown): unknown {
 	if (v === null) return undefined;
 	switch (d.kind) {
@@ -258,6 +264,8 @@ function answerOf(d: Dialog, v: unknown): unknown {
 		case "input":
 		case "editor":
 			return typeof v === "string" ? v : invalid;
+		case "typed":
+			return typeof v === "string" && typedMatches(v, d.expect ?? "") ? true : invalid;
 		case "checklist":
 			return Array.isArray(v) && v.length === (d.steps?.length ?? 0) && v.every((x) => x === "" || x === "pass" || x === "fail" || x === "skip") ? (v as Mark[]) : invalid;
 		case "ask": {

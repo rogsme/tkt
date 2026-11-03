@@ -1809,6 +1809,19 @@ button:focus-visible {
 	border-color: var(--line);
 }
 
+/* A button that throws work away sits at the end of its row, apart from
+   the others, in red. */
+.acts .btn.risky {
+	margin-left: auto;
+	color: var(--error);
+	border-color: var(--error);
+}
+
+.acts .btn.risky:hover {
+	background: var(--danger-bg);
+	border-color: var(--error);
+}
+
 .hint {
 	font-size: 0.8rem;
 	color: var(--dim);
@@ -2044,4 +2057,27 @@ button:focus-visible {
 
 .dialog:focus {
 	outline: none;
+}
+
+/* A question before something that loses work, such as /drop. */
+.dialog.danger {
+	border-top-color: var(--error);
+}
+
+.dialog.danger h2 {
+	color: var(--error);
+}
+
+.dialog ul.loses {
+	margin: 8px 0 12px;
+	padding: 8px 12px 8px 28px;
+}
+
+.dialog ul.loses li {
+	margin: 2px 0;
+}
+
+.typed-label {
+	display: block;
+	margin-bottom: 6px;
 }

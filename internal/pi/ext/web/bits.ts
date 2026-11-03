@@ -23,7 +23,8 @@ export interface Go {
 }
 
 /** ActButtons draws acts as buttons. A reply act opens a box under them
- * for what to tell the ticket's agent. */
+ * for what to tell the ticket's agent. A risky act goes last, apart from
+ * the others, so a quick click on the row never lands on it. */
 export function ActButtons({ acts, ticket, g, small = false }: { acts: Act[]; ticket: string; g: Go; small?: boolean }) {
 	const [replying, setReplying] = useState(false);
 	const click = (a: Act) => {
@@ -31,8 +32,8 @@ export function ActButtons({ acts, ticket, g, small = false }: { acts: Act[]; ti
 		else if (a.reply) setReplying((r) => !r);
 	};
 	return html`<div class=${`acts${small ? " small" : ""}`}>
-			${acts.map((a) => {
-				const cls = a.main ? "btn" : "btn quiet";
+			${[...acts.filter((a) => !a.risky), ...acts.filter((a) => a.risky)].map((a) => {
+				const cls = a.risky ? "btn quiet risky" : a.main ? "btn" : "btn quiet";
 				if (a.cmd) return html`<${RunButton} g=${g} cmd=${a.cmd} cls=${cls} title=${a.description}>${a.label}<//>`;
 				return html`<button class=${cls} title=${a.description ?? ""} onClick=${() => click(a)}>${a.label}</button>`;
 			})}

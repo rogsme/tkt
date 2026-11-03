@@ -8,7 +8,7 @@
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { type BoardState, boardColumns, boardLines, footer, grid, order, title } from "./board.ts";
-import { type Row, type Stamp, stampText } from "./model.ts";
+import { type Row, type Stamp, stampText, typedMatches } from "./model.ts";
 import { cycle, type Mark, tally } from "./report.ts";
 
 export interface Option {
@@ -136,6 +136,55 @@ export async function textEditor(ctx: ExtensionContext, title: string, prefill: 
 				lines.push("", ` ${theme.fg("dim", "Enter to send, Shift+Enter for a new line, Esc to cancel")}`);
 				lines.push(theme.fg("accent", "-".repeat(w)));
 				return lines;
+			},
+			invalidate() {},
+		};
+	});
+}
+
+/** typedConfirm asks you to type expect before something that loses work,
+ * such as tkt drop, under the lines that say what goes. It returns true once
+ * you typed it, or false when you pressed Escape or signal aborted. Any
+ * other text leaves the question open, so a stray Enter answers nothing. */
+export async function typedConfirm(ctx: ExtensionContext, title: string, lines: string[], expect: string, signal?: AbortSignal): Promise<boolean> {
+	if (!ctx.hasUI || signal?.aborted) return false;
+	return ctx.ui.custom<boolean>((tui, theme, _kb, done) => {
+		closeOn(signal, () => done(false));
+		let wrong = "";
+		const editor = new Editor(tui, {
+			borderColor: (s) => theme.fg("error", s),
+			selectList: {
+				selectedPrefix: (t) => theme.fg("accent", t),
+				selectedText: (t) => theme.fg("accent", t),
+				description: (t) => theme.fg("muted", t),
+				scrollInfo: (t) => theme.fg("dim", t),
+				noMatch: (t) => theme.fg("warning", t),
+			},
+		});
+		editor.onSubmit = (value) => {
+			if (typedMatches(value, expect)) return done(true);
+			wrong = value.trim();
+			editor.setText("");
+			tui.requestRender();
+		};
+		return {
+			handleInput(data: string) {
+				if (matchesKey(data, Key.escape)) return done(false);
+				editor.handleInput(data);
+				tui.requestRender();
+			},
+			render(width: number): string[] {
+				const w = Math.max(1, width);
+				const out = [theme.fg("error", "-".repeat(w))];
+				for (const l of wrapTextWithAnsi(theme.fg("error", theme.bold(title)), w - 1)) out.push(` ${l}`);
+				out.push("");
+				for (const line of lines) for (const [i, l] of wrapTextWithAnsi(theme.fg("text", line), w - 4).entries()) out.push(`${i === 0 ? " - " : "   "}${l}`);
+				out.push("", ` ${theme.fg("text", `Type ${expect} to confirm:`)}`);
+				for (const l of editor.render(Math.max(1, w - 2))) out.push(` ${l}`);
+				if (wrong) out.push(` ${theme.fg("warning", `"${wrong}" is not ${expect}; nothing was removed.`)}`);
+				out.push("", ` ${theme.fg("dim", "Enter to confirm, Esc to cancel")}`);
+				out.push(theme.fg("error", "-".repeat(w)));
+				return out;
 			},
 			invalidate() {},
 		};

@@ -16,6 +16,7 @@ export const triggers: Trigger[] = [
 	{ name: "editor", label: "Editor", group: "Questions" },
 	{ name: "ask", label: "Ask, with Type something", group: "Questions" },
 	{ name: "checklist", label: "Checklist", group: "Questions" },
+	{ name: "typed", label: "Type the id, before a drop", group: "Questions" },
 	{ name: "info", label: "Info notice, long", group: "Notices" },
 	{ name: "warning", label: "Warning notice", group: "Notices" },
 	{ name: "error", label: "Error notice", group: "Notices" },

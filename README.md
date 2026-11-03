@@ -174,6 +174,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/chores [run NAME]` | The repository's chores with their next run; `run NAME` starts a run now. |
 | `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |
+| `/drop ID` | Throws away a ticket started by mistake, as `tkt drop` does, once you type its id. The web page has a red Drop button at the end of a ticket's buttons that sends it. |
 | `/version` | Says which tkt and pi the chat runs, and whether the tkt on disk is another one now. |
 | `/update` | Installs a newer tkt, then offers to quit. Reopen the chat with the `tkt agent --session ID` it prints to run the new tkt. The board names a newer release when the chat finds one. |
 | `/web` | Opens the chat's web page in your browser, as `tkt web` does, unless a browser here has it open. `/web new` opens another tab anyway. |

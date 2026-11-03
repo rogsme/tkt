@@ -17,6 +17,9 @@ export interface Act {
 	reply?: boolean;
 	/** main marks the button that moves the ticket on. */
 	main?: boolean;
+	/** risky marks a button that throws work away. It sits apart, at the
+	 * end of the row, and its command asks you to type the ticket's id. */
+	risky?: boolean;
 }
 
 export type Tab = "message" | "pr" | "steps" | "diff" | "screen" | "history";
@@ -98,6 +101,7 @@ export function ticketActs(r: Row): Act[] {
 		out.push(on ? { label: "Auto off", cmd: `/auto ${id} off` } : { label: "Auto on", description: "tkt auto drives it until it is reviewed clean.", cmd: `/auto ${id} on` });
 	}
 	if (!merged) out.push(r.hold ? { label: "Off hold", cmd: `/hold ${id} off` } : { label: "Hold", description: "tkt watch and tkt auto leave it alone.", cmd: `/hold ${id}` });
+	if (!merged) out.push({ label: "Drop", description: "Throw the ticket away, as when you started it by mistake: its tabs, worktree and branch, and your pull request. You type its id to confirm.", cmd: `/drop ${id}`, risky: true });
 	return out;
 }
 

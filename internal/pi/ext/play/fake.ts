@@ -98,6 +98,7 @@ export class Fake {
 		accept: (w) => this.accept(w),
 		check: (w) => this.check(w),
 		done: (w) => this.done(w),
+		drop: (w) => this.drop(w),
 		inbox: (_w, page) => this.inbox(page),
 		board: (w) => this.boardCmd(w),
 		history: (w) => this.history(w),
@@ -632,6 +633,21 @@ export class Fake {
 		await this.job(r.ticket, "done", 1500, () => this.remove(r), true);
 	}
 
+	/** drop asks for the ticket's id under what tkt drop's dry run lists,
+	 * as actions.ts does, and removes the row once you typed it. */
+	private async drop(w: string[]): Promise<void> {
+		const r = this.need(w, "/drop ACM-12");
+		if (!r) return;
+		if (r.phase === "merged") return this.say(`${r.ticket}'s pull request #${r.pr?.number} is merged; tkt drop throws away work that never merged. Next: tkt done ${r.ticket}.`);
+		if (!(await this.question<boolean>({ kind: "typed", title: `Drop ${r.ticket}? This removes for good:`, lines: answers.dropLines(r), expect: r.ticket }))) return this.say(`${r.ticket} is not dropped; nothing changed.`);
+		await this.job(r.ticket, "drop", 1500, () => {
+			this.s.rows = this.s.rows.filter((x) => x !== r);
+			const forge = r.pr?.state === "OPEN" ? `, pull request #${r.pr.number} is closed, and its branch is gone from the remote` : "";
+			const tracker = r.chore ? "" : ` tkt never writes the tracker, so move ${r.ticket} back there yourself.`;
+			return `${r.ticket} is dropped: its tabs are closed, and its worktree and branch are gone${forge}. git branch ${r.ticket} ${headOf(r.ticket).slice(0, 7)} brings the branch back until git gc prunes it.${tracker}`;
+		}, true);
+	}
+
 	private remove(r: Row): string {
 		this.s.rows = this.s.rows.filter((x) => x !== r);
 		return `Removed ${r.ticket}: closed its tabs and removed its worktree.`;
@@ -721,6 +737,10 @@ export class Fake {
 						{ label: "Ask the team first", description: "Leave it blocked for now." },
 					], true),
 				);
+			case "typed": {
+				const r = this.rowOf("ACM-115");
+				return tell("Typed", await this.question({ kind: "typed", title: "Drop ACM-115? This removes for good:", lines: r ? answers.dropLines(r) : ["worktree /home/acme/wt/app/ACM-115"], expect: "ACM-115" }));
+			}
 			case "checklist": {
 				const v = report("ACM-108", [2]);
 				return tell("Checklist", await this.question({ kind: "checklist", title: "ACM-108: human verification", message: "The review bot cleared the head; these steps come from pull request #45.", steps: withEvidence(answers.stepList(), v), marks: ["pass", "", ""] }));

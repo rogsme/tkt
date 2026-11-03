@@ -281,3 +281,18 @@ export function suggest(s: Suggestion | undefined, now: number): Envelope<Sugges
 export function version(update: string): Envelope {
 	return ok("version", { tkt: "v0.9.0", pi: "1.3.0", bin: "/home/acme/.local/bin/tkt", update });
 }
+
+/** dropLines are what tkt drop --dry-run lists for a ticket: what the drop
+ * removes, which the chat's question shows before you type the id. */
+export function dropLines(r: Row): string[] {
+	const id = r.ticket;
+	const out: string[] = [];
+	if (r.agent) out.push(`tab w1:t${r.agent.pane_id.replace(/^w1:p/, "")} and the agent in it`);
+	if (r.agent?.status === "working" || r.agent?.status === "blocked") out.push("an agent that is working or waiting for an answer, which stops mid-turn");
+	if (r.auto?.running || r.auto?.wanted) out.push("the tkt auto loop that drives it");
+	out.push(`worktree /home/acme/wt/app/${id}, with 2 uncommitted changes, lost for good: notes.md, api/export.go`);
+	out.push(`branch ${id} at ${headOf(id).slice(0, 7)}, with ${r.pr ? "4 commits the base lacks, 1 never pushed" : "1 commit the base lacks, 1 never pushed"}`);
+	if (r.pr?.state === "OPEN") out.push(`pull request #${r.pr.number}, closed without merging`, `branch ${id} on origin`);
+	if (!r.chore) out.push(`the tracker stays as it is: move ${id} back yourself`);
+	return out;
+}
