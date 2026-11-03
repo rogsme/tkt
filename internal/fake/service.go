@@ -51,7 +51,8 @@ var instanceRE = regexp.MustCompile(`^([^@]+@)[^.]+(\.service)$`)
 // units' states in $FAKE_DIR/systemd.json. Like systemd, it refuses a unit
 // with no file in the user's unit directory, and finds an instance's file
 // under its template's name. Nothing runs: a started unit only counts as
-// active.
+// active. show-environment prints $FAKE_DIR/systemd-env, the variables the
+// desktop gave the manager at login.
 func Systemctl() {
 	logCall("systemctl")
 	args := os.Args[1:]
@@ -84,6 +85,10 @@ func Systemctl() {
 	}
 	switch verb {
 	case "daemon-reload":
+	case "show-environment":
+		b, _ := os.ReadFile(filepath.Join(os.Getenv("FAKE_DIR"), "systemd-env"))
+		os.Stdout.Write(b)
+		os.Exit(0)
 	case "enable":
 		need()
 		u.Enabled = add(u.Enabled, names...)

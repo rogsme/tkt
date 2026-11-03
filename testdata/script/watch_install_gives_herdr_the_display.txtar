@@ -1,0 +1,58 @@
+# A lingering herdr.service starts at boot, before the desktop gives
+# systemd its display, and the agents in herdr's panes inherit herdr's
+# environment. So herdr's unit sets the display itself, or Claude Code and
+# OpenCode find no image to paste.
+env TKT_SERVICE_MANAGER=systemd
+env UNITS=$HOME/.config/systemd/user
+exec sh -c 'echo yes > "$FAKE_DIR/linger"'
+
+# The unit takes this shell's display. tkt watch never reads the
+# clipboard, so its unit sets none.
+env DISPLAY=:1
+env XAUTHORITY=$HOME/.Xauthority
+exec tkt watch --install --json
+grep '^Environment="DISPLAY=:1"$' $UNITS/herdr.service
+grep '^Environment="XAUTHORITY='$HOME'/.Xauthority"$' $UNITS/herdr.service
+! grep DISPLAY $UNITS/tkt-watch@.service
+! stderr 'found no DISPLAY'
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "services") | .status' ok
+
+# A shell in a herdr pane that started before the desktop has no display,
+# so the unit takes the one the desktop gave systemd at login. herdr's
+# service keeps the display it started with, and a restart would end every
+# pane, so tkt only says so.
+jqedit $FAKE_DIR/systemd.json '.active += ["herdr.service"]'
+env DISPLAY=
+env XAUTHORITY=
+exec sh -c 'printf "HOME=/home/acme\nDISPLAY=:0\nXAUTHORITY=/home/acme/.Xauthority\n" > "$FAKE_DIR/systemd-env"'
+exec tkt watch --install --json
+logged systemctl --user show-environment
+grep '^Environment="DISPLAY=:0"$' $UNITS/herdr.service
+grep '^Environment="XAUTHORITY=/home/acme/.Xauthority"$' $UNITS/herdr.service
+! grep HOME= $UNITS/herdr.service
+stderr 'herdr.service keeps the environment it started with, so its panes get DISPLAY=:0 XAUTHORITY=/home/acme/.Xauthority only when it starts again'
+stderr 'systemctl --user restart herdr.service once no agent works'
+! logged systemctl --user restart herdr.service
+
+# With no display anywhere, the unit keeps the one it had.
+rm $FAKE_DIR/systemd-env
+exec tkt watch --install --json
+grep '^Environment="DISPLAY=:0"$' $UNITS/herdr.service
+! stderr 'found no DISPLAY'
+! stderr 'keeps the environment it started with'
+
+# With no display to keep either, tkt warns.
+rm $UNITS/herdr.service
+exec tkt watch --install --json
+! grep DISPLAY $UNITS/herdr.service
+stderr 'found no DISPLAY or WAYLAND_DISPLAY in this shell or in systemd, so agents in herdr''s panes cannot reach the clipboard'
+
+# tkt doctor warns about a herdr unit that sets no display, as tkt wrote
+# before it set one, while the desktop has one.
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "services") | .status' ok
+env WAYLAND_DISPLAY=wayland-1
+exec tkt doctor --json
+envelope '.result.checks[] | select(.id == "services") | [.status, .message]' '["warn","herdr.service sets no DISPLAY or WAYLAND_DISPLAY, so agents in herdr''s panes cannot paste images"]'
+envelope '.result.checks[] | select(.id == "services") | .hint' 'tkt watch --install, then systemctl --user restart herdr.service once no agent works'

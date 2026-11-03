@@ -20,11 +20,44 @@ const (
 
 // Spec is what the services run: the absolute paths of herdr and tkt, and
 // the PATH they run with. Agents in herdr's panes inherit that PATH, so it
-// must find the harnesses.
+// must find the harnesses. Display holds the desktop's display variables
+// for herdr's unit, as NAME=value, in DisplayVars' order.
 type Spec struct {
-	Herdr string
-	Tkt   string
-	Path  string
+	Herdr   string
+	Tkt     string
+	Path    string
+	Display []string
+}
+
+// DisplayVars are what a program needs to reach the desktop and its
+// clipboard, as Claude Code and OpenCode do to paste an image. A lingering
+// herdr starts at boot, before the desktop gives them to systemd, so its
+// unit sets them itself. They only name the display, so they hold before
+// it runs.
+var DisplayVars = []string{"DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"}
+
+// Display keeps the display variables among NAME=value pairs, in
+// DisplayVars' order, or nil when neither DISPLAY nor WAYLAND_DISPLAY is
+// set: XAUTHORITY alone names no display. A value systemd quotes, as $'...',
+// is left out.
+func Display(env []string) []string {
+	set := map[string]string{}
+	for _, kv := range env {
+		k, v, ok := strings.Cut(strings.TrimSpace(kv), "=")
+		if ok && v != "" && !strings.HasPrefix(v, "$'") {
+			set[k] = v
+		}
+	}
+	if set["DISPLAY"] == "" && set["WAYLAND_DISPLAY"] == "" {
+		return nil
+	}
+	var out []string
+	for _, k := range DisplayVars {
+		if v := set[k]; v != "" {
+			out = append(out, k+"="+v)
+		}
+	}
+	return out
 }
 
 // systemd units. One template serves every repository; each repository is
@@ -59,12 +92,16 @@ const written = "tkt watch --install wrote this file, and writes it again each t
 // HerdrUnitFile runs herdr's server, which stays in the foreground, and
 // starts it again when it crashes. herdr server stop ends it for good.
 func HerdrUnitFile(s Spec) string {
+	env := "Environment=" + unitQuote("PATH="+s.Path) + "\n"
+	for _, d := range s.Display {
+		env += "Environment=" + unitQuote(d) + "\n"
+	}
 	return "# " + written + "\n" +
 		"[Unit]\n" +
 		"Description=herdr server\n" +
 		"\n" +
 		"[Service]\n" +
-		"Environment=" + unitQuote("PATH="+s.Path) + "\n" +
+		env +
 		"ExecStart=" + unitWord(s.Herdr) + " server\n" +
 		"Restart=on-failure\n" +
 		"RestartSec=5\n" +
@@ -122,8 +159,9 @@ func unitQuote(v string) string {
 	return `"` + r.Replace(v) + `"`
 }
 
-// UnitPath reads the PATH a unit file sets, or "" when it sets none.
-func UnitPath(file string) string {
+// UnitEnv reads the variables a unit file sets, as NAME=value.
+func UnitEnv(file string) []string {
+	var env []string
 	for _, line := range strings.Split(file, "\n") {
 		v, ok := strings.CutPrefix(strings.TrimSpace(line), "Environment=")
 		if !ok {
@@ -132,8 +170,16 @@ func UnitPath(file string) string {
 		if s, err := strconv.Unquote(v); err == nil {
 			v = s
 		}
-		if p, ok := strings.CutPrefix(v, "PATH="); ok {
-			return strings.ReplaceAll(p, "%%", "%")
+		env = append(env, strings.ReplaceAll(v, "%%", "%"))
+	}
+	return env
+}
+
+// UnitPath reads the PATH a unit file sets, or "" when it sets none.
+func UnitPath(file string) string {
+	for _, kv := range UnitEnv(file) {
+		if p, ok := strings.CutPrefix(kv, "PATH="); ok {
+			return p
 		}
 	}
 	return ""

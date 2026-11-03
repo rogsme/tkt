@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/xml"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -101,6 +102,50 @@ func TestPlistsRunTheWatchInItsRepository(t *testing.T) {
 			if err != nil {
 				t.Fatalf("not well-formed XML: %v\n%s", err, doc)
 			}
+		}
+	}
+}
+
+func TestHerdrUnitCarriesTheDisplay(t *testing.T) {
+	s := Spec{Herdr: "/usr/bin/herdr", Tkt: "/usr/bin/tkt", Path: "/usr/bin",
+		Display: []string{"DISPLAY=:0", "XAUTHORITY=/home/acme/100%.Xauthority"}}
+	h := HerdrUnitFile(s)
+	for _, want := range []string{
+		"\nEnvironment=\"PATH=/usr/bin\"\nEnvironment=\"DISPLAY=:0\"\n",
+		"\nEnvironment=\"XAUTHORITY=/home/acme/100%%.Xauthority\"\n",
+	} {
+		if !strings.Contains(h, want) {
+			t.Errorf("herdr.service lacks %q:\n%s", want, h)
+		}
+	}
+	if got := Display(UnitEnv(h)); !slices.Equal(got, s.Display) {
+		t.Errorf("Display(UnitEnv) = %q, want %q", got, s.Display)
+	}
+	// tkt watch never reads the clipboard.
+	if w := WatchUnitFile(s); strings.Contains(w, "DISPLAY") {
+		t.Errorf("the watch unit sets the display:\n%s", w)
+	}
+	if got := Display(UnitEnv(HerdrUnitFile(Spec{Path: "/usr/bin"}))); got != nil {
+		t.Errorf("a unit without a display reads as %q", got)
+	}
+}
+
+func TestDisplayKeepsOnlyADisplay(t *testing.T) {
+	for _, c := range []struct {
+		env  []string
+		want []string
+	}{
+		// systemctl show-environment's lines, in its order.
+		{[]string{"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus", "XAUTHORITY=/home/acme/.Xauthority", "DISPLAY=:0", ""},
+			[]string{"DISPLAY=:0", "XAUTHORITY=/home/acme/.Xauthority"}},
+		{[]string{"WAYLAND_DISPLAY=wayland-1", "DISPLAY="}, []string{"WAYLAND_DISPLAY=wayland-1"}},
+		// XAUTHORITY alone names no display.
+		{[]string{"XAUTHORITY=/home/acme/.Xauthority", "DISPLAY="}, nil},
+		{[]string{"DISPLAY=:0", `XAUTHORITY=$'/home/acme/a\nb'`}, []string{"DISPLAY=:0"}},
+		{nil, nil},
+	} {
+		if got := Display(c.env); !slices.Equal(got, c.want) {
+			t.Errorf("Display(%q) = %q, want %q", c.env, got, c.want)
 		}
 	}
 }
