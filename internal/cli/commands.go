@@ -736,6 +736,34 @@ func doneCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func dropCmd(g *globals) *cobra.Command {
+	var o app.DropOpts
+	cmd := &cobra.Command{
+		Use:   "drop ID",
+		Short: "Throw away a ticket started by mistake: its tabs, worktree and branch",
+		Long:  helpText("drop"),
+		Example: `  tkt drop ACM-12 --dry-run
+  tkt drop ACM-12
+  tkt drop ACM-12 --yes`,
+		SuggestFor:        []string{"discard", "abandon", "delete"},
+		ValidArgsFunction: g.completeTickets(false),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return usage("usage: tkt drop ID")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.ID = args[0]
+			res, err := g.app().Drop(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.Yes, "yes", false, "drop without asking you to type the ticket id")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "list what it would remove, and remove nothing")
+	return cmd
+}
+
 func lsCmd(g *globals) *cobra.Command {
 	var o app.LsOpts
 	cmd := &cobra.Command{

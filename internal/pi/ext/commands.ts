@@ -249,6 +249,15 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 		},
 	});
 
+	pi.registerCommand("drop", {
+		description: "Throw away a ticket started by mistake, once you type its id: /drop ACM-12",
+		getArgumentCompletions: ids,
+		handler: async (args, ctx) => {
+			const id = one(args, ctx, "/drop ACM-12");
+			if (id) say(await act.drop(hub, ctx, id));
+		},
+	});
+
 	pi.registerCommand("inbox", {
 		description: "Go through what needs you, oldest first",
 		handler: async (_args, ctx) => say(await act.inbox(hub, ctx)),

@@ -44,6 +44,13 @@ test("statsText counts closed tickets apart", () => {
 	});
 	assert.match(text, /\| ACM-2 \| 2026-01-03 \| 24h \(closed\) \|/);
 	assert.match(text, /1 closed without merging, left out of the times\./);
+	const drop = statsText({
+		repo: "git.example.com/acme/app",
+		tickets: [{ ticket: "ACM-3", repo: "", started: "2026-01-03T00:00:00Z", merged: "", closed: "", dropped: "2026-01-03T06:00:00Z", total_s: 21600, in_progress: false, waiting_on_you_s: 0, rounds: 0, auto: false, pr: 0 }],
+		summary: { merged: 0, closed: 0, dropped: 1, in_progress: 0, median_total_s: 0, p90_total_s: 0, median_waiting_on_you_s: 0, p90_waiting_on_you_s: 0, without_start: 0 },
+	});
+	assert.match(drop, /\| ACM-3 \| 2026-01-03 \| 6h \(dropped\) \|/);
+	assert.match(drop, /1 dropped with tkt drop, left out of the times\./);
 });
 
 test("fixPrompt", () => {
@@ -122,10 +129,12 @@ test("historyText words what tkt watch and tkt merge did", () => {
 		{ at: "2026-01-01T05:00:00Z", event: "watch", action: "merge" },
 		{ at: "2026-01-01T06:00:00Z", event: "sync", action: "failed", note: "git push to origin failed: pre-push hook failed" },
 		{ at: "2026-01-01T07:00:00Z", event: "watch", action: "sync", stop: "failed", note: "git fetch origin failed" },
+		{ at: "2026-01-01T08:00:00Z", event: "dropped", head: "abc1234def", pr: 7 },
 	];
 	const text = historyText({ repo: "r", forge: "ok", tickets: [{ ticket: "ACM-12", timeline: null, events, pull_requests: [] }] }, false);
 	for (const want of ["put on hold", "merged the base, with no agent", "tkt watch ran ci", "merge order left, for when finish-ticket can merge", "tkt watch carried out the merge order",
-		"sync failed: git push to origin failed: pre-push hook failed", "tkt watch could not sync: git fetch origin failed"]) {
+		"sync failed: git push to origin failed: pre-push hook failed", "tkt watch could not sync: git fetch origin failed",
+		"dropped with tkt drop; the branch was at abc1234; closed #7 without merging"]) {
 		assert.match(text, new RegExp(`^- 2026-01-01 0\\d:00 ${want}$`, "m"), want);
 	}
 });

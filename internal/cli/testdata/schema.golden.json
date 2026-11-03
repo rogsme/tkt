@@ -1178,6 +1178,59 @@
       }
     },
     {
+      "path": "drop",
+      "use": "drop ID",
+      "short": "Throw away a ticket started by mistake: its tabs, worktree and branch",
+      "long": "tkt drop throws away a ticket you started by mistake, such as one that is\nsomeone else's. It closes the ticket's tabs, which stops their agents, and\nends a tkt auto loop that drives it. It removes the worktree through\nworktrunk, with its uncommitted changes, deletes the branch even though no\nbase holds it, and removes the private temporary directory its tabs had as\nTMPDIR. It stops an OpenCode turn too, since that runs outside the tab.\n\nOn a GitHub forge, it also closes the ticket's open pull request and deletes\nthe branch from the remote, but only when every commit on that branch beyond\nthe base has your git email. A branch someone else pushed first, which tkt\nstart then checked out, stays with its pull request, and tkt drop says so.\nOn another forge, or when it cannot reach the remote, it leaves the remote\nalone and says what to delete there yourself.\n\nUncommitted changes are lost for good. The branch's commits stay in git for\na while: tkt drop prints the commit the branch held, and git branch ID\nCOMMIT brings it back until git gc prunes it.\n\nBefore it removes anything, it lists what goes and asks you to type the\nticket id. Pass --yes to skip the question, as a program must when stdin is\nnot a terminal; --dry-run lists what goes and removes nothing.\n\nIt refuses a ticket whose pull request merged: tkt done removes that one. It\nalso refuses while tkt runs inside the worktree or in the ticket's own tab,\nor while a pane outside the ticket's tabs, or the OpenCode service, works in\nthe worktree.\n\ntkt never writes the tracker, so move the ticket back there yourself. A drop\ngoes in the history, and tkt stats leaves dropped tickets out of its times.\ntkt hold is the gentler step: it keeps tkt watch and tkt auto away from a\nticket and removes nothing.",
+      "example": "  tkt drop ACM-12 --dry-run\n  tkt drop ACM-12\n  tkt drop ACM-12 --yes",
+      "group": "lifecycle",
+      "args": [
+        {
+          "name": "ID",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "list what it would remove, and remove nothing"
+        },
+        {
+          "name": "yes",
+          "type": "bool",
+          "default": "false",
+          "usage": "drop without asking you to type the ticket id"
+        }
+      ],
+      "result": {
+        "actions": [
+          {
+            "argv": "array of string",
+            "display": "string"
+          }
+        ],
+        "auto": "boolean",
+        "changes": "array of string",
+        "chore": "string",
+        "commits": "integer",
+        "dry_run": "boolean",
+        "head": "string",
+        "kept": "string",
+        "lines": "array of string",
+        "outcome": "string",
+        "path": "string",
+        "pr": "integer",
+        "remote_branch": "boolean",
+        "tabs": "array of string",
+        "ticket": "string",
+        "unpushed": "integer",
+        "working": "boolean"
+      }
+    },
+    {
       "path": "chores",
       "use": "chores",
       "short": "List the repository's chores, with their next run",
@@ -1706,6 +1759,7 @@
                 "chore": "string",
                 "event": "string",
                 "from": "string",
+                "head": "string",
                 "note": "string",
                 "phase": "string",
                 "pr": "integer",
@@ -1750,6 +1804,7 @@
                 "auto": "boolean",
                 "closed": "string",
                 "done": "string",
+                "dropped": "string",
                 "in_progress": "boolean",
                 "merged": "string",
                 "phases_s": "object",
@@ -2511,6 +2566,11 @@
       "summary": "no tkt agent chat serves the repository's web page, and tkt web cannot open one outside herdr"
     },
     {
+      "code": "drop_refused",
+      "exit": 4,
+      "summary": "tkt drop cannot remove the ticket: tkt runs inside it, or a pane or the OpenCode service it did not open works in its worktree"
+    },
+    {
       "code": "wt_failed",
       "exit": 1,
       "summary": "worktrunk failed or printed output tkt cannot read"
@@ -2564,6 +2624,11 @@
       "code": "forge_comment_failed",
       "exit": 1,
       "summary": "commenting on the pull request failed"
+    },
+    {
+      "code": "forge_close_failed",
+      "exit": 1,
+      "summary": "closing the pull request failed"
     },
     {
       "code": "release_query_failed",

@@ -114,6 +114,12 @@ func (c Client) RemoveArgv(branch string) []string {
 	return []string{"wt", "-C", c.Root, "remove", branch, "--foreground", "--reap", "--format", "json"}
 }
 
+// RemoveForceArgv removes a ticket's worktree with its uncommitted changes,
+// and its branch even when no base holds it: the work is thrown away.
+func (c Client) RemoveForceArgv(branch string) []string {
+	return append(c.RemoveArgv(branch), "--force", "--force-delete")
+}
+
 // Visible runs a wt command with its progress on the user's terminal.
 func (c Client) Visible(ctx context.Context, argv []string) runner.Result {
 	return c.R.Run(ctx, runner.Cmd{Argv: argv, Visible: true})

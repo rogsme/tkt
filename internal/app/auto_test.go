@@ -166,6 +166,8 @@ type simWorld struct {
 	incidents []bool
 	// replaceAt is the look before which tkt is replaced, or 0 for never.
 	replaceAt int
+	// goneAt is the look at which the worktree is gone, or 0 for never.
+	goneAt int
 }
 
 const simPoll = 30 * time.Second
@@ -179,6 +181,9 @@ func (w *simWorld) look(_ context.Context, fetch bool) (autoView, error) {
 	if fetch && w.flip != nil {
 		w.flip(&w.f)
 		w.flip = nil
+	}
+	if w.goneAt > 0 && w.looks >= w.goneAt {
+		return autoView{Gone: true}, nil
 	}
 	n := NextStep(w.f)
 	return autoView{Facts: w.f, Next: n, Phase: PhaseOf(w.f, n), Pane: "w1:p10", Started: w.started, Wanted: w.wanted, Hold: w.hold}, nil
@@ -422,6 +427,15 @@ func TestAutoLoopStops(t *testing.T) {
 		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, false, false)
 		if err != nil || res.Stop != StopStopped {
 			t.Errorf("%+v %v", res, err)
+		}
+	})
+	t.Run("the worktree is gone", func(t *testing.T) {
+		// The agent works when the worktree goes, as when tkt drop closes
+		// its tab: the loop ends rather than drive a ticket nobody has.
+		w := &simWorld{f: Facts{ID: "ACM-1", Agent: "working", Stage: "work", Behind: -1}, started: true, wanted: true, goneAt: 2, turns: []func(*Facts){idle("")}}
+		res, err := autoLoop(context.Background(), w, "ACM-1", AutoPolicy{}, autoMemory{}, autoCarry{}, simPoll, false, false)
+		if err != nil || res.Stop != StopRemoved || !slices.Equal(w.stops, []string{StopRemoved}) || len(w.acts) > 0 {
+			t.Errorf("%+v %v stops %v acts %v", res, err, w.stops, w.acts)
 		}
 	})
 	t.Run("the forge recovers", func(t *testing.T) {

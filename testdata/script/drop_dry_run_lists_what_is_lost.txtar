@@ -1,0 +1,35 @@
+# A dry run of tkt drop lists what it would remove, the same list the chat
+# and the web page show before you confirm, and removes nothing.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+statevar $WT tmpdir TMP
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $WT push -q origin ACM-12
+realgit -C $WT commit -q --allow-empty -m 'more work'
+cp $WORK/draft.txt $WT/notes.txt
+cp $WORK/draft.txt $WT/plan.md
+jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "working"'
+env FAKE_GH_PRS=$WORK/prs.json
+resetlog
+exec tkt drop ACM-12 --dry-run --json
+envelope '.result | [.outcome, .dry_run, .tabs, .working, .commits, .unpushed, .changes, .pr, .remote_branch, .kept]' '["planned",true,["w1:t10"],true,2,1,["?? notes.txt","?? plan.md"],7,true,""]'
+envelope '.result.lines[0]' 'tab w1:t10 and the agent in it'
+envelope '.result.lines[2]' 'worktree '$WT', with 2 uncommitted changes, lost for good: notes.txt, plan.md'
+envelope '.result.lines[3] | test("^branch ACM-12 at [0-9a-f]{7}, with 2 commits the base lacks, 1 never pushed$")' true
+envelope '.result.lines[4:]' '["pull request #7, closed without merging","branch ACM-12 on origin","the tracker stays as it is: move ACM-12 back yourself"]'
+envelope '[.result.actions[].display]' '["gh pr close 7 --repo github.com/acme/app","git -C '$REPO' push --quiet origin --delete ACM-12","herdr tab close w1:t10","wt -C '$REPO' remove ACM-12 --foreground --reap --format json --force --force-delete","rm -rf '$TMP'"]'
+! logcontains 'tab close'
+! logcontains 'pr close'
+! logcontains 'remove ACM-12'
+exists $WT
+exists $TMP
+jqeq $WORK/prs.json '.[0].state' OPEN
+
+exec tkt drop ACM-12 --dry-run
+stdout '^ACM-12  tkt drop ACM-12 would remove:$'
+stdout '^  - pull request #7, closed without merging$'
+
+-- draft.txt --
+draft
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

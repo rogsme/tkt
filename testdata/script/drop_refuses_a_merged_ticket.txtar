@@ -1,0 +1,16 @@
+# A merged ticket is not a mistake to throw away: tkt done removes it.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $WT push -q origin ACM-12
+env FAKE_GH_PRS=$WORK/prs.json
+resetlog
+! exec tkt drop ACM-12 --yes --json
+rc 4
+envelope '.error.code' pull_request_merged
+envelope '.error.hint' 'tkt done ACM-12'
+! logcontains 'tab close'
+exists $WT
+
+-- prs.json --
+[{"number": 7, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

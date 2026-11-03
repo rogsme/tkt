@@ -104,6 +104,7 @@ const (
 	PullRequestMerged   Code = "pull_request_merged"
 	ChoreRunning        Code = "chore_running"
 	WebNotRunning       Code = "web_not_running"
+	DropRefused         Code = "drop_refused"
 
 	WtFailed           Code = "wt_failed"
 	WtSwitchFailed     Code = "wt_switch_failed"
@@ -116,6 +117,7 @@ const (
 	OpenCodeFailed     Code = "opencode_failed"
 	ForgeQueryFailed   Code = "forge_query_failed"
 	ForgeCommentFailed Code = "forge_comment_failed"
+	ForgeCloseFailed   Code = "forge_close_failed"
 	ReleaseFailed      Code = "release_query_failed"
 	UpdateChecksum     Code = "update_checksum"
 	UpdateVerify       Code = "update_verify_failed"
@@ -214,6 +216,7 @@ var Registry = []Info{
 	{PullRequestMerged, ExitState, "the ticket's pull request is merged already"},
 	{ChoreRunning, ExitState, "the chore's last run is still open: its agent works, or its pull request waits for a merge"},
 	{WebNotRunning, ExitState, "no tkt agent chat serves the repository's web page, and tkt web cannot open one outside herdr"},
+	{DropRefused, ExitState, "tkt drop cannot remove the ticket: tkt runs inside it, or a pane or the OpenCode service it did not open works in its worktree"},
 
 	{WtFailed, ExitTool, "worktrunk failed or printed output tkt cannot read"},
 	{WtSwitchFailed, ExitTool, "wt switch failed"},
@@ -226,6 +229,7 @@ var Registry = []Info{
 	{OpenCodeFailed, ExitTool, "the OpenCode API failed"},
 	{ForgeQueryFailed, ExitTool, "reading pull requests from the forge failed"},
 	{ForgeCommentFailed, ExitTool, "commenting on the pull request failed"},
+	{ForgeCloseFailed, ExitTool, "closing the pull request failed"},
 	{ReleaseFailed, ExitTool, "reading or downloading a tkt release failed"},
 	{UpdateChecksum, ExitTool, "the downloaded binary does not match SHA256SUMS; nothing was replaced"},
 	{UpdateVerify, ExitTool, "the downloaded binary did not run or did not print its version; nothing was replaced"},

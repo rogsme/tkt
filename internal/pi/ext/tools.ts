@@ -1,7 +1,7 @@
 // The tools the model calls. Each one runs tkt and nothing else. The
 // guards live here, in code, not in the system prompt: a tool that changes
-// a ticket your last message did not name asks you first, and removing a
-// ticket always asks.
+// a ticket your last message did not name asks you first, removing a
+// ticket always asks, and dropping one asks you to type its id.
 
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -270,13 +270,27 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	pi.registerTool({
 		name: "tkt_done",
 		label: "tkt done",
-		description: "Remove a merged ticket: close its tabs and its worktree. tkt refuses unless the pull request is merged. Always asks the user first.",
+		description: "Remove a merged ticket, or one whose pull request was closed without merging: close its tabs and its worktree. tkt refuses unless the pull request is merged or closed; work that never merged needs tkt_drop. Always asks the user first.",
 		parameters: Type.Object({ ticket }),
 		executionMode: "sequential",
 		async execute(_id, p, _signal, _update, ctx) {
 			const t = id(p.ticket);
 			if (!ctx.hasUI || !(await confirm(ctx, `Remove ${t}?`, `Close its tabs and remove its worktree. tkt checks that its pull request is merged first.`))) return text("The user did not confirm; nothing was removed.");
 			return text(await act.done(hub, t));
+		},
+	});
+
+	pi.registerTool({
+		name: "tkt_drop",
+		label: "tkt drop",
+		description:
+			"Throw away a ticket the user started by mistake, such as someone else's, merged or not: close its tabs and agents, stop its tkt auto loop, remove its worktree with any uncommitted changes and its branch, and close its open pull request and delete its remote branch when every commit there is the user's. tkt refuses a merged ticket, which tkt_done removes, and never writes the tracker. Use it only when the user asks to drop, discard, abandon or throw away a ticket. Always asks the user to type the ticket id first.",
+		parameters: Type.Object({ ticket }),
+		executionMode: "sequential",
+		async execute(_id, p, _signal, _update, ctx) {
+			const t = id(p.ticket);
+			if (!ctx.hasUI) return text("Dropping a ticket needs the user to type its id, and nobody can answer here; nothing was removed.");
+			return text(await act.drop(hub, ctx, t));
 		},
 	});
 

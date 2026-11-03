@@ -112,6 +112,59 @@ func (g Git) Clean(ctx context.Context, path string) bool {
 	return ok && s == ""
 }
 
+// Changes lists the worktree's uncommitted changes as git status --short
+// prints them, such as " M main.go" or "?? notes.txt". ok is false when git
+// cannot tell.
+func (g Git) Changes(ctx context.Context, path string) ([]string, bool) {
+	r := g.run(ctx, 0, "-C", path, "status", "--porcelain=v1")
+	if !r.OK() {
+		return nil, false
+	}
+	var out []string
+	for _, l := range strings.Split(strings.TrimRight(r.Out(), "\n"), "\n") {
+		if l != "" {
+			out = append(out, l)
+		}
+	}
+	return out, true
+}
+
+// Authors lists the author emails of the commits a range names, one per
+// commit. ok is false when git cannot read the range.
+func (g Git) Authors(ctx context.Context, dir, rng string) ([]string, bool) {
+	s, ok := g.out(ctx, "-C", dir, "log", "--format=%ae", rng)
+	if !ok {
+		return nil, false
+	}
+	if s == "" {
+		return []string{}, true
+	}
+	return strings.Split(s, "\n"), true
+}
+
+// UserEmail returns the email git writes on the repository's commits, from
+// its settings or GIT_AUTHOR_EMAIL, or "".
+func (g Git) UserEmail(ctx context.Context, dir string) string {
+	s, _ := g.out(ctx, "-C", dir, "var", "GIT_AUTHOR_IDENT")
+	_, rest, ok := strings.Cut(s, "<")
+	email, _, ok2 := strings.Cut(rest, ">")
+	if !ok || !ok2 {
+		return ""
+	}
+	return email
+}
+
+// Unpushed counts the commits HEAD holds that no branch on the remote
+// holds, or -1.
+func (g Git) Unpushed(ctx context.Context, path, remote string) int {
+	s, ok := g.out(ctx, "-C", path, "rev-list", "--count", "HEAD", "--not", "--remotes="+remote)
+	n, err := strconv.Atoi(s)
+	if !ok || err != nil {
+		return -1
+	}
+	return n
+}
+
 // Tracked reports whether git tracks the file at path, relative to the
 // worktree dir, in its index.
 func (g Git) Tracked(ctx context.Context, dir, path string) bool {

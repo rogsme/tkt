@@ -76,11 +76,32 @@ func WT() {
 		}
 		printJSON(map[string]any{"action": "created", "branch": branch, "path": path, "created_branch": create})
 	case "remove":
-		branch := args[0]
-		if _, err := realGit("-C", dir, "worktree", "remove", filepath.Join(root, branch)); err != nil {
+		branch, force, forceDelete := "", false, false
+		for i := 0; i < len(args); i++ {
+			switch a := args[i]; {
+			case a == "-f" || a == "--force":
+				force = true
+			case a == "-D" || a == "--force-delete":
+				forceDelete = true
+			case a == "--format":
+				i++
+			case strings.HasPrefix(a, "-"):
+			default:
+				branch = a
+			}
+		}
+		rm := []string{"-C", dir, "worktree", "remove"}
+		if force {
+			rm = append(rm, "--force")
+		}
+		if _, err := realGit(append(rm, filepath.Join(root, branch))...); err != nil {
 			die(1, "fake wt: git worktree remove failed: %v", err)
 		}
-		realGit("-C", dir, "branch", "-d", branch)
+		if forceDelete {
+			realGit("-C", dir, "branch", "-D", branch)
+		} else {
+			realGit("-C", dir, "branch", "-d", branch)
+		}
 		fmt.Println("{}")
 	case "hook":
 		fmt.Println(os.Getenv("FAKE_WT_HOOKS"))

@@ -1,0 +1,43 @@
+# When every commit on the remote branch is yours, tkt drop closes the open
+# pull request and deletes the branch from the remote, before it removes
+# anything local.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-12'
+realgit -C $WT push -q origin ACM-12
+cp $WORK/prs.json $FAKE_DIR/prs.json
+resetlog
+exec tkt drop ACM-12 --yes
+logged gh pr close 7 --repo github.com/acme/app
+logged git -C $REPO push --quiet origin --delete ACM-12
+logged wt -C $REPO remove ACM-12 --foreground --reap --format json --force --force-delete
+stdout '^ACM-12  closed pull request #7 and deleted origin/ACM-12$'
+jqeq $FAKE_DIR/prs.json '.[0].state' CLOSED
+! exec git -C $REPO ls-remote --exit-code --heads origin ACM-12
+! exists $WT
+grep '"event":"dropped".*"pr":7' $HOME/.local/state/tkt/history.jsonl
+houserules
+
+# When closing the pull request fails, nothing local goes, and running tkt
+# drop again starts over.
+exec tkt start ACM-13
+env WT=$FAKE_WT_ROOT/ACM-13
+realgit -C $WT commit -q --allow-empty -m 'work on ACM-13'
+realgit -C $WT push -q origin ACM-13
+cp $WORK/prs13.json $FAKE_DIR/prs.json
+env FAKE_GH_CLOSE_FAIL=1
+resetlog
+! exec tkt drop ACM-13 --yes --json
+rc 1
+envelope '.error.code' forge_close_failed
+! logcontains 'tab close'
+! logcontains '--delete'
+exists $WT
+env FAKE_GH_CLOSE_FAIL=
+exec tkt drop ACM-13 --yes
+! exists $WT
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]
+-- prs13.json --
+[{"number": 8, "state": "OPEN", "headRefName": "ACM-13", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

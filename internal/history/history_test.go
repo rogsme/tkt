@@ -123,6 +123,37 @@ func TestTimelinesCountClosedTicketsApart(t *testing.T) {
 	}
 }
 
+func TestTimelinesCountDroppedTicketsApart(t *testing.T) {
+	now := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	events := []Event{
+		ev("2026-01-01T00:00:00Z", "ACM-1", Started),
+		ev("2026-01-01T02:00:00Z", "ACM-1", Merged),
+		ev("2026-01-03T00:00:00Z", "ACM-2", Started),
+		ev("2026-01-03T06:00:00Z", "ACM-2", Dropped, func(e *Event) { e.Head = "abc1234" }),
+		// Started again after the drop, it counts afresh.
+		ev("2026-01-05T00:00:00Z", "ACM-3", Started),
+		ev("2026-01-05T01:00:00Z", "ACM-3", Dropped),
+		ev("2026-01-06T00:00:00Z", "ACM-3", Started),
+	}
+	tickets, sum := Timelines(events, Filter{}, waiting, now)
+	if len(tickets) != 3 {
+		t.Fatalf("tickets: %+v", tickets)
+	}
+	byID := map[string]Ticket{}
+	for _, tk := range tickets {
+		byID[tk.Ticket] = tk
+	}
+	if d := byID["ACM-2"]; d.InProgress || d.Dropped == "" || d.Total != 6*3600 {
+		t.Errorf("ACM-2: %+v", d)
+	}
+	if a := byID["ACM-3"]; !a.InProgress || a.Dropped != "" || a.Started != "2026-01-06T00:00:00Z" {
+		t.Errorf("ACM-3: %+v", a)
+	}
+	if sum.Merged != 1 || sum.Dropped != 1 || sum.Closed != 0 || sum.InProgress != 1 || sum.MedianTotal != 2*3600 {
+		t.Errorf("summary: %+v", sum)
+	}
+}
+
 func TestPercentile(t *testing.T) {
 	vs := []int64{5, 1, 4, 2, 3, 6, 7, 8, 9, 10}
 	if percentile(vs, 50) != 5 || percentile(vs, 90) != 9 || percentile(nil, 50) != 0 || percentile([]int64{4}, 90) != 4 {

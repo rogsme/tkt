@@ -120,6 +120,19 @@ func (o OpenCode) SessionActive(ctx context.Context, sid string) bool {
 	return active
 }
 
+// InterruptArgv is the request that stops the turn OpenCode works on in a
+// session.
+func InterruptArgv(sid string) []string {
+	return []string{"opencode", "api", "POST", "/api/session/" + sid + "/interrupt"}
+}
+
+// Interrupt stops the turn OpenCode works on in a session. The turn runs in
+// OpenCode's service, so closing the session's tab leaves it running.
+func (o OpenCode) Interrupt(ctx context.Context, sid string) error {
+	_, err := o.call(ctx, InterruptArgv(sid)[2:]...)
+	return err
+}
+
 // Newest returns the newest top-level session started in path, skipping
 // plan-review sessions.
 func (o OpenCode) Newest(ctx context.Context, path string) (Session, bool) {

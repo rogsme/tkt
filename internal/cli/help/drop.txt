@@ -1,0 +1,31 @@
+tkt drop throws away a ticket you started by mistake, such as one that is
+someone else's. It closes the ticket's tabs, which stops their agents, and
+ends a tkt auto loop that drives it. It removes the worktree through
+worktrunk, with its uncommitted changes, deletes the branch even though no
+base holds it, and removes the private temporary directory its tabs had as
+TMPDIR. It stops an OpenCode turn too, since that runs outside the tab.
+
+On a GitHub forge, it also closes the ticket's open pull request and deletes
+the branch from the remote, but only when every commit on that branch beyond
+the base has your git email. A branch someone else pushed first, which tkt
+start then checked out, stays with its pull request, and tkt drop says so.
+On another forge, or when it cannot reach the remote, it leaves the remote
+alone and says what to delete there yourself.
+
+Uncommitted changes are lost for good. The branch's commits stay in git for
+a while: tkt drop prints the commit the branch held, and git branch ID
+COMMIT brings it back until git gc prunes it.
+
+Before it removes anything, it lists what goes and asks you to type the
+ticket id. Pass --yes to skip the question, as a program must when stdin is
+not a terminal; --dry-run lists what goes and removes nothing.
+
+It refuses a ticket whose pull request merged: tkt done removes that one. It
+also refuses while tkt runs inside the worktree or in the ticket's own tab,
+or while a pane outside the ticket's tabs, or the OpenCode service, works in
+the worktree.
+
+tkt never writes the tracker, so move the ticket back there yourself. A drop
+goes in the history, and tkt stats leaves dropped tickets out of its times.
+tkt hold is the gentler step: it keeps tkt watch and tkt auto away from a
+ticket and removes nothing.

@@ -423,3 +423,9 @@ export function mentions(text: string, ticket: string): boolean {
 	if (!m) return text.toUpperCase().includes(ticket.toUpperCase());
 	return new RegExp(`(^|[^A-Za-z0-9])(${m[1]}[- ]?)?0*${m[2]}([^0-9]|$)`, "i").test(text);
 }
+
+/** typedMatches says whether what you typed is the text a typed question
+ * asks for, ignoring case and the spaces around it. */
+export function typedMatches(typed: string, expect: string): boolean {
+	return expect.trim() !== "" && typed.trim().toLowerCase() === expect.trim().toLowerCase();
+}

@@ -1,0 +1,28 @@
+# Someone else pushed ACM-12 first, so tkt start checked out their branch.
+# tkt drop removes your worktree and local branch, and leaves their branch
+# and pull request on the remote.
+realgit -C $REPO switch -q -c ACM-12
+env GIT_AUTHOR_EMAIL=bob@example.com
+realgit -C $REPO commit -q --allow-empty -m 'bob works on ACM-12'
+env GIT_AUTHOR_EMAIL=dev@example.com
+realgit -C $REPO push -q origin ACM-12
+realgit -C $REPO switch -q main
+realgit -C $REPO branch -q -D ACM-12
+cp $WORK/prs.json $FAKE_DIR/prs.json
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+realgit -C $WT commit -q --allow-empty -m 'my work on ACM-12'
+resetlog
+exec tkt drop ACM-12 --dry-run --json
+envelope '.result | [.pr, .remote_branch, .kept]' '[0,false,"origin/ACM-12 and pull request #7, since the branch holds commits by bob@example.com; it may be someone else''s"]'
+exec tkt drop ACM-12 --yes
+stdout '^ACM-12  kept: origin/ACM-12 and pull request #7, since the branch holds commits by bob@example.com; it may be someone else''s$'
+! logcontains 'pr close'
+! logcontains '--delete'
+exec git -C $REPO ls-remote --exit-code --heads origin ACM-12
+jqeq $FAKE_DIR/prs.json '.[0].state' OPEN
+! exists $WT
+! exec git -C $REPO show-ref --verify --quiet refs/heads/ACM-12
+
+-- prs.json --
+[{"number": 7, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "", "headRepository": {"nameWithOwner": "acme/app"}}]

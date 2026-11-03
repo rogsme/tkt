@@ -1,0 +1,24 @@
+# tkt drop cannot close the tab it runs in, nor remove the directory it runs
+# in, nor a worktree where a pane it did not open works.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+resetlog
+env HERDR_TAB_ID=w1:t10
+! exec tkt drop ACM-12 --yes --json
+rc 4
+envelope '.error.code' drop_refused
+envelope '.error.message' 'cannot drop ACM-12: tkt runs in the ticket''s own tab'
+env HERDR_TAB_ID=w1:t1
+
+cd $WT
+! exec tkt drop ACM-12 --yes
+rc 4
+stderr 'tkt runs inside the worktree'
+cd $REPO
+
+jqedit $FAKE_DIR/herdr.json '.panes += [{pane_id: "w1:p9", tab_id: "w1:t1", workspace_id: "w1", cwd: $WT, foreground_cwd: $WT}]'
+! exec tkt drop ACM-12 --yes
+rc 4
+stderr 'panes outside the ticket''s tabs work in the worktree: w1:p9'
+! logcontains 'tab close'
+exists $WT

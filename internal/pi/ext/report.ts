@@ -7,8 +7,10 @@ export interface StatsTicket {
 	repo: string;
 	started: string;
 	/** merged is when the pull request merged; "" for one closed without
-	 * merging, or still open. */
+	 * merging, or still open. dropped is when tkt drop threw it away. */
 	merged?: string;
+	closed?: string;
+	dropped?: string;
 	total_s: number;
 	in_progress: boolean;
 	waiting_on_you_s: number;
@@ -23,6 +25,7 @@ export interface StatsResult {
 	summary: {
 		merged: number;
 		closed?: number;
+		dropped?: number;
 		in_progress: number;
 		median_total_s: number;
 		p90_total_s: number;
@@ -39,7 +42,7 @@ export function statsText(r: StatsResult, limit = 15): string {
 	if (r.tickets.length === 0) return "No tickets in the history yet. tkt records a ticket from its first tkt start.";
 	const out = ["| Ticket | Started | Start to merge | Waiting on you | Rounds | Auto |", "|---|---|---|---|---|---|"];
 	for (const t of r.tickets.slice(0, limit)) {
-		const total = secs(t.total_s) + (t.in_progress ? " so far" : t.merged === "" ? " (closed)" : "");
+		const total = secs(t.total_s) + (t.in_progress ? " so far" : dropped(t) ? " (dropped)" : t.merged === "" ? " (closed)" : "");
 		out.push(`| ${t.ticket} | ${t.started.split("T")[0]} | ${total} | ${secs(t.waiting_on_you_s)} | ${t.rounds} | ${t.auto ? "yes" : "-"} |`);
 	}
 	const s = r.summary;
@@ -47,9 +50,15 @@ export function statsText(r: StatsResult, limit = 15): string {
 		out.push("", `${s.merged} merged: start to merge median ${secs(s.median_total_s)}, p90 ${secs(s.p90_total_s)}; waiting on you median ${secs(s.median_waiting_on_you_s)}, p90 ${secs(s.p90_waiting_on_you_s)}.`);
 	}
 	if (s.closed) out.push(`${s.closed} closed without merging, left out of the times.`);
+	if (s.dropped) out.push(`${s.dropped} dropped with tkt drop, left out of the times.`);
 	if (s.in_progress > 0) out.push(`${s.in_progress} in progress.`);
 	if (s.without_start > 0) out.push(`${s.without_start} tickets have no recorded start and are left out.`);
 	return out.join("\n");
+}
+
+/** dropped says tkt drop ended the ticket, rather than a merge or a close. */
+function dropped(t: StatsTicket): boolean {
+	return !!t.dropped && !t.merged && !t.closed;
 }
 
 export interface HistoryEvent {
@@ -61,6 +70,8 @@ export interface HistoryEvent {
 	action?: string;
 	stop?: string;
 	pr?: number;
+	/** head is the commit a dropped ticket's branch held. */
+	head?: string;
 	/** unblocked lists the tickets finish-ticket said a merge unblocked. */
 	unblocked?: string[];
 	/** note says why a step failed. */
@@ -118,7 +129,7 @@ export function historyText(r: HistoryResult, bodies: boolean): string {
 		}
 		const tl = t.timeline;
 		const head = tl
-			? `: ${secs(tl.total_s)}${tl.in_progress ? " so far" : " start to merge"}, ${secs(tl.waiting_on_you_s)} waiting on you, ${tl.rounds} round${tl.rounds === 1 ? "" : "s"}${tl.auto ? ", in auto" : ""}`
+			? `: ${secs(tl.total_s)}${tl.in_progress ? " so far" : dropped(tl) ? " start to drop" : " start to merge"}, ${secs(tl.waiting_on_you_s)} waiting on you, ${tl.rounds} round${tl.rounds === 1 ? "" : "s"}${tl.auto ? ", in auto" : ""}`
 			: "";
 		out.push(`${t.ticket}${head}`);
 		for (const e of t.events) out.push(`- ${local(e.at)} ${eventText(e)}`);
@@ -175,6 +186,9 @@ export function eventText(e: HistoryEvent): string {
 			return "merge order cancelled";
 		case "done":
 			if (e.unblocked?.length) return `removed; the merge unblocked ${e.unblocked.join(", ")}`;
+			break;
+		case "dropped":
+			return `dropped with tkt drop${e.head ? `; the branch was at ${e.head.slice(0, 7)}` : ""}${e.pr ? `; closed #${e.pr} without merging` : ""}`;
 	}
 	return e.event;
 }

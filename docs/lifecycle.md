@@ -7,7 +7,7 @@ This page follows one ticket, `ACM-123`, from the tracker to a merged pull reque
 | Part | What it does here |
 |---|---|
 | The tracker | Holds the ticket: Linear, Jira, GitHub Issues, Kaneo, local markdown files, or anything else `/setup-rogs` can describe. The skills read and write it through its MCP server or CLI. tkt never talks to it. |
-| The forge | Holds the branch and the pull request: GitHub, Gitea or GitLab. The skills drive it through `gh`, `tea` or `glab`. tkt reads it through `gh`, so `tkt ls` and `tkt done` support GitHub only, and pushes one thing to it: a base merge that merges clean. |
+| The forge | Holds the branch and the pull request: GitHub, Gitea or GitLab. The skills drive it through `gh`, `tea` or `glab`. tkt reads it through `gh`, so `tkt ls` and `tkt done` support GitHub only. It pushes one thing to it, a base merge that merges clean, and removes one: the pull request and branch of a ticket you drop with `tkt drop`, when every commit on that branch is yours. |
 | CI | Runs the checks on every push. Every claim that CI is green names the exact head it ran on. |
 | The skills | Do the thinking: plan, implement, review, fix, merge. Each one ends with a `Status:` line and never starts the next one. |
 | `docs/agents/*.md` | The project's lifecycle configuration, written by `/setup-rogs`. The skills read all of it; tkt reads the ticket id pattern, the `## Forge` fields, and the rows of workflow.md's feature table that turn on agent verification and autonomous runs. |
@@ -322,6 +322,8 @@ Status: DONE
 
 `tkt done` reads that line from the ticket's session before it closes the tabs, and names the tickets, with no extra agent run. `tkt ls` lists each one until it starts, and the tkt agent's board offers to start it by hand, in auto, or in auto after you approve its plan.
 
+`tkt done` removes only finished work. For a ticket you started by mistake, such as one that is someone else's, `tkt drop ACM-123` throws the work away at any stage short of the merge. It closes the ticket's tabs and agents, ends its `tkt auto` loop, and removes the worktree with any uncommitted changes, the branch and the temporary directory. On GitHub it also closes your open pull request and deletes the branch from the remote, but only when every commit on that branch has your git email: a branch someone else pushed first stays, with its pull request. It lists what goes and asks you to type the ticket id first, and it prints the commit the branch held, which `git branch ACM-123 COMMIT` brings back until `git gc` prunes it. tkt never writes the tracker, so move the ticket back there yourself. `tkt hold ACM-123` is the gentler step: it parks the ticket and removes nothing.
+
 ## Letting tkt auto drive
 
 `tkt auto ACM-123` takes the steps above for one ticket and pauses where a person decides. It reads the same facts as `tkt ls`, so it does nothing you could not do by hand:
@@ -544,5 +546,6 @@ A ticket that waits on a blocker sits in `blocked`, with a `## Blocked` comment 
 | The agent waits for an answer | Answer it in the tab. `tkt ls` shows it as blocked. |
 | No agent runs for the ticket | `tkt resume ACM-123` brings back the last session and sends nothing. Use it, not `tkt run`, when the conversation matters, such as a plan waiting for approval. |
 | The pull request closed without merging | Closing it rejected the work. `tkt watch` removes the ticket's tabs and worktree once no agent works there, as `tkt done ACM-123` does, and keeps a worktree with commits that never reached the pull request. tkt never writes the tracker, so move the ticket there yourself. |
+| You started a ticket by mistake | `tkt drop ACM-123`, or `/drop ACM-123` in the chat, throws the work away once you type the id: tabs, agents, worktree, branch, and your pull request and remote branch. Move the ticket back in the tracker yourself. |
 
 `tkt ls` applies these rules in order and prints the next step. `tkt help ls` lists the rules.

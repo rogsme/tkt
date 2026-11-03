@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -96,7 +97,8 @@ func stepText(s AutoStep) string {
 }
 
 // The ways tkt auto stops, and the reasons it pauses for a person. A loop
-// ends only at ready_for_human, merge_ordered, merged, closed or stopped. For the others it
+// ends only at ready_for_human, merge_ordered, merged, closed, stopped or
+// removed. For the others it
 // notifies once, waits, and goes on when the ticket moves, such as after you
 // answer the agent's question in its tab.
 const (
@@ -123,6 +125,8 @@ const (
 	// StopPostMergeFailed ends a loop whose pull request merged, but whose
 	// finish-ticket saw the checks on the base fail after the merge.
 	StopPostMergeFailed = "post_merge_failed"
+	// StopRemoved ends a loop whose worktree is gone, as after tkt drop.
+	StopRemoved = "removed"
 )
 
 // stopHint says what a person does after a stop.
@@ -156,6 +160,8 @@ func stopHint(stop, id string) string {
 		return "tkt sync " + id + " says why it cannot merge the base; tkt auto goes on once it can"
 	case StopPostMergeFailed:
 		return "the change merged, but the checks on the base failed after it; read finish-ticket's report in the ticket's tab"
+	case StopRemoved:
+		return "the ticket's worktree is gone; tkt start " + id + " starts it again"
 	}
 	return "check the agent in its tab, then tkt auto " + id
 }
@@ -360,6 +366,10 @@ type autoView struct {
 	Started bool
 	// Wanted is false once tkt auto --stop cleared the ticket's auto key.
 	Wanted bool
+	// Gone is true once the worktree the loop drove is removed, as by tkt
+	// drop: nothing is left to drive, and starting the ticket again is a
+	// person's choice.
+	Gone bool
 	// Hold is what the status pages report while they hold agent runs
 	// back, as the running tkt watch last read them, or "".
 	Hold string
@@ -456,6 +466,11 @@ func autoLoop(ctx context.Context, w autoWorld, id string, p AutoPolicy, mem aut
 		}
 		fails = 0
 		res.Next, res.Phase, res.Rounds = v.Next, v.Phase, mem.Rounds
+		if v.Gone {
+			res.Stop = StopRemoved
+			w.stopped(res.Stop, v)
+			return res, nil
+		}
 		if !v.Wanted && !once {
 			res.Stop = StopStopped
 			w.stopped(res.Stop, v)
@@ -770,7 +785,7 @@ func (a *App) auto(ctx context.Context, o AutoOpts, carry autoCarry, self string
 	}
 	res.Actions = append(append([]Action{}, c.Plan...), w.actions...)
 	switch res.Stop {
-	case "", StopReadyForHuman, StopMergeOrdered, StopMerged, StopClosed, StopStopped:
+	case "", StopReadyForHuman, StopMergeOrdered, StopMerged, StopClosed, StopStopped, StopRemoved:
 		return res, nil
 	}
 	if o.Once {
@@ -821,6 +836,8 @@ func (w *ctxWorld) look(ctx context.Context, fetch bool) (autoView, error) {
 			return autoView{Wanted: true, Hold: hold}, nil
 		}
 		w.path = e.Path
+	} else if _, err := os.Stat(w.path); errors.Is(err, fs.ErrNotExist) {
+		return autoView{Gone: true}, nil
 	}
 	if ts, err := c.readState(w.path); err == nil && !c.Dry {
 		c.reapFix(w.id, w.path, ts)
@@ -1073,7 +1090,7 @@ func autoNotice(stop, id, reason string) notice {
 		return notice{"merge order due", "the checks passed, so tkt watch sends finish-ticket your merge line", "none"}
 	case StopPostMergeFailed:
 		return notice{"post-merge CI failed", stopHint(stop, id), "request"}
-	case StopMerged, StopClosed, StopStopped:
+	case StopMerged, StopClosed, StopStopped, StopRemoved:
 		return notice{stop, stopHint(stop, id), "done"}
 	}
 	return notice{"needs you", stop + ": " + stopHint(stop, id), "request"}

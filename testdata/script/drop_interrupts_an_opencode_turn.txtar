@@ -1,0 +1,10 @@
+# OpenCode works on its turn in its own service, so closing the tab leaves
+# the turn running. tkt drop interrupts it first.
+exec tkt start ACM-12 --as opencode
+env WT=$FAKE_WT_ROOT/ACM-12
+env 'FAKE_OC_ACTIVE={"data":{"ses_fake1":{}}}'
+resetlog
+exec tkt drop ACM-12 --yes
+logged opencode api POST /api/session/ses_fake1/interrupt
+logged herdr tab close w1:t10
+! exists $WT

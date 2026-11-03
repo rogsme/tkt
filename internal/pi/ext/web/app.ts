@@ -6,7 +6,7 @@
 // through the chat, as if you typed it in the terminal.
 
 import type { Dialog, Theme, ToPage } from "../mirror.ts";
-import type { Incident } from "../model.ts";
+import { type Incident, typedMatches } from "../model.ts";
 import { type Mark, tally } from "../report.ts";
 import { hashOf, type Nav, navOf, type Tab } from "./acts.ts";
 import type { Go } from "./bits.ts";
@@ -307,6 +307,21 @@ function Ask({ d, send }: { d: Dialog; send: Send }) {
 					<button class="btn" onClick=${() => answer(text)}>Send</button>
 				</div>`;
 			break;
+		case "typed": {
+			// Typing the id, not a click, confirms, so a stray click or Enter
+			// throws nothing away.
+			const ok = typedMatches(text, d.expect ?? "");
+			body = html`<ul class="danger-box loses">
+					${(d.lines ?? []).map((l) => html`<li>${l}</li>`)}
+				</ul>
+				<label class="typed-label" for=${`typed-${d.id}`}>Type <code>${d.expect}</code> to confirm</label>
+				<input id=${`typed-${d.id}`} ref=${first} value=${text} autocomplete="off" spellcheck=${false} onInput=${(e: InputEvent) => setText((e.target as HTMLInputElement).value)} onKeyDown=${(e: KeyboardEvent) => e.key === "Enter" && ok && answer(text)} />
+				<div class="actions">
+					<button class="btn quiet" onClick=${() => answer(null)}>Cancel</button>
+					<button class="btn danger" disabled=${!ok} title=${ok ? "" : `Type ${d.expect} first`} onClick=${() => ok && answer(text)}>Confirm</button>
+				</div>`;
+			break;
+		}
 		case "editor":
 			body = html`<textarea ref=${first} value=${text} onInput=${(e: InputEvent) => setText((e.target as HTMLTextAreaElement).value)} onKeyDown=${(e: KeyboardEvent) => e.key === "Enter" && (e.ctrlKey || e.metaKey) && answer(text)}></textarea>
 				<div class="actions">
@@ -360,7 +375,7 @@ function Ask({ d, send }: { d: Dialog; send: Send }) {
 		}
 	}
 	return html`<div class="veil" onKeyDown=${onKey}>
-		<div class=${`dialog${d.kind === "checklist" ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label=${d.title} tabindex="-1" ref=${box}>
+		<div class=${`dialog${d.kind === "checklist" ? " wide" : ""}${d.kind === "typed" ? " danger" : ""}`} role=${d.kind === "typed" ? "alertdialog" : "dialog"} aria-modal="true" aria-label=${d.title} tabindex="-1" ref=${box}>
 			<h2>${d.title}</h2>
 			${body}
 			<div class="where">The chat's pane asks this too; the first answer counts.</div>

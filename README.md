@@ -402,6 +402,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt merge ID --passed STEPS` | Once the human verification steps passed, sends finish-ticket the word to merge in a fresh session, naming the head they passed on. When finish-ticket could not merge yet, leaves a merge order that `tkt watch` carries out: it syncs a clean base, has the new head reviewed, waits for green checks, and merges one ticket at a time. The steps carry over clean merges of the base, so a verified batch merges while you are away. `--evidence` says you confirmed the steps from verify-pr's evidence. |
 | `tkt resume ID` | Relaunches the ticket's newest session when no agent runs for it, and sends nothing. |
 | `tkt done ID...` | Closes the tabs of tickets whose pull request merged, or closed without merging, and removes their worktrees. It names the tickets each merge unblocked, which `tkt ls` lists and the tkt agent offers to start. `--all` checks every ticket worktree. |
+| `tkt drop ID` | Throws away a ticket you started by mistake, merged or not: closes its tabs and agents, ends its `tkt auto` loop, and removes its worktree with any uncommitted changes, its branch and its temporary directory. On GitHub it also closes your open pull request and deletes the branch from the remote, but only when every commit on that branch has your git email. It lists what goes and asks you to type the ticket id first; `--yes` skips the question, and `--dry-run` only lists. It refuses a merged ticket, which `tkt done` removes, and never writes the tracker. |
 | `tkt chores` | Lists the repository's chores, the agent runs you schedule in its `.tkt/tkt.local.toml`, with their next run and the run still open; `--json` adds each chore's prompt. |
 | `tkt chore run NAME` | Starts a run of a chore now: a branch from the fetched base, its worktree and tab, and an agent with the chore's prompt. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
@@ -488,6 +489,7 @@ Ask how a ticket went, merged ones too, such as "how did ACM-12 go?" or "what fa
 | `/chores [run NAME]` | The repository's chores with their next run; `run NAME` starts a run now. |
 | `/history ID...` | What happened to tickets: each event, commit and review. |
 | `/done ID` | Removes a merged ticket. |
+| `/drop ID` | Throws away a ticket started by mistake, as `tkt drop` does, once you type its id. The web page has a red Drop button at the end of a ticket's buttons that sends it. |
 | `/version` | Says which tkt and pi the chat runs, and whether the tkt on disk is another one now. |
 | `/update` | Installs a newer tkt, then offers to quit. Reopen the chat with the `tkt agent --session ID` it prints to run the new tkt. The board names a newer release when the chat finds one. |
 | `/web` | Opens the chat's web page in your browser, as `tkt web` does, unless a browser here has it open. `/web new` opens another tab anyway. |
@@ -580,7 +582,7 @@ The units keep the `PATH` of the shell you run it from, since the agents in herd
 
 ### State and logs
 
-tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. Each ticket's tabs get `TMPDIR` set to a private directory under `/tmp`, which `tkt done` removes too. OpenCode runs every agent's tools in its one background service, outside the tab, so OpenCode agents get that directory through tkt's plugin: `tkt hook tmp --install` writes it to `~/.config/opencode/plugins/tkt.js`. It also moves into that directory a new `/tmp` path that a file tool names or a shell command uses unquoted; a path in quotes stays as written. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. Past 10 MB the log starts over, and the older lines stay in `tkt.log.1`. `-v` prints the same lines as tkt goes.
+tkt keeps each ticket's state (preset, session, tab, pane, phase) in the worktree's git directory, so it disappears with the worktree. Each ticket's tabs get `TMPDIR` set to a private directory under `/tmp`, which `tkt done` and `tkt drop` remove too. OpenCode runs every agent's tools in its one background service, outside the tab, so OpenCode agents get that directory through tkt's plugin: `tkt hook tmp --install` writes it to `~/.config/opencode/plugins/tkt.js`. It also moves into that directory a new `/tmp` path that a file tool names or a shell command uses unquoted; a path in quotes stays as written. It logs every command it runs to `~/.local/state/tkt/tkt.log`; a prompt appears there only as its size and hash. Past 10 MB the log starts over, and the older lines stay in `tkt.log.1`. `-v` prints the same lines as tkt goes.
 
 `tkt watch` writes its lines to `tkt/watch.log` in the repository's git directory, and how its last pass went to `tkt/watch` beside it. Under systemd, its lines go to the journal instead: `journalctl --user -u 'tkt-watch@*'`.
 
