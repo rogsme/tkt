@@ -1369,6 +1369,26 @@ table.grid th {
 	padding-left: 1.5rem;
 }
 
+/* The setup and the cleanup around the steps: there to read, quieter than
+   the steps you mark. */
+.procedure-notes {
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 8px 12px;
+	color: var(--muted);
+	font-size: 0.9rem;
+	overflow-wrap: anywhere;
+}
+
+.procedure-notes > :first-child {
+	margin-top: 0;
+}
+
+.procedure-notes > :last-child {
+	margin-bottom: 0;
+}
+
 /* Each row's left edge says how you marked it; an unmarked row has none. */
 .checklist li {
 	border-left: 3px solid transparent;

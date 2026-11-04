@@ -412,14 +412,14 @@ export async function check(hub: Hub, ctx: ExtensionContext, id: string): Promis
 	const first = await ask(ctx, `${id}: how do you want to verify?`, howOptions(v), false);
 	if (!first) return "Closed.";
 	if (first.answer.startsWith("Run verify-pr")) return stage(hub, id, "verify");
-	const env = await hub.tkt<{ steps: Step[]; procedure: string; pr: number; source: string }>(["show", id, "--steps"]);
+	const env = await hub.tkt<{ steps: Step[]; procedure: string; before?: string; after?: string; pr: number; source: string }>(["show", id, "--steps"]);
 	if (!env.ok || !env.result) return failure(id, env);
 	const steps = env.result.steps;
 	if (first.answer.startsWith("Confirm") && v) return confirmEvidence(hub, ctx, id, steps, v, behind);
 	const from = env.result.source === "pull_request" ? `The review bot cleared the head; these steps come from pull request #${env.result.pr}.` : "";
 	const head = hub.row(id)?.pr?.head ?? "";
 	const key = `${id}@${head}`;
-	const got = await checklist(ctx, id, withEvidence(steps, v), marks.get(key) ?? [], from);
+	const got = await checklist(ctx, id, withEvidence(steps, v), marks.get(key) ?? [], from, { before: env.result.before, after: env.result.after });
 	marks.set(key, got);
 	hub.pi.appendEntry("tkt-check", { key, marks: got });
 	const t = tally(got, steps.length);

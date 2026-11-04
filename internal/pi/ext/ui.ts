@@ -322,6 +322,13 @@ export function peek(ctx: ExtensionContext, ticket: string, read: () => Promise<
 	);
 }
 
+/** Notes are the rest of a Human verification section around its steps:
+ * the setup before them and the cleanup after, as Markdown. */
+export interface Notes {
+	before?: string;
+	after?: string;
+}
+
 export interface Step {
 	n: number;
 	text: string;
@@ -333,7 +340,7 @@ export interface Step {
 /** checklist lets you mark each human verification step passed, failed or
  * skipped. It returns the marks when you close it, or undefined when
  * signal aborted. */
-export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], start: Mark[], from = "", signal?: AbortSignal): Promise<Mark[] | undefined> {
+export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], start: Mark[], from = "", notes: Notes = {}, signal?: AbortSignal): Promise<Mark[] | undefined> {
 	if (signal?.aborted) return Promise.resolve(undefined);
 	return ctx.ui.custom<Mark[] | undefined>(
 		(tui, theme, _kb, done) => {
@@ -356,12 +363,23 @@ export function checklist(ctx: ExtensionContext, ticket: string, steps: Step[], 
 					const w = Math.max(24, width);
 					const lines: string[] = [];
 					if (from) lines.push(theme.fg("muted", from), "");
+					const note = (text: string | undefined) => {
+						for (const l of (text ?? "").split("\n")) lines.push(...(l ? wrapTextWithAnsi(theme.fg("muted", l), Math.max(10, w - 6)) : [""]));
+					};
+					if (notes.before) {
+						note(notes.before);
+						lines.push("");
+					}
 					steps.forEach((s, i) => {
 						const head = `${i === index ? ">" : " "} ${sign(marks[i])} ${s.n}. `;
 						const text = s.verified ? `${s.text} ${theme.fg("muted", `(verify-pr: ${s.verified.toLowerCase()})`)}` : s.text;
 						const wrapped = wrapTextWithAnsi(text, Math.max(10, w - 17));
 						wrapped.forEach((l, j) => lines.push((j === 0 ? head : " ".repeat(12)) + (i === index ? theme.fg("accent", l) : l)));
 					});
+					if (notes.after) {
+						lines.push("");
+						note(notes.after);
+					}
 					const t = tally(marks, steps.length);
 					lines.push("", theme.fg("muted", `${steps.length - t.open} of ${steps.length} marked`));
 					return panel(theme, frame(theme, w, `${ticket}: human verification`, lines, "space cycles  p pass  f fail  s skip  enter or esc closes"));

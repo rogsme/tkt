@@ -11,7 +11,7 @@ import { type Mark, tally } from "../report.ts";
 import { hashOf, type Nav, navOf, type Tab } from "./acts.ts";
 import type { Go } from "./bits.ts";
 import { Left } from "./left.ts";
-import { mdStep } from "./md.ts";
+import { md, mdStep } from "./md.ts";
 import { dropAll, type Send, settle } from "./query.ts";
 import { apply, type Event, initial, type State, title } from "./state.ts";
 import { Composer, Transcript } from "./talk.ts";
@@ -351,6 +351,7 @@ function Ask({ d, send }: { d: Dialog; send: Send }) {
 			const steps = d.steps ?? [];
 			const t = tally(marks, steps.length);
 			body = html`${d.message && html`<p>${d.message}</p>`}
+				${d.before && html`<div class="procedure-notes md" dangerouslySetInnerHTML=${{ __html: md(d.before) }}></div>`}
 				<ol class="checklist">
 					${steps.map((st, i) => {
 						const m = marks[i] ?? "";
@@ -366,6 +367,7 @@ function Ask({ d, send }: { d: Dialog; send: Send }) {
 						</li>`;
 					})}
 				</ol>
+				${d.after && html`<div class="procedure-notes md" dangerouslySetInnerHTML=${{ __html: md(d.after) }}></div>`}
 				<div class="actions">
 					<span class="tally">${steps.length - t.open} of ${steps.length} marked${t.fail ? `, ${t.fail} failed` : ""}${t.skip ? `, ${t.skip} skipped` : ""}</span>
 					<button class="btn quiet" onClick=${() => answer(null)} title="Close without keeping these marks">Cancel</button>

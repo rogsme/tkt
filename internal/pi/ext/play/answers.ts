@@ -127,12 +127,20 @@ const stepTexts = [
 	"Export a report with no lines: the file holds the header only.",
 ];
 
+/** stepNotes are the rest of every ticket's Human verification section:
+ * a numbered setup, which is not the steps, and the cleanup. */
+export const stepNotes = {
+	before: "**Environment**: this worktree in a browser and a terminal.\n1. Run `just dev` and open http://localhost:3000.\n2. Sign in as `dev@acme.example`.",
+	after: "**Cleanup**: delete the exported files.\n\n**Not covered**: exports larger than 10,000 lines.",
+};
+
 /** steps is tkt show --steps's answer, with the marks you left and the
  * head they hold for. */
 export function steps(r: Row, marks: Mark[]): Envelope {
 	if (!r.pr) return fail("show", "no_pull_request", `${r.ticket} has no pull request yet`, "the steps come from the pull request's review");
 	return ok("show", {
 		procedure: "Human verification",
+		...stepNotes,
 		steps: stepTexts.map((text, i) => ({ n: i + 1, text })),
 		verification: r.verification ?? null,
 		pr: r.pr.number,
