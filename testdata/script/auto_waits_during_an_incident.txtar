@@ -20,7 +20,7 @@ resetlog
 exec tkt auto ACM-1 --once --poll 100ms --json
 envelope '.result | [.wait, .hold, .did]' '["incident","GitHub: Actions major outage",null]'
 exec tkt auto ACM-1 --once --poll 100ms
-stdout '^ACM-1  waiting: GitHub: Actions major outage; tkt auto sets no agent to work until it ends$'
+stdout '^ACM-1  waiting: GitHub: Actions major outage; tkt auto sets no agent to work until it ends, or until tkt incidents --ignore$'
 ! logged herdr agent start
 state $FAKE_WT_ROOT/ACM-1 rounds ''
 

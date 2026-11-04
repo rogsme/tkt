@@ -135,6 +135,10 @@ func (r *WatchResult) Text(w io.Writer) {
 		output.Table(w, []string{"CHORE", "STEP", "WHY", "NEXT"}, rows)
 	}
 	for _, i := range r.Incidents {
+		if i.Ignored {
+			fmt.Fprintf(w, "%s reports %s, ignored, so tkt watch starts agents anyway\n", i.Service, i.Problem)
+			continue
+		}
 		fmt.Fprintf(w, "%s reports %s, so tkt watch starts no agent\n", i.Service, i.Problem)
 	}
 }
@@ -406,7 +410,7 @@ func (a *App) Watch(ctx context.Context, o WatchOpts) (*WatchResult, error) {
 		tickets, chores, err := w.pass(ctx)
 		w.passes++
 		res.Passes = w.passes
-		res.Incidents = append([]Incident{}, w.incidents...)
+		res.Incidents = markIgnored(c.Repo.Common, w.incidents)
 		if ctx.Err() == nil {
 			w.writeStatus(err)
 		}
@@ -796,7 +800,9 @@ func (w *watcher) runChore(ctx context.Context, a *App, c *Ctx, name string, due
 }
 
 // hold says why no agent starts this pass, or "".
-func (w *watcher) hold() string { return holdText(w.incidents) }
+// It reads the waivers each time, so tkt incidents --ignore lets agents go
+// at the next pass, not at the next read of the pages.
+func (w *watcher) hold() string { return holdText(markIgnored(w.c.Repo.Common, w.incidents)) }
 
 // step decides and takes one ticket's step.
 func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, row Row, f Facts) WatchTicket {

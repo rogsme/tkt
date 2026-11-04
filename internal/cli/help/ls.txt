@@ -70,7 +70,8 @@ chore's run; title, the open pull request's title without the ticket id;
 diff, what the branch changes against its base; and verification,
 verify-pr's newest report with each step's result, whose at_head and
 carried say whether it counts for the head. incidents lists what
-the status pages report while a tkt watch reads them.
+the status pages report while a tkt watch reads them, each with ignored:
+true once tkt incidents --ignore lets agents start through it.
 
 The phase names where a ticket stands: queued, starting, planning,
 awaiting_approval, building, ci, waiting_review, reviewing, needs_fix, fixing,

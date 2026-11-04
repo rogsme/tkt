@@ -252,7 +252,7 @@ Then you close a tab by mistake: ACM-131's, with its agent in it. Its tkt auto l
 GitHub's status page reports a partial outage of Actions. tkt watch reads the page every five minutes, and from its next read neither it nor tkt auto starts an agent. The board's top line turns red, and herdr shows `GitHub: incident`:
 
 ```
-! GitHub: Actions partial outage. tkt watch and tkt auto start no agent until it ends.
+! GitHub: Actions partial outage. tkt watch and tkt auto start no agent until it ends, or until /incidents ignore.
 ```
 
 ACM-127's address session pushed at 13:32, and its e2e job dies with the runners. On another day tkt watch would start a `ci` session for it a few minutes later, once the agent had sat idle long enough that nobody still uses its session. Today that session would only spend a round on a service that is down, so it waits. Syncs and removals, which need no agent, go on. tkt auto waits the same way: its loops start, approve and run nothing until the incident ends, so a fix for ACM-121 would wait too, while ACM-131's agent, already at work, goes on.
@@ -267,10 +267,12 @@ A plain shell in another pane shows the same with `tkt ls`:
   ACM-131  building           55m   working  -                -          -               on    wait (agent working)
   ACM-133  awaiting approval  2h    idle     -                -          -               hold  read the plan with tkt show ACM-133, then tkt approve ACM-133
 
-GitHub reports Actions partial outage; tkt watch and tkt auto start no agent until it ends
+GitHub reports Actions partial outage; tkt watch and tkt auto start no agent until it ends, or until tkt incidents --ignore
 ```
 
 NEXT is the step tkt ls suggests, from the same rules tkt auto and tkt watch follow. ACM-131's TIME starts at its return to `building` after the resume. `tkt watch --once --dry-run` prints the step one pass would take for each ticket, and why it takes none: ACM-127's line says `incident`.
+
+The outage is in Actions, and ACM-127 needs Actions, so you let it wait. Had it been a pull request outage on a day full of plans, `/incidents ignore` would have let the loops go on until it ended.
 
 At 14:10 the page says Actions is operational again, and herdr shows `GitHub: resolved`. On its next pass tkt watch starts `ci` for ACM-127 in a fresh session. The ci line tells the agent to rerun a job that failed for infrastructure instead of changing code, so it reruns e2e, which passes.
 

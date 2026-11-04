@@ -148,6 +148,21 @@ export interface Incident {
 	problem: string;
 	url: string;
 	since: string;
+	/** ignored says tkt incidents --ignore lets agents start through it
+	 * until it ends. */
+	ignored?: boolean;
+}
+
+/** IncidentsResult is what tkt incidents prints. */
+export interface IncidentsResult {
+	incidents: Incident[];
+	changed: boolean;
+}
+
+/** incidentText says what an incident holds back: nothing once ignored. */
+export function incidentText(i: Incident): string {
+	if (i.ignored) return `${i.service}: ${i.problem}. Ignored until it ends: tkt watch and tkt auto start agents anyway.`;
+	return `${i.service}: ${i.problem}. tkt watch and tkt auto start no agent until it ends, or until /incidents ignore.`;
 }
 
 export interface LsResult {

@@ -224,6 +224,21 @@ body {
 	color: var(--error);
 }
 
+.banner.warn {
+	color: var(--warning);
+}
+
+.banner.incidents {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.banner.incidents .lines {
+	flex: 1;
+	min-width: 0;
+}
+
 /* Columns: the board, a ticket or view, and the chat. */
 
 .cols {

@@ -1,0 +1,14 @@
+tkt incidents lists what the status pages in config.toml report, as the
+running tkt watch last read them. While a page reports an incident, tkt
+watch and tkt auto set no agent to work: a fix for checks that fail because
+CI is down only spends a round.
+
+Some work never meets the problem, such as a plan while GitHub's pull
+requests are down. tkt incidents --ignore lets tkt watch and tkt auto start
+agents through every incident reported now, until it ends. A loop that
+waits for one goes on at its next look. The next incident holds agents back
+again. tkt incidents --off holds them back again at once.
+
+tkt ls, the board and the web page show an ignored incident, and --json
+gives it ignored: true. Without a running tkt watch, nothing reads the
+pages, and nothing holds agents back.

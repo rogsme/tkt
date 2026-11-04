@@ -1,0 +1,60 @@
+# tkt incidents --ignore lets tkt auto and tkt watch start agents through
+# the incidents a status page reports now, until each ends: the address run
+# that waited for the outage goes on. --off holds agents back again.
+mkdir $HOME/.config/tkt
+expand $WORK/config.toml
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1SHORT"; $H1[0:7]) | gsub("H1"; $H1) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+mkdir $WORK/github/api/v2
+cp $WORK/outage.json $WORK/github/api/v2/summary.json
+exec tkt watch &
+waitfile $REPO/.git/tkt/status
+
+exec tkt incidents --json
+envelope '.result.incidents | map([.service, .problem, .ignored])' '[["GitHub","Actions major outage",null]]'
+exec tkt incidents
+stdout '^GitHub reports Actions major outage; tkt watch and tkt auto start no agent until it ends, or until tkt incidents --ignore$'
+exec tkt auto ACM-1 --once --poll 100ms --json
+envelope '.result.wait' 'incident'
+
+# A dry run changes nothing.
+exec tkt incidents --ignore --dry-run --json
+envelope '.result | [.changed, .dry_run]' '[true,true]'
+! exists $REPO/.git/tkt/status-ignored
+
+resetlog
+exec tkt incidents --ignore --json
+envelope '.result | [.changed, (.incidents | map(.ignored))]' '[true,[true]]'
+stderr 'GitHub: agents start through Actions major outage until it ends'
+exec tkt incidents --ignore --json
+envelope '.result.changed' 'false'
+exec tkt ls --json
+envelope '.result.incidents | map(.ignored)' '[true]'
+exec tkt ls
+stdout '^GitHub reports Actions major outage; ignored until it ends, so tkt watch and tkt auto start agents anyway$'
+exec tkt auto ACM-1 --once --poll 100ms --json
+envelope '.result.did | [.action, .stage]' '["run","address"]'
+logged herdr agent start acm-1 --kind claude
+
+# --off holds agents back again.
+exec tkt incidents --off --json
+envelope '.result | [.changed, (.incidents | map(.ignored))]' '[true,[null]]'
+! exists $REPO/.git/tkt/status-ignored
+exec tkt watch --stop
+
+-- config.toml --
+[status.github]
+page = "file://$WORK/github"
+components = ["Actions"]
+-- outage.json --
+{"page": {"name": "GitHub"}, "status": {"indicator": "major", "description": "Major System Outage"},
+ "components": [{"name": "Actions", "status": "major_outage"}], "incidents": []}
+-- prs.json --
+[{"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+  "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+  "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: FINDINGS** head `H1SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]}]

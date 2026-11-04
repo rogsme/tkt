@@ -668,6 +668,29 @@ func holdCmd(g *globals) *cobra.Command {
 	return cmd
 }
 
+func incidentsCmd(g *globals) *cobra.Command {
+	var o app.IncidentsOpts
+	cmd := &cobra.Command{
+		Use:   "incidents",
+		Short: "List what the status pages report, or let agents start through it",
+		Long:  helpText("incidents"),
+		Example: `  tkt incidents
+  tkt incidents --ignore
+  tkt incidents --off`,
+		SuggestFor: []string{"outage", "status"},
+		Args:       cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			res, err := g.app().Incidents(cmd.Context(), o)
+			return show(g, cmd, res, res == nil, err)
+		},
+	}
+	cmd.Flags().BoolVar(&o.Ignore, "ignore", false, "start agents through the incidents reported now, until each ends")
+	cmd.Flags().BoolVar(&o.Off, "off", false, "hold agents back again for every incident")
+	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
+	cmd.MarkFlagsMutuallyExclusive("ignore", "off")
+	return cmd
+}
+
 func resumeCmd(g *globals) *cobra.Command {
 	var o app.ResumeOpts
 	cmd := &cobra.Command{

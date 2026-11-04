@@ -25,6 +25,7 @@ var resultTypes = map[string]any{
 	"send":       app.SendResult{},
 	"auto":       app.AutoResult{},
 	"hold":       app.HoldResult{},
+	"incidents":  app.IncidentsResult{},
 	"watch":      app.WatchResult{},
 	"show":       app.ShowResult{},
 	"suggest":    app.SuggestResult{},

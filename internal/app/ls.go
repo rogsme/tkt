@@ -263,9 +263,16 @@ func (r *LsResult) Text(w io.Writer) {
 }
 
 // incidentText names what the status pages report.
-func (r *LsResult) incidentText(w io.Writer) {
-	for _, i := range r.Incidents {
-		fmt.Fprintf(w, "%s reports %s; tkt watch and tkt auto start no agent until it ends\n", i.Service, i.Problem)
+func (r *LsResult) incidentText(w io.Writer) { incidentLines(w, r.Incidents) }
+
+// incidentLines names each incident and whether it holds agents back.
+func incidentLines(w io.Writer, incs []Incident) {
+	for _, i := range incs {
+		if i.Ignored {
+			fmt.Fprintf(w, "%s reports %s; ignored until it ends, so tkt watch and tkt auto start agents anyway\n", i.Service, i.Problem)
+			continue
+		}
+		fmt.Fprintf(w, "%s reports %s; tkt watch and tkt auto start no agent until it ends, or until tkt incidents --ignore\n", i.Service, i.Problem)
 	}
 }
 

@@ -9,7 +9,7 @@ import { type Attention, attentionOf, choicesOf, type Choice, unblockedOf } from
 import { statusText } from "../board.ts";
 import { type Item, pageView, slashName, terminalOnly } from "../chat.ts";
 import { type Board, type Command, type Dialog, type Image, Mirror, type Option, type Page, type Query } from "../mirror.ts";
-import { choresText, normalizeId, presetOptions, presetQuestion, type Row, stampText, verifiedAt, versionText } from "../model.ts";
+import { choresText, incidentText, normalizeId, presetOptions, presetQuestion, type Row, stampText, verifiedAt, versionText } from "../model.ts";
 import { historyText, type Mark, marked, statsText, stepsText, tally, withEvidence } from "../report.ts";
 import { cardActs } from "../web/acts.ts";
 import * as answers from "./answers.ts";
@@ -84,6 +84,7 @@ export class Fake {
 		start: (w) => this.start(w),
 		suggest: (w) => this.suggest(w),
 		chores: (w) => this.chores(w),
+		incidents: (w) => this.incidents(w),
 		approve: (w) => this.approve(w),
 		next: (w) => this.next(w),
 		auto: (w) => this.auto(w),
@@ -364,6 +365,19 @@ export class Fake {
 		this.say(`Asked suggest-tickets for ${request} in the suggest tab. Its picks show there and in the web page's Suggest view; start the ones you want.`);
 		await this.wait(6000);
 		s.working = false;
+	}
+
+	/** incidents ignores or holds the incident the toolbar starts, as tkt
+	 * incidents does. */
+	private async incidents(w: string[]): Promise<void> {
+		const how = (w[0] ?? "").toLowerCase();
+		if (how !== "" && how !== "ignore" && how !== "off") return this.mirror.notify("usage: /incidents [ignore | off]", "warning");
+		const incs = this.s.incidents;
+		if (incs.length === 0) return this.say("No status page reports an incident, so nothing holds agents back.");
+		if (how) this.s.incidents = incs.map((i) => ({ ...i, ignored: how === "ignore" }));
+		this.push();
+		const head = how === "ignore" ? "Agents start through these incidents until each ends:" : how === "off" ? "Agents wait for these incidents again:" : "";
+		this.say([head, ...this.s.incidents.map(incidentText)].filter(Boolean).join("\n"));
 	}
 
 	private async chores(w: string[]): Promise<void> {

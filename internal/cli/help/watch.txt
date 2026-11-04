@@ -60,7 +60,8 @@ spend a round on a service that is down. Syncs and removals, which need no
 agent, go on, and tkt auto loops wait the same way (tkt help auto). It notifies when an incident starts and when it ends, and tkt
 ls and the tkt agent's board show it while it lasts. A page it cannot read
 keeps what it said last for fifteen minutes after its last answer, then
-holds nothing back.
+holds nothing back. tkt incidents --ignore lets it start agents through the
+incidents reported now, until each ends (tkt help incidents).
 
 One tkt watch runs per repository. Every tkt command in a herdr pane starts
 it when none runs, in a session of its own, so it outlives the command and the

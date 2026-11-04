@@ -5,7 +5,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Attention, choicesOf } from "./attention.ts";
 import { type Hub, reasonOf } from "./hub.ts";
-import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, confirmedAt, presetOptions, presetQuestion, type PresetsResult, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
+import { type ChoresResult, choresText, type Envelope, type MergeResult, mergeText, confirmedAt, type IncidentsResult, incidentText, presetOptions, presetQuestion, type PresetsResult, stepText, type SuggestResult, type UpdateResult, verifiedAt, type Verification, versionText } from "./model.ts";
 import { fixPrompt, type HistoryResult, historyText, marked, statsText, stepsText, tally, type Mark, type StatsResult, type Waiver, withEvidence } from "./report.ts";
 import { ask, checklist, confirm, editor, input, typed } from "./dialog.ts";
 import { peek, type Step } from "./ui.ts";
@@ -85,6 +85,21 @@ export async function suggest(hub: Hub, request: string, as = ""): Promise<strin
 	if (count === 0) return "Queued: suggest-tickets gets your request in a suggest tab, reading only. Its picks show in that tab and in the web page's Suggest view, not in this chat.";
 	const n = `${count} ticket${count === 1 ? "" : "s"}`;
 	return `Queued: suggest-tickets picks ${n} in a suggest tab, reading only. Its picks show in that tab and in the web page's Suggest view, not in this chat.`;
+}
+
+/** incidents lists what the status pages report. ignore lets tkt watch
+ * and tkt auto start agents through the incidents reported now, until each
+ * ends; off holds them back again. */
+export async function incidents(hub: Hub, how: "" | "ignore" | "off" = ""): Promise<string> {
+	const env = await hub.tkt<IncidentsResult>(["incidents", ...(how ? [`--${how}`] : [])]);
+	if (!env.ok || !env.result) return failure("incidents", env);
+	const r = env.result;
+	if (how) void hub.refresh();
+	if (r.incidents.length === 0) return "No status page reports an incident, so nothing holds agents back.";
+	const lines = r.incidents.map((i) => incidentText(i));
+	if (how === "ignore") lines.unshift(r.changed ? "Agents start through these incidents until each ends:" : "Already ignored:");
+	if (how === "off") lines.unshift(r.changed ? "Agents wait for these incidents again:" : "Nothing was ignored:");
+	return lines.join("\n");
 }
 
 /** chores lists the repository's chores with their next run. */
@@ -302,7 +317,7 @@ export async function next(hub: Hub, id: string): Promise<string> {
 		hub.add({ ticket: id, label: r.did.stage || r.did.action, args: ["auto", id, "--once"] });
 		return `Queued: ${id} ${stepText(r.did)}.`;
 	}
-	if (r.wait === "incident") return `${id} waits: ${r.hold || "a status page reports an incident"}, and tkt auto sets no agent to work until it ends. tkt run ${id} STAGE starts one anyway.`;
+	if (r.wait === "incident") return `${id} waits: ${r.hold || "a status page reports an incident"}, and tkt auto sets no agent to work until it ends. /incidents ignore lets every loop go on; tkt run ${id} STAGE starts one stage anyway.`;
 	if (r.wait === "awaiting_bot") return `${id} waits for the review bot in CI; ${hub.row(id)?.next.text ?? "tkt ls shows it"}.`;
 	if (r.wait) return `${id} has nothing to do yet: ${r.next.text}.`;
 	switch (r.stop) {

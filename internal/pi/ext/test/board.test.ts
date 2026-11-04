@@ -146,9 +146,13 @@ test("a chore's run shows as one, and its pull request is yours to merge", () =>
 test("an incident tops the board", () => {
 	const incidents = [{ page: "github", service: "GitHub", problem: "Actions partial outage", url: "https://www.githubstatus.com", since: "" }];
 	const lines = boardLines({ rows: [row()], jobs: new Map(), items: [], now, tick: 0, repo: "app", incidents }, 200);
-	assert.equal(lines[0].text, "! GitHub: Actions partial outage. tkt watch and tkt auto start no agent until it ends.");
+	assert.equal(lines[0].text, "! GitHub: Actions partial outage. tkt watch and tkt auto start no agent until it ends, or until /incidents ignore.");
 	assert.equal(lines[0].tone, "error");
 	assert.match(lines[1].text, /^TICKET/);
+	// An ignored incident stays on the board, but holds nothing back.
+	const ignored = boardLines({ rows: [row()], jobs: new Map(), items: [], now, tick: 0, repo: "app", incidents: [{ ...incidents[0], ignored: true }] }, 200);
+	assert.equal(ignored[0].text, "! GitHub: Actions partial outage. Ignored until it ends: tkt watch and tkt auto start agents anyway.");
+	assert.equal(ignored[0].tone, "warning");
 });
 
 test("a long run id stays whole for the model", () => {
