@@ -6,10 +6,10 @@
 // through the chat, as if you typed it in the terminal.
 
 import type { Dialog, Theme, ToPage } from "../mirror.ts";
-import { type Incident, typedMatches } from "../model.ts";
+import { type Incident, incidentText, typedMatches } from "../model.ts";
 import { type Mark, tally } from "../report.ts";
 import { hashOf, type Nav, navOf, type Tab } from "./acts.ts";
-import type { Go } from "./bits.ts";
+import { type Go, RunButton } from "./bits.ts";
 import { Left } from "./left.ts";
 import { md, mdStep } from "./md.ts";
 import { dropAll, type Send, settle } from "./query.ts";
@@ -68,7 +68,7 @@ function App() {
 	return html`<div class="app">
 		<${Top} s=${s} g=${g} dispatch=${dispatch} chat=${chat} setChat=${setChat} />
 		<${Banner} link=${s.link} />
-		<${Incidents} list=${s.board?.incidents ?? []} />
+		<${Incidents} list=${s.board?.incidents ?? []} g=${g} />
 		<div class=${`cols${chat ? "" : " no-chat"}`}>
 			<aside class="left"><${Left} board=${s.board} nav=${nav} g=${g} now=${now} /></aside>
 			<main class="center"><${Center} s=${s} nav=${nav} g=${g} now=${now} asked=${asked} /></main>
@@ -254,13 +254,19 @@ function Banner({ link }: { link: State["link"] }) {
 }
 
 /** Incidents is what the status pages report, which holds tkt watch's
- * agent runs back until it ends. */
-function Incidents({ list }: { list: Incident[] }) {
+ * agent runs back until it ends, or until you ignore it. Ignoring covers
+ * every incident reported now, as tkt incidents --ignore does, so the
+ * banner has one button for all of them. */
+function Incidents({ list, g }: { list: Incident[]; g: Go }) {
 	if (list.length === 0) return null;
-	return html`<div class="banner bad">
-		${list.map(
-			(i) => html`<div>${i.service}: ${i.problem}. tkt watch and tkt auto start no agent until it ends. ${i.url && html`<a href=${i.url} target="_blank" rel="noopener noreferrer">${i.page}</a>`}</div>`,
-		)}
+	const held = list.some((i) => !i.ignored);
+	return html`<div class=${held ? "banner bad incidents" : "banner warn incidents"}>
+		<div class="lines">
+			${list.map((i) => html`<div>${incidentText(i)} ${i.url && html`<a href=${i.url} target="_blank" rel="noopener noreferrer">${i.page}</a>`}</div>`)}
+		</div>
+		${held
+			? html`<${RunButton} g=${g} cmd="/incidents ignore" cls="btn small" title="tkt watch and tkt auto start agents through these incidents until each ends">Start agents anyway<//>`
+			: html`<${RunButton} g=${g} cmd="/incidents off" cls="btn small quiet" title="tkt watch and tkt auto hold agents back again until these incidents end">Hold again<//>`}
 	</div>`;
 }
 

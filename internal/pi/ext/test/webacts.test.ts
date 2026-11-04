@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { attentionOf, unblockedOf } from "../attention.ts";
-import { cardActs, hashOf, navOf, sendLine, startLine, suggestLine, ticketActs } from "../web/acts.ts";
+import { anyModel, cardActs, hashOf, navOf, sendLine, startLine, suggestLine, ticketActs } from "../web/acts.ts";
 import { row } from "./fixtures.ts";
 
 test("each answer /inbox offers is a button that sends the slash command you could type", () => {
@@ -80,6 +80,9 @@ test("the forms build the line you could type", () => {
 	assert.equal(suggestLine("", ""), "/suggest 3");
 	assert.equal(suggestLine("  ", "opencode"), "/suggest 3 as opencode");
 	assert.equal(suggestLine(" five  tickets\ttagged feedback ", "sol"), "/suggest five tickets tagged feedback as sol");
+	assert.equal(suggestLine("", anyModel), "/suggest 3 tickets for any model, with no cap on heavy tickets");
+	assert.equal(suggestLine(" 5 ", anyModel), "/suggest 5 tickets for any model, with no cap on heavy tickets");
+	assert.equal(suggestLine("five tickets tagged feedback", anyModel), "/suggest five tickets tagged feedback, for any model, with no cap on heavy tickets");
 	assert.equal(sendLine("ACM-12", "  keep the old endpoint\nfor now "), "/send ACM-12 keep the old endpoint\nfor now");
 	assert.equal(sendLine("ACM-12", "  "), "");
 });

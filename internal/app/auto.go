@@ -74,7 +74,7 @@ func (r *AutoResult) Text(w io.Writer) {
 	case r.Did != nil:
 		fmt.Fprintf(w, "%s  %s\n", r.Ticket, stepText(*r.Did))
 	case r.Wait == WaitIncident:
-		fmt.Fprintf(w, "%s  waiting: %s; tkt auto sets no agent to work until it ends\n", r.Ticket, r.Hold)
+		fmt.Fprintf(w, "%s  waiting: %s; tkt auto sets no agent to work until it ends, or until tkt incidents --ignore\n", r.Ticket, r.Hold)
 	case r.Wait != "":
 		fmt.Fprintf(w, "%s  waiting: %s\n", r.Ticket, r.Next.Text)
 	default:

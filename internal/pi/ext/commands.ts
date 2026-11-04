@@ -88,6 +88,19 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 		},
 	});
 
+	pi.registerCommand("incidents", {
+		description: "List what the status pages report; /incidents ignore starts agents through it until it ends, /incidents off holds them back again",
+		getArgumentCompletions: (prefix: string): AutocompleteItem[] | null => {
+			const items = ["ignore", "off"].filter((w) => w.startsWith(prefix.trim())).map((w) => ({ value: w, label: w }));
+			return items.length > 0 ? items : null;
+		},
+		handler: async (args) => {
+			const how = args.trim().toLowerCase();
+			if (how !== "" && how !== "ignore" && how !== "off") return say("usage: /incidents [ignore | off]");
+			say(await act.incidents(hub, how as "" | "ignore" | "off"));
+		},
+	});
+
 	pi.registerCommand("chores", {
 		description: "List the repository's chores with their next run; /chores run NAME starts a run now",
 		handler: async (args, ctx) => {

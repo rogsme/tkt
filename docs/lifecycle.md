@@ -343,7 +343,7 @@ Status: DONE
 | verify-pr's `Verification: FAILED` | Runs `tkt run ACM-123 address`, a fix round. |
 | Bot `CLEAR`, or `Verdict: READY_FOR_HUMAN` at the head, and verify-pr passed every step or could not run some, or agent verification is off | Stops: the ticket is yours to confirm and merge. |
 | No bot review after `[review] bot_wait` (15 minutes) | Pauses for you, and with `CI review` on it never offers review-pr instead. With no bot (`bot_wait = "0s"`) it runs `tkt run ACM-123 review` instead. |
-| A status page reports an incident (see [tkt watch keeps the tickets moving](#tkt-watch-keeps-the-tickets-moving)) | Waits: it starts, approves and runs nothing, and spends no round, until the incident ends. A sync goes on. |
+| A status page reports an incident (see [tkt watch keeps the tickets moving](#tkt-watch-keeps-the-tickets-moving)) | Waits: it starts, approves and runs nothing, and spends no round, until the incident ends or you run `tkt incidents --ignore`. A sync goes on. |
 
 Where a person decides, it pauses rather than ends: when the agent asks a question or ends with `Status: BLOCKED`, when no agent runs, after `[auto] max_rounds` fix runs (5), and when a step would repeat on the same head with nothing changed. It notifies once, shows the ticket as paused, and goes on by itself when the ticket moves, such as after you answer the agent in its tab. While it drives a ticket, the tab reads `ACM-123 (claude, auto)`. After `tkt update`, a loop restarts on the new tkt at its next look, once its agent stops working, and keeps the pause it notified about. `tkt hold ACM-123` pauses the loop until `tkt hold ACM-123 --off`, without a notification, for a ticket you want to park or drive by hand. At most `[auto] max_parallel` tkt auto agents (3) work at once in a repository; a loop gives up its slot while it waits for CI, the bot or you, and the others wait, queued.
 
@@ -429,6 +429,8 @@ While a status page that `config.toml` or the repository's `.tkt` files name rep
 page = "https://www.githubstatus.com"
 components = ["Actions", "Pull Requests", "Git Operations"]
 ```
+
+Some work never meets the problem, such as a plan while GitHub's pull requests are down. `tkt incidents --ignore`, `/incidents ignore` in the tkt agent, or the web page's Start agents anyway button lets `tkt watch` and `tkt auto` start agents through every incident reported now, until it ends. A waiting loop goes on at its next look. The next incident holds agents back again, and `tkt incidents --off` holds them back at once. The board keeps an ignored incident at its top, in yellow.
 
 You rarely start it yourself: every tkt command in a herdr pane starts one when none runs for the repository, in a session of its own, so it outlives the command and the pane. `[watch] autostart = false`, or `TKT_WATCH=off`, turns that off; `tkt watch --stop` stops it, after the step it is taking; `tkt watch --once --dry-run` says what one pass would do to each ticket. Outside a herdr pane, it finds the workspace whose panes work in the repository, or opens one there before its first step when none has a pane; while herdr is down it waits. `tkt hold ACM-123` keeps it, and `tkt auto`, away from a ticket.
 

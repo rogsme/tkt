@@ -3,7 +3,7 @@
 // it and draws the frame.
 
 import type { Attention, AttentionKind } from "./attention.ts";
-import { type Incident, since, type Row } from "./model.ts";
+import { type Incident, incidentText, since, type Row } from "./model.ts";
 
 export type Tone = "text" | "accent" | "warning" | "muted" | "success" | "error";
 
@@ -121,7 +121,7 @@ function widths(rows: Row[], width: number): number[] {
  * then what each of those needs. */
 export function boardLines(s: BoardState, width: number): Line[] {
 	const lines: Line[] = [];
-	for (const i of s.incidents ?? []) lines.push({ text: fit(`! ${i.service}: ${i.problem}. tkt watch and tkt auto start no agent until it ends.`, width), tone: "error" });
+	for (const i of s.incidents ?? []) lines.push({ text: fit(`! ${incidentText(i)}`, width), tone: i.ignored ? "warning" : "error" });
 	const needs = new Set(s.items.map((a) => a.ticket));
 	const rows = [...s.rows].sort((a, b) => Number(needs.has(b.ticket)) - Number(needs.has(a.ticket)) || a.ticket.localeCompare(b.ticket, undefined, { numeric: true }));
 	const w = widths(rows, width);

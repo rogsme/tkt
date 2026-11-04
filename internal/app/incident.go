@@ -2,8 +2,11 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +28,9 @@ type Incident struct {
 	URL     string `json:"url"`
 	Since   string `json:"since"`
 	Seen    string `json:"seen"`
+	// Ignored says a person ran tkt incidents --ignore while it lasts, so it
+	// holds nothing back.
+	Ignored bool `json:"ignored,omitempty"`
 }
 
 // statusEvery is how often tkt watch reads the status pages, which ask to be
@@ -45,13 +51,64 @@ type statusFile struct {
 }
 
 // incidents returns what tkt watch last read from the status pages, while
-// that read is recent and a watch runs.
+// that read is recent and a watch runs, each marked when it is ignored.
 func (c *Ctx) incidents() []Incident {
 	incs := lastIncidents(c.Repo.Common, c.Now())
 	if len(incs) == 0 || !c.watchRunning() {
 		return []Incident{}
 	}
-	return incs
+	return markIgnored(c.Repo.Common, incs)
+}
+
+// ignorePath is the file where tkt incidents --ignore keeps the incidents a
+// person let agents start through.
+func ignorePath(common string) string { return filepath.Join(common, "tkt", "status-ignored") }
+
+// waiver is one ignored incident. It names the incident by its page and the
+// time tkt first read it, which tkt watch keeps while the incident lasts:
+// the waiver ends with the incident, and the next one holds agents again.
+type waiver struct {
+	Page  string `json:"page"`
+	Since string `json:"since"`
+	At    string `json:"at"`
+}
+
+func (v waiver) covers(i Incident) bool { return v.Page == i.Page && v.Since == i.Since }
+
+func readWaivers(common string) []waiver {
+	b, err := os.ReadFile(ignorePath(common))
+	var ws []waiver
+	if err != nil || json.Unmarshal(b, &ws) != nil {
+		return nil
+	}
+	return ws
+}
+
+func writeWaivers(common string, ws []waiver) error {
+	path := ignorePath(common)
+	if len(ws) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	b, _ := json.Marshal(ws)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o644)
+}
+
+// markIgnored returns a copy of incs with each incident a waiver covers
+// marked Ignored.
+func markIgnored(common string, incs []Incident) []Incident {
+	ws := readWaivers(common)
+	out := make([]Incident, len(incs))
+	for k, i := range incs {
+		i.Ignored = slices.ContainsFunc(ws, func(v waiver) bool { return v.covers(i) })
+		out[k] = i
+	}
+	return out
 }
 
 // lastIncidents reads what the status pages reported at tkt watch's last
@@ -68,11 +125,14 @@ func lastIncidents(common string, now time.Time) []Incident {
 	return f.Incidents
 }
 
-// holdText says why tkt watch and tkt auto start no agent, or "".
+// holdText says why tkt watch and tkt auto start no agent, or "". An
+// ignored incident holds nothing back.
 func holdText(incs []Incident) string {
 	var parts []string
 	for _, i := range incs {
-		parts = append(parts, i.Service+": "+i.Problem)
+		if !i.Ignored {
+			parts = append(parts, i.Service+": "+i.Problem)
+		}
 	}
 	return strings.Join(parts, "; ")
 }
@@ -149,8 +209,8 @@ func (w *watcher) readStatus(c *Ctx) {
 	}
 	for _, i := range incs {
 		if _, ok := prev[i.Page]; !ok {
-			c.UI.Warn("%s reports %s; tkt watch and tkt auto start no agent until it ends", i.Service, i.Problem)
-			c.notify(i.Service, notice{"incident", i.Problem + "; tkt watch and tkt auto start no agent until it ends", "request"})
+			c.UI.Warn("%s reports %s; tkt watch and tkt auto start no agent until it ends, or until tkt incidents --ignore", i.Service, i.Problem)
+			c.notify(i.Service, notice{"incident", i.Problem + "; tkt watch and tkt auto start no agent until it ends, or until tkt incidents --ignore", "request"})
 		}
 		delete(prev, i.Page)
 	}
@@ -167,6 +227,7 @@ func (w *watcher) readStatus(c *Ctx) {
 	if c.Dry {
 		return
 	}
+	w.pruneWaivers(c, incs)
 	path := statusPath(c.Repo.Common)
 	b, _ := json.Marshal(statusFile{Checked: now.UTC().Format(history.TimeFormat), Incidents: append([]Incident{}, incs...)})
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil || os.WriteFile(path, b, 0o644) != nil {
@@ -184,4 +245,19 @@ func (w *watcher) warnOnce(c *Ctx, key, format string, args ...any) {
 	}
 	w.warned[key] = true
 	c.UI.Warn(format, args...)
+}
+
+// pruneWaivers drops the waivers of incidents the pages no longer report,
+// so the file holds only the ones that still last.
+func (w *watcher) pruneWaivers(c *Ctx, incs []Incident) {
+	ws := readWaivers(c.Repo.Common)
+	kept := slices.DeleteFunc(slices.Clone(ws), func(v waiver) bool {
+		return !slices.ContainsFunc(incs, v.covers)
+	})
+	if len(kept) == len(ws) {
+		return
+	}
+	if err := writeWaivers(c.Repo.Common, kept); err != nil {
+		w.warnOnce(c, "write "+ignorePath(c.Repo.Common), "cannot write %s: %v", ignorePath(c.Repo.Common), err)
+	}
 }

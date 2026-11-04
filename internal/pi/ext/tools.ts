@@ -139,6 +139,19 @@ export function registerTools(pi: ExtensionAPI, hub: Hub): void {
 	});
 
 	pi.registerTool({
+		name: "tkt_incidents",
+		label: "tkt incidents",
+		description:
+			"List what the status pages report. While one reports an incident, tkt watch and tkt auto start no agent. With how 'ignore', they start agents through every incident reported now, until each ends, for when the user wants tickets to go on anyway, since the problem may never reach them; the next incident holds agents back again. With how 'off', they hold agents back again. Ignore only when the user asks; the tool asks the user to confirm.",
+		parameters: Type.Object({ how: Type.Optional(StringEnum(["ignore", "off"] as const, { description: "ignore or off, only when the user asks; leave it out to list" })) }),
+		executionMode: "sequential",
+		async execute(_id, p, _signal, _update, ctx) {
+			if (p.how === "ignore" && (!ctx.hasUI || !(await confirm(ctx, "Start agents through the incidents reported now?", "tkt watch and tkt auto set agents to work until each incident ends.")))) return text("The user did not confirm; agents still wait for the incidents.");
+			return text(await act.incidents(hub, p.how ?? ""));
+		},
+	});
+
+	pi.registerTool({
 		name: "tkt_chores",
 		label: "tkt chores",
 		description:
