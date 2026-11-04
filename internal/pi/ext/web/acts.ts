@@ -114,11 +114,22 @@ export function startLine(ids: string, mode: Mode, as: string): string {
 	return ["/start", list, mode === "auto" ? "" : mode, as.trim() ? `as ${as.trim()}` : ""].filter(Boolean).join(" ");
 }
 
+/** anyModel is the Suggest form's preset choice for a batch on any model.
+ * The star keeps it apart from a preset named any. */
+export const anyModel = "*any";
+
+/** anyModelAsk is what anyModel adds to the request. With model routing on,
+ * suggest-tickets takes one heavy ticket a batch and asks before it takes
+ * more; the request lifts that, as a constraint in your words would. */
+const anyModelAsk = "for any model, with no cap on heavy tickets";
+
 /** suggestLine is the /suggest line for what you asked for. An empty
  * request asks for 3 tickets of any kind, since /suggest alone would have
- * the chat ask what to look for. */
+ * the chat ask what to look for. anyModel runs on the [suggest] preset and
+ * asks for tickets on any model. */
 export function suggestLine(request: string, as: string): string {
 	const r = request.replace(/\s+/g, " ").trim() || "3";
+	if (as === anyModel) return `/suggest ${/^\d+$/.test(r) ? `${r} tickets` : `${r},`} ${anyModelAsk}`;
 	return ["/suggest", r, as.trim() ? `as ${as.trim()}` : ""].filter(Boolean).join(" ");
 }
 

@@ -7,7 +7,7 @@ import { boardColumns } from "../board.ts";
 import type { Board } from "../mirror.ts";
 import { ago, type ChoresResult, type PresetsResult, since, type SuggestResult } from "../model.ts";
 import { local, type StatsResult } from "../report.ts";
-import { type Mode, startLine, suggestLine } from "./acts.ts";
+import { anyModel, type Mode, startLine, suggestLine } from "./acts.ts";
 import { Failure, type Go, Loading, Md, RunButton } from "./bits.ts";
 import { useQuery } from "./query.ts";
 import { html, useState } from "./vendor/preact.js";
@@ -49,14 +49,17 @@ function Line({ line, g, label, onSent, danger }: { line: string; g: Go; label: 
 }
 
 /** PresetSelect picks one of the repository's presets. The first choice,
- * None, sends no preset; none(r) says what then runs. A form works without
- * the list, so a failed read leaves None and says why. A page opened on a
- * form reads before its link opens, so the link is a key: it reads again. */
-function PresetSelect({ g, value, onChange, none }: { g: Go; value: string; onChange: (name: string) => void; none: (r: PresetsResult) => string }) {
+ * None, sends no preset; none(r) says what then runs. extra is a choice
+ * between None and the presets, such as the Suggest form's any model. A
+ * form works without the list, so a failed read leaves None and says why. A
+ * page opened on a form reads before its link opens, so the link is a key:
+ * it reads again. */
+function PresetSelect({ g, value, onChange, none, extra }: { g: Go; value: string; onChange: (name: string) => void; none: (r: PresetsResult) => string; extra?: { value: string; label: (r?: PresetsResult) => string } }) {
 	const q = useQuery<PresetsResult>(g.send, "presets", "", [g.link]);
 	const r = q.env?.ok ? q.env.result : undefined;
 	return html`<select value=${value} onChange=${(e: Event) => onChange((e.target as HTMLSelectElement).value)}>
 			<option value="">${r ? `None (${none(r)})` : "None"}</option>
+			${extra && html`<option value=${extra.value}>${extra.label(r)}</option>`}
 			${r?.presets.map((p) => html`<option key=${p.name} value=${p.name}>${p.name} (${p.model || p.harness})</option>`)}
 		</select>
 		${g.link === "open" && q.env && !q.env.ok && html`<span class="muted small">Could not read the presets: ${q.env.error?.message}</span>`}`;
@@ -92,11 +95,12 @@ export function SuggestView({ g, now }: { g: Go; now: number }) {
 	const [request, setRequest] = useState("");
 	const [as, setAs] = useState("");
 	const q = useQuery<SuggestResult>(g.send, "suggest", "", [], suggestPollMs);
+	const runner = (r: PresetsResult) => (r.suggest ? `the [suggest] preset, ${r.suggest}` : `the default, ${r.presets[0]?.name}`);
 	return html`<div class="view form">
 		<h2>Suggest tickets</h2>
 		<p class="muted">suggest-tickets reads the tracker in a suggest tab, and picks tickets that can run side by side. It changes nothing: read its picks below, then start the ones you want.</p>
 		<label>What to look for <input value=${request} placeholder="empty for 3 tickets of any kind; or a number, or what you want, such as five tickets tagged feedback" onInput=${(e: InputEvent) => setRequest((e.target as HTMLInputElement).value)} /></label>
-		<label>Run it on <${PresetSelect} g=${g} value=${as} onChange=${setAs} none=${(r: PresetsResult) => (r.suggest ? `the [suggest] preset, ${r.suggest}` : `the default, ${r.presets[0]?.name}`)} /><span class="muted small">The preset whose agent and model run suggest-tickets. It does not filter the tickets: say that in what to look for.</span></label>
+		<label>Run it on <${PresetSelect} g=${g} value=${as} onChange=${setAs} none=${runner} extra=${{ value: anyModel, label: (r?: PresetsResult) => (r ? `Any model (on ${runner(r)}, no cap on heavy tickets)` : "Any model") }} /><span class="muted small">The preset whose agent and model run suggest-tickets. It does not filter the tickets: say that in what to look for. Any model runs on the same preset as None, and lets the batch take tickets for any model, with no cap on heavy ones, so suggest-tickets does not ask.</span></label>
 		<${Line} line=${suggestLine(request, as)} g=${g} label="Suggest" onSent=${() => setRequest("")} />
 		<h3>Last run</h3>
 		${!q.env ? html`<${Loading} />` : !q.env.ok || !q.env.result ? q.env.error?.code === "agent_missing" ? html`<p class="muted">${q.env.error.message}.</p>` : html`<${Failure} env=${q.env} />` : html`<${SuggestAnswer} r=${q.env.result} now=${now} loading=${q.loading} reload=${q.reload} />`}
