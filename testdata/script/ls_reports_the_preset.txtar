@@ -1,0 +1,18 @@
+# tkt ls names the preset each ticket's agent runs on, which the web page's
+# ticket list shows as a tag.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-12 --as cheap
+exec tkt start ACM-13
+
+exec tkt ls --json
+envelope '[.result.rows[] | [.ticket, .preset]]' '[["ACM-12","cheap"],["ACM-13","claude"]]'
+
+-- config.toml --
+[presets.claude]
+harness = "claude"
+model = "opus"
+
+[presets.cheap]
+harness = "claude"
+model = "haiku"

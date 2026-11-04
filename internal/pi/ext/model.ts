@@ -53,6 +53,8 @@ export interface Row {
 	next: Next;
 	stage: string;
 	launch: string;
+	/** preset is the preset the ticket's agent runs on, "" while queued. */
+	preset?: string;
 	/** paused says why a running tkt auto loop waits for you, why names
 	 * the rule behind it, and note what failed, such as a sync's error; all
 	 * are empty while the loop drives the ticket. */

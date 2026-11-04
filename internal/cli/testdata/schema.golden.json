@@ -1507,6 +1507,7 @@
               },
               "nullable": true
             },
+            "preset": "string",
             "review": {
               "fields": {
                 "at_head": "boolean",

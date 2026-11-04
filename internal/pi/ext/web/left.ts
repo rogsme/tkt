@@ -92,6 +92,7 @@ function TicketRow({ r, on, need, job, g, now }: { r: Row; on: boolean; need: bo
 			${r.pr && html`<span>#${r.pr.number}</span>`}
 			<span title="what the branch changes">${diffText(r)}</span>
 			<span title="since tkt start">${since(r.started, now) ? `${since(r.started, now)} old` : ""}</span>
+			${r.preset && html`<span class="tag preset" title="the preset its agent runs on">${r.preset}</span>`}
 			${flags.map((f) => html`<span class="tag">${f}</span>`)}
 			${job && html`<span class="tag job">${job}...</span>`}
 		</div>

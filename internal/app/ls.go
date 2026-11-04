@@ -190,8 +190,11 @@ type Row struct {
 	Next      Next   `json:"next"`
 	// Stage is the stage tkt last gave the ticket's agent, and Launch how
 	// its launch went (the state file's status).
-	Stage  string   `json:"stage"`
-	Launch string   `json:"launch"`
+	Stage  string `json:"stage"`
+	Launch string `json:"launch"`
+	// Preset is the preset the ticket's agent runs on, from its state
+	// file, or "" for a ticket still queued.
+	Preset string   `json:"preset"`
 	Auto   *RowAuto `json:"auto"`
 	// Hold says the ticket is on hold: tkt watch and tkt auto leave it
 	// alone (tkt hold).
@@ -693,7 +696,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
-	row.Hold, row.Chore = st["hold"] != "", or(t.Chore, st["chore"])
+	row.Hold, row.Chore, row.Preset = st["hold"] != "", or(t.Chore, st["chore"]), st["preset"]
 	row.CIReview = c.LC.On(contract.FeatureCIReview)
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan || st["auto"] == autoYolo, Yolo: st["yolo"] != "", Rounds: atoi(st["rounds"]),
 		Stop: st["auto_stop"], Waiting: st["auto_wait"], Running: c.autoRunning(t.ID), Paused: st["auto_pause"], Why: st["auto_why"], Note: st["auto_note"]}
