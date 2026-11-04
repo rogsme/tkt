@@ -34,6 +34,7 @@ func TestAutoStepTable(t *testing.T) {
 		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "AWAITING_APPROVAL"}, AutoPolicy{ApprovePlan: true}, autoMemory{Last: "approve:@"}, pause(StopNoProgress)},
 		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "BLOCKED"}, AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		{Facts{ID: "ACM-1", Agent: "idle"}, AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
+		{Facts{ID: "ACM-1", Agent: "idle", LastStatus: "READY_FOR_REVIEW"}, AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		{Facts{ID: "ACM-1"}, AutoPolicy{}, autoMemory{}, pause(StopAgentMissing)},
 		{Facts{ID: "ACM-1", Agent: "idle", Launch: "not_ready"}, AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
 		{Facts{ID: "ACM-1", Launch: "launching"}, AutoPolicy{}, autoMemory{}, autoAct{Kind: actPoll}},

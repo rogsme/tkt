@@ -21,6 +21,9 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{Agent: "idle", LastStatus: "BLOCKED"}, "read the agent's reason in its tab", "human", ReasonStatusBlocked},
 		{Facts{Agent: "idle", LastStatus: "SETUP_REQUIRED"}, "read the agent's reason in its tab", "human", ReasonStatusBlocked},
 		{Facts{Agent: "idle"}, "check the agent in its tab", "human", ReasonCheckAgent},
+		// A ticket whose approved plan changes no code ends ready for review
+		// with nothing to review.
+		{Facts{Agent: "idle", LastStatus: "READY_FOR_REVIEW"}, "the agent says it is ready for review, but the branch has no pull request; read its report with tkt show ACM-1", "human", ReasonReadyNoPR},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED"}, "read the agent's reason in its tab", "human", ReasonStatusBlocked},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "AWAITING_POST_APPROVAL"}, "approve or discard the review draft in its tab", "human", ReasonReviewAwaitsApproval},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending", Verdict: "FINDINGS", AtHead: true, Mergeable: "MERGEABLE"}, "wait for CI", "wait", ReasonCIPending},
@@ -153,7 +156,8 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{Chore: "deps", Launch: "prompt_uncertain"}, "tkt resume ACM-1", "command", ReasonNoAgent},
 		{Facts{Chore: "deps", Launch: "submitted"}, "tkt resume ACM-1", "command", ReasonNoAgent},
 		{Facts{Chore: "deps", PRState: "CLOSED", Agent: "idle"}, "tkt done ACM-1", "command", ReasonClosed},
-		{Facts{Chore: "deps", Agent: "idle", LastStatus: "READY_FOR_REVIEW"}, "check the agent in its tab", "human", ReasonCheckAgent},
+		{Facts{Chore: "deps", Agent: "idle", LastStatus: "READY_FOR_REVIEW"}, "the agent says it is ready for review, but the branch has no pull request; read its report with tkt show ACM-1", "human", ReasonReadyNoPR},
+		{Facts{Chore: "deps", Agent: "idle", LastStatus: "IN_PROGRESS"}, "check the agent in its tab", "human", ReasonCheckAgent},
 		{Facts{Chore: "deps", PRState: "MERGED", Agent: "idle"}, "tkt done ACM-1", "command", ReasonMerged},
 		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "STALE_BASE", AtHead: true}, "tkt sync ACM-1", "command", ReasonBaseMoved},
 		{Facts{Chore: "deps", PRState: "OPEN", Agent: "idle", Checks: "fail"}, "tkt run ACM-1 ci", "command", ReasonChecksFail},
@@ -209,6 +213,7 @@ func TestPhaseOf(t *testing.T) {
 		{Facts{Agent: "blocked"}, PhaseNeedsYou},
 		{Facts{Agent: "idle", LastStatus: "AWAITING_APPROVAL"}, PhaseAwaitingApproval},
 		{Facts{Agent: "idle"}, PhaseNeedsYou},
+		{Facts{Agent: "idle", LastStatus: "READY_FOR_REVIEW"}, PhaseNeedsYou},
 		{Facts{}, PhaseNoAgent},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending"}, PhaseCI},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", BotWait: time.Hour}, PhaseWaitingReview},

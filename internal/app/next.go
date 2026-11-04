@@ -47,6 +47,11 @@ const (
 	ReasonBotSilent      = "bot_silent"
 	ReasonNeedsReview    = "needs_review"
 	ReasonUnknown        = "unknown"
+	// ReasonReadyNoPR is an agent that ended with Status: READY_FOR_REVIEW
+	// on a branch with no pull request, as a ticket whose approved plan
+	// changes no code does: nothing is left to review, so its report is
+	// yours to read.
+	ReasonReadyNoPR = "ready_no_pr"
 	// The reasons verify-pr gives: a clean head waits for it, where
 	// workflow.md turns agent verification on; its report found a step
 	// that fails; or the report holds, every step passed or some it could
@@ -215,6 +220,8 @@ func NextStep(f Facts) Next {
 			return human(ReasonPlanAwaitsApproval, "read the plan with tkt show "+id+", then tkt approve "+id)
 		case f.LastStatus == contract.StatusBlocked, f.LastStatus == contract.StatusSetupRequired:
 			return human(ReasonStatusBlocked, "read the agent's reason in its tab")
+		case f.LastStatus == contract.StatusReadyForReview:
+			return human(ReasonReadyNoPR, "the agent says it is ready for review, but the branch has no pull request; read its report with tkt show "+id)
 		}
 		return human(ReasonCheckAgent, "check the agent in its tab")
 	case f.LastStatus == contract.StatusBlocked, f.LastStatus == contract.StatusSetupRequired:
@@ -404,7 +411,7 @@ func PhaseOf(f Facts, n Next) string {
 			return PhaseBlocked
 		}
 		return PhaseNeedsYou
-	case ReasonAgentBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval, ReasonBotSilent, ReasonChoreFindings, ReasonFixBlocked, ReasonFixStopped:
+	case ReasonAgentBlocked, ReasonCheckAgent, ReasonReadyNoPR, ReasonReviewAwaitsApproval, ReasonBotSilent, ReasonChoreFindings, ReasonFixBlocked, ReasonFixStopped:
 		return PhaseNeedsYou
 	case ReasonNoChanges:
 		return PhaseFinished

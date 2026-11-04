@@ -192,8 +192,10 @@ func pauseText(stop, reason string) string {
 		return "the ticket is on hold; tkt hold --off lets the loop go on"
 	case stop == StopSyncFailed:
 		return "tkt sync cannot merge the base"
+	case reason == ReasonReadyNoPR:
+		return "the agent ended with Status: READY_FOR_REVIEW, but the branch has no pull request; read its report with tkt show"
 	case reason == ReasonCheckAgent:
-		return "the agent stopped without a status line; check its tab"
+		return "the agent stopped with no status line tkt acts on; check its tab"
 	}
 	return "the agent needs you; check its tab"
 }
@@ -307,7 +309,7 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 		return pause(StopNeedsYou)
 	case ReasonSyncFailed:
 		return fix(syncFixStage(f.SyncFail))
-	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReviewAwaitsApproval:
+	case ReasonAgentBlocked, ReasonStatusBlocked, ReasonCheckAgent, ReasonReadyNoPR, ReasonReviewAwaitsApproval:
 		return pause(StopNeedsYou)
 	case ReasonNoAgent:
 		return pause(StopAgentMissing)

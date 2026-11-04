@@ -401,7 +401,8 @@ Every item on the board names its ticket and the command that acts on it, and `/
 | `asks a question` | The agent waits in a dialog. | `/peek ID`, then answer in its tab. |
 | `Status: BLOCKED` | The agent stopped on something a person decides, or on setup it lacks. | `/show ID` for its reason. |
 | `review draft waits` | review-pr waits for you to post or drop its draft. | Answer in its tab. |
-| `stopped, no status` | The agent stopped without a status line. | `/show ID`, then reply to it. |
+| `stopped, no status` | The agent stopped without a status line. With one tkt does not act on there, the item names it, such as `stopped: PLAN_APPROVED`. | `/show ID`, then reply to it. |
+| `no pull request` | The agent ended with `Status: READY_FOR_REVIEW`, but the branch has no pull request, as for a ticket whose approved plan changes no code. | `/show ID` for its report. If the ticket needed no code, move it in the tracker and `/drop ID`; otherwise ask the agent to open the pull request. |
 | `did not start` | The agent did not start cleanly; for a chore's run, its start stopped before the prompt. | `/peek ID` and fix it in its tab; for a run, `/chores run NAME` goes on with it, or `/done ID` drops it. |
 | `no agent` | No agent runs in the worktree. | `Bring the agent back` in `/inbox`, which runs `tkt resume ID`. |
 | `the review has findings to address`, `the pull request waits for review-pr`, `human verification failed`, `verify-pr found a step that fails` | A ticket you drive by hand has a next step. With a merge order, tkt watch has review-pr review the head itself. | `/next ID`, or say "continue ID". On the web page, `Read the findings` opens what the review found. For findings that do not matter, `Accept the review as it is`, or `/accept ID`. |

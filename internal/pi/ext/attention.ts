@@ -283,8 +283,15 @@ function byReason(row: Row, reason: string, item: Make, byAuto = false): Attenti
 			return item("question", "the fix asks", `${id}: the session fixing it in a split asks a question. Answer it in pane ${row.fix?.pane ?? "its split"}.${after}`, byAuto);
 		case "fix_stopped":
 			return item("blocked", `fix: ${row.fix?.last_status || "stopped"}`, `${id}: the session fixing ${row.fix?.stage || "it"} in a split stopped with Status: ${row.fix?.last_status || "BLOCKED"}. Read why in pane ${row.fix?.pane ?? "its split"}.${after}`, byAuto);
+		case "ready_no_pr": {
+			const gone = row.chore ? `If it needed no change, /done ${id}` : `If the ticket needed no code, move it in the tracker and /drop ${id}`;
+			return item("check", "no pull request", `${id}: the agent ended with Status: READY_FOR_REVIEW, but the branch has no pull request, so nothing waits for a review. /show ${id} for its report. ${gone}; if not, ask the agent to open the pull request.${after}`, byAuto, [reply]);
+		}
 		case "verify_incomplete":
 			return item("paused", "verification incomplete", `${id}: verify-pr could not run every step, so the yolo run cannot merge it. /check ${id} shows the rest; run them, and merge it yourself.`, byAuto);
+	}
+	if (row.last_status) {
+		return item("check", `stopped: ${row.last_status}`, `${id}: the agent stopped with Status: ${row.last_status}, which tkt does not act on here. /show ${id} for what it said.${after}`, byAuto, [reply]);
 	}
 	return item("check", "stopped, no status", `${id}: the agent stopped without a status line. /show ${id} for what it said.${after}`, byAuto, [reply]);
 }

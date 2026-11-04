@@ -17,7 +17,8 @@ The next step is the first of these rules that matches:
      an answer: answer it.
   3. No pull request yet: tkt resume ID when no agent runs; otherwise read the
      plan and approve it (tkt show ID, tkt approve ID), read the agent's
-     reason, or check the agent in its tab.
+     reason, read its report when it ended with READY_FOR_REVIEW and opened
+     no pull request (tkt show ID), or check the agent in its tab.
   4. The agent ended with Status: BLOCKED or SETUP_REQUIRED, or a review
      draft waits for your approval: do it in the tab.
   5. The checks are pending: wait for CI.
@@ -59,11 +60,12 @@ review within bot_wait, is yours to merge.
 With --json each row's next step is an object whose argv, when set, is the
 command to run, and whose reason names the rule: merged, closed,
 agent_working, agent_waiting, agent_blocked, no_agent, plan_awaits_approval,
-status_blocked, check_agent, review_awaits_approval, ci_pending, base_moved,
-qa_failed, verify_failed, findings, checks_fail, needs_verify, verified,
-verify_incomplete, autonomous_merge, bot_clear, review_clear, awaiting_bot,
-bot_silent, needs_review, no_changes, chore_findings, chore_ready, or, for a
-ticket whose tkt auto loop waits before the ticket has a worktree,
+status_blocked, check_agent, ready_no_pr, review_awaits_approval, ci_pending,
+base_moved, qa_failed, verify_failed, findings, checks_fail, needs_verify,
+verified, verify_incomplete, autonomous_merge, bot_clear, review_clear,
+awaiting_bot, bot_silent, needs_review, no_changes, chore_findings,
+chore_ready, or, for a ticket whose tkt auto loop waits before the ticket
+has a worktree,
 awaiting_slot while it waits for a slot and incident while a status page's
 incident lasts. Each row also carries chore, the chore's name for a
 chore's run; title, the open pull request's title without the ticket id;

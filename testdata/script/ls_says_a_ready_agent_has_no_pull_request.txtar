@@ -1,0 +1,28 @@
+# An agent can end with Status: READY_FOR_REVIEW on a branch with no pull
+# request, as for a ticket whose approved plan changes no code. Nothing
+# waits for a review, so tkt ls says so, with its own reason, rather than
+# that the agent stopped without a status line.
+exec tkt start ACM-12
+cp $WORK/ready.txt $FAKE_DIR/screen
+exec tkt ls --no-fetch --json
+envelope '.result.rows[0] | [.phase, .last_status, .pr, .next.kind, .next.reason]' '["needs_you","READY_FOR_REVIEW",null,"human","ready_no_pr"]'
+envelope '.result.rows[0].next.text' 'the agent says it is ready for review, but the branch has no pull request; read its report with tkt show ACM-12'
+
+# tkt auto pauses for you, and its notice says what it found.
+exec tkt auto ACM-12 --notify --poll 1s --json &
+waitstate $FAKE_WT_ROOT/ACM-12 auto_pause needs_you
+state $FAKE_WT_ROOT/ACM-12 auto_why ready_no_pr
+logged herdr notification show 'ACM-12: needs you' --body 'the agent ended with Status: READY_FOR_REVIEW, but the branch has no pull request; read its report with tkt show'
+
+# The agent opened the pull request after all, and it merged: the loop ends.
+cp $WORK/merged.json $FAKE_DIR/prs.json
+wait
+stdout '"stop": *"merged"'
+
+-- ready.txt --
+The assessment is in the ticket. No code changed, so no pull request.
+
+Status: READY_FOR_REVIEW
+-- merged.json --
+[{"number": 4, "state": "MERGED", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
+  "createdAt": "2026-01-01T00:00:00Z", "mergedAt": "2026-01-02T00:00:00Z"}]

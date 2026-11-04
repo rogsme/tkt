@@ -17,6 +17,15 @@ test("a plan, a question and a ready ticket need you", () => {
 	assert.match(ready?.text ?? "", /Pull request #4/);
 });
 
+test("an agent that ended with a status tkt does not act on says which", () => {
+	const human = (reason: string) => ({ kind: "human" as const, reason, argv: null, text: "" });
+	const ready = attentionOf(row({ phase: "needs_you", last_status: "READY_FOR_REVIEW", next: human("ready_no_pr") }), false);
+	assert.equal(ready?.title, "no pull request");
+	assert.match(ready?.text ?? "", /Status: READY_FOR_REVIEW, but the branch has no pull request/);
+	assert.equal(attentionOf(row({ phase: "needs_you", last_status: "PLAN_APPROVED", next: human("check_agent") }), false)?.title, "stopped: PLAN_APPROVED");
+	assert.equal(attentionOf(row({ phase: "needs_you", last_status: "", next: human("check_agent") }), false)?.title, "stopped, no status");
+});
+
 test("a blocked ticket says why once, and waits out of what needs you", () => {
 	const a = attentionOf(row({ phase: "blocked", last_status: "BLOCKED", blocked_reason: "Clerk account upgrade pending with James." }), false);
 	assert.equal(a?.kind, "blocked");
@@ -119,6 +128,8 @@ test("each stop offers the answer that moves it on", () => {
 	assert.equal(offered(row({ phase: "needs_you", auto: auto({ paused: "bot_silent" }) }))[0], "run:review");
 	assert.equal(offered(row({ phase: "needs_you", last_status: "BLOCKED", next: human("status_blocked") }))[0], "reply");
 	assert.equal(offered(row({ phase: "needs_you", next: human("check_agent") }))[0], "reply");
+	assert.equal(offered(row({ phase: "needs_you", last_status: "READY_FOR_REVIEW", next: human("ready_no_pr") }))[0], "reply");
+	assert.equal(offered(row({ phase: "needs_you", auto: auto({ paused: "needs_you", why: "ready_no_pr" }) }))[0], "reply");
 	assert.equal(offered(row({ phase: "needs_you", next: human("review_awaits_approval") }))[0], "reply");
 	assert.equal(offered(row({ phase: "needs_you", auto: auto({ paused: "needs_you", why: "status_blocked" }) }))[0], "reply");
 	// An agent that asks in its own dialog only queues what you send.

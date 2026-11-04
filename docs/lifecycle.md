@@ -193,7 +193,7 @@ Read the plan with `tkt show ACM-123`, which prints the agent's last message fro
 6. It waits for CI on the exact head and checks that the head contains the current base.
 7. It moves the ticket to `in-review` and posts a handoff comment on it.
 
-It ends with `Status: READY_FOR_REVIEW`.
+It ends with `Status: READY_FOR_REVIEW`. A plan you approved may change no code, such as an assessment that lives in the ticket; the agent then opens no pull request, and nothing waits for a review. `tkt ls` gives such a ticket the reason `ready_no_pr` and leaves it for you, and so does `tkt auto`: read the report with `tkt show ACM-123`, then move the ticket in the tracker and `tkt drop ACM-123`, or have the agent open the pull request it forgot.
 
 ### 5. review-pr reviews in a fresh session
 
