@@ -162,11 +162,15 @@ type Step struct {
 }
 
 // Procedure is the Human verification section of review-pr's ready summary:
-// the whole section as written, and its numbered steps.
+// the whole section as written, and its numbered steps. Before and After are
+// the rest of the section around the steps, such as the setup and the
+// cleanup, which the checklist shows beside them.
 type Procedure struct {
 	Head        string `json:"head"`
 	SubmittedAt string `json:"submitted_at"`
 	Section     string `json:"section"`
+	Before      string `json:"before"`
+	After       string `json:"after"`
 	Steps       []Step `json:"steps"`
 }
 
@@ -193,11 +197,12 @@ func HumanVerificationAt(p PR, at string) *Procedure {
 		if head == "" || !strings.HasPrefix(at, head) {
 			continue
 		}
-		section, steps, ok := ParseProcedure(r.Body)
+		proc, ok := ParseProcedure(r.Body)
 		if !ok || best != nil && best.SubmittedAt > r.SubmittedAt {
 			continue
 		}
-		best = &Procedure{Head: head, SubmittedAt: r.SubmittedAt, Section: section, Steps: steps}
+		proc.Head, proc.SubmittedAt = head, r.SubmittedAt
+		best = &proc
 	}
 	return best
 }
@@ -206,44 +211,74 @@ func HumanVerificationAt(p PR, at string) *Procedure {
 // writes into the pull request body. It stands in for review-pr's procedure
 // when the review bot cleared the head and no review-pr review exists.
 func BodyVerification(p PR) *Procedure {
-	section, steps, ok := ParseProcedure(p.Body)
+	proc, ok := ParseProcedure(p.Body)
 	if !ok {
 		return nil
 	}
-	return &Procedure{Head: p.HeadRefOid, Section: section, Steps: steps}
+	proc.Head = p.HeadRefOid
+	return &proc
 }
 
 var stepRE = regexp.MustCompile(`^( {0,3})(\d+)[.)][ \t]+(.*)$`)
+
+// notSteps are the labels of the parts of a procedure around its steps. A
+// numbered list under one of them, such as setup commands, is not the steps:
+// verify-pr numbers the steps, and tkt matches its report to them by number.
+var notSteps = []string{"setup", "environment", "prerequisite", "before", "cleanup", "clean up", "clean-up", "teardown", "not covered", "not verifiable"}
+
+// list is one top-level numbered list in a procedure: its steps, the lines
+// it spans, and the label above it.
+type list struct {
+	steps      []Step
+	start, end int
+	label      string
+}
 
 // ParseProcedure reads the Human verification section of a review body: the
 // text up to the next level-two heading, and its numbered steps. A step's
 // indented or wrapped lines belong to it, and so does a numbered list
 // indented to its text, as Markdown nests one; a blank line followed by
 // text that is neither indented nor numbered, such as a cleanup paragraph,
-// ends it.
-func ParseProcedure(body string) (section string, steps []Step, ok bool) {
+// ends the list. The steps are the first list that no setup or cleanup
+// label introduces, or the first list when every one has such a label.
+func ParseProcedure(body string) (Procedure, bool) {
 	loc := contract.HumanVerificationRE.FindStringIndex(body)
 	if loc == nil {
-		return "", nil, false
+		return Procedure{}, false
 	}
-	rest := body[loc[1]:]
 	var lines []string
-	for _, l := range strings.Split(rest, "\n") {
+	for _, l := range strings.Split(body[loc[1]:], "\n") {
 		if strings.HasPrefix(l, "## ") {
 			break
 		}
 		lines = append(lines, strings.TrimRight(l, " \t\r"))
 	}
-	section = strings.TrimSpace(strings.Join(lines, "\n"))
+	var lists []list
+	var cur *list
+	label := ""
 	blank := false
 	// col is where the last step's text starts; a numbered line indented
 	// that far is a list inside it.
 	col := 0
-	for _, l := range lines {
-		if m := stepRE.FindStringSubmatchIndex(l); m != nil && (len(steps) == 0 || m[3]-m[2] < col) {
+	for i, l := range lines {
+		m := stepRE.FindStringSubmatchIndex(l)
+		if cur == nil {
+			if m == nil {
+				// A paragraph's first line is the label of a list under it.
+				if strings.TrimSpace(l) == "" {
+					blank = true
+				} else if blank || label == "" {
+					label, blank = l, false
+				}
+				continue
+			}
+			lists = append(lists, list{start: i, label: label})
+			cur, label = &lists[len(lists)-1], ""
+		}
+		if m != nil && (len(cur.steps) == 0 || m[3]-m[2] < col) {
 			n, _ := strconv.Atoi(l[m[4]:m[5]])
-			steps = append(steps, Step{N: n, Text: strings.TrimSpace(l[m[6]:m[7]])})
-			col, blank = m[6], false
+			cur.steps = append(cur.steps, Step{N: n, Text: strings.TrimSpace(l[m[6]:m[7]])})
+			col, blank, cur.end = m[6], false, i+1
 			continue
 		}
 		if strings.TrimSpace(l) == "" {
@@ -251,17 +286,51 @@ func ParseProcedure(body string) (section string, steps []Step, ok bool) {
 			continue
 		}
 		indented := strings.HasPrefix(l, "  ") || strings.HasPrefix(l, "\t")
-		if len(steps) > 0 && (indented || !blank) && !strings.HasPrefix(l, "#") {
-			s := &steps[len(steps)-1]
+		if (indented || !blank) && !strings.HasPrefix(l, "#") {
+			s := &cur.steps[len(cur.steps)-1]
 			s.Text += "\n" + strings.TrimSpace(l)
-			blank = false
+			blank, cur.end = false, i+1
 			continue
 		}
-		if len(steps) > 0 {
+		// The list ended; this line may label the next one.
+		cur, blank, label = nil, false, l
+	}
+	if len(lists) == 0 {
+		return Procedure{}, false
+	}
+	pick := lists[0]
+	for _, ls := range lists {
+		if !isNotSteps(ls.label) {
+			pick = ls
 			break
 		}
 	}
-	return section, steps, len(steps) > 0
+	join := func(ls []string) string { return strings.TrimSpace(strings.Join(ls, "\n")) }
+	// A bare label such as "**Steps**:" heads the steps; the checklist
+	// shows them, so the text before them leaves it out.
+	before := join(lines[:pick.start])
+	if name, rest, ok := strings.Cut(pick.label, ":"); ok && strings.TrimSpace(rest) == "" && strings.Trim(name, "*_#` \t") != "" && !isNotSteps(pick.label) && strings.HasSuffix(before, pick.label) {
+		before = strings.TrimSpace(strings.TrimSuffix(before, pick.label))
+	}
+	return Procedure{
+		Section: join(lines),
+		Before:  before,
+		After:   join(lines[pick.end:]),
+		Steps:   pick.steps,
+	}, true
+}
+
+// isNotSteps reports whether a list's label, such as "**Environment**: a
+// browser" or "Setup:", names a part of the procedure other than its steps.
+func isNotSteps(label string) bool {
+	name, _, _ := strings.Cut(label, ":")
+	name = strings.ToLower(strings.Trim(name, "*_#` \t"))
+	for _, p := range notSteps {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // Verification is a verify-pr report: the head it ran the human verification

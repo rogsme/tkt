@@ -1578,9 +1578,11 @@
         }
       ],
       "result": {
+        "after": "string",
         "agent_status": "string",
         "at": "string",
         "base": "string",
+        "before": "string",
         "files": [
           {
             "added": "integer",

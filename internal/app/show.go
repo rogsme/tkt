@@ -48,8 +48,11 @@ type ShowResult struct {
 	Screen string `json:"screen"`
 	PR     int    `json:"pr"`
 	// Procedure is the whole Human verification section; Steps are its
-	// numbered steps.
+	// numbered steps, and Before and After the rest of it around them,
+	// such as the setup and the cleanup.
 	Procedure string       `json:"procedure"`
+	Before    string       `json:"before"`
+	After     string       `json:"after"`
 	Steps     []forge.Step `json:"steps"`
 	// Verification is verify-pr's newest report on the pull request, with
 	// each step's result, or null. AtHead says whether it is about the head
@@ -194,7 +197,7 @@ func (c *Ctx) stepsAt(id, head string, res *ShowResult) error {
 			res.Verification = v
 		}
 		if proc := forge.HumanVerificationAt(p, or(head, p.HeadRefOid)); proc != nil {
-			res.Procedure, res.Steps, res.Source = proc.Section, proc.Steps, "review"
+			res.Procedure, res.Before, res.After, res.Steps, res.Source = proc.Section, proc.Before, proc.After, proc.Steps, "review"
 			return nil
 		}
 	}
@@ -212,7 +215,7 @@ func (c *Ctx) stepsAt(id, head string, res *ShowResult) error {
 			continue
 		}
 		if proc := forge.BodyVerification(p); proc != nil {
-			res.Procedure, res.Steps, res.Source = proc.Section, proc.Steps, "pull_request"
+			res.Procedure, res.Before, res.After, res.Steps, res.Source = proc.Section, proc.Before, proc.After, proc.Steps, "pull_request"
 			return nil
 		}
 	}

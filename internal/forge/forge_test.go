@@ -94,7 +94,8 @@ func TestMine(t *testing.T) {
 // nests it, so a procedure's steps never repeat.
 func TestParseProcedureNestsSubSteps(t *testing.T) {
 	body := "## Human verification\n\n1. Open the login page.\n2. Sign in:\n   1. Type the name.\n   2. Press Enter.\n3. Check the banner.\n  4. Two spaces in is still a step.\n"
-	_, steps, ok := ParseProcedure(body)
+	proc, ok := ParseProcedure(body)
+	steps := proc.Steps
 	if !ok || len(steps) != 4 {
 		t.Fatalf("steps: %+v", steps)
 	}
@@ -105,6 +106,45 @@ func TestParseProcedureNestsSubSteps(t *testing.T) {
 	}
 	if steps[1].Text != "Sign in:\n1. Type the name.\n2. Press Enter." {
 		t.Errorf("step 2: %q", steps[1].Text)
+	}
+}
+
+// work-ticket may number its setup too. verify-pr numbers the steps, so a
+// list under a setup label is not them, and the checklist shows it above.
+func TestParseProcedureSkipsNumberedSetup(t *testing.T) {
+	body := "## Human verification\n\n" +
+		"**Environment**: This worktree in a browser.\n" +
+		"1. Run `make dev`.\n" +
+		"2. Steps 2 and 3 also need `make api`.\n\n" +
+		"**Steps**:\n\n" +
+		"1. Open http://localhost:3000/login. Expected: the form shows.\n" +
+		"2. Sign in with a wrong password.\n   Expected: an error shows.\n" +
+		"3. Sign out. Expected: the login page shows.\n\n" +
+		"**Cleanup**: Stop the servers.\n\n## Screenshots\n\nnone\n"
+	proc, ok := ParseProcedure(body)
+	if !ok || len(proc.Steps) != 3 {
+		t.Fatalf("steps: %+v", proc.Steps)
+	}
+	if s := proc.Steps[0]; s.N != 1 || !strings.HasPrefix(s.Text, "Open http://localhost:3000/login") {
+		t.Errorf("step 1: %+v", s)
+	}
+	if s := proc.Steps[1]; s.Text != "Sign in with a wrong password.\nExpected: an error shows." {
+		t.Errorf("step 2: %q", s.Text)
+	}
+	if !strings.HasPrefix(proc.Before, "**Environment**:") || !strings.Contains(proc.Before, "1. Run `make dev`.") || strings.HasSuffix(proc.Before, "**Steps**:") {
+		t.Errorf("before: %q", proc.Before)
+	}
+	if proc.After != "**Cleanup**: Stop the servers." {
+		t.Errorf("after: %q", proc.After)
+	}
+	if !strings.HasPrefix(proc.Section, "**Environment**:") || !strings.HasSuffix(proc.Section, "Stop the servers.") {
+		t.Errorf("section: %q", proc.Section)
+	}
+
+	// A section whose only list sits under a setup label still has steps.
+	proc, ok = ParseProcedure("## Human verification\n\nSetup:\n1. Run `make dev`.\n2. Open the page.\n")
+	if !ok || len(proc.Steps) != 2 || proc.Before != "Setup:" || proc.After != "" {
+		t.Errorf("setup only: %+v", proc)
 	}
 }
 
@@ -161,5 +201,14 @@ func TestLatestConfirmation(t *testing.T) {
 	}
 	if LatestConfirmation(PR{HeadRefOid: head}) != nil {
 		t.Errorf("a pull request without comments has a confirmation")
+	}
+}
+
+// A wrapped setup paragraph labels the list under it by its first line.
+func TestParseProcedureLabelsByTheParagraphsFirstLine(t *testing.T) {
+	body := "## Human verification\n\nSetup: run the servers\nin two terminals.\n1. Run `make api`.\n2. Run `make web`.\n\nThen:\n\n1. Open the page.\n"
+	proc, ok := ParseProcedure(body)
+	if !ok || len(proc.Steps) != 1 || proc.Steps[0].Text != "Open the page." {
+		t.Errorf("steps: %+v", proc.Steps)
 	}
 }

@@ -406,7 +406,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt chores` | Lists the repository's chores, the agent runs you schedule in its `.tkt/tkt.local.toml`, with their next run and the run still open; `--json` adds each chore's prompt. |
 | `tkt chore run NAME` | Starts a run of a chore now: a branch from the fetched base, its worktree and tab, and an agent with the chore's prompt. |
 | `tkt ls [ID...]` | Lists ticket worktrees with their agent, pull request, checks, review and the next step. |
-| `tkt show ID` | Prints the agent's last message, such as the plan; `--screen` its live screen, with `--ansi` in color; `--steps` the human verification steps, with what verify-pr saw on each one; `--diff` what the branch changes since it left its base. |
+| `tkt show ID` | Prints the agent's last message, such as the plan; `--screen` its live screen, with `--ansi` in color; `--steps` the human verification steps, with what verify-pr saw on each one, and the setup and cleanup around them; `--diff` what the branch changes since it left its base. |
 | `tkt wait ID` | Blocks until the ticket's agent needs you or has finished. |
 | `tkt presets` | Lists the presets `--as` takes in this repository, in order, with the default first. |
 | `tkt stats` | Shows how long tickets took from start to merge, and how long they waited for you. |

@@ -321,6 +321,9 @@ func TestReadySummaryCarriesHumanVerification(t *testing.T) {
 	if !strings.HasPrefix(proc.Section, "Setup:") || !strings.Contains(proc.Section, "Not verifiable here") {
 		t.Errorf("section: %q", proc.Section)
 	}
+	if !strings.HasPrefix(proc.Before, "Setup:") || !strings.HasPrefix(proc.After, "Cleanup:") || !strings.Contains(proc.After, "Not verifiable here") {
+		t.Errorf("before %q, after %q", proc.Before, proc.After)
+	}
 	// A verdict on an older head has no steps to run.
 	p.HeadRefOid = strings.Repeat("c3", 20)
 	if proc := forge.HumanVerification(p); proc != nil {

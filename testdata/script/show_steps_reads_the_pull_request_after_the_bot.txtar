@@ -1,13 +1,16 @@
 # When the review bot cleared the head, no review-pr summary holds the human
 # verification steps: tkt show --steps reads the pull request's own Human
 # verification section, which work-ticket writes. Without CI review, the
-# head still waits for review-pr before you run them.
+# head still waits for review-pr before you run them. A numbered setup list
+# under its label is not the steps: it comes back as the text before them.
 mkprompt $WORK/p.txt ACM-12
 stdin $WORK/p.txt
 exec tkt start ACM-12 --prompt -
 env FAKE_GH_PRS=$WORK/prs.json
 exec tkt show ACM-12 --steps --json
 envelope '.result | [.source, .pr, (.steps | length), .steps[1].n]' '["pull_request",4,2,2]'
+envelope '.result.steps[0].text | startswith("Open http://localhost:3000/login")' true
+envelope '.result | [(.before | startswith("**Environment**:")), (.before | contains("1. Run `make dev`.")), .after]' '[true,true,"**Cleanup**: Sign out."]'
 exec tkt ls --no-fetch --json
 envelope '.result.rows[0] | [.phase, .next.reason]' '["waiting_review","needs_review"]'
 
@@ -20,5 +23,5 @@ envelope '.error.code' no_verification_steps
 -- prs.json --
 [{"number": 4, "state": "OPEN", "headRefName": "ACM-12", "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "headRepository": {"nameWithOwner": "acme/app"},
   "mergeable": "MERGEABLE", "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
-  "body": "## Summary\n\nLogin errors.\n\n## Human verification\n\n1. Open http://localhost:3000/login and sign in with a wrong password.\n   Expected: the form shows an error.\n2. Sign out, then press Back.\n   Expected: the login page shows.\n\n## Screenshots\n\nnone\n",
+  "body": "## Summary\n\nLogin errors.\n\n## Human verification\n\n**Environment**: Firefox and a terminal.\n1. Run `make dev`.\n2. Run `make api`.\n3. Seed the database.\n\n**Steps**:\n\n1. Open http://localhost:3000/login and sign in with a wrong password.\n   Expected: the form shows an error.\n2. Sign out, then press Back.\n   Expected: the login page shows.\n\n**Cleanup**: Sign out.\n\n## Screenshots\n\nnone\n",
   "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: CLEAR** · head `aaaaaaa` · reviewed against ACM-12", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}]
