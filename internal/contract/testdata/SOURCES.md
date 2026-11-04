@@ -49,6 +49,8 @@ The built-in `resolve` stage, which `tkt sync` starts when the base merge confli
 
 `forge.LatestVerification` reads verify-pr's report, a comment-only review, from the reviews tkt already lists: its `Verified head:` line, one line per step, and the `Verification:` line, as `verify-pr-report.txt` shows them. The report holds no `Verdict:` line and no `## Human verification` heading, so `forge.LatestVerdict` and the procedure `tkt show --steps` reads never take it for a review summary.
 
+`forge.ParseProcedure` takes the numbered steps of a `## Human verification` section, in a review or in the pull request body. The workflow standard asks for the environment and setup before the numbered actions, and work-ticket sometimes numbers the setup too, so a section can hold more than one numbered list. The steps are the first list that no setup, environment, prerequisites or cleanup label introduces, such as `**Environment**:` or `Setup:`, and the first list when every one has such a label. verify-pr numbers the steps the same way, so its report's step lines match them by number. The rest of the section comes back beside the steps as `before` and `after`.
+
 `lifecycle.Load` reads the rows of workflow.md's feature table that say `on`, as the skills' preflight `on()` helper does (gitlab.com/rogs/skills `5ab313f` and `9a25c66`). A missing file or row means off.
 
 `tkt done` reads finish-ticket's `Unblocked:` line from the last turn of the ticket's session before it closes the tabs: the line `finish-ticket-unblocked.md` shows, right before `Status: DONE`, naming the tickets whose blockers are all done now, or `none`. `contract.UnblockedRE` finds it, and tkt takes only whole ticket ids from it, so `none` names nothing.

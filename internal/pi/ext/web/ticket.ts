@@ -13,7 +13,7 @@ import { cardActs, type Tab, tabs, ticketActs } from "./acts.ts";
 import { look, parseAnsi } from "./ansi.ts";
 import { ActButtons, Failure, type Go, Loading, Md, Phase, Reply, RunButton } from "./bits.ts";
 import { type File, lines, section, total } from "./diff.ts";
-import { mdStep } from "./md.ts";
+import { md, mdStep } from "./md.ts";
 import { useQuery } from "./query.ts";
 import { html, useState } from "./vendor/preact.js";
 
@@ -24,6 +24,8 @@ interface Shown {
 	at: string;
 	screen: string;
 	procedure: string;
+	before?: string;
+	after?: string;
 	steps: { n: number; text: string }[];
 	verification: Verification | null;
 	pr: number;
@@ -185,6 +187,7 @@ function StepsTab({ r, g, asked }: { r: Row; g: Go; asked: number }) {
 			${v && ` verify-pr: ${v.verification} on ${v.head.slice(0, 7)}${v.at_head || v.carried ? "" : ", an older head"}.`}
 		</p>
 		${buttons}
+		${s.before && html`<div class="procedure-notes md" dangerouslySetInnerHTML=${{ __html: md(s.before) }}></div>`}
 		<ol class="steps">
 			${s.steps.map((st, i) => {
 				const res = v?.steps.find((x) => x.n === st.n);
@@ -198,6 +201,7 @@ function StepsTab({ r, g, asked }: { r: Row; g: Go; asked: number }) {
 				</li>`;
 			})}
 		</ol>
+		${s.after && html`<div class="procedure-notes md" dangerouslySetInnerHTML=${{ __html: md(s.after) }}></div>`}
 	</div>`;
 }
 

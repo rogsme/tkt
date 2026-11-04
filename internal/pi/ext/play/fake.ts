@@ -568,7 +568,7 @@ export class Fake {
 		const key = `${id}@${r.pr.head ?? ""}`;
 		const from = r.review?.verdict === "CLEAR" ? "" : `The review bot cleared the head; these steps come from pull request #${r.pr.number}.`;
 		const start = this.marks.get(key) ?? [];
-		const got = (await this.question<Mark[]>({ kind: "checklist", title: `${id}: human verification`, message: from, steps: withEvidence(steps, v), marks: steps.map((_, i) => start[i] ?? "") })) ?? start;
+		const got = (await this.question<Mark[]>({ kind: "checklist", title: `${id}: human verification`, message: from, steps: withEvidence(steps, v), marks: steps.map((_, i) => start[i] ?? ""), ...answers.stepNotes })) ?? start;
 		this.marks.set(key, got);
 		const t = tally(got, steps.length);
 		if (t.fail > 0) {
@@ -743,7 +743,7 @@ export class Fake {
 			}
 			case "checklist": {
 				const v = report("ACM-108", [2]);
-				return tell("Checklist", await this.question({ kind: "checklist", title: "ACM-108: human verification", message: "The review bot cleared the head; these steps come from pull request #45.", steps: withEvidence(answers.stepList(), v), marks: ["pass", "", ""] }));
+				return tell("Checklist", await this.question({ kind: "checklist", title: "ACM-108: human verification", message: "The review bot cleared the head; these steps come from pull request #45.", steps: withEvidence(answers.stepList(), v), marks: ["pass", "", ""], ...answers.stepNotes }));
 			}
 			case "info":
 				return this.mirror.notify("Queued: tkt sync for ACM-105. It merges the base itself when the merge is clean, and hands a conflict or any other failure to a fresh session in a split beside the agent. Hover over this notice for the whole text.");

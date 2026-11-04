@@ -36,6 +36,10 @@ export interface Dialog {
 	 * and how each is marked so far. */
 	steps?: { n: number; text: string; verified?: "PASSED" | "FAILED" | "NOT RUN" }[];
 	marks?: Mark[];
+	/** before and after are the rest of a checklist's Human verification
+	 * section, as Markdown: the setup above the steps, the cleanup below. */
+	before?: string;
+	after?: string;
 }
 
 /** Board is what the board shows, as the chat knows it: every ticket, what
