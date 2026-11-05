@@ -30,7 +30,8 @@ const unblockedFor = 7 * 24 * time.Hour
 func unblockedPath(common string) string { return filepath.Join(common, "tkt", "unblocked") }
 
 // sessionUnblocked reads the tickets finish-ticket said the merge unblocked,
-// from the last turn of the ticket's session; never the ticket itself.
+// from the last turn of the ticket's session: the ids its Unblocked line
+// opens with, never the ticket itself.
 func (c *Ctx) sessionUnblocked(id, path string, agents []herdr.Agent, st state.State) []string {
 	var ag *herdr.Agent
 	for i := range agents {
@@ -43,7 +44,7 @@ func (c *Ctx) sessionUnblocked(id, path string, agents []herdr.Agent, st state.S
 	if len(m) == 0 {
 		return []string{}
 	}
-	return slices.DeleteFunc(c.LC.IDs(m[len(m)-1][1]), func(t string) bool { return t == id })
+	return slices.DeleteFunc(contract.UnblockedIDs(m[len(m)-1][1], c.LC.RE.MatchString), func(t string) bool { return t == id })
 }
 
 // noteUnblocked keeps the tickets by's merge unblocked, for tkt ls to offer.

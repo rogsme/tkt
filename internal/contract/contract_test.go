@@ -455,13 +455,21 @@ func TestUnblockedLineNamesTheTicketsAMergeFreed(t *testing.T) {
 		"Merged.\nUnblocked: ACM-15, ACM-16\nStatus: DONE": {"ACM-15", "ACM-16"},
 		"Unblocked: none\nStatus: DONE":                    {},
 		"Unblocked: `ACM-15` (2 blockers done)":            {"ACM-15"},
+		"Unblocked: unknown: the tracker timed out":        {},
+		"Unblocked: ACM-15 and ACM-16.":                    {"ACM-15", "ACM-16"},
+		"Unblocked: ACM-15, ACM-15, ACM-16, 4":             {"ACM-15", "ACM-16"},
+		// Notes after the list name tickets that are not clear to start:
+		// the ones still blocked, and a bundle's rider beside its lead.
+		"Unblocked: ACM-11 (it stays in Backlog, since it was never in Blocked). ACM-14, ACM-16 with ACM-30, and ACM-41 still have other open blockers.": {"ACM-11"},
+		"Unblocked: ACM-95, whose only blocker was ACM-87; it remains in Backlog. ACM-18 still waits on ACM-2 and ACM-9.":                                {"ACM-95"},
+		"Unblocked: ACM-16 with ACM-30": {"ACM-16"},
 	} {
 		m := contract.UnblockedRE.FindStringSubmatch(text)
 		if m == nil {
 			t.Errorf("%q: no Unblocked line", text)
 			continue
 		}
-		if got := c.IDs(m[1]); !slices.Equal(got, want) {
+		if got := contract.UnblockedIDs(m[1], c.RE.MatchString); !slices.Equal(got, want) {
 			t.Errorf("%q: %v, want %v", text, got, want)
 		}
 	}
