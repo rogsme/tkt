@@ -195,7 +195,7 @@ func (c *Ctx) run(o RunOpts) (*RunResult, error) {
 		return nil, err
 	}
 	res.Session = sid
-	c.save(ts, "ticket", id, "preset", own, "harness", h, "stage", stage, "tab", tab, "pane", pane, "agent", name, "session", sid, "status", "launching")
+	c.save(ts, "ticket", id, "preset", own, "harness", h, "stage", stage, "stage_at", c.Now().UTC().Format(history.TimeFormat), "tab", tab, "pane", pane, "agent", name, "session", sid, "status", "launching")
 	out, err := c.Agent.Launch(c.Ctx, pane, name, h, harness.LaunchArgs(h, harness.New, sid, preset, path))
 	switch out {
 	case agent.NotReady:

@@ -126,8 +126,11 @@ func human(reason, text string) Next {
 // workflow.md turns agent verification on. Verification is the outcome of
 // verify-pr's newest report, and VerifyHeld says it counts for the head:
 // it is about the head, or about one only clean merges of the base
-// separate from it. Yolo says tkt auto --yolo carries the ticket to the
-// merge with nobody watching. Fix is the status of the agent fixing the
+// separate from it. VerifyAnswered says address-pr-review answered that
+// report without a new head, such as by fixing the procedure: an address
+// run that started after the report ended with Status: READY_FOR_REVIEW, so
+// verify-pr runs again rather than address. Yolo says tkt auto --yolo
+// carries the ticket to the merge with nobody watching. Fix is the status of the agent fixing the
 // ticket in a split, "" without one, and FixStatus the status line it
 // ended with. SyncFail is the kind of the sync that failed on the head:
 // conflict, failed, or "". CIReview says workflow.md turns CI review on: a
@@ -169,6 +172,7 @@ type Facts struct {
 	AgentVerify       bool
 	Verification      string
 	VerifyHeld        bool
+	VerifyAnswered    bool
 	Yolo              bool
 	BotWait           time.Duration
 	Waited            time.Duration
@@ -239,7 +243,7 @@ func NextStep(f Facts) Next {
 		return command(ReasonBaseMoved, "tkt", "sync", id)
 	case f.LastStatus == contract.StatusHumanQAFailed:
 		return command(ReasonQAFailed, "tkt", "run", id, "address")
-	case f.VerifyHeld && f.Verification == contract.VerificationFailed && f.Chore == "":
+	case f.VerifyHeld && f.Verification == contract.VerificationFailed && !f.VerifyAnswered && f.Chore == "":
 		// The report is feedback, which address-pr-review answers.
 		return command(ReasonVerifyFailed, "tkt", "run", id, "address")
 	case f.AtHead && (f.Verdict == contract.VerdictFindings || f.Verdict == contract.VerdictChangesRequested) && !f.Accepted:
@@ -330,6 +334,24 @@ func cleared(f Facts) Next {
 		return command(ReasonBotClear, "tkt", "run", id, "verify")
 	}
 	return command(ReasonReviewClear, "tkt", "run", id, "verify")
+}
+
+// verifyAnswered says an address run that started after verify-pr's failed
+// report on the head answered it without pushing: the report is then the
+// old procedure's, and a fresh verify-pr run reads the new one. A report
+// posted after the run started is open feedback again. A state from before
+// tkt kept the stage's start falls back to when the agent's turn ended.
+func verifyAnswered(r Row) bool {
+	v := r.Verification
+	if v == nil || v.Value != contract.VerificationFailed || r.Stage != "address" || r.LastStatus != contract.StatusReadyForReview {
+		return false
+	}
+	at, err := time.Parse(time.RFC3339, or(r.stageAt, r.IdleSince))
+	if err != nil {
+		return false
+	}
+	posted, err := time.Parse(time.RFC3339, v.SubmittedAt)
+	return err == nil && at.After(posted)
 }
 
 // The phases PhaseOf names: the board's columns, and the history's steps.
@@ -468,6 +490,7 @@ func factsFor(r Row) Facts {
 	}
 	if v := r.Verification; v != nil {
 		f.Verification, f.VerifyHeld = v.Value, v.Holds()
+		f.VerifyAnswered = verifyAnswered(r)
 	}
 	if r.Fix != nil {
 		f.Fix, f.FixStatus = r.Fix.Status, r.Fix.LastStatus

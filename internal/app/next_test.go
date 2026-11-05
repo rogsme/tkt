@@ -3,6 +3,9 @@ package app
 import (
 	"testing"
 	"time"
+
+	"gitlab.com/rogs/tkt/internal/contract"
+	"gitlab.com/rogs/tkt/internal/forge"
 )
 
 func TestNextStepTable(t *testing.T) {
@@ -76,6 +79,10 @@ func TestNextStepTable(t *testing.T) {
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "CLEAR", AtHead: true, ReviewReady: true, CIReview: true, AgentVerify: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true, Verification: "FAILED", VerifyHeld: true}, "tkt run ACM-1 address", "command", ReasonVerifyFailed},
+		// address answered the failed report without a new head, such as by
+		// fixing the procedure, so verify-pr runs again on the same head.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true, Verification: "FAILED", VerifyHeld: true, VerifyAnswered: true}, "tkt run ACM-1 verify", "command", ReasonNeedsVerify},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Verification: "FAILED", VerifyHeld: true, VerifyAnswered: true}, "tkt run ACM-1 verify", "command", ReasonReviewClear},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, AgentVerify: true, Verification: "PASSED", VerifyHeld: true},
 			"verify-pr passed every step: confirm them from its evidence (tkt show ACM-1 --steps), then tkt merge ACM-1 --passed all --evidence", "human", ReasonVerified},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Verification: "INCOMPLETE", VerifyHeld: true},
@@ -179,6 +186,30 @@ func TestNextStepTable(t *testing.T) {
 	}
 	if got := NextStep(Facts{ID: "ACM-1", PRState: "OPEN", Agent: "working"}); len(got.Argv) != 3 || got.Argv[1] != "wait" {
 		t.Errorf("a working agent's next step is not tkt wait: %+v", got)
+	}
+}
+
+func TestVerifyAnswered(t *testing.T) {
+	failed := func(at string) *forge.Verification {
+		return &forge.Verification{Value: contract.VerificationFailed, SubmittedAt: at, AtHead: true}
+	}
+	for _, c := range []struct {
+		name string
+		row  Row
+		want bool
+	}{
+		{"address started after the report", Row{Stage: "address", LastStatus: "READY_FOR_REVIEW", stageAt: "2026-11-04T22:12:36Z", Verification: failed("2026-11-04T22:12:11Z")}, true},
+		{"report posted after the address run started", Row{Stage: "address", LastStatus: "READY_FOR_REVIEW", stageAt: "2026-11-04T22:10:00Z", IdleSince: "2026-11-04T22:16:55Z", Verification: failed("2026-11-04T22:12:11Z")}, false},
+		{"older state: the turn ended after the report", Row{Stage: "address", LastStatus: "READY_FOR_REVIEW", IdleSince: "2026-11-04T22:16:55Z", Verification: failed("2026-11-04T22:12:11Z")}, true},
+		{"older state: the turn ended before the report", Row{Stage: "address", LastStatus: "READY_FOR_REVIEW", IdleSince: "2026-11-04T22:10:00Z", Verification: failed("2026-11-04T22:12:11Z")}, false},
+		{"another stage", Row{Stage: "verify", LastStatus: "READY_FOR_REVIEW", stageAt: "2026-11-04T22:12:36Z", Verification: failed("2026-11-04T22:12:11Z")}, false},
+		{"address stopped blocked", Row{Stage: "address", LastStatus: "BLOCKED", stageAt: "2026-11-04T22:12:36Z", Verification: failed("2026-11-04T22:12:11Z")}, false},
+		{"no time known", Row{Stage: "address", LastStatus: "READY_FOR_REVIEW", Verification: failed("2026-11-04T22:12:11Z")}, false},
+		{"no report", Row{Stage: "address", LastStatus: "READY_FOR_REVIEW", stageAt: "2026-11-04T22:12:36Z"}, false},
+	} {
+		if got := verifyAnswered(c.row); got != c.want {
+			t.Errorf("%s: verifyAnswered = %v, want %v", c.name, got, c.want)
+		}
 	}
 }
 
