@@ -53,6 +53,20 @@ jqedit $WORK/prs.json '. + [.[0] | .number = 8 | .headRefName = "ACM-13"]'
 env 'FAKE_HERDR_SCREEN=Unblocked: none'
 exec tkt done ACM-13 --json
 envelope '.result.tickets[0].unblocked' '[]'
+
+# Only the list the line opens with counts. A note after it names tickets
+# still blocked, and a bundle's rider beside its lead: none is clear to start.
+exec tkt start ACM-14
+realgit -C $FAKE_WT_ROOT/ACM-14 commit -q --allow-empty -m 'work on ACM-14'
+realgit -C $FAKE_WT_ROOT/ACM-14 push -q origin ACM-14
+realgit -C $REPO merge -q --no-ff -m 'Merge ACM-14' ACM-14
+realgit -C $REPO push -q origin main
+jqedit $WORK/prs.json '. + [.[0] | .number = 10 | .headRefName = "ACM-14"]'
+env 'FAKE_HERDR_SCREEN=Unblocked: ACM-17 (it stays in Backlog). ACM-18, ACM-19 with ACM-20, and ACM-21 still have open blockers.'
+exec tkt done ACM-14 --json
+envelope '.result.tickets[0].unblocked' '["ACM-17"]'
+exec tkt ls --json
+envelope '[.result.unblocked[] | .ticket]' '["ACM-17"]'
 houserules
 
 -- screen.txt --
