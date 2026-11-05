@@ -42,13 +42,16 @@ const (
 // session resolves it, in Run), fixing (the sync failed, such as on a push a
 // hook refused, and a fresh session fixes it, in Run) or conflict (it
 // conflicts, and --no-agent kept tkt from starting one). Base is the base commit merged, Head the
-// branch's head before, and NewHead the merge tkt pushed.
+// branch's head before, and NewHead the merge tkt pushed. Dropped is a merge
+// of the base an earlier sync left unpushed, as when it was killed during
+// its push, which this one took off the branch before it merged again.
 type SyncResult struct {
 	Ticket    string     `json:"ticket"`
 	Outcome   string     `json:"outcome"`
 	Base      string     `json:"base"`
 	Head      string     `json:"head"`
 	NewHead   string     `json:"new_head"`
+	Dropped   string     `json:"dropped"`
 	Conflicts []string   `json:"conflicts"`
 	Run       *RunResult `json:"run"`
 	DryRun    bool       `json:"dry_run"`
@@ -64,7 +67,7 @@ func (r *SyncResult) Text(w io.Writer) {
 	case SyncUpToDate:
 		fmt.Fprintf(w, "%s  up to date with %s\n", r.Ticket, r.base)
 	case SyncMerged:
-		fmt.Fprintf(w, "%s  merged %s (%s) and pushed %s\n", r.Ticket, r.base, short(r.Base), or(short(r.NewHead), "the merge"))
+		fmt.Fprintf(w, "%s  merged %s (%s) and pushed %s%s\n", r.Ticket, r.base, short(r.Base), or(short(r.NewHead), "the merge"), r.droppedText())
 	case SyncResolving:
 		fmt.Fprintf(w, "%s  merging %s %s; a fresh session resolves it in pane %s\n", r.Ticket, r.base, r.conflictText(), r.Run.Pane)
 	case SyncFixing:
@@ -72,6 +75,15 @@ func (r *SyncResult) Text(w io.Writer) {
 	default:
 		fmt.Fprintf(w, "%s  merging %s %s\n", r.Ticket, r.base, r.conflictText())
 	}
+}
+
+// droppedText names the unpushed merge an earlier sync left, when this one
+// dropped it.
+func (r *SyncResult) droppedText() string {
+	if r.Dropped == "" {
+		return ""
+	}
+	return "; it dropped the unpushed merge " + short(r.Dropped) + " an earlier sync left"
 }
 
 // conflictText says how the merge failed: the files that conflict, or that
@@ -212,6 +224,20 @@ func (c *Ctx) syncBranch(id, path string, wait bool) (*SyncResult, error) {
 		} else if r := c.Git.Do(c.Ctx, time.Minute, ff); !r.OK() {
 			return nil, c.syncFailed(id, path, remote, apperr.New(apperr.GitFailed, "git merge --ff-only %s failed in %s: %s", short(remote), path, oneLine(r.ErrText())), r.ErrText()+r.Out())
 		}
+		head, res.Head = remote, remote
+	case c.strandedMerge(path, head, remote):
+		// An earlier sync was killed before it could push its merge or take
+		// it back, as when memory ran out during the push's hook. Nothing is
+		// lost by dropping it: tkt makes the same merge again, with the base
+		// as it is now.
+		reset := gitx.Argv(path, "reset", "--keep", "--quiet", remote)
+		if c.Dry {
+			c.Would(reset)
+		} else if r := c.Git.Do(c.Ctx, time.Minute, reset); !r.OK() {
+			return nil, c.syncFailed(id, path, head, apperr.New(apperr.GitFailed, "git reset --keep %s failed in %s: %s", short(remote), path, oneLine(r.ErrText())), r.ErrText()+r.Out())
+		}
+		c.UI.Info("%s: dropped the unpushed merge %s an earlier sync left; merging %s again", id, short(head), res.base)
+		res.Dropped = head
 		head, res.Head = remote, remote
 	default:
 		return nil, apperr.New(apperr.UnpushedCommits, "%s has commits that are not on %s/%s; tkt sync pushes only its own merge", id, f.Remote, id).
@@ -362,6 +388,19 @@ func (c *Ctx) undo(path, merge, head string, e *apperr.Error) *apperr.Error {
 	}
 	e.Msg += fmt.Sprintf("; tkt's merge %s stays in %s, unpushed", short(merge), path)
 	return e.WithHint("git -C %s reset --keep %s drops it, when nothing came after it", path, short(head))
+}
+
+// strandedMerge reports whether HEAD is the remote's head plus clean merges
+// of the base alone, which tkt can drop and make again exactly: each one's
+// second parent the base or an older base commit, and its tree the one git
+// merge-tree computes, so nobody resolved or changed anything in it. An
+// earlier sync killed during its push leaves such a merge, and so may an
+// agent's plain git merge of the base, which loses nothing either. The
+// caller checked that the worktree is clean and that no agent works there.
+func (c *Ctx) strandedMerge(path, head, remote string) bool {
+	f := c.LC.Forge
+	clean, err := c.Git.CleanMerges(c.Ctx, path, remote, head, "refs/remotes/"+f.Remote+"/"+f.Base)
+	return err == nil && clean && head != remote
 }
 
 // abortMerge ends a merge that stopped, even when tkt was interrupted.

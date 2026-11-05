@@ -15,6 +15,7 @@ import (
 	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/gitx"
+	"gitlab.com/rogs/tkt/internal/lifecycle"
 	"gitlab.com/rogs/tkt/internal/output"
 	"gitlab.com/rogs/tkt/internal/runner"
 )
@@ -82,6 +83,113 @@ func TestSyncUndoesOnlyItsOwnMerge(t *testing.T) {
 	c.Ctx = ctx
 	if err := c.undo(dir, merge, head, apperr.New(apperr.GitFailed, "interrupted")); !strings.HasSuffix(err.Error(), "tkt undid its merge") {
 		t.Errorf("undo after Ctrl-C: %v", err)
+	}
+}
+
+// syncRepo makes a repository whose ticket branch ACM-12 has its own commit,
+// pushed as refs/remotes/origin/ACM-12, behind a main that moved on, as
+// refs/remotes/origin/main. It returns a Ctx for it and its git.
+func syncRepo(t *testing.T) (*Ctx, string, func(...string) string) {
+	t.Helper()
+	dir, _, _ := mergedRepo(t)
+	git := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	// Start again from the ticket's own commit, with a file on each side.
+	git("reset", "-q", "--hard", "HEAD^1")
+	os.WriteFile(filepath.Join(dir, "app.txt"), []byte("ticket\n"), 0o644)
+	git("add", "app.txt")
+	git("commit", "-q", "-m", "ACM-12 app")
+	git("update-ref", "refs/remotes/origin/ACM-12", "HEAD")
+	git("switch", "-q", "main")
+	os.WriteFile(filepath.Join(dir, "base.txt"), []byte("base\n"), 0o644)
+	git("add", "base.txt")
+	git("commit", "-q", "-m", "base moved")
+	git("update-ref", "refs/remotes/origin/main", "HEAD")
+	git("switch", "-q", "ACM-12")
+	c := &Ctx{App: &App{UI: &output.UI{Err: io.Discard}}, Ctx: context.Background(), Git: gitx.Git{R: runner.Exec{}}}
+	c.LC.Forge = lifecycle.Forge{Remote: "origin", Base: "main", Repo: "acme/app"}
+	return c, dir, git
+}
+
+// tkt sync drops a merge an earlier sync left unpushed only when it can make
+// the same merge again: a clean merge of the base onto the branch's head on
+// the remote, which nobody changed.
+func TestStrandedMerge(t *testing.T) {
+	c, dir, git := syncRepo(t)
+	remote := git("rev-parse", "refs/remotes/origin/ACM-12")
+	git("merge", "-q", "--no-ff", "--no-edit", "refs/remotes/origin/main")
+	if !c.strandedMerge(dir, git("rev-parse", "HEAD"), remote) {
+		t.Errorf("tkt's own clean merge is not stranded")
+	}
+	// An older base commit counts too: the base moved again since.
+	git("switch", "-q", "main")
+	git("commit", "-q", "--allow-empty", "-m", "base moved again")
+	git("update-ref", "refs/remotes/origin/main", "HEAD")
+	git("switch", "-q", "ACM-12")
+	if !c.strandedMerge(dir, git("rev-parse", "HEAD"), remote) {
+		t.Errorf("a merge of an older base commit is not stranded")
+	}
+
+	// A change in the merge commit stays.
+	os.WriteFile(filepath.Join(dir, "base.txt"), []byte("changed in the merge\n"), 0o644)
+	git("commit", "-q", "-a", "--amend", "--no-edit")
+	if c.strandedMerge(dir, git("rev-parse", "HEAD"), remote) {
+		t.Errorf("a merge with a change of its own counts as stranded")
+	}
+
+	// So does a commit on top of the merge.
+	git("reset", "-q", "--hard", remote)
+	git("merge", "-q", "--no-ff", "--no-edit", "refs/remotes/origin/main")
+	git("commit", "-q", "--allow-empty", "-m", "the agent's commit")
+	if c.strandedMerge(dir, git("rev-parse", "HEAD"), remote) {
+		t.Errorf("a commit on top of the merge counts as stranded")
+	}
+
+	// And a merge of another branch than the base.
+	git("reset", "-q", "--hard", remote)
+	git("switch", "-q", "-c", "side", "main~2")
+	os.WriteFile(filepath.Join(dir, "side.txt"), []byte("side\n"), 0o644)
+	git("add", "side.txt")
+	git("commit", "-q", "-m", "side work")
+	git("switch", "-q", "ACM-12")
+	git("merge", "-q", "--no-ff", "--no-edit", "side")
+	if c.strandedMerge(dir, git("rev-parse", "HEAD"), remote) {
+		t.Errorf("a merge of another branch counts as stranded")
+	}
+
+	// And a merge onto anything but the branch's head on the remote.
+	git("reset", "-q", "--hard", remote)
+	git("commit", "-q", "--allow-empty", "-m", "unpushed work")
+	git("merge", "-q", "--no-ff", "--no-edit", "refs/remotes/origin/main")
+	if c.strandedMerge(dir, git("rev-parse", "HEAD"), remote) {
+		t.Errorf("a merge onto unpushed work counts as stranded")
+	}
+}
+
+// A conflict someone resolved by hand is never dropped.
+func TestStrandedMergeKeepsAResolvedConflict(t *testing.T) {
+	c, dir, git := syncRepo(t)
+	git("switch", "-q", "main")
+	os.WriteFile(filepath.Join(dir, "app.txt"), []byte("base\n"), 0o644)
+	git("add", "app.txt")
+	git("commit", "-q", "-m", "base edits app.txt")
+	git("update-ref", "refs/remotes/origin/main", "HEAD")
+	git("switch", "-q", "ACM-12")
+	remote := git("rev-parse", "HEAD")
+	if out, err := exec.Command("git", "-C", dir, "merge", "-q", "--no-ff", "--no-edit", "refs/remotes/origin/main").CombinedOutput(); err == nil {
+		t.Fatalf("the merge did not conflict: %s", out)
+	}
+	os.WriteFile(filepath.Join(dir, "app.txt"), []byte("both\n"), 0o644)
+	git("add", "app.txt")
+	git("commit", "-q", "--no-edit")
+	if c.strandedMerge(dir, git("rev-parse", "HEAD"), remote) {
+		t.Errorf("a resolved conflict counts as stranded")
 	}
 }
 
