@@ -320,7 +320,7 @@ Unblocked: ACM-124, ACM-125
 Status: DONE
 ```
 
-`tkt done` reads that line from the ticket's session before it closes the tabs, and names the tickets, with no extra agent run. `tkt ls` lists each one until it starts, and the tkt agent's board offers to start it by hand, in auto, or in auto after you approve its plan.
+The line holds only ticket ids, and a bundle goes by its lead's id. `tkt done` reads that line from the ticket's session before it closes the tabs, and names the tickets, with no extra agent run. It takes only the list of ids the line opens with, so a note after the list names nothing, such as tickets that are still blocked, or a bundle's rider. `tkt ls` lists each one until it starts, and the tkt agent's board offers to start it by hand, in auto, or in auto after you approve its plan.
 
 `tkt done` removes only finished work. For a ticket you started by mistake, such as one that is someone else's, `tkt drop ACM-123` throws the work away at any stage short of the merge. It closes the ticket's tabs and agents, ends its `tkt auto` loop, and removes the worktree with any uncommitted changes, the branch and the temporary directory. On GitHub it also closes your open pull request and deletes the branch from the remote, but only when every commit on that branch has your git email: a branch someone else pushed first stays, with its pull request. It lists what goes and asks you to type the ticket id first, and it prints the commit the branch held, which `git branch ACM-123 COMMIT` brings back until `git gc` prunes it. tkt never writes the tracker, so move the ticket back there yourself. `tkt hold ACM-123` is the gentler step: it parks the ticket and removes nothing.
 

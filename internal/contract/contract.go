@@ -7,6 +7,7 @@ package contract
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -134,6 +135,31 @@ const AcceptedHeading = "## Review accepted"
 // Status: DONE: the tickets the merge unblocked, whose blockers are all
 // done now, or none.
 var UnblockedRE = regexp.MustCompile(`(?m)^Unblocked: (.*)$`)
+
+// unblockedToken splits an Unblocked line into words and single marks; the
+// whitespace between them is left out.
+var unblockedToken = regexp.MustCompile(`[A-Za-z0-9-]+|[^A-Za-z0-9\s-]`)
+
+// UnblockedIDs reads the tickets an Unblocked line names: the list of ids it
+// opens with, once each, separated by commas, backticks or "and". The list
+// ends at the first other word or mark, so a note after it names nothing:
+// reports have put the tickets still blocked, and a bundle's riders, on the
+// line after the list, and none of those is clear to start.
+func UnblockedIDs(value string, isID func(string) bool) []string {
+	out := []string{}
+	for _, tok := range unblockedToken.FindAllString(value, -1) {
+		switch {
+		case tok == "," || tok == "`" || strings.EqualFold(tok, "and"):
+		case isID(tok):
+			if !slices.Contains(out, tok) {
+				out = append(out, tok)
+			}
+		default:
+			return out
+		}
+	}
+	return out
+}
 
 // HumanVerificationRE finds the section that follows review-pr's
 // READY_FOR_HUMAN summary and holds the numbered procedure a person runs.
