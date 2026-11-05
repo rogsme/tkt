@@ -206,6 +206,9 @@ type Row struct {
 	// Sync is the last failed tkt sync, while the head is the one it failed
 	// on, or null.
 	Sync *RowSync `json:"sync"`
+	// PushWait is what keeps the sync the ticket needs from pushing now,
+	// such as other syncs that hold every push slot, or null.
+	PushWait *PushWait `json:"push_wait"`
 	// Fix is the session fixing the ticket in a split, or null.
 	Fix *RowFix `json:"fix"`
 	// Merge is the ticket's merge order when it holds at the pull request's
@@ -399,6 +402,9 @@ func (r *LsResult) cells(row Row, now time.Time) []string {
 	if forgeOK {
 		pr = "-"
 		next = row.Next.Text
+		if row.PushWait != nil {
+			next += " (waits for " + row.PushWait.Text() + ")"
+		}
 	}
 	if row.PR != nil {
 		pr = forge.Ref(row.PR.Number)
@@ -840,6 +846,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		row.Phase, row.PhaseSince = PhaseUnknown, ""
 	} else {
 		row.Next = NextStep(f)
+		if row.Next.Reason == ReasonBaseMoved {
+			row.PushWait = c.pushWait(t.ID)
+		}
 		row.Phase = PhaseOf(f, row.Next)
 		row.PhaseSince = pf["since"]
 		if l.src.Herdr == "ok" {

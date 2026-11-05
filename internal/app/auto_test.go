@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/rogs/tkt/internal/apperr"
 	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/gitx"
 	"gitlab.com/rogs/tkt/internal/lock"
@@ -608,4 +609,20 @@ func TestAutoLoopRestartsOnANewTkt(t *testing.T) {
 			t.Errorf("%+v %v", res, err)
 		}
 	})
+}
+
+// A sync that waits for its turn to push is tried again at the next look,
+// with no pause: the turn comes by itself.
+func TestAutoSyncStepErr(t *testing.T) {
+	busy := syncStepErr(apperr.New(apperr.SyncPushBusy, "ACM-1 waits for a push slot"))
+	var se errStep
+	if !errors.As(busy, &se) || se.stop != "" {
+		t.Errorf("busy push: %#v", busy)
+	}
+	if err := syncStepErr(apperr.New(apperr.SyncConflict, "conflicts")); err != nil {
+		t.Errorf("conflict: %v", err)
+	}
+	if !errors.As(syncStepErr(apperr.New(apperr.WorktreeDirty, "dirty")), &se) || se.stop != StopSyncFailed {
+		t.Errorf("a dirty worktree pauses for you: %#v", se)
+	}
 }

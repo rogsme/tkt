@@ -84,6 +84,10 @@ type fileTOML struct {
 	Start *struct {
 		Mode string `toml:"mode"`
 	} `toml:"start"`
+	Sync *struct {
+		Pushes  *int   `toml:"pushes"`
+		MinFree string `toml:"min_free"`
+	} `toml:"sync"`
 	Chores map[string]choreTOML  `toml:"chores"`
 	Status map[string]statusTOML `toml:"status"`
 }
@@ -348,6 +352,21 @@ func parseSettings(c *Config, path string, f fileTOML) error {
 		}
 		if w.Autostart != nil {
 			c.Watch.Autostart = *w.Autostart
+		}
+	}
+	if s := f.Sync; s != nil {
+		if s.Pushes != nil {
+			if *s.Pushes < 1 {
+				return bad("[sync] pushes", "must be 1 or more")
+			}
+			c.Sync.Pushes = *s.Pushes
+		}
+		if s.MinFree != "" {
+			m, ok := ParseMem(s.MinFree)
+			if !ok {
+				return bad("[sync] min_free", "must be a percentage such as \"20%\" or a size such as \"8G\"")
+			}
+			c.Sync.MinFree = m
 		}
 	}
 	if s := f.Start; s != nil && s.Mode != "" {

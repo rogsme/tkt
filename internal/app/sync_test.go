@@ -2,13 +2,18 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/rogs/tkt/internal/apperr"
+	"gitlab.com/rogs/tkt/internal/config"
 	"gitlab.com/rogs/tkt/internal/gitx"
 	"gitlab.com/rogs/tkt/internal/output"
 	"gitlab.com/rogs/tkt/internal/runner"
@@ -78,4 +83,113 @@ func TestSyncUndoesOnlyItsOwnMerge(t *testing.T) {
 	if err := c.undo(dir, merge, head, apperr.New(apperr.GitFailed, "interrupted")); !strings.HasSuffix(err.Error(), "tkt undid its merge") {
 		t.Errorf("undo after Ctrl-C: %v", err)
 	}
+}
+
+func TestMemFree(t *testing.T) {
+	avail, total, ok := memFree("MemTotal:       16384000 kB\nMemFree:         1000 kB\nMemAvailable:    4096000 kB\nBuffers: 1 kB\n")
+	if !ok || avail != 4096000<<10 || total != 16384000<<10 {
+		t.Errorf("memFree = %d, %d, %v", avail, total, ok)
+	}
+	if _, _, ok := memFree("MemTotal: 1 kB\n"); ok {
+		t.Errorf("a file without MemAvailable reads as known")
+	}
+}
+
+// slotCtx is a Ctx with [sync] pushes slots in a state directory of its own
+// and a meminfo file that says free of the total GB is free.
+func slotCtx(t *testing.T, state, repo string, pushes int, free, total uint64) (*Ctx, string) {
+	t.Helper()
+	mem := filepath.Join(t.TempDir(), "meminfo")
+	writeMem(t, mem, free, total)
+	env := map[string]string{"XDG_STATE_HOME": state, "TKT_MEMINFO": mem}
+	c := &Ctx{App: &App{UI: &output.UI{Err: io.Discard}, Getenv: func(k string) string { return env[k] }}, Ctx: context.Background()}
+	c.LC.Forge.Repo = repo
+	c.Cfg.Sync = config.Sync{Pushes: pushes, MinFree: config.Mem{Percent: 20}}
+	return c, mem
+}
+
+func writeMem(t *testing.T, path string, free, total uint64) {
+	t.Helper()
+	text := fmt.Sprintf("MemTotal: %d kB\nMemAvailable: %d kB\n", total<<20, free<<20)
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Only [sync] pushes syncs on the machine merge and push at once, whatever
+// their repository, and each once [sync] min_free of memory is free. tkt
+// watch and tkt auto get SyncPushBusy at once; a person's tkt sync waits.
+func TestPushSlots(t *testing.T) {
+	state := t.TempDir()
+	c, mem := slotCtx(t, state, "acme/app", 2, 8, 16)
+	r1, err := c.takePush("ACM-1", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2, err := c.takePush("ACM-2", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.takePush("ACM-3", false)
+	e := apperr.As(err)
+	if e.Code != apperr.SyncPushBusy {
+		t.Fatalf("a third push: %v", err)
+	}
+	if w, _ := e.Details["push_wait"].(*PushWait); w == nil || w.On != PushOnSlots || !slices.Equal(w.Pushes, []string{"ACM-1", "ACM-2"}) {
+		t.Errorf("push_wait: %#v", e.Details["push_wait"])
+	}
+	if !strings.Contains(e.Msg, "ACM-3 waits for a push slot: ACM-1 and ACM-2 push") {
+		t.Errorf("message: %s", e.Msg)
+	}
+	if w := c.pushWait("ACM-3"); w == nil || len(w.Pushes) != 2 {
+		t.Errorf("tkt ls for ACM-3: %#v", w)
+	}
+	if w := c.pushWait("ACM-1"); w != nil {
+		t.Errorf("ACM-1 pushes itself, but waits for %#v", w)
+	}
+	// Another repository's sync shares the machine's slots.
+	other, _ := slotCtx(t, state, "acme/web", 2, 8, 16)
+	if w := other.pushWait("ACM-9"); w == nil || !slices.Equal(w.Pushes, []string{"acme/app ACM-1", "acme/app ACM-2"}) {
+		t.Errorf("another repository's wait: %#v", w)
+	}
+
+	// A sync a person runs waits for its turn, and takes it.
+	pushPoll = 10 * time.Millisecond
+	t.Cleanup(func() { pushPoll = time.Second })
+	got := make(chan error)
+	go func() {
+		r, err := c.takePush("ACM-3", true)
+		if err == nil {
+			defer r()
+		}
+		got <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	r1()
+	if err := <-got; err != nil {
+		t.Fatalf("the waiting sync: %v", err)
+	}
+	r2()
+
+	// With too little memory free, a push waits for it.
+	writeMem(t, mem, 2, 16)
+	_, err = c.takePush("ACM-4", false)
+	if w, _ := apperr.As(err).Details["push_wait"].(*PushWait); w == nil || w.On != PushOnMemory || w.Need != 16<<30/100*20 {
+		t.Fatalf("low memory: %v, %#v", err, apperr.As(err).Details["push_wait"])
+	}
+	if w := c.pushWait("ACM-4"); w == nil || w.On != PushOnMemory {
+		t.Errorf("tkt ls on low memory: %#v", w)
+	}
+	// A person's sync gives up after pushWaitFor.
+	pushWaitFor = 30 * time.Millisecond
+	t.Cleanup(func() { pushWaitFor = 30 * time.Minute })
+	if _, err := c.takePush("ACM-4", true); apperr.As(err).Code != apperr.SyncPushBusy {
+		t.Errorf("a wait that ran out: %v", err)
+	}
+	writeMem(t, mem, 8, 16)
+	r, err := c.takePush("ACM-4", false)
+	if err != nil {
+		t.Fatalf("with memory free again: %v", err)
+	}
+	r()
 }

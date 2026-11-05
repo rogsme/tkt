@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -50,7 +51,16 @@ func (e Exec) Run(ctx context.Context, c Cmd) Result {
 	} else {
 		cmd.Stderr = &stderr
 	}
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		if c.OOMScoreAdj != 0 {
+			// Only Linux has the file; elsewhere the command runs as it is.
+			// git connects to the remote before it starts a pre-push hook,
+			// so the hook starts after this write and inherits the score.
+			os.WriteFile("/proc/"+strconv.Itoa(cmd.Process.Pid)+"/oom_score_adj", []byte(strconv.Itoa(c.OOMScoreAdj)), 0)
+		}
+		err = cmd.Wait()
+	}
 	if f, ok := cmd.Stdout.(*os.File); ok {
 		f.Seek(0, io.SeekStart)
 		stdout.ReadFrom(f)

@@ -83,7 +83,8 @@ const (
 // on it), forge_lag (the forge still shows an older head), agent_settling
 // (its agent stopped minutes ago, and a person may still use the session),
 // slot (every [auto] max_parallel slot is taken), turn (another ticket's
-// merge goes first), incident (a status page reports a problem, so no agent
+// merge goes first), push_turn (its sync waits for a push slot or for free
+// memory, [sync] pushes and min_free), incident (a status page reports a problem, so no agent
 // starts), worktree_gone (its directory or state is gone), round_limit or
 // no_progress (it waits for you), or its next step's reason. A chore's run
 // is a row here too, named by its branch.
@@ -162,6 +163,7 @@ const (
 	WatchLaunch   = "launch"
 	WatchGone     = "worktree_gone"
 	WatchTurn     = "turn"
+	WatchPushTurn = "push_turn"
 	WatchIncident = "incident"
 )
 
@@ -842,6 +844,11 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 	if act.Kind == actMerge && w.turn != "" && w.turn != t.ID {
 		act = watchAct{Why: WatchTurn}
 	}
+	// A sync whose push could not start now waits for its turn, and a pass
+	// never blocks the other tickets on it.
+	if act.Kind == actSync && !c.Dry && c.pushWait(t.ID) != nil {
+		act = watchAct{Why: WatchPushTurn}
+	}
 	res.Action, res.Stage, res.Reason = act.Kind, act.Stage, act.Why
 	if act.Pause {
 		w.pause(c, ts, t.ID, f.Head, act.Why, mem.Last)
@@ -887,6 +894,12 @@ func (w *watcher) step(ctx context.Context, a *App, c *Ctx, t ticketWorktree, ro
 		if errors.As(err, &waits) {
 			c.save(ts, "watch_last", mem.Last)
 			res.Action, res.Reason = "", waits.reason()
+			return res
+		}
+		if apperr.As(err).Code == apperr.SyncPushBusy {
+			// Another sync took the last slot since the check above.
+			c.save(ts, "watch_last", mem.Last)
+			res.Action, res.Reason = "", WatchPushTurn
 			return res
 		}
 		res.Error = apperr.As(err).Msg
@@ -988,7 +1001,7 @@ func (w *watcher) do(ctx context.Context, a *App, act watchAct, id string, ts *t
 		}
 		return err
 	case actSync:
-		_, err := a.Sync(ctx, SyncOpts{ID: id, NoAgent: true})
+		_, err := a.Sync(ctx, SyncOpts{ID: id, NoAgent: true, noWait: true})
 		// The base moved again since the look, and now conflicts, or the
 		// sync failed another way: tkt sync kept why, and the next pass
 		// hands it to a fresh session.

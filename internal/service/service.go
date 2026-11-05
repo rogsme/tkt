@@ -90,7 +90,11 @@ func UnitDir(getenv func(string) string) string {
 const written = "tkt watch --install wrote this file, and writes it again each time it runs."
 
 // HerdrUnitFile runs herdr's server, which stays in the foreground, and
-// starts it again when it crashes. herdr server stop ends it for good.
+// starts it again when it crashes. herdr server stop ends it for good. Every
+// agent, and every hook a tkt command in a pane runs, lives in this unit, so
+// OOMPolicy=continue keeps one process the kernel kills for memory, such as
+// a test suite a pre-push hook started, from stopping the whole server and
+// every agent with it, as systemd's default policy would.
 func HerdrUnitFile(s Spec) string {
 	env := "Environment=" + unitQuote("PATH="+s.Path) + "\n"
 	for _, d := range s.Display {
@@ -105,6 +109,7 @@ func HerdrUnitFile(s Spec) string {
 		"ExecStart=" + unitWord(s.Herdr) + " server\n" +
 		"Restart=on-failure\n" +
 		"RestartSec=5\n" +
+		"OOMPolicy=continue\n" +
 		"\n" +
 		"[Install]\n" +
 		"WantedBy=default.target\n"
@@ -118,7 +123,8 @@ func HerdrUnitFile(s Spec) string {
 // are tkt's own for a setting or a state, such as another watch that runs,
 // and 200 is systemd's when the repository's directory is gone. A stop
 // signals tkt watch alone, which finishes the step it took, with the git,
-// gh and herdr commands it runs, within five minutes.
+// gh and herdr commands it runs, within five minutes. Like herdr's unit, it
+// outlives a hook the kernel kills for memory.
 func WatchUnitFile(s Spec) string {
 	return "# " + written + "\n" +
 		"# One instance per repository: tkt-watch@$(systemd-escape --path DIR).service.\n" +
@@ -135,6 +141,7 @@ func WatchUnitFile(s Spec) string {
 		"RestartPreventExitStatus=3 4 200\n" +
 		"KillMode=mixed\n" +
 		"TimeoutStopSec=300\n" +
+		"OOMPolicy=continue\n" +
 		"\n" +
 		"[Install]\n" +
 		"WantedBy=default.target\n"

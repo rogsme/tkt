@@ -133,6 +133,9 @@ func setupSandbox(env *testscript.Env, realGit string) error {
 		// Under -race every fake is a race-built copy of this test binary,
 		// which by default sleeps a second as it exits.
 		"GORACE": "atexit_sleep_ms=0",
+		// A sync's push waits for free memory; the sandbox's is plenty
+		// whatever the machine has, and a script may write less.
+		"TKT_MEMINFO": filepath.Join(work, "fake", "meminfo"),
 	}
 	for k, v := range vars {
 		env.Setenv(k, v)
@@ -143,6 +146,7 @@ func setupSandbox(env *testscript.Env, realGit string) error {
 		}
 	}
 	os.WriteFile(vars["FAKE_LOG"], nil, 0o644)
+	os.WriteFile(vars["TKT_MEMINFO"], []byte("MemTotal:       16777216 kB\nMemFree:         8388608 kB\nMemAvailable:   12582912 kB\n"), 0o644)
 	os.WriteFile(filepath.Join(repo, "docs/agents/issue-tracker.md"), []byte(trackerConfig), 0o644)
 	os.WriteFile(filepath.Join(repo, "docs/agents/forge.md"), []byte(forgeConfig), 0o644)
 	gitEnv := os.Environ()

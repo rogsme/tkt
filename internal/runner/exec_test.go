@@ -42,3 +42,19 @@ func TestExecSpawn(t *testing.T) {
 		t.Fatalf("log: %q", out)
 	}
 }
+
+// A command with OOMScoreAdj, and what it starts, is the kernel's first pick
+// when memory runs out.
+func TestExecOOMScoreAdj(t *testing.T) {
+	if _, err := os.Stat("/proc/self/oom_score_adj"); err != nil {
+		t.Skip("no /proc/self/oom_score_adj on this system")
+	}
+	r := Exec{}.Run(context.Background(), Cmd{Argv: []string{"sh", "-c", "sleep 0.2; cat /proc/self/oom_score_adj"}, OOMScoreAdj: 800})
+	if got := strings.TrimSpace(r.Out()); !r.OK() || got != "800" {
+		t.Fatalf("the child's oom_score_adj: %q (code %d, %s)", got, r.Code, r.ErrText())
+	}
+	r = Exec{}.Run(context.Background(), Cmd{Argv: []string{"cat", "/proc/self/oom_score_adj"}})
+	if got := strings.TrimSpace(r.Out()); got == "800" {
+		t.Fatalf("a plain command got the raised score")
+	}
+}

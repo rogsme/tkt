@@ -29,6 +29,15 @@ merge commit it checked, and when the push fails, or you press Ctrl-C, it
 takes its merge back off the branch, unless a commit came on top of it
 meanwhile: then it leaves the branch alone and says how to drop the merge.
 
+The merge and the push run the repository's hooks, which may run its whole
+test suite, so they take a turn first. At most [sync] pushes syncs (2) on the
+machine merge and push at once, whatever their repository, and each starts
+only while [sync] min_free of memory (20%) is free. tkt sync waits for its
+turn and says once what it waits for, up to 30 minutes; tkt watch and tkt
+auto never wait, and take the sync again at their next look. The fetch and
+git merge-tree never wait. On Linux, the push and its hooks are the first
+thing the kernel stops when memory runs out, before the agents.
+
 Whenever a sync fails after its fetch, tkt keeps why. tkt ls --json shows the reason under the row's sync while the
 head is the one it failed on, tkt history lists it, and a log in the
 ticket's temporary directory holds everything git and its hooks printed. A

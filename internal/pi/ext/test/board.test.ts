@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { attentionOf } from "../attention.ts";
-import { boardColumns, boardLines, columnOf, diffText, footer, grid, order, phaseLabel, statusText, title } from "../board.ts";
+import { boardColumns, boardLines, columnOf, diffText, footer, grid, order, phaseLabel, pushWaitText, statusText, title } from "../board.ts";
 import { row } from "./fixtures.ts";
 
 const now = Date.parse("2026-01-01T02:00:00Z");
@@ -161,4 +161,17 @@ test("a long run id stays whole for the model", () => {
 	const s = { rows, jobs: new Map<string, string>(), items: [], now, tick: 0, repo: "app" };
 	assert.ok(statusText(s).includes(id));
 	assert.ok(boardLines(s, 200)[1].text.startsWith(id.slice(0, 32) + " "));
+});
+
+test("the board says what a due sync waits for before it pushes", () => {
+	const rows = [
+		row({ ticket: "ACM-1", phase: "ci", push_wait: { on: "slots", pushes: ["ACM-2", "acme/web ACM-9"], free: 0, need: 0 } }),
+		row({ ticket: "ACM-3", phase: "ci", push_wait: { on: "memory", pushes: [], free: 1 << 30, need: 4 << 30 } }),
+		row({ ticket: "ACM-4", phase: "ci" }),
+	];
+	const [, one, three, four] = boardLines({ rows, jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
+	assert.match(one.text, / sync waits for ACM-2, acme\/web ACM-9$/);
+	assert.match(three.text, / sync waits for memory$/);
+	assert.doesNotMatch(four.text, /waits/);
+	assert.equal(pushWaitText(row({ push_wait: { on: "slots", pushes: [], free: 0, need: 0 } })), "sync waits for a push slot");
 });

@@ -959,22 +959,10 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 		}
 		actions = res.Actions
 	case actSync:
-		res, err := c.App.Sync(ctx, SyncOpts{ID: w.id, NoAgent: true, Dry: c.Dry})
+		res, err := c.App.Sync(ctx, SyncOpts{ID: w.id, NoAgent: true, Dry: c.Dry, noWait: true})
 		if err != nil {
-			switch apperr.As(err).Code {
-			case apperr.SyncConflict:
-				// The base moved again since the look, and now conflicts:
-				// the next look sees the conflict and runs resolve.
-			case apperr.TicketLocked, apperr.AgentBusy:
-				// Another tkt command, or an agent, works on it right now.
-				return errStep{error: err}
-			default:
-				if fixable(err) {
-					// tkt sync kept why, and the next look hands it to
-					// a fresh session.
-					return errStep{error: err}
-				}
-				return errStep{error: err, stop: StopSyncFailed}
+			if err := syncStepErr(err); err != nil {
+				return err
 			}
 		}
 		if res != nil {
@@ -987,6 +975,27 @@ func (w *ctxWorld) act(ctx context.Context, a autoAct) error {
 		w.labelTab(true)
 	}
 	return nil
+}
+
+// syncStepErr is what the loop makes of a sync that failed: nil when the
+// next look sees why and takes the step it needs, or an errStep that takes
+// the sync again then, with a pause when it needs you.
+func syncStepErr(err error) error {
+	switch apperr.As(err).Code {
+	case apperr.SyncConflict:
+		// The base moved again since the look, and now conflicts: the next
+		// look sees the conflict and runs resolve.
+		return nil
+	case apperr.TicketLocked, apperr.AgentBusy, apperr.SyncPushBusy:
+		// Another tkt command, or an agent, works on it right now, or other
+		// syncs push and its turn comes later.
+		return errStep{error: err}
+	}
+	if fixable(err) {
+		// tkt sync kept why, and the next look hands it to a fresh session.
+		return errStep{error: err}
+	}
+	return errStep{error: err, stop: StopSyncFailed}
 }
 
 func (w *ctxWorld) remember(m autoMemory, kv ...string) {

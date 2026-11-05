@@ -68,6 +68,10 @@ export interface Row {
 	/** sync is the last tkt sync that failed on the head: why, when, and the
 	 * log with everything git and its hooks printed. */
 	sync?: { reason: string; kind: string; at: string; log: string } | null;
+	/** push_wait is what keeps the sync the ticket needs from pushing now:
+	 * slots, while the syncs in pushes hold every [sync] pushes slot on the
+	 * machine, or memory, while less than [sync] min_free is free. */
+	push_wait?: { on: "slots" | "memory"; pushes: string[]; free: number; need: number } | null;
 	/** ci_review says workflow.md turns CI review on: the review bot's
 	 * CLEAR counts as review-pr's, and tkt never starts review-pr. */
 	ci_review?: boolean;

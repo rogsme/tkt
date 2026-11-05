@@ -39,6 +39,17 @@ func (g Git) Do(ctx context.Context, timeout time.Duration, argv []string) runne
 	return g.R.Run(ctx, runner.Cmd{Argv: argv, Timeout: timeout})
 }
 
+// expendable is the oom_score_adj of a command that may run a heavy hook:
+// high, so the kernel kills it first when memory runs out.
+const expendable = 800
+
+// DoExpendable runs a command line that Argv built, such as a push whose
+// hook may run a whole test suite, as the first thing the kernel kills when
+// memory runs out.
+func (g Git) DoExpendable(ctx context.Context, timeout time.Duration, argv []string) runner.Result {
+	return g.R.Run(ctx, runner.Cmd{Argv: argv, Timeout: timeout, OOMScoreAdj: expendable})
+}
+
 // Repo locates a repository: Root is the primary worktree and Common the
 // shared git directory.
 type Repo struct {

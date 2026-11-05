@@ -36,7 +36,7 @@ Every fake appends its command line to `$FAKE_LOG`, each word quoted like bash `
 
 A status page in a script is a `file://` URL to a directory under `$WORK` that holds `api/v2/summary.json`, the file Statuspage serves.
 
-`TKT_WATCH=off` keeps every script's tkt commands from starting a `tkt watch` that would outlive the script; the `watch_` scripts turn it back on where they test that. `TKT_SERVICE_MANAGER` picks the services `tkt watch --install` writes, so a script on Linux can test the launchd agents too.
+`TKT_WATCH=off` keeps every script's tkt commands from starting a `tkt watch` that would outlive the script; the `watch_` scripts turn it back on where they test that. `TKT_SERVICE_MANAGER` picks the services `tkt watch --install` writes, so a script on Linux can test the launchd agents too. `TKT_MEMINFO` names the file tkt reads free memory from instead of `/proc/meminfo`; the sandbox's says plenty is free, whatever the machine has, and a script that tests `[sync] min_free` writes less.
 
 The scripts use these commands beyond testscript's own:
 

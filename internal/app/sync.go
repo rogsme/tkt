@@ -18,11 +18,14 @@ import (
 
 // SyncOpts are tkt sync's arguments. NoAgent stops at a conflict instead of
 // starting a session to resolve it; As is the preset for that session.
+// noWait returns SyncPushBusy at once when the sync cannot take its turn to
+// push, for tkt watch and tkt auto, which try again at their next look.
 type SyncOpts struct {
 	ID      string
 	As      string
 	NoAgent bool
 	Dry     bool
+	noWait  bool
 }
 
 // The outcomes of tkt sync.
@@ -111,7 +114,7 @@ func (a *App) Sync(ctx context.Context, o SyncOpts) (*SyncResult, error) {
 	if err := c.lockTicket(id); err != nil {
 		return nil, err
 	}
-	res, err := c.syncBranch(id, path)
+	res, err := c.syncBranch(id, path, !o.noWait)
 	if err != nil {
 		if o.NoAgent || !fixable(err) {
 			return nil, err
@@ -158,8 +161,11 @@ func fixable(err error) bool {
 
 // syncBranch merges the base into a ticket's branch when the merge is
 // clean, and pushes it. It returns the outcome conflict, and changes
-// nothing, when the merge conflicts. The caller holds the ticket's lock.
-func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
+// nothing, when the merge conflicts. The merge and the push run the
+// repository's hooks, so they take one of the machine's push slots first:
+// with wait, the sync waits for one; without, it returns SyncPushBusy and
+// changes nothing. The caller holds the ticket's lock.
+func (c *Ctx) syncBranch(id, path string, wait bool) (*SyncResult, error) {
 	f := c.LC.Forge
 	res := &SyncResult{Ticket: id, Conflicts: []string{}, DryRun: c.Dry, Actions: []Action{}, base: f.Remote + "/" + f.Base}
 	agents, err := c.H.Agents(c.Ctx)
@@ -227,13 +233,22 @@ func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
 	}
 	msg := fmt.Sprintf("Merge remote-tracking branch '%s' into %s", res.base, id)
 	merge := gitx.Argv(path, "merge", "--no-ff", "--no-edit", "-m", msg, base)
+	release, err := c.takePush(id, wait)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	if !c.Dry && c.Git.Head(c.Ctx, path) != head {
+		return nil, c.syncFailed(id, path, head, apperr.New(apperr.GitFailed, "%s moved while tkt sync waited for its turn to push, so tkt left it as it is", id).
+			WithHint("check git -C %s log, then tkt sync %s", path, id), "")
+	}
 	if c.Dry {
 		c.Would(merge)
 		c.Would(gitx.Argv(path, "push", "--quiet", f.Remote, "<merge>:refs/heads/"+id))
 		res.Outcome = SyncMerged
 		return res, nil
 	}
-	if r := c.Git.Do(c.Ctx, 5*time.Minute, merge); !r.OK() {
+	if r := c.Git.DoExpendable(c.Ctx, 5*time.Minute, merge); !r.OK() {
 		// git merge-tree said clean, so something here stopped the merge,
 		// such as a hook or an untracked file in its way.
 		c.abortMerge(path)
@@ -253,7 +268,7 @@ func (c *Ctx) syncBranch(id, path string) (*SyncResult, error) {
 	}
 	// Push the merge tkt checked, not whatever HEAD is by now.
 	push := gitx.Argv(path, "push", "--quiet", f.Remote, next+":refs/heads/"+id)
-	if r := c.Git.Do(c.Ctx, 10*time.Minute, push); !r.OK() {
+	if r := c.Git.DoExpendable(c.Ctx, 10*time.Minute, push); !r.OK() {
 		return nil, c.syncFailed(id, path, head, c.undo(path, next, head, apperr.New(apperr.GitFailed, "git push to %s failed: %s", f.Remote, oneLine(r.ErrText())).
 			WithHint("tkt sync %s tries again", id)), r.ErrText()+r.Out())
 	}

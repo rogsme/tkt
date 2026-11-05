@@ -57,3 +57,33 @@ func Wait(ctx context.Context, common, name string, timeout time.Duration) (*os.
 		}
 	}
 }
+
+// Mark writes what holds a lock into its file, such as a ticket's id, for
+// Holder to read.
+func Mark(f *os.File, text string) error {
+	if err := f.Truncate(0); err != nil {
+		return err
+	}
+	_, err := f.WriteAt([]byte(text), 0)
+	return err
+}
+
+// Holder reads what Mark wrote into the named lock's file while another
+// process holds it, or "" when the lock is free or the holder wrote nothing.
+// It takes the lock for a moment to tell, so a Try elsewhere at the same
+// time may see it held.
+func Holder(common, name string) string {
+	f, err := Try(common, name)
+	if err == nil {
+		f.Close()
+		return ""
+	}
+	if !errors.Is(err, ErrHeld) {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(common, "tkt", "locks", name+".lock"))
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}

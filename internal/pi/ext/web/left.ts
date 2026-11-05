@@ -3,7 +3,7 @@
 // chat sends; the buttons send the slash commands /inbox would run.
 
 import type { Attention } from "../attention.ts";
-import { diffText, watchStage } from "../board.ts";
+import { diffText, pushWaitText, watchStage } from "../board.ts";
 import { type Row, since } from "../model.ts";
 import type { Board } from "../mirror.ts";
 import { cardActs, type Nav, type View } from "./acts.ts";
@@ -75,6 +75,8 @@ function TicketRow({ r, on, need, job, g, now }: { r: Row; on: boolean; need: bo
 	const ws = watchStage(r);
 	if (ws) flags.push(`watch: ${ws}`);
 	if (r.merge && r.phase !== "merging") flags.push("merges when green");
+	const pw = pushWaitText(r);
+	if (pw) flags.push(pw);
 	if (r.stale) flags.push("stale");
 	const agent = !r.agent ? "none" : (r.agent.background ?? 0) > 0 ? "waiting" : r.agent.status;
 	return html`<li class=${`${on ? "on" : ""}${need ? " need" : ""}`} onClick=${() => g.go({ ticket: r.ticket, tab: "message" })}>

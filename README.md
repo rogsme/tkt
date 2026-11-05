@@ -284,7 +284,7 @@ Three things move a ticket:
 
 - You: approve plans, answer the agents' questions, confirm the human verification steps, say merge, and run `tkt done`.
 - `tkt auto ACM-124`, one loop per ticket: it takes every step a ticket in auto needs, and pauses where a person decides, such as when an agent asks a question or after five fix rounds. It goes on by itself once you act.
-- `tkt watch`, one per repository, which tkt commands start by themselves: every minute it merges a moved base when a sync is due, fixes failing checks once per head, removes a ticket whose pull request closed without merging, carries out the merge orders you left, and starts the chores you schedule. It never removes a merged ticket. While a service it depends on reports an incident, it starts no agent, and neither does `tkt auto`.
+- `tkt watch`, one per repository, which tkt commands start by themselves: every minute it merges a moved base when a sync is due, fixes failing checks once per head, removes a ticket whose pull request closed without merging, carries out the merge orders you left, and starts the chores you schedule. It never removes a merged ticket. While a service it depends on reports an incident, it starts no agent, and neither does `tkt auto`. A sync whose turn to push has not come, because other syncs hold every push slot or memory is short, waits for a later pass, so a pass never blocks the other tickets; `tkt ls` and the board say what it waits for.
 
 `tkt ls` shows the next step for every ticket, so you can drive one by hand at any time. [`docs/lifecycle.md`](docs/lifecycle.md) follows a ticket through every loop in depth, and [`docs/day-in-the-life.md`](docs/day-in-the-life.md) follows a whole working day with several tickets in flight.
 
@@ -397,7 +397,7 @@ tkt completion fish > ~/.config/fish/completions/tkt.fish
 | `tkt incidents` | Lists what the status pages report. `--ignore` lets `tkt watch` and `tkt auto` start agents through the incidents reported now, until each ends; `--off` holds them back again. |
 | `tkt watch` | Keeps every ticket moving: syncs a moved base, runs ci once per head when the checks fail, and removes a ticket whose pull request closed without merging. tkt commands start it by themselves; `--install` runs it, and herdr's server, as services that start at boot. |
 | `tkt run ID STAGE` | Replaces the ticket's idle agent with a fresh session and sends a stage line: `review`, `address` (which merges the base first), `resolve`, `ci`, `verify` (verify-pr runs the human verification steps and posts what it saw) or `start`. `sync`, the old name of `address`, still works and warns. |
-| `tkt sync ID` | Merges the base into the ticket's branch: itself, with no agent, when the merge is clean; through a fresh session in a split beside the ticket's agent on a conflict, or when the sync fails another way, such as on a push a pre-push hook refuses. |
+| `tkt sync ID` | Merges the base into the ticket's branch: itself, with no agent, when the merge is clean; through a fresh session in a split beside the ticket's agent on a conflict, or when the sync fails another way, such as on a push a pre-push hook refuses. The merge and push run the repository's hooks, so at most `[sync] pushes` syncs (2) on the machine push at once, each once `[sync] min_free` of memory (20%) is free; a sync waits for its turn and says on what. |
 | `tkt accept ID --reason TEXT` | Takes the review at the head as it is, when its findings do not matter: it comments `## Review accepted` on the pull request, which finish-ticket and verify-pr take in place of a clean review, and the head goes on to human verification with the steps from the pull request's body. The acceptance holds across clean merges of the base; a fix voids it. |
 | `tkt verified ID --passed STEPS` | Comments on the pull request that every human verification step passed on a head, once per head. `--waived STEPS --reason TEXT` names the steps you skipped instead, and why. `/check` in the tkt agent runs it before it asks whether to merge. Until you merge, the ticket shows as ready to merge, with the merge as its next step. |
 | `tkt merge ID --passed STEPS` | Once the human verification steps passed, sends finish-ticket the word to merge in a fresh session, naming the head they passed on. When finish-ticket could not merge yet, leaves a merge order that `tkt watch` carries out: it syncs a clean base, has the new head reviewed, waits for green checks, and merges one ticket at a time. The steps carry over clean merges of the base, so a verified batch merges while you are away. `--evidence` says you confirmed the steps from verify-pr's evidence. |
@@ -543,6 +543,10 @@ max_parallel = 3   # tkt auto and tkt watch agents at work at once in a reposito
 
 [watch]
 interval = "60s"   # how often tkt watch looks at every ticket
+
+[sync]
+pushes = 2         # syncs on the machine that merge and push at once, since each runs the repository's hooks
+min_free = "20%"   # memory free before a sync's push starts, or a size such as "8G" (Linux)
 
 [status.github]    # tkt watch and tkt auto start no agent while it reports a problem
 page = "https://www.githubstatus.com"
