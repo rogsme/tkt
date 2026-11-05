@@ -450,6 +450,15 @@ func TestUnblockedLineNamesTheTicketsAMergeFreed(t *testing.T) {
 	if !strings.Contains(skill, "it is unblocked when every one of them is now `done`") {
 		t.Errorf("finish-ticket no longer names only tickets whose blockers are all done")
 	}
+	// tkt offers every id the line opens with, so the line holds nothing else.
+	for _, want := range []string{
+		"The line holds only ticket ids, separated by commas: one per ticket, and a bundle by its lead's id alone.",
+		"a note about a ticket, and every ticket that is still blocked, goes in the report above the line, never on it.",
+	} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("finish-ticket no longer keeps notes off the Unblocked line: %q", want)
+		}
+	}
 	c := lifecycle.Config{RE: regexp.MustCompile(`^ACM-[1-9][0-9]*$`)}
 	for text, want := range map[string][]string{
 		"Merged.\nUnblocked: ACM-15, ACM-16\nStatus: DONE": {"ACM-15", "ACM-16"},

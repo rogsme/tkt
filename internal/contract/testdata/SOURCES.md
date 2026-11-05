@@ -22,7 +22,7 @@ Each fixture copies text that another project produces, so a change there shows 
 | `start-ticket-unattended.md` | gitlab.com/rogs/skills `skills/lifecycle/start-ticket/SKILL.md`, the `## Unattended runs` section | `619ef65` |
 | `review-pr-clean-merge.md` | gitlab.com/rogs/skills `skills/lifecycle/review-pr/SKILL.md`, the paragraph on a brief pinned to an earlier head, under `## 3. Review the complete change` | `05d27d5` |
 | `finish-ticket-authorization.md` | gitlab.com/rogs/skills `skills/lifecycle/finish-ticket/SKILL.md`: the description, the first rule of `## 1. Verify authorization and context`, the rule on human steps under `## 2. Verify the merge packet`, the paragraph on confirmations made from verify-pr's evidence, the paragraph on confirmations across clean merges, and the paragraph on a base that moved | `0d2c69f` |
-| `finish-ticket-unblocked.md` | gitlab.com/rogs/skills `skills/lifecycle/finish-ticket/SKILL.md`: the paragraph on what the merge unblocked, under `## 4. Complete the tickets`, and the report under `## 5. Report` | `a348760` |
+| `finish-ticket-unblocked.md` | gitlab.com/rogs/skills `skills/lifecycle/finish-ticket/SKILL.md`: the paragraph on what the merge unblocked, under `## 4. Complete the tickets`, and the report under `## 5. Report` | `fc13a4e` |
 | `automated-review.txt` | the forge's automated reviewer, not a skill: its review summary line | none |
 
 `config.ApproveLine`, the line tkt approve sends, relies on work-ticket's trigger: the skill runs "when the user approves the plan and says ... execute the plan" (gitlab.com/rogs/skills `skills/lifecycle/work-ticket/SKILL.md`, `33d185b`).
