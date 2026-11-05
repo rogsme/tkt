@@ -316,3 +316,49 @@ func TestMergeLineNamesEveryStep(t *testing.T) {
 		t.Errorf("MergeLine after a sync = %q, want %q", got, want)
 	}
 }
+
+// [sync] pushes and min_free default to 2 and 20%, and config.toml or a
+// repository's own files override them key by key.
+func TestSyncSettings(t *testing.T) {
+	c, err := Load(t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Sync != (Sync{Pushes: 2, MinFree: Mem{Percent: 20}}) {
+		t.Errorf("defaults: %+v", c.Sync)
+	}
+	c, err = Load(dirWith(t, map[string]string{FileName: "[sync]\npushes = 4\nmin_free = \"8G\"\n"}), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Sync != (Sync{Pushes: 4, MinFree: Mem{Bytes: 8 << 30}}) {
+		t.Errorf("config.toml: %+v", c.Sync)
+	}
+	// A repository whose hooks run a heavy suite pushes one at a time; its
+	// local file can loosen the memory floor for this machine.
+	c, err = Load(dirWith(t, map[string]string{FileName: "[sync]\npushes = 4\n"}), repoWith(t, "[sync]\npushes = 1\n", "[sync]\nmin_free = \"10%\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Sync != (Sync{Pushes: 1, MinFree: Mem{Percent: 10}}) {
+		t.Errorf("the repository's files: %+v", c.Sync)
+	}
+	// "0%" and "0" turn the memory floor off.
+	for _, off := range []string{"0%", "0"} {
+		c, err := Load(dirWith(t, map[string]string{FileName: "[sync]\nmin_free = \"" + off + "\"\n"}), "")
+		if err != nil || c.Sync.MinFree.Of(16<<30) != 0 {
+			t.Errorf("min_free %q: %+v, %v", off, c.Sync.MinFree, err)
+		}
+	}
+	for _, bad := range []string{
+		"[sync]\npushes = 0\n",
+		"[sync]\npushes = -1\n",
+		"[sync]\nmin_free = \"lots\"\n",
+		"[sync]\nmin_free = \"120%\"\n",
+		"[sync]\nmin_free = \"8 GB\"\n",
+	} {
+		if _, err := Load(dirWith(t, map[string]string{FileName: bad}), ""); code(err) != apperr.ConfigInvalid {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+}

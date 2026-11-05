@@ -553,6 +553,8 @@ page = "https://www.githubstatus.com"
 components = ["Actions", "Pull Requests", "Git Operations"]
 ```
 
+`[sync] pushes` is the most syncs that merge and push at once on the whole machine, since each push runs the repository's pre-push hook, which may run its whole test suite. Raise it on a machine with memory to spare, or set `1` for one push at a time. A repository with heavy hooks can set a lower value in its own `.tkt/tkt.toml`: its syncs then use only that many of the machine's slots, and other repositories keep yours. `min_free = "0%"` turns the memory floor off.
+
 A repository's own settings go in a `.tkt` directory at the root of its main checkout, next to `.git`. `.tkt/tkt.toml` holds the repository's settings, which it may commit to share them; `.tkt/tkt.local.toml` is yours, and git must not track it. Both win over `config.toml` key by key, the local file over the shared one, so a repository with no review bot, which runs Claude Code for everything, can say so for everyone:
 
 ```toml

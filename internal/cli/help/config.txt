@@ -60,6 +60,14 @@ watch and tkt sync. These are the defaults:
   min_free = "20%"      # memory free before a push starts, as a share or a
                         # size such as "8G"; Linux only
 
+[sync] pushes caps the syncs that merge and push at once on the whole
+machine, since each push runs the repository's hooks, which may run its whole
+test suite, and every repository shares the machine's memory. Raise it on a
+machine with room to spare, or set 1 so pushes go one at a time. A
+repository whose hooks are heavy can set a lower value in its .tkt/tkt.toml:
+its syncs then use only that many of the machine's slots, while other
+repositories keep yours. min_free = "0%" turns the memory floor off.
+
 A [suggest] table names the preset tkt suggest runs suggest-tickets on, such
 as a cheap one; without it, the default preset runs it:
 
