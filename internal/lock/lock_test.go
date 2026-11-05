@@ -28,3 +28,25 @@ func TestTryAndWait(t *testing.T) {
 	}
 	g.Close()
 }
+
+func TestHolder(t *testing.T) {
+	dir := t.TempDir()
+	if h := Holder(dir, "push-0"); h != "" {
+		t.Fatalf("free lock: %q", h)
+	}
+	f, err := Try(dir, "push-0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Mark(f, "acme/app ACM-1"); err != nil {
+		t.Fatal(err)
+	}
+	if h := Holder(dir, "push-0"); h != "acme/app ACM-1" {
+		t.Fatalf("held lock: %q", h)
+	}
+	f.Close()
+	// The text stays in the file, but a free lock has no holder.
+	if h := Holder(dir, "push-0"); h != "" {
+		t.Fatalf("released lock: %q", h)
+	}
+}

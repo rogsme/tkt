@@ -1,0 +1,81 @@
+# A sync's merge and push run the repository's hooks, which may run its
+# whole test suite, so only [sync] pushes syncs on the machine push at once.
+# A sync a person runs waits for its turn, and says on what.
+mkdir $HOME/.config/tkt
+cp $WORK/one.toml $HOME/.config/tkt/config.toml
+exec tkt start ACM-1
+exec tkt start ACM-2
+exec tkt start ACM-3
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-2 commit -q --allow-empty -m 'ACM-2 work'
+realgit -C $FAKE_WT_ROOT/ACM-3 commit -q --allow-empty -m 'ACM-3 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-2 push -q origin ACM-2
+realgit -C $FAKE_WT_ROOT/ACM-3 push -q origin ACM-3
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+cp $WORK/pre-push $REPO/.git/hooks/pre-push
+chmod 755 $REPO/.git/hooks/pre-push
+
+# With one slot, ACM-2's sync waits while ACM-1's hook runs, then pushes.
+cp $WORK/one $WORK/max
+exec tkt sync ACM-1 --no-agent &
+waitfile $WORK/hook-ACM-1
+exec sh -c 'tkt sync ACM-2 --no-agent 2>$WORK/acm2.err' &
+waitgrep 'ACM-2: waits for a push slot: ACM-1 pushes \(\[sync\] pushes\)' $WORK/acm2.err
+cp $WORK/one $WORK/go
+wait
+stdout 'ACM-1  merged origin/main'
+stdout 'ACM-2  merged origin/main'
+! exists $WORK/overlap
+
+# With two slots, three syncs at once never run more than two hooks.
+cp $WORK/two.toml $HOME/.config/tkt/config.toml
+cp $WORK/two $WORK/max
+realgit -C $REPO commit -q --allow-empty -m 'a third ticket merged'
+realgit -C $REPO push -q --no-verify origin main
+exec tkt sync ACM-1 --no-agent &
+exec tkt sync ACM-2 --no-agent &
+exec tkt sync ACM-3 --no-agent &
+wait
+stdout 'ACM-1  merged origin/main'
+stdout 'ACM-2  merged origin/main'
+stdout 'ACM-3  merged origin/main'
+! exists $WORK/overlap
+houserules
+
+-- one.toml --
+[sync]
+pushes = 1
+-- two.toml --
+[sync]
+pushes = 2
+-- one --
+1
+-- two --
+2
+-- pre-push --
+#!/bin/sh
+# Stands in for a heavy hook. It notes when more hooks run at once than
+# $WORK/max allows, and ACM-1's waits for $WORK/go.
+refs=$(cat)
+max=$(cat "$WORK/max")
+i=1
+while ! mkdir "$WORK/running-$i" 2>/dev/null; do
+	i=$((i + 1))
+	if [ "$i" -gt 9 ]; then
+		echo "cannot count the hooks in $WORK" >&2
+		exit 1
+	fi
+done
+if [ "$i" -gt "$max" ]; then
+	touch "$WORK/overlap"
+fi
+case "$refs" in
+*refs/heads/ACM-1*)
+	touch "$WORK/hook-ACM-1"
+	while [ ! -e "$WORK/go" ]; do sleep 0.1; done
+	;;
+esac
+sleep 0.3
+rmdir "$WORK/running-$i"

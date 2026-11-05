@@ -15,6 +15,8 @@ func TestUnitFilesCarryThePathAndTheBinaries(t *testing.T) {
 		"\nEnvironment=\"PATH=/home/acme/.local/bin:/usr/bin\"\n",
 		"\nExecStart=/home/acme/.local/bin/herdr server\n",
 		"\nRestart=on-failure\n",
+		// A hook the kernel kills for memory takes no agent with it.
+		"\nOOMPolicy=continue\n",
 		"\nWantedBy=default.target\n",
 	} {
 		if !strings.Contains(h, want) {
@@ -32,6 +34,7 @@ func TestUnitFilesCarryThePathAndTheBinaries(t *testing.T) {
 		// A stop lets the step in progress finish, with its child commands.
 		"\nKillMode=mixed\n",
 		"\nTimeoutStopSec=300\n",
+		"\nOOMPolicy=continue\n",
 	} {
 		if !strings.Contains(w, want) {
 			t.Errorf("tkt-watch@.service lacks %q:\n%s", want, w)

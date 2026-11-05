@@ -1,0 +1,45 @@
+# A sync's push runs the repository's hooks, so tkt watch syncs a moved base
+# only while [sync] min_free of memory is free and a push slot is. Until
+# then it leaves the ticket with the reason push_turn, notifies nobody, and
+# never blocks the pass; tkt ls says what the sync waits for.
+exec tkt start ACM-2
+realgit -C $FAKE_WT_ROOT/ACM-2 commit -q --allow-empty -m 'ACM-2 work'
+realgit -C $FAKE_WT_ROOT/ACM-2 push -q origin ACM-2
+gitvar H2 $FAKE_WT_ROOT/ACM-2 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H2SHORT"; $H2[0:7]) | gsub("H2"; $H2) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+
+# 1 GB free of 16 GB is under the default 20%.
+cp $WORK/low $TKT_MEMINFO
+resetlog
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-2::push_turn"]'
+! logged git -C $FAKE_WT_ROOT/ACM-2 merge --no-ff
+! logged herdr notification show
+state $FAKE_WT_ROOT/ACM-2 watch_last ''
+exec tkt ls --json
+envelope '.result.rows[0].push_wait | [.on, .free, .need]' '["memory",1073741824,3435973820]'
+exec tkt ls
+stdout 'waits for free memory: 1.0 GB free of the 3.2 GB a push needs \(\[sync\] min_free\)'
+
+# Once memory is free, the next pass syncs.
+cp $WORK/free $TKT_MEMINFO
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-2:sync:base_moved"]'
+stderr 'ACM-2: synced with the base, with no agent'
+houserules
+
+-- low --
+MemTotal:       16777216 kB
+MemAvailable:    1048576 kB
+-- free --
+MemTotal:       16777216 kB
+MemAvailable:   12582912 kB
+-- prs.json --
+[
+  {"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "H2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"author": {"login": "claude"}, "body": "**Automated review: STALE_BASE** · head `H2SHORT`", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H2"}}]}
+]

@@ -1,0 +1,56 @@
+# A sync killed during its push, as when memory ran out under its hook,
+# leaves its merge unpushed. The next sync drops a clean merge of the base
+# like that and makes it again with the base as it is now. Any other
+# unpushed commit stays, for whoever made it.
+exec tkt start ACM-12
+env WT=$FAKE_WT_ROOT/ACM-12
+cp $WORK/ticket.txt $WT/ticket.txt
+realgit -C $WT add ticket.txt
+realgit -C $WT commit -q -m 'ACM-12 work'
+realgit -C $WT push -q origin ACM-12
+gitvar OLD $WT HEAD
+cp $WORK/other.txt $REPO/other.txt
+realgit -C $REPO add other.txt
+realgit -C $REPO commit -q -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+realgit -C $WT fetch -q origin
+realgit -C $WT merge -q --no-ff --no-edit origin/main
+gitvar STRANDED $WT HEAD
+realgit -C $REPO commit -q --allow-empty -m 'a third ticket merged'
+realgit -C $REPO push -q origin main
+gitvar BASE $REPO HEAD
+
+resetlog
+exec tkt sync ACM-12 --no-agent --json
+envelope '.result.outcome' merged
+envelope '.result.dropped' $STRANDED
+stderr 'ACM-12: dropped the unpushed merge [0-9a-f]{7} an earlier sync left; merging origin/main again'
+logged git -C $WT reset --keep --quiet $OLD
+realgit -C $WT log -1 --format=%P
+stdout '^'$OLD' '$BASE'$'
+gitvar NEW $WT HEAD
+realgit -C $WORK/origin.git rev-parse ACM-12
+stdout ^$NEW
+
+# A merge with a change of its own is someone's work: it stays.
+realgit -C $REPO commit -q --allow-empty -m 'a fourth ticket merged'
+realgit -C $REPO push -q origin main
+realgit -C $WT fetch -q origin
+realgit -C $WT merge -q --no-ff --no-commit origin/main
+cp $WORK/changed.txt $WT/ticket.txt
+realgit -C $WT add ticket.txt
+realgit -C $WT commit -q --no-edit
+gitvar MINE $WT HEAD
+! exec tkt sync ACM-12 --no-agent --json
+envelope '.error.code' unpushed_commits
+gitvar SAME $WT HEAD
+exec echo $SAME
+stdout ^$MINE
+houserules
+
+-- ticket.txt --
+ACM-12's change.
+-- changed.txt --
+ACM-12's change, changed in the merge.
+-- other.txt --
+Another ticket's change.

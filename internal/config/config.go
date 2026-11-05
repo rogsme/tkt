@@ -54,6 +54,7 @@ type Config struct {
 	Verify        Verify
 	Fixes         Fixes
 	Start         Start
+	Sync          Sync
 	// Chores are the repository's scheduled runs, by name.
 	Chores []Chore
 	// Status lists the status pages tkt watch reads, by name.
@@ -135,6 +136,74 @@ type Auto struct {
 	MaxParallel int
 }
 
+// Sync holds what limits tkt sync's merges and pushes, whose hooks may run
+// a repository's whole test suite. The limits are the machine's, since every
+// repository's hooks share its memory.
+type Sync struct {
+	// Pushes caps the syncs on the machine that merge and push at once.
+	Pushes int
+	// MinFree is the memory a push needs free before it starts.
+	MinFree Mem
+}
+
+// Mem is an amount of memory: Bytes, or Percent of the machine's.
+type Mem struct {
+	Bytes   uint64
+	Percent int
+}
+
+// Of is the amount in bytes on a machine with total bytes of memory.
+func (m Mem) Of(total uint64) uint64 {
+	if m.Percent > 0 {
+		return total / 100 * uint64(m.Percent)
+	}
+	return m.Bytes
+}
+
+func (m Mem) String() string {
+	if m.Percent > 0 {
+		return strconv.Itoa(m.Percent) + "%"
+	}
+	return strconv.FormatUint(m.Bytes, 10)
+}
+
+// ParseMem reads an amount of memory: a percentage such as "20%", or a size
+// in bytes with an optional K, M, G or T suffix, such as "8G".
+func ParseMem(s string) (Mem, bool) {
+	s = strings.TrimSpace(s)
+	if p, ok := strings.CutSuffix(s, "%"); ok {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 || n > 100 {
+			return Mem{}, false
+		}
+		if n == 0 {
+			return Mem{}, true
+		}
+		return Mem{Percent: n}, true
+	}
+	mult := uint64(1)
+	if s != "" {
+		switch strings.ToUpper(s[len(s)-1:]) {
+		case "K":
+			mult = 1 << 10
+		case "M":
+			mult = 1 << 20
+		case "G":
+			mult = 1 << 30
+		case "T":
+			mult = 1 << 40
+		}
+		if mult > 1 {
+			s = s[:len(s)-1]
+		}
+	}
+	n, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return Mem{}, false
+	}
+	return Mem{Bytes: n * mult}, true
+}
+
 // Review holds how tkt treats reviews.
 type Review struct {
 	// BotWait is how long a new head waits for the forge's automated
@@ -157,6 +226,8 @@ const (
 	DefaultBotWait     = 15 * time.Minute
 	DefaultStaleAfter  = 2 * time.Hour
 	DefaultWatchEvery  = 60 * time.Second
+	DefaultPushes      = 2
+	DefaultMinFree     = 20
 )
 
 // ApproveLine is what tkt approve sends to the planning session. It is not a
@@ -291,7 +362,8 @@ func builtin() Config {
 		Review: Review{BotWait: DefaultBotWait},
 		Board:  Board{StaleAfter: DefaultStaleAfter},
 		Watch:  Watch{Interval: DefaultWatchEvery, DoneAfterMerge: true, Autostart: true},
-		Start:  Start{Mode: ModeAuto}}
+		Start:  Start{Mode: ModeAuto},
+		Sync:   Sync{Pushes: DefaultPushes, MinFree: Mem{Percent: DefaultMinFree}}}
 	for k, v := range BuiltinStages {
 		c.Stages[k] = v
 	}

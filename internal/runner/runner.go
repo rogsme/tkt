@@ -23,6 +23,11 @@ type Cmd struct {
 	// pipe, for a command that exits before a pipe drains: opencode api
 	// cuts its output at 256 KiB on a pipe.
 	StdoutFile bool
+	// OOMScoreAdj raises the command's oom_score_adj on Linux, which its
+	// children inherit, so that when memory runs out the kernel kills it
+	// before anything else, such as the herdr server whose panes run tkt.
+	// It suits a command that may run a heavy hook, such as git push.
+	OOMScoreAdj int
 }
 
 // Result is what a command did. Code is -1 when it could not start or ran

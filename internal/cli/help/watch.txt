@@ -42,7 +42,11 @@ Its agent runs take the [auto] max_parallel slots tkt auto uses. It records
 each step in the history, and shows a herdr notification for each agent run,
 failure and removal; a clean sync stays quiet. A sync that fails, such as
 while the network is down, is tried again at the next pass, with one
-notification for each head and reason.
+notification for each head and reason. A sync whose turn to push has not
+come, because other syncs hold every [sync] pushes slot on the machine or
+less than [sync] min_free of memory is free, waits for a later pass with the
+reason push_turn and no notification, so the pass never blocks the other
+tickets (tkt help sync).
 
 It also starts the repository's chores, the agent runs its
 .tkt/tkt.local.toml schedules, when their slot comes (tkt help chores): once per slot, however

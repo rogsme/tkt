@@ -94,6 +94,7 @@ const (
 	BranchNotPushed     Code = "branch_not_pushed"
 	UnpushedCommits     Code = "unpushed_commits"
 	SyncConflict        Code = "sync_conflict"
+	SyncPushBusy        Code = "sync_push_busy"
 	WatchRunning        Code = "watch_running"
 	MergeHeadMoved      Code = "merge_head_moved"
 	MergeBaseConflicts  Code = "merge_base_conflicts"
@@ -206,6 +207,7 @@ var Registry = []Info{
 	{BranchNotPushed, ExitState, "the ticket's branch is not on the remote yet"},
 	{UnpushedCommits, ExitState, "the ticket's branch has commits that are not on the remote"},
 	{SyncConflict, ExitState, "merging the base conflicts, and --no-agent kept tkt sync from starting a session to resolve it"},
+	{SyncPushBusy, ExitState, "every [sync] pushes slot on the machine is taken, or less than [sync] min_free of memory is free, so the sync merged nothing; it goes once its turn comes"},
 	{WatchRunning, ExitState, "a tkt watch already runs for the repository, or did not stop when asked"},
 	{MergeHeadMoved, ExitState, "the pull request changed beyond clean merges of the base since the human verification steps ran on it"},
 	{MergeBaseConflicts, ExitState, "merging the base into the branch conflicts, and human verification never carries over the resolution: sync, then verify the new head"},

@@ -93,6 +93,15 @@ export function watchStage(r: Row): string {
 	return stage === r.stage ? stage : "";
 }
 
+/** pushWaitText says what the sync a ticket needs waits for before it
+ * pushes, or "": the syncs that push first, or free memory. */
+export function pushWaitText(r: Row): string {
+	const w = r.push_wait;
+	if (!w) return "";
+	if (w.on === "memory") return "sync waits for memory";
+	return w.pushes.length > 0 ? `sync waits for ${w.pushes.join(", ")}` : "sync waits for a push slot";
+}
+
 /** The board's columns and their widths. AGE is the time since tkt start,
  * TIME the time in the phase, as in tkt ls; DIFF what the branch changes
  * against its base; NOTES takes the rest, with the pull request's title
@@ -174,6 +183,8 @@ function rowText(r: Row, s: BoardState, w: number[]): string {
 	const ws = watchStage(r);
 	if (ws) flags.push(`watch: ${ws}`);
 	if (r.merge && r.phase !== "merging") flags.push("merges when green");
+	const pw = pushWaitText(r);
+	if (pw) flags.push(pw);
 	const job = s.jobs.get(r.ticket);
 	if (job) flags.push(`${job} ${spinner[s.tick % spinner.length]}`);
 	if (r.stale) flags.push("stale");
