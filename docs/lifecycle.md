@@ -257,7 +257,7 @@ Where workflow.md's feature table turns on `Agent verification`, this is the nex
 
 | Report | Next |
 |---|---|
-| `Verification: FAILED` | `tkt run ACM-123 address`: address-pr-review answers each failed step as a finding. The fix gets a new review, and verify-pr runs again on the new head. |
+| `Verification: FAILED` | `tkt run ACM-123 address`: address-pr-review answers each failed step as a finding. The fix gets a new review, and verify-pr runs again on the new head. When address answers without a new head, such as by fixing a step that could not pass as written, verify-pr runs again on the same head. |
 | `Verification: PASSED` | You confirm the steps from its evidence, or run them yourself. |
 | `Verification: INCOMPLETE` | You run the steps it could not. |
 

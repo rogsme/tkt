@@ -9,6 +9,8 @@ jqedit $FAKE_DIR/herdr.json '.agents[0].agent_status = "blocked"'
 exec tkt auto ACM-12 --notify --poll 1s --json &
 waitstate $FAKE_WT_ROOT/ACM-12 auto_pause needs_you
 state $FAKE_WT_ROOT/ACM-12 auto_why agent_blocked
+# The loop saves the pause before it sends the notice.
+waitgrep 'notification show ACM-12:\\ needs' $FAKE_LOG
 exec tkt ls --no-fetch --json
 envelope '.result.rows[0] | [.phase, .auto.running, .auto.paused, .auto.why]' '["needs_you",true,"needs_you","agent_blocked"]'
 logged herdr notification show 'ACM-12: needs you'

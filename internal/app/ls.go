@@ -213,10 +213,12 @@ type Row struct {
 	Merge *RowMerge `json:"merge"`
 	// orderVoid says why the ticket's merge order on orderHead no longer
 	// holds, so tkt watch drops it, or is ""; reviewReady says review-pr's
-	// READY_FOR_HUMAN summary is at the head, which finish-ticket merges on.
+	// READY_FOR_HUMAN summary is at the head, which finish-ticket merges on;
+	// stageAt is when tkt run started the stage, or "" before tkt kept it.
 	orderVoid   string
 	orderHead   string
 	reviewReady bool
+	stageAt     string
 
 	// Phase is where the ticket stands, since PhaseSince.
 	Phase      string `json:"phase"`
@@ -696,6 +698,7 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 	}
 	st := ts.st
 	row.Stage, row.Launch, row.Started, row.Updated = st["stage"], st["status"], st["started"], st["updated"]
+	row.stageAt = st["stage_at"]
 	row.Hold, row.Chore, row.Preset = st["hold"] != "", or(t.Chore, st["chore"]), st["preset"]
 	row.CIReview = c.LC.On(contract.FeatureCIReview)
 	row.Auto = &RowAuto{Wanted: st["auto"] != "", ApprovePlan: st["auto"] == autoPlan || st["auto"] == autoYolo, Yolo: st["yolo"] != "", Rounds: atoi(st["rounds"]),

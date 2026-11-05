@@ -307,7 +307,7 @@ The review bot cleared the head; these steps come from pull request #485.
 
 On the web page, each step reads as Markdown, so its commands show as code, and its pass, fail and skip buttons wear green, red and yellow. The one you press fills in with a check mark, and the row's other two fade.
 
-Space cycles a step's mark, `p`, `f` and `s` set pass, fail and skip, and Enter closes the list. You close it with step 3 failed, as verify-pr said. Its report is feedback on the pull request, so `/next ACM-124` runs address: a fresh session answers the failed step as a finding, fixes it test-first, and pushes. For a failure only you found, `Start a fix session with what I saw` in /check sends a fresh session the step and what you type instead. CI and the bot run on the new head, and at 15:05 the bot clears it.
+Space cycles a step's mark, `p`, `f` and `s` set pass, fail and skip, and Enter closes the list. You close it with step 3 failed, as verify-pr said. Its report is feedback on the pull request, so `/next ACM-124` runs address: a fresh session answers the failed step as a finding, fixes it test-first, and pushes. For a failure only you found, `Start a fix session with what I saw` in /check sends a fresh session the step and what you type instead. CI and the bot run on the new head, and at 15:05 the bot clears it. Had the step itself been wrong, address would fix the procedure and push nothing, and verify-pr would run the new steps on the same head.
 
 ## 15:10 A loop at its limit
 
