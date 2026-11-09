@@ -30,6 +30,7 @@ logged herdr pane split w1:p10 --direction right --cwd $WT --env
 statevar $WT fix_pane FIX
 logged herdr agent start acm-12-fix --kind claude --pane $FIX
 grep 'Fetch origin and merge origin/main into this branch. The merge conflicts: resolve each conflict from what both sides meant' $FAKE_DIR/prompts
+grep 'correct every Human verification step whose page, control or expected result the merge changed' $FAKE_DIR/prompts
 state $WT fix_stage resolve
 state $WT stage start
 state $WT pane w1:p10

@@ -486,7 +486,7 @@ flowchart LR
   class moved,next ext
 ```
 
-`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge and hands the failure to the `sync-fix` stage, whose line says why and names the log of git's output. A conflict goes to the `resolve` stage, which merges the base, resolves each conflict from what both sides meant, changes nothing else, refreshes the pull request's review brief when it has one, and pushes once. Review findings stay for `address`.
+`git merge-tree` tests the merge in memory, without touching the worktree or the branch. A clean merge becomes a merge commit and a normal push; tkt never rebases and never force-pushes, and when the push fails it undoes its merge and hands the failure to the `sync-fix` stage, whose line says why and names the log of git's output. A conflict goes to the `resolve` stage, which merges the base, resolves each conflict from what both sides meant, changes nothing else, pushes once, and then updates the pull request's body when it has one: it refreshes the review brief and corrects every human verification step the merge changed. Review findings stay for `address`.
 
 Both fixes run in a split beside the ticket's agent, which keeps its pane and its conversation, and so does a `ci` run for failing checks. `[fixes] as` runs them on a cheaper preset. The split closes once the fix ends with `Status: READY_FOR_REVIEW` and `tkt watch` or `tkt auto` looks again; a fix that stops otherwise keeps its split, and the board says so.
 
