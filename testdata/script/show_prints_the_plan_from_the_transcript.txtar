@@ -22,11 +22,16 @@ envelope '.result.rows[0] | [.last_status, .phase, .idle_since]' '["AWAITING_APP
 exec tkt show ACM-12 --screen
 stdout '^Status: BLOCKED$'
 
-# Without a transcript, the recent output stands in.
+# Without a transcript, the screen stands in as it shows: reading Claude
+# Code's recent output would scroll its view, and tkt ls reads a planning
+# ticket's turn on every look.
 rm $CD/$SID.jsonl
+resetlog
 exec tkt show ACM-12 --json
 envelope '.result | [.source, .last_status]' '["screen","BLOCKED"]'
-logged herdr agent read w1:p10 --source recent --lines 200
+logged herdr agent read w1:p10 --source visible --lines 200
+exec tkt ls --no-fetch --json
+! logged --source recent
 
 # OpenCode's last message comes from its API.
 exec tkt start ACM-13 --as opencode --prompt-file $WORK/p13.txt
