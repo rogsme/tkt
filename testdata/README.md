@@ -69,11 +69,11 @@ The fakes cannot prove that the real tools behave as assumed. After a change to 
 
 1. Run `tkt start ACM-1 --dry-run --prompt "..."`, then the same without `--dry-run`. Check:
    - the tab label;
-   - that the agent runs in build mode: Claude shows "bypass permissions on", and OpenCode shows Build and the preset's model;
+   - that the agent runs in build mode: Claude shows auto mode on, or "bypass permissions on" for a preset with `permissions = "bypass"`, and OpenCode shows Build and the preset's model;
    - that the prompt arrived whole.
 2. Run the same start again. It refuses, because an agent runs in the worktree.
 3. Run `tkt run ACM-1 address` while the agent works. It refuses. Run it again once the agent is idle: the agent exits, a new one starts, and it gets the address line.
-4. Exit the agent, then run `tkt resume ACM-1`. The newest session comes back in bypass mode.
+4. Exit the agent, then run `tkt resume ACM-1`. The newest session comes back in the preset's permission mode.
 5. Run `tkt ls`. It shows the row and a sensible next step.
 6. Close the tab, then remove the scratch worktrees with `wt remove`.
 

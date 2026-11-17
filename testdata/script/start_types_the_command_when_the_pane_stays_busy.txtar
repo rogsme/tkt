@@ -5,6 +5,6 @@ mkprompt $WORK/p.txt ACM-12
 stdin $WORK/p.txt
 exec tkt start ACM-12 --prompt -
 stderr 'typing the command'
-logcontains 'herdr pane run w1:p10 \''claude\''\ \''--dangerously-skip-permissions\'''
+logcontains 'herdr pane run w1:p10 \''claude\''\ \''--permission-mode\''\ \''auto\'''
 logged herdr agent rename w1:p10 acm-12
 jqeq $FAKE_DIR/herdr.json '.agents[0].name' acm-12

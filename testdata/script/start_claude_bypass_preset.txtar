@@ -1,0 +1,23 @@
+# A Claude preset with permissions = "bypass" starts Claude Code with its
+# permission prompts off, and tkt resume keeps them off.
+mkdir $HOME/.config/tkt
+cp $WORK/config.toml $HOME/.config/tkt/config.toml
+mkprompt $WORK/p.txt ACM-12
+stdin $WORK/p.txt
+exec tkt start ACM-12 --as yolo --prompt -
+logged herdr agent start acm-12 --kind claude --pane w1:p10 --timeout 90000 -- --dangerously-skip-permissions --session-id
+! logcontains permission-mode
+
+jqedit $FAKE_DIR/herdr.json '.agents = []'
+resetlog
+statevar $FAKE_WT_ROOT/ACM-12 session SID
+exec tkt resume ACM-12 --as yolo
+logged herdr agent start acm-12 --kind claude --pane w1:p10 --timeout 90000 -- --resume $SID --dangerously-skip-permissions
+
+-- config.toml --
+[presets.claude]
+harness = "claude"
+
+[presets.yolo]
+harness = "claude"
+permissions = "bypass"

@@ -28,19 +28,24 @@ type Session struct {
 // LaunchArgs returns the harness arguments that start or resume sid.
 func LaunchArgs(harness string, phase Phase, sid string, p config.Preset, path string) []string {
 	if harness == config.Claude {
-		return ClaudeArgs(phase, sid, p.Model)
+		return ClaudeArgs(phase, sid, p.Model, p.Permissions)
 	}
 	return []string{"-s", sid, path}
 }
 
-// ClaudeArgs starts Claude Code with its permission prompts off, on a session
-// id chosen up front. A model reads model#effort.
-func ClaudeArgs(phase Phase, sid, model string) []string {
+// ClaudeArgs starts Claude Code on a session id chosen up front, in auto mode
+// unless perm is config.PermBypass, which turns the permission prompts off. A
+// model reads model#effort.
+func ClaudeArgs(phase Phase, sid, model, perm string) []string {
+	mode := []string{"--permission-mode", "auto"}
+	if perm == config.PermBypass {
+		mode = []string{"--dangerously-skip-permissions"}
+	}
 	var a []string
 	if phase == Resume {
-		a = []string{"--resume", sid, "--dangerously-skip-permissions"}
+		a = append([]string{"--resume", sid}, mode...)
 	} else {
-		a = []string{"--dangerously-skip-permissions", "--session-id", sid}
+		a = append(mode, "--session-id", sid)
 	}
 	if model == "" {
 		return a

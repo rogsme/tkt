@@ -84,6 +84,8 @@ func TestSettingsErrors(t *testing.T) {
 		"[presets.x]\nharness = \"claude\"\nmodle = \"opus\"\n",
 		"[presets.x]\nharness = \"opencode\"\nmodel = \"fast\"\n",
 		"[presets.\"-x\"]\nharness = \"claude\"\n",
+		"[presets.x]\nharness = \"claude\"\npermissions = \"ask\"\n",
+		"[presets.x]\nharness = \"opencode\"\npermissions = \"auto\"\n",
 		"[stages]\nlint = \"  \"\n",
 		"[stages]\nLint = \"Run it.\"\n",
 		"[presets.x\nharness = \"claude\"\n",
@@ -93,6 +95,28 @@ func TestSettingsErrors(t *testing.T) {
 		if code(err) != apperr.ConfigInvalid {
 			t.Errorf("%q: %v", src, err)
 		}
+	}
+}
+
+func TestClaudePresetsDefaultToAutoPermissions(t *testing.T) {
+	src := "[presets.claude]\nharness = \"claude\"\n\n[presets.yolo]\nharness = \"claude\"\npermissions = \"bypass\"\n\n[presets.fast]\nharness = \"opencode\"\n"
+	c, err := Load(dirWith(t, map[string]string{"config.toml": src}), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range c.Presets {
+		got = append(got, p.Permissions)
+	}
+	if !slices.Equal(got, []string{PermAuto, PermBypass, ""}) {
+		t.Errorf("permissions %q", got)
+	}
+	if p := BuiltinPresets()[0]; p.Permissions != PermAuto {
+		t.Errorf("built-in claude: %+v", p)
+	}
+	text := RenderTOML(c)
+	if strings.Count(text, "permissions") != 1 || !strings.Contains(text, "[presets.yolo]\nharness = \"claude\"\npermissions = \"bypass\"\n") {
+		t.Errorf("rendered:\n%s", text)
 	}
 }
 

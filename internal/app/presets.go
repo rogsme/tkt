@@ -26,9 +26,9 @@ func (r *PresetsResult) Text(w io.Writer) {
 		if i == 0 {
 			name += " (default)"
 		}
-		rows = append(rows, []string{name, p.Harness, or(p.Model, "default model")})
+		rows = append(rows, []string{name, p.Harness, or(p.Model, "default model"), or(p.Permissions, "-")})
 	}
-	output.Table(w, []string{"PRESET", "HARNESS", "MODEL"}, rows)
+	output.Table(w, []string{"PRESET", "HARNESS", "MODEL", "PERMISSIONS"}, rows)
 }
 
 // Presets lists the presets of the repository tkt runs in, with its own

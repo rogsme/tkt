@@ -8,7 +8,7 @@ resetlog
 statevar $WT session OLD
 exec tkt run ACM-12 address
 logged herdr agent prompt w1:p10 /exit
-logged herdr agent start acm-12 --kind claude --pane w1:p10 --timeout 90000 -- --dangerously-skip-permissions --session-id
+logged herdr agent start acm-12 --kind claude --pane w1:p10 --timeout 90000 -- --permission-mode auto --session-id
 cmp $FAKE_DIR/prompts $WORK/want.txt
 state $WT stage address
 ! state $WT session $OLD

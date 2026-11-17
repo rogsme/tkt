@@ -1,4 +1,4 @@
-# tkt resume relaunches the recorded session in bypass mode and sends nothing.
+# tkt resume relaunches the recorded session in auto mode and sends nothing.
 mkprompt $WORK/p.txt ACM-12
 stdin $WORK/p.txt
 exec tkt start ACM-12 --prompt -
@@ -7,6 +7,6 @@ jqedit $FAKE_DIR/herdr.json '.agents = []'
 resetlog
 statevar $WT session SID
 exec tkt resume ACM-12
-logged herdr agent start acm-12 --kind claude --pane w1:p10 --timeout 90000 -- --resume $SID --dangerously-skip-permissions
+logged herdr agent start acm-12 --kind claude --pane w1:p10 --timeout 90000 -- --resume $SID --permission-mode auto
 state $WT status resumed
 ! exists $FAKE_DIR/prompts
