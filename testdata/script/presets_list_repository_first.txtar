@@ -6,11 +6,13 @@ cp $WORK/config.toml $HOME/.config/tkt/config.toml
 mkdir $REPO/.tkt
 cp $WORK/tkt.toml $REPO/.tkt/tkt.toml
 exec tkt presets
-stdout '^claude \(default\) +claude +default model$'
-stdout '^fast +opencode +acme/fast#max$'
+stdout '^claude \(default\) +claude +default model +auto$'
+stdout '^fast +opencode +acme/fast#max +-$'
+stdout '^yolo +claude +opus +bypass$'
 exec tkt presets --json
-envelope '[.result.presets[].name]' '["claude","fast"]'
+envelope '[.result.presets[].name]' '["claude","fast","yolo"]'
 envelope '.result.presets[1].model' 'acme/fast#max'
+envelope '[.result.presets[].permissions]' '["auto",null,"bypass"]'
 envelope .result.suggest fast
 
 -- config.toml --
@@ -23,6 +25,11 @@ as = "fast"
 
 [presets.claude]
 harness = "claude"
+
+[presets.yolo]
+harness = "claude"
+model = "opus"
+permissions = "bypass"
 -- tkt.toml --
 [presets.claude]
 harness = "claude"

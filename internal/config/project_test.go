@@ -164,11 +164,23 @@ func TestRepositoryFilesRefuseBadSettings(t *testing.T) {
 	}
 }
 
+func TestSharedFileTakesAutoPermissions(t *testing.T) {
+	dir := dirWith(t, map[string]string{FileName: globalSettings})
+	c, err := Load(dir, repoWith(t, "[presets.claude]\nharness = \"claude\"\npermissions = \"auto\"\n", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := c.Default(); p.Permissions != PermAuto {
+		t.Errorf("default %+v", p)
+	}
+}
+
 func TestSharedFileRefusesWhatIsYours(t *testing.T) {
 	dir := dirWith(t, map[string]string{FileName: globalSettings})
 	for src, want := range map[string]string{
-		"[chores.deps]\nschedule = \"@daily\"\nprompt = \"Upgrade.\"\n": "[chores] belongs in ",
-		"[agent]\nmodel = \"acme/small\"\n":                             "[agent] belongs in ",
+		"[chores.deps]\nschedule = \"@daily\"\nprompt = \"Upgrade.\"\n":    "[chores] belongs in ",
+		"[agent]\nmodel = \"acme/small\"\n":                                "[agent] belongs in ",
+		"[presets.yolo]\nharness = \"claude\"\npermissions = \"bypass\"\n": "preset 'yolo': permissions = \"bypass\" belongs in ",
 		// fast is a preset config.toml defines, but a teammate's may not.
 		"[verify]\nas = \"fast\"\n": "[verify] as names preset 'fast', which this file does not define",
 	} {

@@ -24,7 +24,18 @@ type Preset struct {
 	// Model is empty for the harness's default model. A Claude model reads
 	// model#effort; an OpenCode model reads provider/model#variant.
 	Model string `json:"model,omitempty"`
+	// Permissions is how a Claude Code preset answers permission prompts:
+	// PermAuto or PermBypass. OpenCode presets leave it empty.
+	Permissions string `json:"permissions,omitempty"`
 }
+
+// The permission modes a Claude Code preset takes: auto lets Claude Code's
+// classifier approve each tool call and asks you when it will not; bypass
+// turns the prompts off.
+const (
+	PermAuto   = "auto"
+	PermBypass = "bypass"
+)
 
 // Config is the loaded settings. Presets keep their file order: the first
 // is the default, and tkt tries them in order.
@@ -351,7 +362,7 @@ var BuiltinStages = map[string]string{
 // BuiltinPresets apply when the settings define none.
 func BuiltinPresets() []Preset {
 	return []Preset{
-		{Name: Claude, Harness: Claude},
+		{Name: Claude, Harness: Claude, Permissions: PermAuto},
 		{Name: OpenCode, Harness: OpenCode},
 	}
 }

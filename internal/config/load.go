@@ -43,6 +43,8 @@ var (
 type presetTOML struct {
 	Harness string `toml:"harness"`
 	Model   string `toml:"model"`
+	// Permissions is PermAuto or PermBypass, for a claude preset.
+	Permissions string `toml:"permissions"`
 	// Serves is read and ignored, so a file from before tkt dropped it loads.
 	Serves any `toml:"serves"`
 }
@@ -190,8 +192,15 @@ func readPresets(path string, f fileTOML, md toml.MetaData) ([]Preset, error) {
 			return nil, bad("the harness must be claude or opencode")
 		case p.Harness == OpenCode && p.Model != "" && !openCode.MatchString(p.Model):
 			return nil, bad("an OpenCode model looks like provider/model or provider/model#variant")
+		case p.Harness == OpenCode && p.Permissions != "":
+			return nil, bad("permissions applies to claude presets only")
+		case p.Permissions != "" && p.Permissions != PermAuto && p.Permissions != PermBypass:
+			return nil, bad("permissions is '%s'; it takes auto or bypass", p.Permissions)
 		}
-		out = append(out, Preset{Name: name, Harness: p.Harness, Model: p.Model})
+		if p.Harness == Claude && p.Permissions == "" {
+			p.Permissions = PermAuto
+		}
+		out = append(out, Preset{Name: name, Harness: p.Harness, Model: p.Model, Permissions: p.Permissions})
 	}
 	return out, nil
 }
@@ -242,6 +251,10 @@ func parseProject(c *Config, global, path, root, src string) error {
 		return err
 	}
 	if !local {
+		if i := slices.IndexFunc(ps, func(p Preset) bool { return p.Permissions == PermBypass }); i >= 0 {
+			return apperr.New(apperr.ConfigInvalid, "%s: preset '%s': permissions = \"bypass\" belongs in %s or %s: it turns off Claude Code's permission prompts, and anyone can commit to the repository", path, ps[i].Name, LocalPath(root), global).
+				WithHint("set permissions = \"bypass\" on [presets.%s] in %s", ps[i].Name, LocalPath(root))
+		}
 		for _, k := range []struct{ key, as string }{{"suggest", asOf(f.Suggest)}, {"verify", asOf(f.Verify)}, {"fixes", asOf(f.Fixes)}} {
 			if k.as != "" && !slices.ContainsFunc(ps, func(p Preset) bool { return p.Name == k.as }) {
 				return apperr.New(apperr.ConfigInvalid, "%s: [%s] as names preset '%s', which this file does not define: each person's config.toml names its own presets, so the repository's file names only its own", path, k.key, k.as).
@@ -445,6 +458,9 @@ func RenderTOML(c Config) string {
 		fmt.Fprintf(&b, "\n[presets.%s]\nharness = %s\n", tomlKey(p.Name), tomlString(p.Harness))
 		if p.Model != "" {
 			fmt.Fprintf(&b, "model = %s\n", tomlString(p.Model))
+		}
+		if p.Permissions == PermBypass {
+			fmt.Fprintf(&b, "permissions = %s\n", tomlString(p.Permissions))
 		}
 	}
 	if len(c.OwnStages) > 0 {

@@ -21,6 +21,20 @@ settings.
 A Claude Code model reads model#effort, such as "opus#high". An OpenCode model
 reads provider/model#variant.
 
+A Claude Code preset takes permissions, how its agents answer permission
+prompts. "auto", the default, starts Claude Code in auto mode: its classifier
+approves each tool call, and when it blocks the same work a few times it asks
+you instead, so tkt ls says to answer the agent in its tab and tkt auto waits
+for you there. "bypass" starts it with --dangerously-skip-permissions, so it
+never asks:
+
+  [presets.yolo]
+  harness = "claude"
+  permissions = "bypass"
+
+Only config.toml and .tkt/tkt.local.toml may set "bypass", since anyone can
+commit to .tkt/tkt.toml.
+
 Stages are the lines tkt run sends. A [stages] table overrides the built-in
 ones or adds your own; {id} becomes the ticket id, and {remote} and {base} the
 remote and base branch the forge configuration names:

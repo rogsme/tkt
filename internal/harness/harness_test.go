@@ -13,14 +13,21 @@ import (
 )
 
 func TestClaudeArgs(t *testing.T) {
-	if got := ClaudeArgs(New, "s1", ""); !slices.Equal(got, []string{"--dangerously-skip-permissions", "--session-id", "s1"}) {
+	if got := ClaudeArgs(New, "s1", "", config.PermAuto); !slices.Equal(got, []string{"--permission-mode", "auto", "--session-id", "s1"}) {
 		t.Errorf("new: %v", got)
 	}
-	if got := ClaudeArgs(Resume, "s1", "opus#high"); !slices.Equal(got, []string{"--resume", "s1", "--dangerously-skip-permissions", "--model", "opus", "--effort", "high"}) {
+	if got := ClaudeArgs(Resume, "s1", "opus#high", config.PermAuto); !slices.Equal(got, []string{"--resume", "s1", "--permission-mode", "auto", "--model", "opus", "--effort", "high"}) {
 		t.Errorf("resume: %v", got)
 	}
-	if got := ClaudeArgs(New, "s1", "#low"); !slices.Equal(got[3:], []string{"--effort", "low"}) {
+	if got := ClaudeArgs(New, "s1", "#low", ""); !slices.Equal(got[4:], []string{"--effort", "low"}) {
 		t.Errorf("effort only: %v", got)
+	}
+	if got := ClaudeArgs(New, "s1", "", config.PermBypass); !slices.Equal(got, []string{"--dangerously-skip-permissions", "--session-id", "s1"}) {
+		t.Errorf("new bypass: %v", got)
+	}
+	bypass := config.Preset{Name: "opus", Harness: config.Claude, Permissions: config.PermBypass}
+	if got := LaunchArgs(config.Claude, Resume, "s1", bypass, "/w/ACM-1"); !slices.Equal(got, []string{"--resume", "s1", "--dangerously-skip-permissions"}) {
+		t.Errorf("resume bypass: %v", got)
 	}
 	p := config.Preset{Name: "fast", Harness: config.OpenCode}
 	if got := LaunchArgs(config.OpenCode, New, "ses_1", p, "/w/ACM-1"); !slices.Equal(got, []string{"-s", "ses_1", "/w/ACM-1"}) {

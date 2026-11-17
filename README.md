@@ -529,6 +529,7 @@ The page follows your system's light or dark setting until you pick one with its
 ```toml
 [presets.claude]
 harness = "claude"
+permissions = "auto"   # Claude Code's auto mode, the default; "bypass" turns the prompts off
 
 [presets.fast]
 harness = "opencode"
@@ -554,6 +555,8 @@ min_free = "20%"   # memory free before a sync's push starts, or a size such as 
 page = "https://www.githubstatus.com"
 components = ["Actions", "Pull Requests", "Git Operations"]
 ```
+
+A Claude Code preset starts its agents in auto mode, where Claude Code's classifier approves each tool call. When it blocks the same work a few times, it asks you instead, and `tkt ls` says to answer the agent in its tab; `tkt auto` waits for you there. `permissions = "bypass"` starts them with `--dangerously-skip-permissions`, so they never ask. Only `config.toml` and `.tkt/tkt.local.toml` may set it, since anyone can commit to `.tkt/tkt.toml`.
 
 `[sync] pushes` is the most syncs that merge and push at once on the whole machine, since each push runs the repository's pre-push hook, which may run its whole test suite. Raise it on a machine with memory to spare, or set `1` for one push at a time. A repository with heavy hooks can set a lower value in its own `.tkt/tkt.toml`: its syncs then use only that many of the machine's slots, and other repositories keep yours. `min_free = "0%"` turns the memory floor off.
 

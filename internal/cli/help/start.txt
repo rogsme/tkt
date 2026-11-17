@@ -1,7 +1,8 @@
 tkt start creates or reuses the ticket's worktree through worktrunk, opens a
 herdr tab named after the ticket, starts an agent in build mode (Claude Code
-with --dangerously-skip-permissions, OpenCode on its Build agent) and sends it
-the prompt, typically the dispatcher's start-ticket block.
+in the preset's permission mode, auto unless it says bypass, OpenCode on its
+Build agent) and sends it the prompt, typically the dispatcher's start-ticket
+block.
 
 A new branch starts from the base on the remote, such as origin/main: tkt
 fetches it first, so the plan starts from the code the base holds now. When
