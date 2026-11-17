@@ -296,6 +296,7 @@ func mergeCmd(g *globals) *cobra.Command {
   tkt merge ACM-12 --passed all --head a1b2c3d
   tkt merge ACM-12 --passed all --waived 3 --reason 'it needs production credentials'
   tkt merge ACM-12 --passed all --evidence
+  tkt merge ACM-12 --skip
   tkt merge ACM-12 --cancel`,
 		SuggestFor:        []string{"ship", "finish"},
 		ValidArgsFunction: g.completeTickets(false),
@@ -303,7 +304,7 @@ func mergeCmd(g *globals) *cobra.Command {
 			switch {
 			case len(args) != 1:
 				return usage("usage: tkt merge ID --passed STEPS")
-			case !cmd.Flags().Changed("passed") && !o.Cancel && !o.Autonomous:
+			case !cmd.Flags().Changed("passed") && !o.Cancel && !o.Skip && !o.Autonomous:
 				return usage("tkt merge needs --passed: the human verification steps that passed, such as 1-3, or all")
 			}
 			return needWaiverReason(cmd)
@@ -323,6 +324,7 @@ func mergeCmd(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&o.Evidence, "evidence", false, "say you confirmed the steps from verify-pr's evidence, on the head it ran on, instead of running them")
 	cmd.Flags().BoolVar(&o.Autonomous, "autonomous", false, "merge a yolo ticket on verify-pr's passing report, as tkt auto --yolo does")
 	cmd.Flags().BoolVar(&o.Cancel, "cancel", false, "drop the ticket's merge order")
+	cmd.Flags().BoolVar(&o.Skip, "skip", false, "send the ticket's merge order to the back of the merge queue, so the ones behind it go first")
 	cmd.Flags().BoolVar(&o.Dry, "dry-run", false, "print the changes instead of making them")
 	cmd.MarkFlagsMutuallyExclusive("passed", "cancel")
 	cmd.MarkFlagsMutuallyExclusive("evidence", "cancel")
@@ -330,6 +332,9 @@ func mergeCmd(g *globals) *cobra.Command {
 	cmd.MarkFlagsMutuallyExclusive("autonomous", "cancel")
 	cmd.MarkFlagsMutuallyExclusive("waived", "cancel")
 	cmd.MarkFlagsMutuallyExclusive("waived", "autonomous")
+	for _, f := range []string{"passed", "cancel", "evidence", "autonomous", "waived", "head", "as"} {
+		cmd.MarkFlagsMutuallyExclusive("skip", f)
+	}
 	return cmd
 }
 

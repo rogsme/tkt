@@ -217,6 +217,8 @@ func (e HistoryEvent) line() string {
 			return "merge order left, for when finish-ticket can merge"
 		case "dropped":
 			return "merge order dropped by a new head"
+		case MergeSkipped:
+			return "merge order sent to the back of the merge queue"
 		}
 		return "merge order cancelled"
 	case history.Done:

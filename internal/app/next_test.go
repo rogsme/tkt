@@ -138,6 +138,13 @@ func TestNextStepTable(t *testing.T) {
 		// is due once the checks pass at a head reviewed clean.
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2"}, "wait for CI", "wait", ReasonCIPending},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2", Behind: 1}, "tkt sync ACM-1", "command", ReasonBaseMoved},
+		// Behind another order in the merge queue, an order waits untouched:
+		// no sync, no wait for CI, no fix.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, Head: "h1", MergeSteps: "1,2", Behind: 1, QueuePlace: 2, QueueAhead: "ACM-7"}, "merges after ACM-7, 2nd in the merge queue", "wait", ReasonMergeQueued},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "pending", Mergeable: "CONFLICTING", Head: "h1", MergeSteps: "1,2", QueuePlace: 3, QueueAhead: "ACM-8"}, "merges after ACM-8, 3rd in the merge queue", "wait", ReasonMergeQueued},
+		// What waits on you still comes first.
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", LastStatus: "BLOCKED", MergeSteps: "1,2", QueuePlace: 2, QueueAhead: "ACM-7"}, "read the agent's reason in its tab", "human", ReasonStatusBlocked},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h1", MergeSteps: "1,2", MergeHead: "h1", QueuePlace: 1}, "tkt merge ACM-1 --passed 1,2 --head h1", "command", ReasonMergeDue},
 		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", Verdict: "READY_FOR_HUMAN", AtHead: true, ReviewReady: true, Head: "h1", MergeSteps: "1,2", MergeHead: "h1"}, "tkt merge ACM-1 --passed 1,2 --head h1", "command", ReasonMergeDue},
 		// finish-ticket merges on review-pr's READY_FOR_HUMAN alone, so a head
 		// only the bot cleared gets that review first; one that has it is
@@ -220,6 +227,8 @@ func TestPhaseOf(t *testing.T) {
 	}{
 		{Facts{PRState: "MERGED"}, PhaseMerged},
 		{Facts{PRState: "CLOSED"}, PhaseClosed},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", MergeSteps: "1", Behind: 2, QueueAhead: "ACM-7", QueuePlace: 2}, PhaseMerging},
+		{Facts{PRState: "OPEN", Agent: "idle", Checks: "ok", MergeSteps: "1", QueueAhead: "ACM-7", QueuePlace: 2, Hold: true}, PhaseBlocked},
 		{Facts{Launch: "launching"}, PhaseStarting},
 		{Facts{Launch: "tab", Agent: "idle"}, PhaseStarting},
 		{Facts{Launch: "not_ready", Agent: "idle"}, PhaseNeedsYou},

@@ -20,7 +20,8 @@ import (
 // MergeOpts are tkt merge's arguments. Passed names the human verification
 // steps that passed, such as 1-3, 1,2,4 or all, and Waived the ones you
 // skipped, for Reason; Head is the head they ran on. Cancel drops the
-// ticket's merge order instead.
+// ticket's merge order instead, and Skip sends it to the back of the merge
+// queue.
 type MergeOpts struct {
 	ID     string
 	Passed string
@@ -37,6 +38,7 @@ type MergeOpts struct {
 	// which finish-ticket counts as waived.
 	Autonomous bool
 	Cancel     bool
+	Skip       bool
 	Dry        bool
 	// order marks tkt watch carrying out the ticket's merge order: it
 	// merges only while that order stands.
@@ -46,7 +48,8 @@ type MergeOpts struct {
 // MergeResult is what tkt merge did. Action is merging (a fresh session got
 // finish-ticket's merge line, Run), ordered (the merge waits, on what Waits
 // says, and tkt watch sends the line once it can), cancelled (an order was
-// dropped), or none (no order to drop, or to carry out). Head is the pull
+// dropped), skipped (an order went to the back of the merge queue), or
+// none (no order to drop, skip or carry out). Head is the pull
 // request's head, and Verified the head the steps passed on: the same, or
 // one that clean merges of the base left behind. Sent is when finish-ticket
 // last got the merge line for the ticket, if ever.
@@ -60,10 +63,14 @@ type MergeResult struct {
 	Action   string `json:"action"`
 	// Waits is what an order waits for: sync (tkt watch merges the base
 	// into the branch first), review (a review of the head a sync made),
-	// checks (the checks at the head), or turn (the merge of After goes
-	// first); "" when nothing does.
-	Waits   string     `json:"waits"`
-	After   string     `json:"after"`
+	// checks (the checks at the head), queue (After is ahead of it in the
+	// merge queue), or turn (the merge of After goes first); "" when
+	// nothing does.
+	Waits string `json:"waits"`
+	After string `json:"after"`
+	// Place is the order's place in the merge queue, from 1, or 0 without
+	// an order.
+	Place   int        `json:"place"`
 	Sent    string     `json:"sent"`
 	Run     *RunResult `json:"run"`
 	DryRun  bool       `json:"dry_run"`
@@ -84,6 +91,7 @@ const (
 	MergeMerging   = "merging"
 	MergeOrdered   = "ordered"
 	MergeCancelled = "cancelled"
+	MergeSkipped   = "skipped"
 	MergeNone      = "none"
 )
 
@@ -96,6 +104,8 @@ const (
 	WaitBot    = "bot"
 	WaitChecks = "checks"
 	WaitTurn   = "turn"
+	// WaitQueue is an order behind another in the merge queue.
+	WaitQueue = "queue"
 )
 
 func (r *MergeResult) Text(w io.Writer) {
@@ -121,6 +131,8 @@ func (r *MergeResult) Text(w io.Writer) {
 		fmt.Fprintf(w, "%s  dropped the merge order for %s; finish-ticket got the merge line at %s, and stopping it is up to you, in the ticket's tab\n", r.Ticket, short(r.Head), r.Sent)
 	case r.Action == MergeCancelled:
 		fmt.Fprintf(w, "%s  dropped the merge order for %s\n", r.Ticket, short(r.Head))
+	case r.Action == MergeSkipped:
+		fmt.Fprintf(w, "%s  went to the back of the merge queue, %s; its merge order stands\n", r.Ticket, ordinal(r.Place))
 	case r.Sent != "":
 		fmt.Fprintf(w, "%s  no merge order: finish-ticket got the merge line at %s; to stop it, tell its agent in the ticket's tab\n", r.Ticket, r.Sent)
 	default:
@@ -139,6 +151,8 @@ func (r *MergeResult) waitText() string {
 		return "the review bot cleared its head " + short(r.Head)
 	case WaitTurn:
 		return or(r.After, "the merge another tkt sends now") + " went first"
+	case WaitQueue:
+		return r.After + " merged, as " + ordinal(r.Place) + " in the merge queue"
 	}
 	return "its checks pass at " + short(r.Head)
 }
@@ -209,9 +223,11 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	res := &MergeResult{Ticket: id, Steps: []int{}, Waived: []int{}, Sent: ts.st["merge_sent"], DryRun: c.Dry, Actions: []Action{}, base: base}
 	res.Head, res.Verified = ts.st["merge_head"], ts.st["merge_head"]
 	switch {
-	case o.Cancel && res.Head == "":
+	case (o.Cancel || o.Skip) && res.Head == "":
 		res.Action = MergeNone
 		return res, nil
+	case o.Skip:
+		return c.skipOrder(ts, res)
 	case o.Cancel:
 		res.Steps = parseStepList(ts.st["merge_steps"])
 		c.dropOrder(ts, id, MergeCancelled)
@@ -304,9 +320,18 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 			return nil, apperr.New(apperr.MergeBaseConflicts, "%s conflicts with %s, and human verification never carries over the resolution of a conflict", id, base).
 				WithHint("tkt sync %s, then verify the new head once it is reviewed", id)
 		}
-		res.Waits = WaitSync
 	case f.Checks == "fail":
 		return nil, apperr.New(apperr.MergeChecksFail, "the checks fail at %s's head %s", id, short(res.Head)).WithHint("tkt run %s ci", id)
+	}
+	var ahead string
+	res.Place, ahead = c.queuePlace(l, id)
+	switch {
+	case ahead != "":
+		// Only the front of the queue syncs and merges, so this order
+		// waits untouched until the ones ahead of it merged.
+		res.Waits, res.After = WaitQueue, ahead
+	case f.Behind > 0:
+		res.Waits = WaitSync
 	case waitsReview && row.CIReview:
 		res.Waits = WaitBot
 	case waitsReview:
@@ -331,8 +356,10 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 			return res, nil
 		}
 		// A new order is a new word from you: tkt watch forgets that it
-		// sent one on this head already.
-		kv := []string{"merge_head", res.Verified, "merge_steps", stepList(got), "merge_waived", stepList(waived), "merge_reason", o.Reason, "merge_as", o.As, "merge_by", o.by(), "merge_at", c.Now().UTC().Format(history.TimeFormat), "merge_sent", ""}
+		// sent one on this head already. An order that stands keeps its
+		// place in the merge queue.
+		at := or(ts.st["merge_at"], orderAt(c.Now()))
+		kv := []string{"merge_head", res.Verified, "merge_steps", stepList(got), "merge_waived", stepList(waived), "merge_reason", o.Reason, "merge_as", o.As, "merge_by", o.by(), "merge_at", at, "merge_sent", ""}
 		if strings.HasPrefix(ts.st["watch_last"], actMerge+":") {
 			kv = append(kv, "watch_last", "", "watch_pause", "", "watch_head", "")
 		}
@@ -360,7 +387,7 @@ func (a *App) Merge(ctx context.Context, o MergeOpts) (*MergeResult, error) {
 	// and sends the line again on the new head. watch_last keeps it from
 	// sending the line twice on one head.
 	sent := c.Now().UTC().Format(history.TimeFormat)
-	c.save(ts, "merge_head", res.Verified, "merge_steps", stepList(got), "merge_waived", stepList(waived), "merge_reason", o.Reason, "merge_as", o.As, "merge_by", o.by(), "merge_at", or(ts.st["merge_at"], sent),
+	c.save(ts, "merge_head", res.Verified, "merge_steps", stepList(got), "merge_waived", stepList(waived), "merge_reason", o.Reason, "merge_as", o.As, "merge_by", o.by(), "merge_at", or(ts.st["merge_at"], orderAt(c.Now())),
 		"merge_sent", sent, "watch_last", watchAct{Kind: actMerge}.key(res.Head))
 	res.Action, res.Run, res.Sent = MergeMerging, run, sent
 	res.Actions = append(res.Actions, run.Actions...)
@@ -539,6 +566,29 @@ func (c *Ctx) mergeInFlight(agents []herdr.Agent, except string) (string, error)
 		}
 	}
 	return "", nil
+}
+
+// skipOrder sends a ticket's merge order to the back of the merge queue,
+// so the ones behind it go first while it waits on you. The order stands,
+// and tkt watch may send its line again once it is at the front.
+func (c *Ctx) skipOrder(ts *ticketState, res *MergeResult) (*MergeResult, error) {
+	res.Steps, res.Waived = parseStepList(ts.st["merge_steps"]), parseStepList(ts.st["merge_waived"])
+	l, err := c.look(lookOpts{ids: []string{res.Ticket}})
+	if err != nil {
+		return nil, err
+	}
+	if p := l.gh.Mine(l.open, res.Ticket); len(p) > 0 {
+		res.PR = p[0].Number
+	}
+	kv := []string{"merge_at", orderAt(c.backOfQueue(l, res.Ticket))}
+	if strings.HasPrefix(ts.st["watch_last"], actMerge+":") {
+		kv = append(kv, "watch_last", "", "watch_pause", "", "watch_head", "")
+	}
+	c.save(ts, kv...)
+	c.record(history.Event{Ticket: res.Ticket, Event: history.Merge, Action: MergeSkipped})
+	res.Action, res.Place = MergeSkipped, c.queueLen(l)
+	res.Actions = append(res.Actions, c.Plan...)
+	return res, nil
 }
 
 // dropOrder forgets a ticket's merge order and records why: cancelled by

@@ -1,6 +1,7 @@
 # A merge line whose agent never started leaves the ticket at stage merge,
-# launching. The turn frees once the command that launched it is gone, so
-# the other orders go on.
+# launching, waiting on you. The merge queue waits behind it, until tkt
+# merge --skip sends it to the back: the next order goes, since the turn
+# freed once the command that launched the line was gone.
 exec tkt start ACM-1
 exec tkt start ACM-2
 realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
@@ -22,10 +23,30 @@ env FAKE_HERDR_START_ERRORS=
 state $FAKE_WT_ROOT/ACM-1 stage merge
 state $FAKE_WT_ROOT/ACM-1 status launching
 
-# ACM-1 waits for you, and ACM-2, due now, merges.
+# ACM-1 waits for you, and so does the queue behind it, though ACM-2 is
+# due.
 jqedit $WORK/prs.json '.[1].statusCheckRollup[0] |= (.status = "COMPLETED" | .conclusion = "SUCCESS")'
 exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::launch","ACM-2::merge_queued"]'
+exec tkt ls --no-fetch --json
+envelope '[.result.rows[] | .ticket + ":" + (.merge.place|tostring) + ":" + (.merge.after // "")]' '["ACM-1:1:","ACM-2:2:ACM-1"]'
+envelope '.result.rows[1].next | [.kind, .reason, .text]' '["wait","merge_queued","merges after ACM-1, 2nd in the merge queue"]'
+
+# --skip sends ACM-1 to the back with its order kept, and ACM-2 merges.
+exec tkt merge ACM-1 --skip --json
+envelope '.result | [.action, .place, .pr]' '["skipped",2,1]'
+state $FAKE_WT_ROOT/ACM-1 merge_steps 1
+exec tkt history ACM-1
+stdout 'merge order sent to the back of the merge queue'
+exec tkt merge ACM-1 --skip
+stdout 'ACM-1  went to the back of the merge queue, 2nd; its merge order stands'
+exec tkt watch --once --json
 envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::launch","ACM-2:merge:merge_due"]'
+
+# A ticket with no order has nothing to skip.
+exec tkt merge ACM-2 --cancel
+exec tkt merge ACM-2 --skip --json
+envelope '.result.action' 'none'
 
 -- prs.json --
 [

@@ -76,6 +76,11 @@ func TestWatchStepTable(t *testing.T) {
 		{with(open, func(f *Facts) {
 			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps = "READY_FOR_HUMAN", true, true, "1,2"
 		}), p, watchMemory{Last: "merge:@h1"}, pause(StopNoProgress)},
+		// Behind another order in the merge queue, nothing happens: not even
+		// the sync a branch behind its base would get.
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps, f.Behind, f.QueuePlace, f.QueueAhead = "READY_FOR_HUMAN", true, true, "1,2", 3, 2, "ACM-7"
+		}), p, watchMemory{}, leave(ReasonMergeQueued)},
 		// A head only the bot cleared gets review-pr's review for the order,
 		// since finish-ticket merges on that alone.
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.MergeSteps = "CLEAR", true, "1,2" }), p, watchMemory{}, watchAct{Kind: actRun, Stage: "review", Why: ReasonNeedsReview}},

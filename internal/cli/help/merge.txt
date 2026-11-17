@@ -34,16 +34,25 @@ review-pr's READY_FOR_HUMAN at the head, so a head a sync made, or one only
 the review bot cleared, waits for review-pr, which tkt watch runs. tkt ls
 sends a head only the bot cleared to review-pr before the steps, so this
 happens only when you skip that. With CI review on, the bot's CLEAR is the
-review. The order also waits for running checks, and for another ticket's
-merge, since one goes at a time: a turn lock covers the moment from tkt merge's check to its
-line. The line then names the head the steps passed on
-and the one to merge, and finish-ticket checks the merges between them
-itself. tkt ls shows the order in the merge field, and the tkt agent's
-board as merges when green.
+review. The order also waits for running checks. The line then names the
+head the steps passed on and the one to merge, and finish-ticket checks the
+merges between them itself.
+
+The orders form the merge queue, in the order you gave them. Only the
+order at its front syncs, gets its review and gets the merge line; the
+others wait untouched, so a merge ahead of them does not make each one
+sync and wait for CI again. An order goes to the back when you give it and
+keeps its place when you give it again. When the front waits on you, such
+as on hold or after Status: BLOCKED, the whole queue waits; --skip sends
+it to the back with its order kept, and the next one goes. A pull request
+that merged leaves the queue at once. A turn lock also covers the moment
+from tkt merge's check to its line. tkt ls shows the order in the merge
+field, with its place and the ticket ahead of it, and the tkt agent's
+board and web page show the queue.
 
 The order stands until the pull request merges. When finish-ticket stops
-with BLOCKED_FOR_SYNC because another merge moved the base, tkt watch syncs
-again and sends the line on the new head; on one head it sends the line
+with BLOCKED_FOR_SYNC because the base moved, the order keeps its place,
+and tkt watch syncs again and sends the line on the new head; on one head it sends the line
 once. A new head of any other kind, such as a fix or the resolution of a
 conflict, drops the order, with a notification, since the steps ran on code
 it changed.

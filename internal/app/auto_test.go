@@ -118,6 +118,14 @@ func TestAutoStepTable(t *testing.T) {
 		{with(open, func(f *Facts) {
 			f.Verdict, f.AtHead, f.AgentVerify, f.Verification, f.VerifyHeld = "READY_FOR_HUMAN", true, true, "INCOMPLETE", true
 		}), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopReadyForHuman}},
+		// A yolo loop's own order waits its turn in the merge queue; any
+		// other order is yours, and tkt watch carries it out.
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps, f.MergeBy, f.QueuePlace, f.QueueAhead = "READY_FOR_HUMAN", true, true, "1", "autonomous", 2, "ACM-7"
+		}), AutoPolicy{Yolo: true}, autoMemory{}, autoAct{Kind: actPoll}},
+		{with(open, func(f *Facts) {
+			f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps, f.QueuePlace, f.QueueAhead = "READY_FOR_HUMAN", true, true, "1", 2, "ACM-7"
+		}), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopMergeOrdered}},
 		// A merge order is yours: tkt auto leaves it to tkt watch.
 		{with(open, func(f *Facts) { f.Verdict, f.AtHead, f.ReviewReady, f.MergeSteps = "READY_FOR_HUMAN", true, true, "1" }), AutoPolicy{}, autoMemory{}, autoAct{Kind: actStop, Stop: StopMergeOrdered}},
 		{with(open, func(f *Facts) { f.LastStatus = "AWAITING_POST_APPROVAL" }), AutoPolicy{}, autoMemory{}, pause(StopNeedsYou)},
