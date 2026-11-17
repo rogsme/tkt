@@ -526,6 +526,46 @@ code {
 	color: var(--warning);
 }
 
+.queue {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.queue li {
+	background: var(--raised);
+	border: 1px solid var(--border);
+	border-left: 4px solid var(--border);
+	border-radius: 8px;
+	padding: 6px 10px 0;
+}
+
+.queue li.front {
+	border-left-color: var(--accent);
+}
+
+.queue li.stopped {
+	border-left-color: var(--warning);
+}
+
+.queue li p {
+	margin: 4px 0 0;
+}
+
+.queue .place {
+	font-family: var(--mono);
+	font-weight: 600;
+	min-width: 1.2em;
+}
+
+.queue .id {
+	font-family: var(--mono);
+	font-weight: 500;
+}
+
 .line1,
 .line3 {
 	display: flex;

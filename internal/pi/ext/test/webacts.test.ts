@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { attentionOf, unblockedOf } from "../attention.ts";
-import { anyModel, cardActs, hashOf, navOf, sendLine, startLine, suggestLine, ticketActs } from "../web/acts.ts";
+import { anyModel, cardActs, hashOf, navOf, queueActs, sendLine, startLine, suggestLine, ticketActs } from "../web/acts.ts";
 import { row } from "./fixtures.ts";
 
 test("each answer /inbox offers is a button that sends the slash command you could type", () => {
@@ -98,4 +98,13 @@ test("the address keeps what the center column shows", () => {
 		assert.deepEqual(navOf(hashOf(n)), n);
 	}
 	assert.equal(hashOf({ board: true }), "#");
+});
+
+test("the merge queue offers Skip only on a front that waits on you with others behind it, and Cancel on each", () => {
+	const merge = { head: "abc", steps: [1], at: "2026-01-01T00:00:00Z", place: 1 };
+	const held = row({ ticket: "ACM-9", phase: "blocked", hold: true, merge });
+	assert.deepEqual(queueActs(held, true, 2).map((a) => a.cmd), ["/queue skip ACM-9", "/queue cancel ACM-9"]);
+	assert.deepEqual(queueActs(held, true, 0).map((a) => a.cmd), ["/queue cancel ACM-9"]);
+	assert.deepEqual(queueActs(row({ ticket: "ACM-9", phase: "needs_fix", merge }), true, 2).map((a) => a.cmd), ["/queue cancel ACM-9"]);
+	assert.deepEqual(queueActs(row({ ticket: "ACM-3", phase: "merging", merge: { ...merge, place: 2 } }), false, 1).map((a) => a.cmd), ["/queue cancel ACM-3"]);
 });

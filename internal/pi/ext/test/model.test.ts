@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ago, choresText, expandIds, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, mentions, mergeText, normalizeId, presetOptions, presetQuestion, rowsOf, stampText, updateNotice, stepText, versionText } from "../model.ts";
+import { ago, choresText, expandIds, idOf, idsIn, incidentsOf, keyFromTracker, keyOf, mentions, mergeText, normalizeId, ordinal, presetOptions, presetQuestion, rowsOf, stampText, updateNotice, stepText, versionText } from "../model.ts";
 import { row } from "./fixtures.ts";
 
 test("the preset question keeps the order and marks only the first as the default", () => {
@@ -82,6 +82,10 @@ test("stepText says what tkt auto's step does", () => {
 	assert.equal(stepText({ action: "approve" }), "approving the plan");
 });
 
+test("ordinal writes a place for people", () => {
+	assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 101, 111].map(ordinal), ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "101st", "111th"]);
+});
+
 test("mergeText says what tkt merge did", () => {
 	const r = { ticket: "ACM-12", pr: 7, head: "abc", steps: [1, 2] };
 	assert.match(mergeText({ ...r, action: "merging" }), /^ACM-12: finish-ticket merges pull request #7 in a fresh session/);
@@ -91,6 +95,8 @@ test("mergeText says what tkt merge did", () => {
 	assert.match(mergeText({ ...r, action: "ordered", waits: "review", verified: "aaa" }), /^ACM-12 merges once a review clears the head a sync made/);
 	assert.match(mergeText({ ...r, action: "ordered", waits: "review", verified: "abc" }), /^ACM-12 merges once review-pr, which tkt watch starts, clears its head, since finish-ticket merges on review-pr's verdict/);
 	assert.match(mergeText({ ...r, action: "ordered", waits: "turn", after: "ACM-11" }), /^ACM-12 merges once ACM-11 merged first/);
+	assert.match(mergeText({ ...r, action: "ordered", waits: "queue", after: "ACM-11", place: 3 }), /^ACM-12 merges once ACM-11 merged, as it is 3rd in the merge queue; it syncs once it reaches the front/);
+	assert.match(mergeText({ ...r, action: "skipped", place: 2 }), /^ACM-12 went to the back of the merge queue, 2nd, so the ones behind it go first\. Its merge order stands; \/queue cancel ACM-12 drops it\.$/);
 	assert.match(mergeText({ ...r, action: "cancelled", sent: "2026-01-01T00:00:00Z" }), /no merge order now\. finish-ticket got the merge line at 2026-01-01T00:00:00Z/);
 	assert.equal(mergeText({ ...r, action: "cancelled" }), "ACM-12 has no merge order now.");
 	assert.match(mergeText({ ...r, action: "none", sent: "2026-01-01T00:00:00Z" }), /finish-ticket got the merge line at 2026-01-01T00:00:00Z/);

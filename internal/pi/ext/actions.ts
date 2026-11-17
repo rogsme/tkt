@@ -175,6 +175,22 @@ export function merge(hub: Hub, id: string, steps: number[] | "all", head: strin
 	return `Queued: tkt merge for ${id}. finish-ticket merges it now when the checks passed at its head; otherwise tkt watch hands it over once they do.`;
 }
 
+/** queueSkip sends a ticket's merge order to the back of the merge queue,
+ * with tkt merge --skip, so the ones behind it go first. */
+export async function queueSkip(hub: Hub, id: string): Promise<string> {
+	const env = await hub.run({ ticket: id, label: "skip", args: ["merge", id, "--skip"], quiet: true });
+	if (!env.ok || !env.result) return failure(id, env);
+	return mergeText(env.result as MergeResult);
+}
+
+/** queueCancel drops a ticket's merge order, with tkt merge --cancel, which
+ * takes it out of the merge queue. */
+export async function queueCancel(hub: Hub, id: string): Promise<string> {
+	const env = await hub.run({ ticket: id, label: "cancel merge", args: ["merge", id, "--cancel"], quiet: true });
+	if (!env.ok || !env.result) return failure(id, env);
+	return mergeText(env.result as MergeResult);
+}
+
 /** accept takes the review at a ticket's head as it is, with tkt accept.
  * Its comment on the pull request stands in for a clean review, so the
  * head goes on to its human verification steps; the reason is yours, and
@@ -495,7 +511,7 @@ async function askMerge(hub: Hub, ctx: ExtensionContext, id: string, question: s
 			? { label: "Merge once synced", description: "tkt merge leaves an order: tkt watch merges the base, has the new head reviewed, and sends finish-ticket the merge line once the checks pass." }
 			: pending
 				? { label: "Merge once CI is green", description: "tkt merge leaves an order, and tkt watch sends finish-ticket the merge line once the checks pass." }
-				: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab, or leaves an order while another ticket merges." },
+				: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab, or joins the merge queue behind the orders ahead of it." },
 		{ label: "Not yet" },
 	], false);
 	return !!go?.answer.startsWith("Merge");

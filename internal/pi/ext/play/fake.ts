@@ -6,10 +6,10 @@
 // hub's do. It imports nothing from pi or Bun, so node --test covers it.
 
 import { type Attention, attentionOf, choicesOf, type Choice, unblockedOf } from "../attention.ts";
-import { statusText } from "../board.ts";
+import { queueOf, queueText, statusText } from "../board.ts";
 import { type Item, pageView, slashName, terminalOnly } from "../chat.ts";
 import { type Board, type Command, type Dialog, type Image, Mirror, type Option, type Page, type Query } from "../mirror.ts";
-import { choresText, incidentText, normalizeId, presetOptions, presetQuestion, type Row, stampText, verifiedAt, versionText } from "../model.ts";
+import { choresText, incidentText, mergeText, normalizeId, ordinal, presetOptions, presetQuestion, type Row, stampText, verifiedAt, versionText } from "../model.ts";
 import { historyText, type Mark, marked, statsText, stepsText, tally, withEvidence } from "../report.ts";
 import { cardActs } from "../web/acts.ts";
 import * as answers from "./answers.ts";
@@ -89,6 +89,7 @@ export class Fake {
 		next: (w) => this.next(w),
 		auto: (w) => this.auto(w),
 		hold: (w) => this.hold(w),
+		queue: (w) => this.queue(w),
 		sync: (w) => this.sync(w),
 		send: (w) => this.sendTo(w),
 		run: (w) => this.runStage(w),
@@ -449,6 +450,45 @@ export class Fake {
 		this.say(r.hold ? `${r.ticket} is on hold: tkt watch and tkt auto leave it alone. /hold ${r.ticket} off takes it off.` : `${r.ticket} is off hold: tkt watch and tkt auto take it up again.`);
 	}
 
+	/** queue answers /queue as tkt merge --skip and --cancel would, and the
+	 * board's places follow. */
+	private async queue(w: string[]): Promise<void> {
+		const how = (w[0] ?? "").toLowerCase();
+		if (!how) return this.say(queueText(this.s.rows));
+		const r = how === "skip" || how === "cancel" ? this.need(w.slice(1), "/queue [skip|cancel ACM-12]") : undefined;
+		if (!r) {
+			if (how !== "skip" && how !== "cancel") this.mirror.notify("usage: /queue [skip|cancel ACM-12]", "warning");
+			return;
+		}
+		const base = { ticket: r.ticket, pr: r.pr?.number ?? 0, head: r.merge?.head ?? "", steps: r.merge?.steps ?? [] };
+		if (!r.merge) return this.say(mergeText({ ...base, action: "none" }));
+		if (how === "skip") {
+			r.merge.place = queueOf(this.s.rows).length + 1;
+			this.requeue();
+			return this.say(mergeText({ ...base, action: "skipped", place: r.merge.place }));
+		}
+		const ok = await this.question<boolean>({ kind: "confirm", title: `Drop ${r.ticket}'s merge order?`, message: "It leaves the merge queue; /check orders the merge again, at the back." });
+		if (!ok) return;
+		r.merge = null;
+		Object.assign(r, { phase: "ready_to_merge", next: { kind: "human", reason: "steps_passed", argv: null, text: "every step passed: merge it" } });
+		this.requeue();
+		this.say(mergeText({ ...base, action: "cancelled" }));
+	}
+
+	/** requeue numbers the merge queue again, as tkt ls would after an order
+	 * left or moved: the front syncs, and the others wait. */
+	private requeue(): void {
+		const q = queueOf(this.s.rows);
+		q.forEach((r, i) => {
+			if (!r.merge) return;
+			r.merge.place = i + 1;
+			r.merge.after = i === 0 ? undefined : q[i - 1].ticket;
+			if (i > 0) Object.assign(r, { phase: "merging", next: { kind: "wait", reason: "merge_queued", argv: null, text: `merges after ${q[i - 1].ticket}, ${ordinal(i + 1)} in the merge queue` } });
+			else if (r.next?.reason === "merge_queued") Object.assign(r, { phase: "needs_fix", phase_since: new Date().toISOString(), next: { kind: "command", reason: "base_moved", argv: ["tkt", "sync", r.ticket], text: `the base moved: tkt sync ${r.ticket}` } });
+		});
+		this.push();
+	}
+
 	private async sync(w: string[]): Promise<void> {
 		const r = this.need(w, "/sync ACM-12");
 		if (!r) return;
@@ -624,13 +664,21 @@ export class Fake {
 		const go = await this.ask(title, [
 			(r.behind ?? 0) > 0
 				? { label: "Merge once synced", description: "tkt merge leaves an order: tkt watch merges the base, has the new head reviewed, and sends finish-ticket the merge line once the checks pass." }
-				: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab, or leaves an order while another ticket merges." },
+				: { label: "Merge now", description: "tkt merge sends finish-ticket the merge line in a fresh session in its tab, or joins the merge queue behind the orders ahead of it." },
 			{ label: "Not yet" },
 		]);
 		return !!go?.answer.startsWith("Merge");
 	}
 
 	private merge(r: Row): Promise<void> {
+		const q = queueOf(this.s.rows);
+		if (q.length > 0) {
+			// Others wait ahead of it, so it joins the merge queue at the back.
+			r.merge = { head: r.pr?.head ?? "", steps: [1, 2, 3], at: new Date().toISOString(), place: q.length + 1, after: q[q.length - 1].ticket };
+			this.requeue();
+			this.say(mergeText({ ticket: r.ticket, pr: r.pr?.number ?? 0, head: r.merge.head, steps: r.merge.steps, action: "ordered", waits: "queue", after: r.merge.after, place: r.merge.place }));
+			return Promise.resolve();
+		}
 		this.say(`Queued: tkt merge for ${r.ticket}. finish-ticket merges it now when the checks passed at its head; otherwise tkt watch hands it over once they do.`);
 		return this.job(r.ticket, "merge", 4000, () => {
 			Object.assign(r, { phase: "merged", phase_since: new Date().toISOString(), next: { kind: "command", reason: "merged", argv: ["tkt", "done", r.ticket], text: `tkt done ${r.ticket} removes it` } });
@@ -785,6 +833,15 @@ export class Fake {
 			case "update":
 				this.s.update = this.s.update ? "" : "v0.10.0";
 				return this.push();
+			case "queue": {
+				// The front's pull request merges, and the next one moves up.
+				const front = queueOf(this.s.rows)[0];
+				if (!front) return this.mirror.notify("The merge queue is empty. Reset the tickets to fill it again.", "warning");
+				Object.assign(front, { merge: null, phase: "merged", phase_since: new Date().toISOString(), next: { kind: "command", reason: "merged", argv: ["tkt", "done", front.ticket], text: `tkt done ${front.ticket} removes it` } });
+				if (front.pr) front.pr.state = "MERGED";
+				this.requeue();
+				return this.mirror.notify(`${front.ticket} merged; the next order in the merge queue syncs now.`);
+			}
 			case "answer":
 				return this.chat("what is on the board?", 0);
 			case "markdown":

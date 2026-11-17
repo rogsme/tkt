@@ -9,6 +9,7 @@ import { type Hub, reasonOf } from "./hub.ts";
 import { expandIds } from "./model.ts";
 import { ask, confirm, input, notify } from "./dialog.ts";
 import { networkURLs } from "./gate.ts";
+import { queueText } from "./board.ts";
 import { board } from "./ui.ts";
 import type { Web } from "./web.ts";
 
@@ -157,6 +158,27 @@ export function registerCommands(pi: ExtensionAPI, hub: Hub, web: Web): void {
 		handler: async (args, ctx) => {
 			const id = one(args, ctx, "/hold ACM-12 [off]");
 			if (id) say(await act.hold(hub, id, args.trim().split(/\s+/)[1]?.toLowerCase() !== "off"));
+		},
+	});
+
+	pi.registerCommand("queue", {
+		description: "Show the merge queue; /queue skip ACM-12 sends an order to the back, /queue cancel ACM-12 drops it",
+		getArgumentCompletions: (prefix) => {
+			const words = prefix.trimStart().split(/\s+/);
+			if (words.length < 2) return ["skip", "cancel"].filter((w) => w.startsWith(words[0] ?? "")).map((w) => ({ value: w, label: w }));
+			return ids(prefix);
+		},
+		handler: async (args, ctx) => {
+			const [word = "", raw = ""] = args.trim().split(/\s+/);
+			const how = word.toLowerCase();
+			if (!how) {
+				await hub.refresh();
+				return say(queueText(hub.rows));
+			}
+			const id = raw ? hub.idOf(raw) : undefined;
+			if ((how !== "skip" && how !== "cancel") || !id) return notify(ctx, "usage: /queue [skip|cancel ACM-12]", "warning");
+			if (how === "skip") return say(await act.queueSkip(hub, id));
+			if (await confirm(ctx, `Drop ${id}'s merge order?`, "It leaves the merge queue; /check orders the merge again, at the back.")) say(await act.queueCancel(hub, id));
 		},
 	});
 

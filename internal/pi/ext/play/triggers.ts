@@ -26,6 +26,7 @@ export const triggers: Trigger[] = [
 	{ name: "incident", label: "Incident on or off", group: "Board" },
 	{ name: "watch", label: "Watch on, off, failing", group: "Board" },
 	{ name: "update", label: "Update on or off", group: "Board" },
+	{ name: "queue", label: "Queue front merges", group: "Board" },
 	{ name: "answer", label: "The model answers", group: "Chat" },
 	{ name: "markdown", label: "A long Markdown answer", group: "Chat" },
 	{ name: "busy", label: "Model busy or ready", group: "Chat" },

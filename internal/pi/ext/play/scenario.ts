@@ -100,9 +100,23 @@ export function scenario(now: number): Scenario {
 		row("ACM-119", now, { title: "Show the build number in the footer", phase: "needs_fix", pr: pr("ACM-119", 53), checks: green, review: { verdict: "STALE_BASE", head: headOf("ACM-119"), at_head: true }, behind: 4, push_wait: { on: "slots", pushes: ["ACM-104", "acme/web ACM-31"], free: 0, need: 0 }, diff: { files: 1, added: 9, removed: 2 }, next: { kind: "command", reason: "base_moved", argv: ["tkt", "sync", "ACM-119"], text: "the base moved: tkt sync ACM-119" }, phase_since: ago(4), idle_since: ago(30) }),
 		row("chore/deps-2026-10-29", now, { chore: "deps", title: "Update dependencies", phase: "ready_for_human", stage: "chore", pr: pr("chore/deps-2026-10-29", 52), checks: green, review: clean("chore/deps-2026-10-29"), next: { kind: "human", reason: "chore_ready", argv: null, text: "review it and merge it yourself" }, diff: { files: 2, added: 40, removed: 40 }, phase_since: ago(50), started: ago(120) }),
 		row("ACM-120", now, { title: "Import contacts from a file", phase: "needs_you", last_status: "BLOCKED", next: { kind: "human", reason: "status_blocked", argv: null, text: "the agent stopped with Status: BLOCKED" }, phase_since: ago(18), idle_since: ago(18) }),
+		...queued(now),
 		row("ACM-121", now, { title: "Rotate the signing keys", phase: "merged", pr: pr("ACM-121", 37, { state: "MERGED" }), checks: green, review: clean("ACM-121"), auto: auto({ yolo: true, running: false, wanted: false, stop: "post_merge_failed" }), next: { kind: "command", reason: "merged", argv: ["tkt", "done", "ACM-121"], text: "tkt done ACM-121 removes it" }, phase_since: ago(45) }),
 	];
 	return { rows, unblocked: [{ ticket: "ACM-130", by: "ACM-110", at: ago(20) }], incidents: [], watch: "off", update: "" };
+}
+
+/** queued are three verified tickets in the merge queue: the front syncs,
+ * and the two behind it wait untouched. */
+function queued(now: number): Row[] {
+	const ago = (min: number) => new Date(now - min * 60_000).toISOString();
+	const order = (id: string, place: number, after: string, min: number) => ({ head: headOf(id), steps: [1, 2, 3], at: ago(min), place, ...(after ? { after } : {}) });
+	const waits = (after: string, place: number) => ({ kind: "wait", reason: "merge_queued", argv: null, text: `merges after ${after}, ${place === 2 ? "2nd" : "3rd"} in the merge queue` });
+	return [
+		row("ACM-122", now, { title: "Send receipts by email", phase: "needs_fix", pr: pr("ACM-122", 54), checks: green, review: { verdict: "READY_FOR_HUMAN", head: headOf("ACM-122"), at_head: true }, behind: 1, merge: order("ACM-122", 1, "", 30), diff: { files: 4, added: 120, removed: 8 }, next: { kind: "command", reason: "base_moved", argv: ["tkt", "sync", "ACM-122"], text: "the base moved: tkt sync ACM-122" }, phase_since: ago(2), idle_since: ago(30) }),
+		row("ACM-123", now, { title: "Let admins rename teams", phase: "merging", pr: pr("ACM-123", 55), checks: green, review: { verdict: "READY_FOR_HUMAN", head: headOf("ACM-123"), at_head: true }, behind: 1, merge: order("ACM-123", 2, "ACM-122", 22), diff: { files: 3, added: 47, removed: 5 }, next: waits("ACM-122", 2), phase_since: ago(22), idle_since: ago(25) }),
+		row("ACM-124", now, { title: "Show usage on the dashboard", phase: "merging", pr: pr("ACM-124", 56), checks: green, review: { verdict: "READY_FOR_HUMAN", head: headOf("ACM-124"), at_head: true }, behind: 1, merge: order("ACM-124", 3, "ACM-123", 12), diff: { files: 6, added: 210, removed: 31 }, next: waits("ACM-123", 3), phase_since: ago(12), idle_since: ago(14) }),
+	];
 }
 
 /** incident is what the incident trigger reports. */

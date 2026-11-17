@@ -82,8 +82,10 @@ export interface Row {
 	/** merge is the merge order tkt merge left once the steps passed on
 	 * head: tkt watch hands them to finish-ticket once the head is synced,
 	 * reviewed and green. It holds across clean merges of the base, and sent
-	 * says when finish-ticket last got the line. */
-	merge?: { head: string; steps: number[]; waived?: number[]; reason?: string; at: string; sent?: string; by?: string } | null;
+	 * says when finish-ticket last got the line. place is its place in the
+	 * merge queue, from 1, and after the ticket right ahead of it: only the
+	 * front syncs and merges. */
+	merge?: { head: string; steps: number[]; waived?: number[]; reason?: string; at: string; sent?: string; by?: string; place?: number; after?: string } | null;
 	phase: string;
 	phase_since: string;
 	started: string;
@@ -282,8 +284,9 @@ export function stepText(did: { action: string; stage?: string }): string {
 
 /** MergeResult is what tkt merge prints: merging (finish-ticket got the
  * merge line), ordered (tkt watch sends it once nothing waits: waits says
- * on what), cancelled, or none, with sent saying when finish-ticket last got
- * the line. */
+ * on what), cancelled, skipped (it went to the back of the merge queue), or
+ * none, with sent saying when finish-ticket last got the line, and place
+ * the order's place in the merge queue. */
 export interface MergeResult {
 	ticket: string;
 	pr: number;
@@ -291,9 +294,10 @@ export interface MergeResult {
 	verified?: string;
 	steps: number[];
 	waived?: number[];
-	action: "merging" | "ordered" | "cancelled" | "none";
-	waits?: "sync" | "review" | "bot" | "checks" | "turn" | "";
+	action: "merging" | "ordered" | "cancelled" | "skipped" | "none";
+	waits?: "sync" | "review" | "bot" | "checks" | "turn" | "queue" | "";
 	after?: string;
+	place?: number;
 	sent?: string;
 }
 
@@ -323,14 +327,23 @@ export function mergeText(r: MergeResult): string {
 			review: r.verified && r.verified !== r.head ? "a review clears the head a sync made; your steps carry over the clean merge" : "review-pr, which tkt watch starts, clears its head, since finish-ticket merges on review-pr's verdict",
 			bot: "the review bot clears the head a sync made; your steps carry over the clean merge",
 			turn: `${r.after || "the other ticket"} merged first, since one merge goes at a time`,
+			queue: `${r.after} merged, as it is ${ordinal(r.place ?? 0)} in the merge queue; it syncs once it reaches the front`,
 			checks: "its checks pass",
 			"": "its checks pass",
 		}[r.waits ?? ""];
-		return `${r.ticket} merges once ${once}: tkt watch sends finish-ticket the merge line then. The board shows it as merges when green.`;
+		return `${r.ticket} merges once ${once}: tkt watch sends finish-ticket the merge line then. The board shows it in the merge queue.`;
 	}
+	if (r.action === "skipped") return `${r.ticket} went to the back of the merge queue, ${ordinal(r.place ?? 0)}, so the ones behind it go first. Its merge order stands; /queue cancel ${r.ticket} drops it.`;
 	if (r.action === "cancelled") return r.sent ? `${r.ticket} has no merge order now. finish-ticket got the merge line at ${r.sent}; to stop it, tell its agent in the ticket's tab.` : `${r.ticket} has no merge order now.`;
 	if (r.action === "none") return r.sent ? `${r.ticket} has no merge order: finish-ticket got the merge line at ${r.sent}. To stop it, tell its agent in the ticket's tab.` : `${r.ticket} has no merge order.`;
 	return `${r.ticket}: finish-ticket merges pull request #${r.pr} in a fresh session in its tab. Once it ends with Status: DONE, /done ${r.ticket} removes the ticket when you finish with it.`;
+}
+
+/** ordinal writes a place for people: 1st, 2nd, 3rd, 4th, 11th. */
+export function ordinal(n: number): string {
+	const t = n % 100;
+	const suffix = t >= 11 && t <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
+	return `${n}${suffix}`;
 }
 
 /** ago renders milliseconds for people: 45s, 12m, 3h, 2d. */

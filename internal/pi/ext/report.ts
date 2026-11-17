@@ -183,6 +183,7 @@ export function eventText(e: HistoryEvent): string {
 		case "merge":
 			if (e.action === "ordered") return "merge order left, for when finish-ticket can merge";
 			if (e.action === "dropped") return "merge order dropped by a new head";
+			if (e.action === "skipped") return "merge order sent to the back of the merge queue";
 			return "merge order cancelled";
 		case "done":
 			if (e.unblocked?.length) return `removed; the merge unblocked ${e.unblocked.join(", ")}`;

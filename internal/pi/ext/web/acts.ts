@@ -4,6 +4,7 @@
 // at run time but the extension's pure modules, so node --test covers it.
 
 import { type Attention, choicesOf } from "../attention.ts";
+import { queueStopped } from "../board.ts";
 import { accepted, findings, type Row } from "../model.ts";
 
 /** Act is one button: cmd is the slash command it sends, tab the ticket's
@@ -102,6 +103,17 @@ export function ticketActs(r: Row): Act[] {
 	}
 	if (!merged) out.push(r.hold ? { label: "Off hold", cmd: `/hold ${id} off` } : { label: "Hold", description: "tkt watch and tkt auto leave it alone.", cmd: `/hold ${id}` });
 	if (!merged) out.push({ label: "Drop", description: "Throw the ticket away, as when you started it by mistake: its tabs, worktree and branch, and your pull request. You type its id to confirm.", cmd: `/drop ${id}`, risky: true });
+	return out;
+}
+
+/** queueActs are the buttons on an order in the merge queue: Skip on a
+ * front that waits on you while others wait behind it, since the whole
+ * queue waits with it, and Cancel on each, which asks first. */
+export function queueActs(r: Row, front: boolean, behind: number): Act[] {
+	const id = r.ticket;
+	const out: Act[] = [];
+	if (front && behind > 0 && queueStopped(r)) out.push({ label: "Skip", description: "Send it to the back of the merge queue, with its order kept, so the next one goes.", cmd: `/queue skip ${id}`, main: true });
+	out.push({ label: "Cancel merge", description: "Drop its merge order, which takes it out of the queue.", cmd: `/queue cancel ${id}` });
 	return out;
 }
 

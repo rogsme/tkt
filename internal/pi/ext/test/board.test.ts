@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { attentionOf } from "../attention.ts";
-import { boardColumns, boardLines, columnOf, diffText, footer, grid, order, phaseLabel, pushWaitText, statusText, title } from "../board.ts";
+import { boardColumns, boardLines, columnOf, diffText, footer, grid, order, phaseLabel, pushWaitText, queueOf, queueState, statusText, title } from "../board.ts";
 import { row } from "./fixtures.ts";
 
 const now = Date.parse("2026-01-01T02:00:00Z");
@@ -109,14 +109,46 @@ test("the board says whether tkt watch runs, and what it runs", () => {
 	assert.doesNotMatch(two.text, /watch/);
 });
 
-test("the board marks a merge order until the merge is due", () => {
+test("the board marks each merge order with its place in the merge queue", () => {
 	const merge = { head: "abc", steps: [1, 2], at: "2026-01-01T01:00:00Z" };
-	const rows = [row({ ticket: "ACM-1", phase: "ci", merge }), row({ ticket: "ACM-2", phase: "merging", merge })];
+	const rows = [row({ ticket: "ACM-1", phase: "ci", merge: { ...merge, place: 2, after: "ACM-2" } }), row({ ticket: "ACM-2", phase: "merging", merge: { ...merge, place: 1 } })];
 	const [, one, two] = boardLines({ rows, jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
-	assert.match(one.text, / merges when green$/);
-	assert.doesNotMatch(two.text, /merges when green/);
-	assert.match(two.text, / merging /);
+	assert.match(one.text, / merge queue 2$/);
+	assert.match(two.text, / merging .* merge queue 1$/);
 	assert.equal(columnOf(row({ phase: "merging" })), "Ready");
+});
+
+test("the board lists the merge queue under the tickets, front first, with where the front stands", () => {
+	const merge = { head: "abc", steps: [1], at: "2026-01-01T01:00:00Z" };
+	const pr = (n: number) => ({ number: n, state: "OPEN", head: "abc" });
+	const rows = [
+		row({ ticket: "ACM-3", phase: "merging", pr: pr(3), title: "Fix the footer", merge: { ...merge, place: 2, after: "ACM-9" }, next: { kind: "wait", reason: "merge_queued", argv: null, text: "" } }),
+		row({ ticket: "ACM-9", phase: "needs_fix", pr: pr(9), merge: { ...merge, place: 1 }, next: { kind: "command", reason: "base_moved", argv: ["tkt", "sync", "ACM-9"], text: "" } }),
+		row({ ticket: "ACM-4", phase: "building" }),
+	];
+	const lines = boardLines({ rows, jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
+	const at = lines.findIndex((l) => l.text === "MERGE QUEUE");
+	assert.ok(at > 3);
+	assert.deepEqual(
+		lines.slice(at + 1).map((l) => [l.text, l.tone]),
+		[
+			["1 ACM-9 #9  syncs next", "accent"],
+			["2 ACM-3 #3  Fix the footer", "muted"],
+		],
+	);
+	assert.ok(!boardLines({ rows: [rows[2]], jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200).some((l) => l.text === "MERGE QUEUE"));
+});
+
+test("a front of the merge queue that waits on you stops it, and the board says how to skip it", () => {
+	const merge = { head: "abc", steps: [1], at: "2026-01-01T01:00:00Z" };
+	const rows = [row({ ticket: "ACM-9", phase: "blocked", hold: true, merge: { ...merge, place: 1 } }), row({ ticket: "ACM-3", phase: "merging", merge: { ...merge, place: 2, after: "ACM-9" } })];
+	const lines = boardLines({ rows, jobs: new Map(), items: [], now, tick: 0, repo: "app" }, 200);
+	const front = lines[lines.findIndex((l) => l.text === "MERGE QUEUE") + 1];
+	assert.equal(front.text, "1 ACM-9 -  stopped: on hold   /queue skip ACM-9");
+	assert.equal(front.tone, "warning");
+	assert.equal(queueState(row({ phase: "merging", agent: { pane_id: "p", name: "a", harness: "claude", status: "working" } })), "merging");
+	assert.equal(queueState(row({ phase: "ci", next: { kind: "wait", reason: "ci_pending", argv: null, text: "" } })), "waits for CI");
+	assert.deepEqual(queueOf(rows).map((r) => r.ticket), ["ACM-9", "ACM-3"]);
 });
 
 test("the board sizes each branch's change and names its pull request", () => {
