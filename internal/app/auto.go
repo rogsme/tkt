@@ -355,6 +355,12 @@ func autoStep(n Next, f Facts, p AutoPolicy, m autoMemory) autoAct {
 			return act(actMerge, "")
 		}
 		return stop(StopMergeOrdered)
+	case ReasonMergeQueued:
+		// A yolo loop's own order waits its turn in the merge queue.
+		if p.Yolo && f.MergeBy == mergeByAutonomous {
+			return autoAct{Kind: actPoll}
+		}
+		return stop(StopMergeOrdered)
 	}
 	return pause(StopUnknown)
 }

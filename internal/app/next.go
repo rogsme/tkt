@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strconv"
 	"time"
 
 	"gitlab.com/rogs/tkt/internal/config"
@@ -67,6 +68,10 @@ const (
 	// ReasonAutonomousMerge is a yolo ticket's: review-pr cleared the head
 	// and verify-pr passed every step, so finish-ticket merges it.
 	ReasonAutonomousMerge = "autonomous_merge"
+	// ReasonMergeQueued is a merge order behind another in the merge
+	// queue: it waits untouched, with no sync, review or fix, until the
+	// ones ahead of it merged.
+	ReasonMergeQueued = "merge_queued"
 	// The reasons only a chore's run gets: it ended with nothing to change,
 	// the review found something, or its pull request waits for your merge.
 	// No skill reviews, fixes or merges a pull request without a ticket.
@@ -186,6 +191,10 @@ type Facts struct {
 	ConfirmedEvidence bool
 	ConfirmedWaived   string
 	ConfirmedReason   string
+	// QueuePlace is a merge order's place in the merge queue, from 1, and
+	// QueueAhead the ticket right ahead of it, "" at the front.
+	QueuePlace int
+	QueueAhead string
 }
 
 // NextStep applies the rules in order and returns the first that matches.
@@ -232,6 +241,10 @@ func NextStep(f Facts) Next {
 		return human(ReasonStatusBlocked, "read the agent's reason in its tab")
 	case f.LastStatus == contract.StatusAwaitingPostApproval:
 		return human(ReasonReviewAwaitsApproval, "approve or discard the review draft in its tab")
+	case f.MergeSteps != "" && f.QueueAhead != "":
+		// Only the front of the merge queue syncs and merges: a sync now
+		// would go stale with every merge ahead of this one.
+		return Next{Kind: "wait", Reason: ReasonMergeQueued, Text: "merges after " + f.QueueAhead + ", " + ordinal(f.QueuePlace) + " in the merge queue"}
 	case f.Checks == "pending":
 		return Next{Kind: "wait", Reason: ReasonCIPending, Text: "wait for CI"}
 	case f.SyncFail != "":
@@ -453,7 +466,7 @@ func PhaseOf(f Facts, n Next) string {
 		return PhaseReadyForHuman
 	case ReasonStepsPassed:
 		return PhaseReadyToMerge
-	case ReasonMergeDue, ReasonAutonomousMerge:
+	case ReasonMergeDue, ReasonAutonomousMerge, ReasonMergeQueued:
 		return PhaseMerging
 	}
 	return PhaseUnknown
@@ -487,6 +500,7 @@ func factsFor(r Row) Facts {
 	if r.Merge != nil {
 		f.MergeSteps, f.MergeHead, f.MergeAs, f.MergeBy = stepList(r.Merge.Steps), r.Merge.Head, r.Merge.As, r.Merge.By
 		f.MergeWaived, f.MergeReason = stepList(r.Merge.Waived), r.Merge.Reason
+		f.QueuePlace, f.QueueAhead = r.Merge.Place, r.Merge.After
 	}
 	if v := r.Verification; v != nil {
 		f.Verification, f.VerifyHeld = v.Value, v.Holds()
@@ -504,4 +518,20 @@ func factsFor(r Row) Facts {
 		f.SyncFail = r.Sync.Kind
 	}
 	return f
+}
+
+// ordinal writes a place for people: 1st, 2nd, 3rd, 4th, 11th, 21st.
+func ordinal(n int) string {
+	suffix := "th"
+	if n%100 < 11 || n%100 > 13 {
+		switch n % 10 {
+		case 1:
+			suffix = "st"
+		case 2:
+			suffix = "nd"
+		case 3:
+			suffix = "rd"
+		}
+	}
+	return strconv.Itoa(n) + suffix
 }

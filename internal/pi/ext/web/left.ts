@@ -1,12 +1,12 @@
 // The left column: what needs you, as cards with their answers as buttons,
-// then every ticket, then the repository's views. It draws the board the
+// then the merge queue, then every ticket, then the repository's views. It draws the board the
 // chat sends; the buttons send the slash commands /inbox would run.
 
 import type { Attention } from "../attention.ts";
-import { diffText, pushWaitText, watchStage } from "../board.ts";
+import { diffText, pushWaitText, queueOf, queueState, queueStopped, watchStage } from "../board.ts";
 import { type Row, since } from "../model.ts";
 import type { Board } from "../mirror.ts";
-import { cardActs, type Nav, type View } from "./acts.ts";
+import { cardActs, type Nav, queueActs, type View } from "./acts.ts";
 import { ActButtons, type Go, Phase } from "./bits.ts";
 import { html } from "./vendor/preact.js";
 
@@ -21,6 +21,7 @@ export function Left({ board, nav, g, now }: { board?: Board; nav: Nav; g: Go; n
 			${board.items.length === 0 && html`<p class="muted small">Nothing needs you now.</p>`}
 			${board.items.map((a) => html`<${Card} key=${a.key} a=${a} row=${board.rows.find((r) => r.ticket === a.ticket)} g=${g} />`)}
 		</section>
+		<${Queue} rows=${board.rows} g=${g} />
 		<section>
 			<h2 class="label">
 				<a href="#" class="plain" onClick=${(e: MouseEvent) => {
@@ -66,6 +67,38 @@ function Card({ a, row, g }: { a: Attention; row?: Row; g: Go }) {
 	</div>`;
 }
 
+/** Queue is the merge queue, front first: only the front syncs and
+ * merges, and when it waits on you, so does the rest. It shows only while
+ * an order waits. */
+function Queue({ rows, g }: { rows: Row[]; g: Go }) {
+	const q = queueOf(rows);
+	if (q.length === 0) return null;
+	const open = (id: string) => (e: MouseEvent) => {
+		e.preventDefault();
+		g.go({ ticket: id, tab: "message" });
+	};
+	return html`<section>
+		<h2 class="label">Merge queue <span class="count">${q.length}</span></h2>
+		<ol class="queue">
+			${q.map((r, i) => {
+				const stop = i === 0 && queueStopped(r);
+				return html`<li key=${r.ticket} class=${i === 0 ? (stop ? "front stopped" : "front") : ""}>
+					<div class="line1">
+						<span class="place">${r.merge?.place ?? i + 1}</span>
+						<a href="#" class="id plain" onClick=${open(r.ticket)}>${r.ticket}</a>
+						${r.pr && html`<span class="muted small">#${r.pr.number}</span>`}
+						<span class="spacer"></span>
+						<span class="small ${i === 0 ? "" : "muted"}">${i === 0 ? queueState(r) : `after ${r.merge?.after ?? ""}`}</span>
+					</div>
+					${r.title && html`<div class="line2"><span class="title">${r.title}</span></div>`}
+					${stop && q.length > 1 && html`<p class="small muted">The queue waits on ${r.ticket}. Skip it to let ${q[1].ticket} go.</p>`}
+					<${ActButtons} acts=${queueActs(r, i === 0, q.length - 1)} ticket=${r.ticket} g=${g} small=${true} />
+				</li>`;
+			})}
+		</ol>
+	</section>`;
+}
+
 function TicketRow({ r, on, need, job, g, now }: { r: Row; on: boolean; need: boolean; job?: string; g: Go; now: number }) {
 	const flags: string[] = [];
 	if (r.chore) flags.push("chore");
@@ -74,7 +107,7 @@ function TicketRow({ r, on, need, job, g, now }: { r: Row; on: boolean; need: bo
 	else if (r.auto?.wanted) flags.push("auto stalled");
 	const ws = watchStage(r);
 	if (ws) flags.push(`watch: ${ws}`);
-	if (r.merge && r.phase !== "merging") flags.push("merges when green");
+	if (r.merge?.place) flags.push(`merge queue ${r.merge.place}`);
 	const pw = pushWaitText(r);
 	if (pw) flags.push(pw);
 	if (r.stale) flags.push("stale");

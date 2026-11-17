@@ -102,6 +102,70 @@ export function pushWaitText(r: Row): string {
 	return w.pushes.length > 0 ? `sync waits for ${w.pushes.join(", ")}` : "sync waits for a push slot";
 }
 
+/** queueOf lists the merge queue: the tickets with a merge order, front
+ * first. */
+export function queueOf(rows: Row[]): Row[] {
+	return rows.filter((r) => (r.merge?.place ?? 0) > 0).sort((a, b) => (a.merge?.place ?? 0) - (b.merge?.place ?? 0));
+}
+
+/** queueStopped says why the front of the merge queue waits on you, or "":
+ * the whole queue waits with it, until /queue skip sends it to the back. */
+export function queueStopped(r: Row): string {
+	if (r.hold) return "on hold";
+	if (r.phase === "blocked") return "blocked";
+	if (["needs_you", "no_agent", "unknown", "awaiting_approval"].includes(r.phase)) return "needs you";
+	return "";
+}
+
+/** queueState says where the front of the merge queue stands. */
+export function queueState(r: Row): string {
+	const stop = queueStopped(r);
+	if (stop) return `stopped: ${stop}`;
+	if (r.agent?.status === "working") return r.phase === "merging" ? "merging" : phaseLabel(r.phase);
+	switch (r.next?.reason) {
+		case "base_moved":
+			return pushWaitText(r) || "syncs next";
+		case "needs_review":
+		case "awaiting_bot":
+			return "waits for its review";
+		case "ci_pending":
+			return "waits for CI";
+		case "merge_due":
+			return "merges next";
+	}
+	return phaseLabel(r.phase);
+}
+
+/** queueLines is the merge queue under the tickets: each order in its
+ * place, with where the front stands, or nothing without one. */
+function queueLines(rows: Row[], width: number): Line[] {
+	const q = queueOf(rows);
+	if (q.length === 0) return [];
+	const lines: Line[] = [{ text: "", tone: "text" }, { text: "MERGE QUEUE", tone: "muted" }];
+	q.forEach((r, i) => {
+		const pr = r.pr ? `#${r.pr.number}` : "-";
+		const stop = i === 0 && q.length > 1 && queueStopped(r) ? `   /queue skip ${r.ticket}` : "";
+		const what = i === 0 ? queueState(r) + stop : r.title ?? "";
+		const tone: Tone = i === 0 ? (queueStopped(r) ? "warning" : "accent") : "muted";
+		lines.push({ text: fit(`${r.merge?.place ?? i + 1} ${r.ticket} ${pr}  ${what}`.trimEnd(), width), tone });
+	});
+	return lines;
+}
+
+/** queueText is the merge queue as text, for the chat. */
+export function queueText(rows: Row[]): string {
+	const q = queueOf(rows);
+	if (q.length === 0) return "The merge queue is empty. /check on a verified ticket leaves a merge order, which joins it.";
+	const lines = q.map((r, i) => {
+		const pr = r.pr ? ` (#${r.pr.number})` : "";
+		return `${r.merge?.place ?? i + 1}. ${r.ticket}${pr}${i === 0 ? `: ${queueState(r)}` : ""}`;
+	});
+	const front = q[0];
+	const stop = queueStopped(front);
+	const tail = stop && q.length > 1 ? `\n\n${front.ticket} waits on you, and so does the rest of the queue. /queue skip ${front.ticket} sends it to the back.` : "";
+	return `The merge queue, in the order you gave the orders. Only the front syncs and merges.\n\n${lines.join("\n")}${tail}`;
+}
+
 /** The board's columns and their widths. AGE is the time since tkt start,
  * TIME the time in the phase, as in tkt ls; DIFF what the branch changes
  * against its base; NOTES takes the rest, with the pull request's title
@@ -127,7 +191,7 @@ function widths(rows: Row[], width: number): number[] {
 
 /** boardLines renders the board's body for a width: what the status pages
  * report, a header, one line per ticket, the ones that need you first,
- * then what each of those needs. */
+ * the merge queue, then what each ticket that needs you needs. */
 export function boardLines(s: BoardState, width: number): Line[] {
 	const lines: Line[] = [];
 	for (const i of s.incidents ?? []) lines.push({ text: fit(`! ${incidentText(i)}`, width), tone: i.ignored ? "warning" : "error" });
@@ -144,6 +208,7 @@ export function boardLines(s: BoardState, width: number): Line[] {
 		else if (r.phase === "merged" || r.phase === "closed" || r.phase === "queued" || r.phase === "finished") tone = "muted";
 		lines.push({ text: fit(rowText(r, s, w), width), tone });
 	}
+	lines.push(...queueLines(s.rows, width));
 	if (s.items.length > 0) {
 		lines.push({ text: "", tone: "text" });
 		for (const a of s.items) {
@@ -182,7 +247,7 @@ function rowText(r: Row, s: BoardState, w: number[]): string {
 	else if (r.auto?.wanted) flags.push("auto stalled");
 	const ws = watchStage(r);
 	if (ws) flags.push(`watch: ${ws}`);
-	if (r.merge && r.phase !== "merging") flags.push("merges when green");
+	if (r.merge?.place) flags.push(`merge queue ${r.merge.place}`);
 	const pw = pushWaitText(r);
 	if (pw) flags.push(pw);
 	const job = s.jobs.get(r.ticket);

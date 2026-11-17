@@ -133,6 +133,11 @@ type RowMerge struct {
 	By   string `json:"by"`
 	At   string `json:"at"`
 	Sent string `json:"sent"`
+	// Place is the order's place in the merge queue, from 1, and After the
+	// ticket right ahead of it, or "" at the front. Only the front syncs,
+	// gets its review and gets the merge line.
+	Place int    `json:"place"`
+	After string `json:"after,omitempty"`
 }
 
 // RowDiff is the size of a branch's own change against its base, as its
@@ -530,6 +535,7 @@ func (a *App) Ls(ctx context.Context, o LsOpts) (*LsResult, error) {
 	if lookErr != nil {
 		return nil, lookErr
 	}
+	l.entries = entries
 	res := &LsResult{Sources: l.src, Watch: c.watchStatus(), Rows: []Row{}, Unblocked: []Unblocked{}, Incidents: c.incidents(), now: a.Now()}
 	if len(want) == 0 {
 		res.Unblocked = c.unblocked(entries)
@@ -606,6 +612,12 @@ type look struct {
 	// failed, src.Forge is failed too; when only the full list failed, the
 	// open ones still count.
 	forgeErr error
+	// ids are the tickets whose pull requests the look read, or nil for
+	// every open one. entries are the worktrees, when the caller listed
+	// them already, for the merge queue.
+	ids     []string
+	entries wt.Entries
+	queue   mergeQueue
 }
 
 // lookOpts says what to read. With one to three ids, pull requests are read
@@ -623,7 +635,7 @@ type lookOpts struct {
 // look reads herdr, the forge and, when asked, the remote, in parallel.
 func (c *Ctx) look(o lookOpts) (*look, error) {
 	f := c.LC.Forge
-	l := &look{src: Sources{Herdr: "unavailable", Forge: "unsupported", Fetch: "skipped"}, probe: o.probe}
+	l := &look{src: Sources{Herdr: "unavailable", Forge: "unsupported", Fetch: "skipped"}, probe: o.probe, ids: o.ids}
 	haveHerdr := c.Getenv("HERDR_ENV") == "1" && found("herdr")
 	l.gh = forge.GH{R: c.R, Repo: f.Host + "/" + f.Repo, Name: f.Repo}
 	haveGH := f.Kind == "GitHub" && found("gh") && f.Host != "" && f.Repo != ""
@@ -822,6 +834,9 @@ func (c *Ctx) row(ctx context.Context, l *look, t ticketWorktree) (Row, Facts) {
 		row.reviewReady = true
 	}
 	row.Merge, row.orderVoid = c.mergeOrder(rctx, t.Path, st, row.PR, base, row.LastStatus)
+	if row.Merge != nil {
+		row.Merge.Place, row.Merge.After = c.queuePlace(l, t.ID)
+	}
 	row.orderHead = st["merge_head"]
 	if p := st["watch_pause"]; p != "" && row.PR != nil && st["watch_head"] == row.PR.Head && c.watchRunning() {
 		row.Watch.Paused = p

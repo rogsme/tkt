@@ -365,15 +365,11 @@ run explain for ACM-131
 
 A fresh session explains what users see change and what could go wrong, and `/show ACM-131` prints it. `/check ACM-131` says the branch is two commits behind main, and this time you pick `Sync first`: tkt sync merges main itself, the bot clears the new head, and you run the steps on the code that will merge. `/sync ACM-131`, or "sync ACM-131 with main", does the same sync at any time. You verify ACM-121 and ACM-127 as they are. /check sends ACM-131's merge line at once, since the bot cleared the head your steps ran on, and leaves a merge order on each of the other two, which are behind main.
 
-Then the product team asks you to keep ACM-127 out of today's release. The chat has no command to drop an order, so you use a terminal:
+The board lists the merge queue under the tickets, in the order you gave the word: ACM-131 at the front, `merging`, then ACM-121 and ACM-127, which wait untouched. Only the front syncs and merges, since a second finish-ticket that checked main before the first one merged would merge an integration nobody reviewed, and a sync now would go stale at the next merge anyway. The web page shows the same queue beside the tickets, with a Cancel merge button on each.
 
-```bash
-tkt merge ACM-127 --cancel
-```
+Then the product team asks you to keep ACM-127 out of today's release. `/queue cancel ACM-127` asks first, then drops its order, and it leaves the queue. In a terminal, `tkt merge ACM-127 --cancel` does the same and prints `ACM-127  dropped the merge order for 4be1c3a`. Tomorrow, `/check ACM-127` leaves a new one, at the back of the queue.
 
-It prints `ACM-127  dropped the merge order for 4be1c3a`. Tomorrow, `/check ACM-127` leaves a new one.
-
-By 17:15 ACM-131 has merged, ACM-121's order stands, and you go back to your own work. One merge line goes out at a time, since a second finish-ticket that checked main before the first one merged would merge an integration nobody reviewed, so ACM-121's order waited for ACM-131's merge.
+By 17:15 ACM-131 has merged, ACM-121's order stands at the front of the queue, and you go back to your own work.
 
 That merge moves main under ACM-121, and both changed the orders serializer, so ACM-121 now conflicts. tkt watch would hand the conflict to a `resolve` session, but ACM-121 used its five fix rounds this afternoon, and tkt watch keeps to `[auto] max_rounds` too. So it waits for you: herdr shows `ACM-121: needs you`, and the board `max rounds reached`. A sync you ask for has no cap, so `/sync ACM-121` starts the resolve session, which merges main, resolves the conflict and pushes once. A resolution is code your steps never ran on, so the order drops. herdr shows `ACM-121: merge order dropped`, with the reason: check the new head once it is reviewed. That is tomorrow's first item.
 

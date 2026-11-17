@@ -1,0 +1,71 @@
+# The merge orders form a queue, in the order you gave them. Only its front
+# syncs, gets its review and gets the merge line; the others wait untouched,
+# so a merge ahead of them does not make each one sync and wait for CI
+# again. A second finish-ticket that checks the base before the first one
+# merges would merge an integration nobody reviewed, too.
+exec tkt start ACM-1
+exec tkt start ACM-2
+exec tkt start ACM-3
+realgit -C $FAKE_WT_ROOT/ACM-1 commit -q --allow-empty -m 'ACM-1 work'
+realgit -C $FAKE_WT_ROOT/ACM-2 commit -q --allow-empty -m 'ACM-2 work'
+realgit -C $FAKE_WT_ROOT/ACM-3 commit -q --allow-empty -m 'ACM-3 work'
+realgit -C $FAKE_WT_ROOT/ACM-1 push -q origin ACM-1
+realgit -C $FAKE_WT_ROOT/ACM-2 push -q origin ACM-2
+realgit -C $FAKE_WT_ROOT/ACM-3 push -q origin ACM-3
+gitvar H1 $FAKE_WT_ROOT/ACM-1 HEAD
+gitvar H2 $FAKE_WT_ROOT/ACM-2 HEAD
+gitvar H3 $FAKE_WT_ROOT/ACM-3 HEAD
+jqedit $WORK/prs.json 'walk(if type == "string" then gsub("H1"; $H1) | gsub("H2"; $H2) | gsub("H3"; $H3) else . end)'
+env FAKE_GH_PRS=$WORK/prs.json
+
+# The base moved after the reviews, so every branch is behind.
+realgit -C $REPO commit -q --allow-empty -m 'another ticket merged'
+realgit -C $REPO push -q origin main
+
+# You verify ACM-3 first, then ACM-1, then ACM-2: that is the queue.
+exec tkt merge ACM-3 --passed all --json
+envelope '.result | [.action, .waits, .after, .place]' '["ordered","sync","",1]'
+exec tkt merge ACM-1 --passed all --json
+envelope '.result | [.action, .waits, .after, .place]' '["ordered","queue","ACM-3",2]'
+exec tkt merge ACM-2 --passed all
+stdout 'ACM-2  merges #2 once ACM-1 merged, as 3rd in the merge queue'
+exec tkt ls --no-fetch --json
+envelope '[.result.rows[] | .ticket + ":" + (.merge.place|tostring) + ":" + (.merge.after // "") + ":" + .next.reason + ":" + .phase]' '["ACM-1:2:ACM-3:merge_queued:merging","ACM-2:3:ACM-1:merge_queued:merging","ACM-3:1::base_moved:needs_fix"]'
+
+# Giving an order again keeps its place.
+exec tkt merge ACM-1 --passed all --json
+envelope '.result.place' '2'
+
+# One pass syncs the front alone: the others keep their heads.
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1::merge_queued","ACM-2::merge_queued","ACM-3:sync:base_moved"]'
+realgit -C $WORK/origin.git rev-parse ACM-1
+stdout ^$H1
+realgit -C $WORK/origin.git rev-parse ACM-2
+stdout ^$H2
+
+# Once ACM-3's pull request merged, ACM-1 is at the front and syncs, and
+# ACM-2 moves up behind it.
+jqedit $WORK/prs.json '.[2].state = "MERGED"'
+realgit -C $REPO commit -q --allow-empty -m 'ACM-3 merged'
+realgit -C $REPO push -q origin main
+exec tkt watch --once --json
+envelope '[.result.tickets[] | .ticket + ":" + .action + ":" + .reason]' '["ACM-1:sync:base_moved","ACM-2::merge_queued","ACM-3::merged"]'
+realgit -C $WORK/origin.git rev-parse ACM-2
+stdout ^$H2
+exec tkt ls --no-fetch --json ACM-2
+envelope '.result.rows[0].merge | [.place, .after]' '[2,"ACM-1"]'
+houserules
+
+-- prs.json --
+[
+  {"number": 1, "state": "OPEN", "headRefName": "ACM-1", "headRefOid": "H1", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"body": "Reviewed head: H1\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the login page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H1"}}]},
+  {"number": 2, "state": "OPEN", "headRefName": "ACM-2", "headRefOid": "H2", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"body": "Reviewed head: H2\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the sign-up page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H2"}}]},
+  {"number": 3, "state": "OPEN", "headRefName": "ACM-3", "headRefOid": "H3", "headRepository": {"nameWithOwner": "acme/app"}, "mergeable": "MERGEABLE",
+   "statusCheckRollup": [{"name": "tests", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+   "reviews": [{"body": "Reviewed head: H3\nReviewed base: cccc\nVerdict: READY_FOR_HUMAN\n\n## Human verification\n\n1. Open the settings page.\n   Expected: it shows.\n", "submittedAt": "2026-01-02T00:00:00Z", "commit": {"oid": "H3"}}]}
+]

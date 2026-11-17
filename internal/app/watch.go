@@ -650,6 +650,7 @@ func (w *watcher) pass(ctx context.Context) ([]WatchTicket, []WatchChore, error)
 	if err != nil {
 		return nil, nil, err
 	}
+	l.entries = es
 	if l.src.Forge != "ok" {
 		if l.forgeErr != nil {
 			return nil, nil, l.forgeErr
